@@ -9,7 +9,7 @@ table! {
     rewards (id) {
         id -> Uuid,
         block -> Int8,
-        transaction_hash -> Nullable<Text>,
+        transaction_hash -> Text,
         time -> Int8,
         validator_id -> Uuid,
         account -> Text,

@@ -37,7 +37,7 @@ CREATE INDEX idx_validators_is_enabled on validators(is_enabled);
 CREATE TABLE rewards (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     block BIGINT NOT NULL,
-    transaction_hash TEXT,
+    transaction_hash TEXT NOT NULL,
     time BIGINT NOT NULL,
     validator_id UUID NOT NULL,
     account TEXT NOT NULL,
