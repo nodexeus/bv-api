@@ -1,36 +1,35 @@
-use actix_web::{get, middleware, post, web, App, Error, HttpResponse, HttpServer, Responder};
-
-#[macro_use]
-extern crate diesel;
-
-use diesel::prelude::*;
-use diesel::r2d2::{self, ConnectionManager};
+use actix_web::{get, middleware, post, web, App, HttpResponse, HttpServer, Responder};
+use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
 
 mod db;
 mod models;
-mod schema;
 
-type DbPool = web::Data<r2d2::Pool<ConnectionManager<PgConnection>>>;
+type DbPool = web::Data<PgPool>;
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> anyhow::Result<(), std::io::Error> {
     dotenv::dotenv().ok();
     env_logger::init();
 
     let db_url = std::env::var("DATABASE_URL").expect("Missing DATABASE_URL");
+    let db_max_conn = std::env::var("DB_MAX_CONN")
+        .unwrap_or("10".to_string())
+        .parse()
+        .unwrap();
     let port = std::env::var("PORT").unwrap_or("8080".to_string());
     let bind_ip = std::env::var("BIND_IP").unwrap_or("0.0.0.0".to_string());
     let addr = format!("{}:{}", bind_ip, port);
 
-    let db = ConnectionManager::<PgConnection>::new(db_url);
-    let pool = r2d2::Pool::builder()
-        .build(db)
-        .expect("Failed to create db pool.");
+    let db_pool = PgPoolOptions::new()
+        .max_connections(db_max_conn)
+        .connect(&db_url)
+        .await
+        .expect("Could not create db connection pool.");
 
     HttpServer::new(move || {
         App::new()
-            .data(pool.clone())
+            .data(db_pool.clone())
             .wrap(middleware::Logger::default())
             .service(add_host)
     })
@@ -40,37 +39,19 @@ async fn main() -> std::io::Result<()> {
 }
 
 #[get("/hosts/{host_id}")]
-async fn get_host(pool: DbPool, host_id: web::Path<Uuid>) -> Result<HttpResponse, Error> {
+async fn get_host(db_pool: DbPool, host_id: web::Path<Uuid>) -> impl Responder {
     let host_id = host_id.into_inner();
-    let db = pool.get().expect("couldn't get a db connection from pool");
-
-    let host = web::block(move || db::find_host_by_id(host_id, &db))
-        .await
-        .map_err(|e| {
-            eprintln!("{}", e);
-            HttpResponse::InternalServerError().finish()
-        })?;
-
-    if let Some(host) = host {
-        Ok(HttpResponse::Ok().json(host))
-    } else {
-        let res = HttpResponse::NotFound().body(format!("No user found with id: {}", host_id));
-        Ok(res)
+    let result = models::Host::find_by_id(host_id, db_pool.get_ref()).await;
+    match result {
+        Ok(host) => HttpResponse::Ok().json(host),
+        _ => HttpResponse::NotFound().body("host not found"),
     }
 }
 
 #[post("/hosts")]
-async fn add_host(pool: DbPool, form: web::Json<models::NewHost>) -> Result<HttpResponse, Error> {
-    let db = pool.get().expect("couldn't get db connection from pool");
-
-    let host = web::block(move || db::insert_host(&form.name, &db))
-        .await
-        .map_err(|e| {
-            eprintln!("{}", e);
-            HttpResponse::InternalServerError().finish()
-        })?;
-
-    Ok(HttpResponse::Ok().json(host))
+async fn add_host(_pool: DbPool, _form: web::Json<models::NewHost>) -> impl Responder {
+    //TODO
+    HttpResponse::InternalServerError().finish()
 }
 
 //login
@@ -90,19 +71,24 @@ mod tests {
         env_logger::init();
         dotenv::dotenv().ok();
 
-        let db = std::env::var("DATABASE_URL").expect("DATABASE_URL");
-        let manager = ConnectionManager::<PgConnection>::new(db);
-        let pool = r2d2::Pool::builder()
-            .build(manager)
-            .expect("Failed to create pool.");
+        let db_url = std::env::var("DATABASE_URL").expect("Missing DATABASE_URL");
+        let db_max_conn = std::env::var("DB_MAX_CONN")
+            .unwrap_or("10".to_string())
+            .parse()
+            .unwrap();
+
+        let db_pool = PgPoolOptions::new()
+            .max_connections(db_max_conn)
+            .connect(&db_url)
+            .await
+            .expect("Could not create db connection pool.");
 
         let mut app = test::init_service(
             App::new()
-                .data(pool.clone())
+                .data(db_pool.clone())
                 .wrap(middleware::Logger::default())
                 .service(get_host)
                 .service(add_host),
-
         )
         .await;
 
@@ -128,9 +114,5 @@ mod tests {
         assert_eq!(resp.name, "Test user");
 
         // Delete new host from table
-        use crate::schema::hosts::dsl::*;
-        diesel::delete(hosts.filter(id.eq(resp.id)))
-            .execute(&pool.get().expect("couldn't get db connection from pool"))
-            .expect("couldn't delete test user from table");
     }
 }
