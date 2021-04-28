@@ -45,7 +45,7 @@ pub struct User {
 pub struct Host {
     pub id: Uuid,
     pub name: String,
-    pub locatoin: Option<String>,
+    pub location: Option<String>,
     pub ip_addr: IpNetwork,
     pub ip_addrs: String,
     pub token: String,
@@ -104,7 +104,7 @@ impl Host {
 pub struct HostRequest {
     pub name: String,
     pub location: Option<String>,
-    pub ip_addr: String,
+    pub ip_addr: IpNetwork,
     pub ip_addrs: String,
     pub token: String,
     pub status: ConnectionStatus,
