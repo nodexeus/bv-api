@@ -1,5 +1,5 @@
 # Build container
-FROM rust:1.51-alpine as build
+FROM rust:alpine as build
 
 # We are indirectly depending on libbrotli.
 RUN apk update && apk add libc-dev
