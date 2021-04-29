@@ -1,4 +1,4 @@
-use actix_web::{get, middleware, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, middleware, post, delete, put, web, App, HttpResponse, HttpServer, Responder};
 use models::*;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
@@ -39,9 +39,9 @@ async fn main() -> anyhow::Result<(), std::io::Error> {
 }
 
 #[get("/hosts/{host_id}")]
-async fn get_host(db_pool: DbPool, host_id: web::Path<Uuid>) -> impl Responder {
-    let host_id = host_id.into_inner();
-    let result = models::Host::find_by_id(host_id, db_pool.get_ref()).await;
+async fn get_host(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
+    let id = id.into_inner();
+    let result = models::Host::find_by_id(id, db_pool.get_ref()).await;
     match result {
         Ok(host) => HttpResponse::Ok().json(host),
         Err(e) => HttpResponse::NotFound().json(e.to_string()),
@@ -62,6 +62,15 @@ async fn add_host(host: web::Json<HostRequest>, pool: DbPool) -> impl Responder 
     }
 }
 
+#[delete("/hosts/{id}")]
+async fn delete(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
+    let result = Host::delete(id.into_inner(), db_pool.get_ref()).await;
+    match result {
+        Ok(rows) if rows > 0 => HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", rows)),
+        _ => HttpResponse::BadRequest().json("Host not found."),
+    }
+}
+
 //login
 
 //add host
@@ -74,7 +83,7 @@ mod tests {
     use actix_web::test;
 
     #[actix_rt::test]
-    async fn user_routes() {
+    async fn host_routes() {
         std::env::set_var("RUST_LOG", "actix_web=debug");
         env_logger::init();
         dotenv::dotenv().ok();
@@ -129,6 +138,7 @@ mod tests {
         assert_eq!(resp.name, "Test user");
 
         // Delete new host from table
-        let _ = models::Host::delete(resp.id, &db_pool).await;
+        let res = models::Host::delete(resp.id, &db_pool).await;
+        assert_eq!(1, res.unwrap());
     }
 }
