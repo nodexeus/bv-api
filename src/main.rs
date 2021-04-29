@@ -1,7 +1,7 @@
 use actix_web::{get, middleware, post, web, App, HttpResponse, HttpServer, Responder};
+use models::*;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
-use models::*;
 
 mod models;
 
@@ -44,7 +44,7 @@ async fn get_host(db_pool: DbPool, host_id: web::Path<Uuid>) -> impl Responder {
     let result = models::Host::find_by_id(host_id, db_pool.get_ref()).await;
     match result {
         Ok(host) => HttpResponse::Ok().json(host),
-        _ => HttpResponse::NotFound().body("host not found"),
+        Err(e) => HttpResponse::NotFound().json(e.to_string()),
     }
 }
 
@@ -55,7 +55,10 @@ async fn add_host(host: web::Json<HostRequest>, pool: DbPool) -> impl Responder 
     let result = Host::create(host, pool.get_ref()).await;
     match result {
         Ok(host) => HttpResponse::Ok().json(host),
-        _ => HttpResponse::BadRequest().body("Error trying to create new todo"),
+        Err(e) => {
+            dbg!(&e);
+            HttpResponse::BadRequest().json(e.to_string())
+        }
     }
 }
 
@@ -102,9 +105,11 @@ mod tests {
             .uri("/hosts")
             .set_json(&models::HostRequest {
                 name: "Test user".to_string(),
+                version: Some("0.1.0".to_string()),
                 location: Some("Virgina".to_string()),
                 ip_addr: "192.168.1.2".parse().expect("Couldn't parse ip address"),
-                ip_addrs: "192.168.0.1, 193.168.5.5".to_string(),
+                val_ip_addr_start: "192.168.0.1".parse().expect("Couldn't parse ip address"),
+                val_count: 10,
                 token: "123".to_string(),
                 status: models::ConnectionStatus::Online,
             })

@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TYPE enum_conn_status AS ENUM ('online', 'offline');
 CREATE TYPE enum_validator_status AS ENUM ('provisioning', 'syncing', 'upgrading', 'synced', 'consensus', 'stopped');
-CREATE TYPE enum_stake_status AS ENUM ('available', 'staked', 'delinquent', 'disabled');
+CREATE TYPE enum_stake_status AS ENUM ('available', 'staking', 'staked', 'delinquent', 'disabled');
  
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -17,10 +17,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email on users (email);
 
 CREATE TABLE IF NOT EXISTS hosts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    version TEXT,
     name TEXT UNIQUE NOT NULL,
     location TEXT,
     ip_addr INET UNIQUE NOT NULL,
-    ip_addrs TEXT NOT NULL,
+    val_ip_addr_start INET UNIQUE NOT NULL,
+    val_count INT NOT NULL,
     token TEXT UNIQUE NOT NULL,
     status enum_conn_status NOT NULL DEFAULT 'offline',
     created_at TIMESTAMP NOT NULL default now()
@@ -29,6 +31,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_hosts_name on hosts (name);
 
 CREATE TABLE IF NOT EXISTS validators (
     id UUID PRIMARY KEY  DEFAULT uuid_generate_v4(),
+    name TEXT UNIQUE NOT NULL,
+    version TEXT,
     host_id UUID NOT NULL,
     user_id UUID,
     ip_addr INET UNIQUE NOT NULL,
