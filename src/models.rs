@@ -1,5 +1,6 @@
 use ipnetwork::IpNetwork;
 use serde::{Deserialize, Serialize};
+use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Result};
 use uuid::Uuid;
 
@@ -117,15 +118,15 @@ impl Host {
         Ok(host)
     }
 
-    pub async fn delete(id: Uuid, pool: &PgPool) -> Result<()> {
+    pub async fn delete(id: Uuid, pool: &PgPool) -> Result<u64> {
         let mut tx = pool.begin().await?;
-        let _deleted = sqlx::query("DELETE FROM hosts WHERE id = $1")
+        let deleted = sqlx::query("DELETE FROM hosts WHERE id = $1")
             .bind(id)
             .execute(&mut tx)
             .await?;
 
         tx.commit().await?;
-        Ok(())
+        Ok(deleted.rows_affected())
     }
 }
 
