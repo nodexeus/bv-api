@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS validators (
     user_id UUID,
     ip_addr INET UNIQUE NOT NULL,
     address TEXT UNIQUE,
-    swarm_key bytea,
+    swarm_key TEXT,
     stake_status enum_stake_status NOT NULL DEFAULT 'available',
     status enum_validator_status NOT NULL DEFAULT 'provisioning',
     score BIGINT NOT NULL DEFAULT 0,
