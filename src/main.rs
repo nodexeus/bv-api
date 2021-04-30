@@ -129,14 +129,13 @@ mod tests {
 
     #[actix_rt::test]
     async fn it_shoud_add_host() {
-        
         let db_pool = init_test().await;
 
         let mut app = test::init_service(
             App::new()
                 .data(db_pool.clone())
                 .wrap(middleware::Logger::default())
-                .service(add_host)
+                .service(add_host),
         )
         .await;
 
@@ -159,8 +158,6 @@ mod tests {
 
         assert_eq!(resp.name, "Test user 1");
 
-        
-
         // Delete new host from table
         let res = models::Host::delete(resp.id, &db_pool).await;
         assert_eq!(1, res.unwrap());
@@ -168,18 +165,19 @@ mod tests {
 
     #[actix_rt::test]
     async fn it_shoud_get_host() {
-        
         let db_pool = init_test().await;
 
         let mut app = test::init_service(
             App::new()
                 .data(db_pool.clone())
                 .wrap(middleware::Logger::default())
-                .service(get_host)
+                .service(get_host),
         )
         .await;
 
-        let host = Host::find_by_token("123", &db_pool).await.expect("Could not read test host from db.");
+        let host = Host::find_by_token("123", &db_pool)
+            .await
+            .expect("Could not read test host from db.");
 
         // Get a host
         let req = test::TestRequest::get()
@@ -193,18 +191,19 @@ mod tests {
 
     #[actix_rt::test]
     async fn it_shoud_get_host_by_token() {
-        
         let db_pool = init_test().await;
 
         let mut app = test::init_service(
             App::new()
                 .data(db_pool.clone())
                 .wrap(middleware::Logger::default())
-                .service(list_hosts)
+                .service(list_hosts),
         )
         .await;
 
-        let host = Host::find_by_token("123", &db_pool).await.expect("Could not read test host from db.");
+        let host = Host::find_by_token("123", &db_pool)
+            .await
+            .expect("Could not read test host from db.");
 
         // Get a host
         let req = test::TestRequest::get()
@@ -234,14 +233,25 @@ mod tests {
         reset_db(&pool.clone()).await;
 
         pool
-
     }
 
     async fn reset_db(pool: &PgPool) {
-        sqlx::query("DELETE FROM rewards").execute(pool).await.expect("Error deleting rewards");
-        sqlx::query("DELETE FROM validators").execute(pool).await.expect("Error deleting validators");
-        sqlx::query("DELETE FROM hosts").execute(pool).await.expect("Error deleting hosts");
-        sqlx::query("DELETE FROM users").execute(pool).await.expect("Error deleting users");
+        sqlx::query("DELETE FROM rewards")
+            .execute(pool)
+            .await
+            .expect("Error deleting rewards");
+        sqlx::query("DELETE FROM validators")
+            .execute(pool)
+            .await
+            .expect("Error deleting validators");
+        sqlx::query("DELETE FROM hosts")
+            .execute(pool)
+            .await
+            .expect("Error deleting hosts");
+        sqlx::query("DELETE FROM users")
+            .execute(pool)
+            .await
+            .expect("Error deleting users");
 
         let host = HostRequest {
             name: "Test user".to_string(),
@@ -254,6 +264,8 @@ mod tests {
             status: models::ConnectionStatus::Online,
         };
 
-        Host::create(host, &pool).await.expect("Could not create test host in db.");
+        Host::create(host, &pool)
+            .await
+            .expect("Could not create test host in db.");
     }
 }

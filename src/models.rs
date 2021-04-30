@@ -4,6 +4,7 @@ use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Result, Row};
 use std::convert::From;
 use uuid::Uuid;
+use std::net::{IpAddr, Ipv4Addr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -63,16 +64,34 @@ impl From<PgRow> for Host {
     fn from(row: PgRow) -> Self {
         Host {
             id: row.try_get("id").expect("Couldn't try_get id for host."),
-            name: row.try_get("name").expect("Couldn't try_get name for host."),
-            version: row.try_get("version").expect("Couldn't try_get version for host."),
-            location: row.try_get("location").expect("Couldn't try_get location for host."),
-            ip_addr: row.try_get("ip_addr").expect("Couldn't try_get ip_addr for host."),
-            val_ip_addr_start: row.try_get("val_ip_addr_start").expect("Couldn't try_get val_ip_addr_start for host."),
-            val_count: row.try_get("val_count").expect("Couldn't try_get val_count for host."),
-            token: row.try_get("token").expect("Couldn't try_get token for host."),
-            status: row.try_get("status").expect("Couldn't try_get status for host."),
+            name: row
+                .try_get("name")
+                .expect("Couldn't try_get name for host."),
+            version: row
+                .try_get("version")
+                .expect("Couldn't try_get version for host."),
+            location: row
+                .try_get("location")
+                .expect("Couldn't try_get location for host."),
+            ip_addr: row
+                .try_get("ip_addr")
+                .expect("Couldn't try_get ip_addr for host."),
+            val_ip_addr_start: row
+                .try_get("val_ip_addr_start")
+                .expect("Couldn't try_get val_ip_addr_start for host."),
+            val_count: row
+                .try_get("val_count")
+                .expect("Couldn't try_get val_count for host."),
+            token: row
+                .try_get("token")
+                .expect("Couldn't try_get token for host."),
+            status: row
+                .try_get("status")
+                .expect("Couldn't try_get status for host."),
             validators: Some(vec![]),
-            created_at: row.try_get("created_at").expect("Couldn't try_get created_at for host."),
+            created_at: row
+                .try_get("created_at")
+                .expect("Couldn't try_get created_at for host."),
         }
     }
 }
@@ -88,9 +107,7 @@ impl Host {
     pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
         sqlx::query("SELECT * FROM hosts WHERE id = $1")
             .bind(id)
-            .map(|row: PgRow| {
-                Self::from(row)
-            })
+            .map(|row: PgRow| Self::from(row))
             .fetch_one(pool)
             .await
     }
@@ -98,16 +115,14 @@ impl Host {
     pub async fn find_by_token(token: &str, pool: &PgPool) -> Result<Self> {
         sqlx::query("SELECT * FROM hosts WHERE token = $1")
             .bind(token)
-            .map(|row: PgRow| {
-                Self::from(row)
-            })
+            .map(|row: PgRow| Self::from(row))
             .fetch_one(pool)
             .await
     }
 
     pub async fn create(host: HostRequest, pool: &PgPool) -> Result<Self> {
         let mut tx = pool.begin().await?;
-        let host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addr_start, val_count, token, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *")
+        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addr_start, val_count, token, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *")
         .bind(host.name)
         .bind(host.version)
         .bind(host.location)
@@ -122,9 +137,29 @@ impl Host {
         .fetch_one(&mut tx)
         .await?;
 
-        //TODO: Create Validators
+        // Create and add validators
+        for i in 0..host.val_count {
 
-        // Get all Validators and add to host.
+            //TODO: Fix name/ip_addr
+            let val = ValidatorRequest {
+                name: "pet-name".to_string(),
+                version: None,
+                ip_addr: host.ip_addr,
+                host_id: host.id,
+                user_id: None,
+                address: None,
+                swarm_key: None,
+                stake_status: StakeStatus::Available,
+                status: ValidatorStatus::Provisioning,
+                score: 0,
+            };
+
+            //TODO add to array
+            // let val = Validator::create(val, &pool).await?;
+            // if let Some(vals) = host.validators {
+            //     vals.push(val.to_owned());
+            // }
+        }
 
         tx.commit().await?;
 
@@ -193,6 +228,49 @@ pub struct Validator {
     pub status: ValidatorStatus,
     pub score: i64,
     pub created_at: time::PrimitiveDateTime,
+}
+
+impl From<PgRow> for Validator {
+    fn from(row: PgRow) -> Self {
+        Self {
+            id: row
+                .try_get("id")
+                .expect("Couldn't try_get id for validator."),
+            name: row
+                .try_get("name")
+                .expect("Couldn't try_get name for validator."),
+            version: row
+                .try_get("version")
+                .expect("Couldn't try_get version for validator."),
+            ip_addr: row
+                .try_get("ip_addr")
+                .expect("Couldn't try_get ip_addr for validator."),
+            host_id: row
+                .try_get("host_id")
+                .expect("Couldn't try_get host_id for validator."),
+            user_id: row
+                .try_get("user)id")
+                .expect("Couldn't try_get user_id for validator."),
+            address: row
+                .try_get("address")
+                .expect("Couldn't try_get address for validator."),
+            swarm_key: row
+                .try_get("swarm_key")
+                .expect("Couldn't try_get swarm_key for validator."),
+            stake_status: row
+                .try_get("stake_status")
+                .expect("Couldn't try_get stake_status for validator."),
+            status: row
+                .try_get("status")
+                .expect("Couldn't try_get status for validator."),
+            score: row
+                .try_get("score")
+                .expect("Couldn't try_get score for validator."),
+            created_at: row
+                .try_get("created_at")
+                .expect("Couldn't try_get created_at for validator."),
+        }
+    }
 }
 
 impl Validator {
