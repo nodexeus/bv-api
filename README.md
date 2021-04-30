@@ -24,3 +24,12 @@ Revert Migration:
 ```bash
 diesel migration revert
 ```
+
+## Testing
+
+Currently the tests require live db and do not support multithreaded testing.
+
+To run:
+```bash
+cargo test -- --test-threads=1
+```
