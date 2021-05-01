@@ -99,7 +99,7 @@ async fn get_host(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
 #[post("/hosts")]
 async fn add_host(db_pool: DbPool, host: web::Json<HostRequest>) -> impl Responder {
     let mut host = host.into_inner();
-    host.token = Uuid::new_v4().to_string(); //TODO: Change up to string without dashes
+    host.token = Host::generate_token();
     let result = Host::create(host, db_pool.get_ref()).await;
     match result {
         Ok(host) => HttpResponse::Ok().json(host),
