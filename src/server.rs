@@ -98,9 +98,9 @@ async fn get_host(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
 }
 
 #[post("/hosts")]
-async fn add_host(db_pool: DbPool, host: web::Json<HostRequest>) -> impl Responder {
-    let mut host = host.into_inner();
-    host.token = Host::new_token();
+async fn add_host(db_pool: DbPool, host: web::Json<HostCreateRequest>) -> impl Responder {
+    let host = host.into_inner().into();
+
     let result = Host::create(host, db_pool.get_ref()).await;
     match result {
         Ok(host) => HttpResponse::Ok().json(host),

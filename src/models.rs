@@ -228,6 +228,29 @@ pub struct HostRequest {
     pub status: ConnectionStatus,
 }
 
+impl From<HostCreateRequest> for HostRequest {
+    fn from(host: HostCreateRequest) -> Self {
+        Self {
+            name: host.name,
+            version: host.version,
+            location: host.location,
+            ip_addr: host.ip_addr,
+            val_ip_addrs: host.val_ip_addrs,
+            token: Host::new_token(),
+            status: ConnectionStatus::Offline,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostCreateRequest {
+    pub name: String,
+    pub version: Option<String>,
+    pub location: Option<String>,
+    pub ip_addr: IpNetwork,
+    pub val_ip_addrs: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Validator {
     pub id: Uuid,
