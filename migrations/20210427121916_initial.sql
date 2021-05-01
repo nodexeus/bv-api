@@ -42,8 +42,8 @@ CREATE TABLE IF NOT EXISTS validators (
     status enum_validator_status NOT NULL DEFAULT 'provisioning',
     score BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT now(),
-    CONSTRAINT fk_validators_hosts FOREIGN KEY (host_id) REFERENCES hosts(id),
-    CONSTRAINT fk_validators_users FOREIGN KEY (user_id) REFERENCES users(id)
+    CONSTRAINT fk_validators_hosts FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE,
+    CONSTRAINT fk_validators_users FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_validators_user_id on validators(user_id);
 CREATE INDEX IF NOT EXISTS idx_validators_host_id on validators(host_id);

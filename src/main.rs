@@ -129,7 +129,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn it_shoud_add_host() {
-        let db_pool = init_test().await;
+        let db_pool = setup().await;
 
         let mut app = test::init_service(
             App::new()
@@ -148,7 +148,7 @@ mod tests {
                 location: Some("Virgina".to_string()),
                 ip_addr: "192.168.1.2".parse().expect("Couldn't parse ip address"),
                 val_ip_addr_start: "192.168.0.2".parse().expect("Couldn't parse ip address"),
-                val_count: 10,
+                val_count: 1,
                 token: "1234".to_string(),
                 status: models::ConnectionStatus::Online,
             })
@@ -157,6 +157,8 @@ mod tests {
         let resp: models::Host = test::read_response_json(&mut app, req).await;
 
         assert_eq!(resp.name, "Test user 1");
+        assert!(resp.validators.is_some());
+        assert_eq!(resp.validators.unwrap().len(), 1);
 
         // Delete new host from table
         let res = models::Host::delete(resp.id, &db_pool).await;
@@ -165,7 +167,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn it_shoud_get_host() {
-        let db_pool = init_test().await;
+        let db_pool = setup().await;
 
         let mut app = test::init_service(
             App::new()
@@ -191,7 +193,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn it_shoud_get_host_by_token() {
-        let db_pool = init_test().await;
+        let db_pool = setup().await;
 
         let mut app = test::init_service(
             App::new()
@@ -215,7 +217,7 @@ mod tests {
         assert_eq!(resp.name, "Test user");
     }
 
-    async fn init_test() -> PgPool {
+    async fn setup() -> PgPool {
         dotenv::dotenv().ok();
 
         let db_url = std::env::var("DATABASE_URL").expect("Missing DATABASE_URL");
@@ -259,7 +261,7 @@ mod tests {
             location: Some("Virgina".to_string()),
             ip_addr: "192.168.1.1".parse().expect("Couldn't parse ip address"),
             val_ip_addr_start: "192.168.0.1".parse().expect("Couldn't parse ip address"),
-            val_count: 10,
+            val_count: 1,
             token: "123".to_string(),
             status: models::ConnectionStatus::Online,
         };

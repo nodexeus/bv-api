@@ -1,7 +1,7 @@
 use ipnetwork::IpNetwork;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgRow;
-use sqlx::{FromRow, PgPool, Result, Row};
+use sqlx::{PgConnection, postgres::{PgRow, Postgres}};
+use sqlx::{FromRow, PgPool, Result, Row, Transaction};
 use std::convert::From;
 use uuid::Uuid;
 use std::net::{IpAddr, Ipv4Addr};
@@ -88,7 +88,7 @@ impl From<PgRow> for Host {
             status: row
                 .try_get("status")
                 .expect("Couldn't try_get status for host."),
-            validators: Some(vec![]),
+            validators: None,
             created_at: row
                 .try_get("created_at")
                 .expect("Couldn't try_get created_at for host."),
@@ -137,14 +137,16 @@ impl Host {
         .fetch_one(&mut tx)
         .await?;
 
+        let mut vals:Vec<Validator> = vec![];
+
         // Create and add validators
         for i in 0..host.val_count {
 
             //TODO: Fix name/ip_addr
             let val = ValidatorRequest {
-                name: "pet-name".to_string(),
+                name: petname::petname(2, "_"),
                 version: None,
-                ip_addr: host.ip_addr,
+                ip_addr: host.val_ip_addr_start,
                 host_id: host.id,
                 user_id: None,
                 address: None,
@@ -155,11 +157,12 @@ impl Host {
             };
 
             //TODO add to array
-            // let val = Validator::create(val, &pool).await?;
-            // if let Some(vals) = host.validators {
-            //     vals.push(val.to_owned());
-            // }
+            let val = Validator::create_tx(val, &mut tx).await?;
+            vals.push(val.to_owned());
+   
         }
+
+        host.validators = Some(vals);
 
         tx.commit().await?;
 
@@ -294,8 +297,7 @@ impl Validator {
             .await
     }
 
-    pub async fn create(validator: ValidatorRequest, pool: &PgPool) -> Result<Self> {
-        let mut tx = pool.begin().await?;
+    pub async fn create_tx(validator: ValidatorRequest, tx: &mut PgConnection) -> Result<Self> {
         let validator = sqlx::query_as::<_, Self>("INSERT INTO validators (name, version, ip_addr, host_id, user_id, address, swarm_key, stake_status, status, score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *")
         .bind(validator.name)
         .bind(validator.version)
@@ -307,8 +309,16 @@ impl Validator {
         .bind(validator.stake_status)
         .bind(validator.status)
         .bind(validator.score)
-        .fetch_one(&mut tx)
+        .fetch_one(tx)
         .await?;
+
+        Ok(validator)
+    }
+
+    pub async fn create(validator: ValidatorRequest, pool: &PgPool) -> Result<Self> {
+        let mut tx = pool.begin().await?;
+        
+        let validator = Self::create_tx(validator, &mut tx).await?;
 
         tx.commit().await?;
 
