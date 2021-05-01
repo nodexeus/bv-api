@@ -211,6 +211,10 @@ impl Host {
         tx.commit().await?;
         Ok(deleted.rows_affected())
     }
+
+    pub fn generate_token() -> String {
+        Uuid::new_v4().to_simple().encode_lower(&mut Uuid::encode_buffer()).to_string()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
