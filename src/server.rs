@@ -32,7 +32,7 @@ pub async fn start() -> anyhow::Result<()> {
 
     Ok(HttpServer::new(move || {
         let cors = Cors::default()
-              .allowed_origin("http://localhost:8080")
+              .allowed_origin("http://localhost:3000")
               .allowed_origin_fn(|origin, _req_head| {
                   origin.as_bytes().ends_with(b".stakejoy.com")
               })
