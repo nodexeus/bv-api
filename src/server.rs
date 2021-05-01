@@ -49,6 +49,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(update_host)
             .service(list_hosts)
             .service(delete_host)
+            .service(list_validators)
             .service(list_validators_by_user)
             .service(get_validator)
             .service(update_validator_status)
@@ -99,7 +100,7 @@ async fn get_host(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
 #[post("/hosts")]
 async fn add_host(db_pool: DbPool, host: web::Json<HostRequest>) -> impl Responder {
     let mut host = host.into_inner();
-    host.token = Host::generate_token();
+    host.token = Host::new_token();
     let result = Host::create(host, db_pool.get_ref()).await;
     match result {
         Ok(host) => HttpResponse::Ok().json(host),
@@ -132,6 +133,15 @@ async fn delete_host(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
             HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", rows))
         }
         _ => HttpResponse::BadRequest().json("Host not found."),
+    }
+}
+
+#[get("/validators")]
+async fn list_validators(db_pool: DbPool) -> impl Responder {
+    let result = Validator::find_all(db_pool.get_ref()).await;
+    match result {
+        Ok(validators) => HttpResponse::Ok().json(validators),
+        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
     }
 }
 
@@ -207,8 +217,7 @@ mod tests {
                 version: Some("0.1.0".to_string()),
                 location: Some("Virgina".to_string()),
                 ip_addr: "192.168.1.2".parse().expect("Couldn't parse ip address"),
-                val_ip_addr_start: "192.168.0.2".parse().expect("Couldn't parse ip address"),
-                val_count: 1,
+                val_ip_addrs: "192.168.0.3, 192.168.0.4".to_string(),
                 token: "1234".to_string(),
                 status: ConnectionStatus::Online,
             })
@@ -218,7 +227,7 @@ mod tests {
 
         assert_eq!(resp.name, "Test user 1");
         assert!(resp.validators.is_some());
-        assert_eq!(resp.validators.unwrap().len(), 1);
+        assert_eq!(resp.validators.unwrap().len(), 2);
 
         // Delete new host from table
         let res = Host::delete(resp.id, &db_pool).await;
@@ -353,8 +362,7 @@ mod tests {
             version: Some("0.1.0".to_string()),
             location: Some("Virgina".to_string()),
             ip_addr: "192.168.1.1".parse().expect("Couldn't parse ip address"),
-            val_ip_addr_start: "192.168.0.1".parse().expect("Couldn't parse ip address"),
-            val_count: 1,
+            val_ip_addrs: "192.168.0.1, 192.168.0.2".to_string(),
             token: "123".to_string(),
             status: ConnectionStatus::Online,
         };

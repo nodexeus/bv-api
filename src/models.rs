@@ -51,8 +51,7 @@ pub struct Host {
     pub version: Option<String>,
     pub location: Option<String>,
     pub ip_addr: IpNetwork,
-    pub val_ip_addr_start: IpNetwork,
-    pub val_count: i32,
+    pub val_ip_addrs: String,
     pub token: String,
     pub status: ConnectionStatus,
     pub validators: Option<Vec<Validator>>,
@@ -75,12 +74,9 @@ impl From<PgRow> for Host {
             ip_addr: row
                 .try_get("ip_addr")
                 .expect("Couldn't try_get ip_addr for host."),
-            val_ip_addr_start: row
-                .try_get("val_ip_addr_start")
-                .expect("Couldn't try_get val_ip_addr_start for host."),
-            val_count: row
-                .try_get("val_count")
-                .expect("Couldn't try_get val_count for host."),
+            val_ip_addrs: row
+                .try_get("val_ip_addrs")
+                .expect("Couldn't try_get val_ip_addrs for host."),
             token: row
                 .try_get("token")
                 .expect("Couldn't try_get token for host."),
@@ -131,13 +127,12 @@ impl Host {
 
     pub async fn create(host: HostRequest, pool: &PgPool) -> Result<Self> {
         let mut tx = pool.begin().await?;
-        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addr_start, val_count, token, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *")
+        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, token, status) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *")
         .bind(host.name)
         .bind(host.version)
         .bind(host.location)
         .bind(host.ip_addr)
-        .bind(host.val_ip_addr_start)
-        .bind(host.val_count)
+        .bind(host.val_ip_addrs)
         .bind(host.token)
         .bind(host.status)
         .map(|row: PgRow| {
@@ -149,12 +144,11 @@ impl Host {
         let mut vals: Vec<Validator> = vec![];
 
         // Create and add validators
-        for _i in 0..host.val_count {
-            //TODO: Fix name/ip_addr
+        for ip in host.validator_ips() {
             let val = ValidatorRequest {
                 name: petname::petname(2, "_"),
                 version: None,
-                ip_addr: host.val_ip_addr_start,
+                ip_addr: ip.to_owned(),
                 host_id: host.id,
                 user_id: None,
                 address: None,
@@ -164,7 +158,6 @@ impl Host {
                 score: 0,
             };
 
-            //TODO add to array
             let val = Validator::create_tx(val, &mut tx).await?;
             vals.push(val.to_owned());
         }
@@ -212,8 +205,15 @@ impl Host {
         Ok(deleted.rows_affected())
     }
 
-    pub fn generate_token() -> String {
+    pub fn new_token() -> String {
         Uuid::new_v4().to_simple().encode_lower(&mut Uuid::encode_buffer()).to_string()
+    }
+
+    pub fn validator_ips(&self) -> Vec<IpNetwork> {
+        self.val_ip_addrs.split(",").map(|ip| {
+            ip.trim().parse().expect("Could not parse validator ip addresses.")
+        }).collect()
+
     }
 }
 
@@ -223,8 +223,7 @@ pub struct HostRequest {
     pub version: Option<String>,
     pub location: Option<String>,
     pub ip_addr: IpNetwork,
-    pub val_ip_addr_start: IpNetwork,
-    pub val_count: i32,
+    pub val_ip_addrs: String,
     pub token: String,
     pub status: ConnectionStatus,
 }
@@ -295,29 +294,6 @@ impl Validator {
         Ok(validator)
     }
 
-    pub async fn update(id: Uuid, validator: ValidatorRequest, pool: &PgPool) -> Result<Self> {
-        let mut tx = pool.begin().await.unwrap();
-        let validator = sqlx::query_as::<_, Self>(
-            r#"UPDATE validators SET name=$1, version=$2, ip_addr=$3, host_id=$4, user_id=$5, address=$6, swarm_key=$7, stake_status=$8, status=$9, score=$10  WHERE id = $11 RETURNING *"#
-        )
-        .bind(validator.name)
-        .bind(validator.version)
-        .bind(validator.ip_addr)
-        .bind(validator.host_id)
-        .bind(validator.user_id)
-        .bind(validator.address)
-        .bind(validator.swarm_key)
-        .bind(validator.stake_status)
-        .bind(validator.status)
-        .bind(validator.score)
-        .bind(id)
-        .fetch_one(&mut tx)
-        .await?;
-
-        tx.commit().await.unwrap();
-        Ok(validator)
-    }
-
     pub async fn update_status(
         id: Uuid,
         validator: ValidatorStatusRequest,
@@ -359,16 +335,6 @@ impl Validator {
         Ok(validator)
     }
 
-    pub async fn delete(id: Uuid, pool: &PgPool) -> Result<u64> {
-        let mut tx = pool.begin().await?;
-        let deleted = sqlx::query("DELETE FROM validators WHERE id = $1")
-            .bind(id)
-            .execute(&mut tx)
-            .await?;
-
-        tx.commit().await?;
-        Ok(deleted.rows_affected())
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

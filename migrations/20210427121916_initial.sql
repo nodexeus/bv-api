@@ -21,8 +21,7 @@ CREATE TABLE IF NOT EXISTS hosts (
     name TEXT UNIQUE NOT NULL,
     location TEXT,
     ip_addr INET UNIQUE NOT NULL,
-    val_ip_addr_start INET UNIQUE NOT NULL,
-    val_count INT NOT NULL,
+    val_ip_addrs TEXT NOT NULL,
     token TEXT UNIQUE NOT NULL,
     status enum_conn_status NOT NULL DEFAULT 'offline',
     created_at TIMESTAMP NOT NULL default now()
