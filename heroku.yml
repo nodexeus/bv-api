@@ -1,0 +1,7 @@
+setup:
+  addons:
+    - plan: heroku-postgres
+      as: DATABASE_URL
+build:
+  docker:
+    web: Dockerfile
