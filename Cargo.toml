@@ -9,7 +9,9 @@ resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-web = "3.3.2"
+#actix-cors = "0.5.4"
+actix-cors = { git = "https://github.com/lumeohq/actix-extras", rev = "1023b996" }
+actix-web = { version = "=4.0.0-beta.5", features = ["rustls"] }
 anyhow = "1.0.40"
 dotenv = "0.15.0"
 env_logger = "0.8.3"
@@ -17,8 +19,9 @@ ipnetwork = { version = "0.17.0", features = ["serde"] }
 petname = "1.1.0"
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = "1.0.64"
-sqlx = { version = "0.5.2", features = ["postgres", "runtime-actix-rustls","migrate", "time", "ipnetwork", "uuid" ] }
+sqlx = { version = "0.5.2", features = ["postgres", "runtime-tokio-rustls", "migrate", "time", "ipnetwork", "uuid" ] }
 time = {version = "0.2.26", features = ["serde"] }
+tokio = { version = "1.2.0", default-features = false, features = ["io-util", "sync"] }
 uuid = { version = "0.8", features = ["serde", "v4"] }
 
 [dev-dependencies]

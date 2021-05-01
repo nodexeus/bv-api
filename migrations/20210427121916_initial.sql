@@ -50,6 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_validators_host_id on validators(host_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_validators_address on validators(address);
 CREATE INDEX IF NOT EXISTS idx_validators_status on validators(status);
 CREATE INDEX IF NOT EXISTS idx_validators_stake_status on validators(stake_status);
+CREATE INDEX IF NOT EXISTS idx_validators_created_at on validators(created_at);
 
 CREATE TABLE IF NOT EXISTS rewards (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

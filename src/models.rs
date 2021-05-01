@@ -1,10 +1,9 @@
 use ipnetwork::IpNetwork;
 use serde::{Deserialize, Serialize};
-use sqlx::{PgConnection, postgres::{PgRow, Postgres}};
-use sqlx::{FromRow, PgPool, Result, Row, Transaction};
+use sqlx::{FromRow, PgPool, Result, Row};
+use sqlx::{postgres::PgRow, PgConnection};
 use std::convert::From;
 use uuid::Uuid;
-use std::net::{IpAddr, Ipv4Addr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -105,19 +104,29 @@ impl Host {
     }
 
     pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
-        sqlx::query("SELECT * FROM hosts WHERE id = $1")
+        let mut host = sqlx::query("SELECT * FROM hosts WHERE id = $1")
             .bind(id)
             .map(|row: PgRow| Self::from(row))
             .fetch_one(pool)
-            .await
+            .await?;
+
+        // Add Validators list
+        host.validators = Some(Validator::find_all_by_host(host.id, pool).await?);
+
+        Ok(host)
     }
 
     pub async fn find_by_token(token: &str, pool: &PgPool) -> Result<Self> {
-        sqlx::query("SELECT * FROM hosts WHERE token = $1")
+        let mut host = sqlx::query("SELECT * FROM hosts WHERE token = $1")
             .bind(token)
             .map(|row: PgRow| Self::from(row))
             .fetch_one(pool)
-            .await
+            .await?;
+
+        // Add Validators list
+        host.validators = Some(Validator::find_all_by_host(host.id, pool).await?);
+
+        Ok(host)
     }
 
     pub async fn create(host: HostRequest, pool: &PgPool) -> Result<Self> {
@@ -137,11 +146,10 @@ impl Host {
         .fetch_one(&mut tx)
         .await?;
 
-        let mut vals:Vec<Validator> = vec![];
+        let mut vals: Vec<Validator> = vec![];
 
         // Create and add validators
-        for i in 0..host.val_count {
-
+        for _i in 0..host.val_count {
             //TODO: Fix name/ip_addr
             let val = ValidatorRequest {
                 name: petname::petname(2, "_"),
@@ -159,7 +167,6 @@ impl Host {
             //TODO add to array
             let val = Validator::create_tx(val, &mut tx).await?;
             vals.push(val.to_owned());
-   
         }
 
         host.validators = Some(vals);
@@ -172,14 +179,15 @@ impl Host {
     pub async fn update(id: Uuid, host: HostRequest, pool: &PgPool) -> Result<Self> {
         let mut tx = pool.begin().await.unwrap();
         let host = sqlx::query(
-            r#"UPDATE hosts SET name = $1, version = $2, location = $3, ip_addr = $4, val_ip_addr_start = $5, val_count = $6, token = $7, status = $8  WHERE id = $9 RETURNING *"#
+            r#"UPDATE hosts SET name = $1, version = $2, location = $3, ip_addr = $4, token = $5, status = $6  WHERE id = $7 RETURNING *"#
         )
         .bind(host.name)
         .bind(host.version)
         .bind(host.location)
         .bind(host.ip_addr)
-        .bind(host.val_ip_addr_start)
-        .bind(host.val_count)
+        //TODO: disable until we can figure out how best to handle
+        //.bind(host.val_ip_addr_start)
+        //.bind(host.val_count)
         .bind(host.token)
         .bind(host.status)
         .bind(id)
@@ -233,49 +241,6 @@ pub struct Validator {
     pub created_at: time::PrimitiveDateTime,
 }
 
-impl From<PgRow> for Validator {
-    fn from(row: PgRow) -> Self {
-        Self {
-            id: row
-                .try_get("id")
-                .expect("Couldn't try_get id for validator."),
-            name: row
-                .try_get("name")
-                .expect("Couldn't try_get name for validator."),
-            version: row
-                .try_get("version")
-                .expect("Couldn't try_get version for validator."),
-            ip_addr: row
-                .try_get("ip_addr")
-                .expect("Couldn't try_get ip_addr for validator."),
-            host_id: row
-                .try_get("host_id")
-                .expect("Couldn't try_get host_id for validator."),
-            user_id: row
-                .try_get("user)id")
-                .expect("Couldn't try_get user_id for validator."),
-            address: row
-                .try_get("address")
-                .expect("Couldn't try_get address for validator."),
-            swarm_key: row
-                .try_get("swarm_key")
-                .expect("Couldn't try_get swarm_key for validator."),
-            stake_status: row
-                .try_get("stake_status")
-                .expect("Couldn't try_get stake_status for validator."),
-            status: row
-                .try_get("status")
-                .expect("Couldn't try_get status for validator."),
-            score: row
-                .try_get("score")
-                .expect("Couldn't try_get score for validator."),
-            created_at: row
-                .try_get("created_at")
-                .expect("Couldn't try_get created_at for validator."),
-        }
-    }
-}
-
 impl Validator {
     pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM validators")
@@ -284,10 +249,21 @@ impl Validator {
     }
 
     pub async fn find_all_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Self>> {
-        sqlx::query_as::<_, Self>("SELECT * FROM validators WHERE host_id = $1 order by created_at")
-            .bind(host_id)
-            .fetch_all(pool)
-            .await
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM validators WHERE host_id = $1 order by status, name",
+        )
+        .bind(host_id)
+        .fetch_all(pool)
+        .await
+    }
+
+    pub async fn find_all_by_user(user_id: Uuid, pool: &PgPool) -> Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM validators WHERE user_id = $1 order by status, name",
+        )
+        .bind(user_id)
+        .fetch_all(pool)
+        .await
     }
 
     pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
@@ -311,16 +287,6 @@ impl Validator {
         .bind(validator.score)
         .fetch_one(tx)
         .await?;
-
-        Ok(validator)
-    }
-
-    pub async fn create(validator: ValidatorRequest, pool: &PgPool) -> Result<Self> {
-        let mut tx = pool.begin().await?;
-        
-        let validator = Self::create_tx(validator, &mut tx).await?;
-
-        tx.commit().await?;
 
         Ok(validator)
     }
@@ -369,6 +335,26 @@ impl Validator {
         Ok(validator)
     }
 
+    pub async fn update_identity(
+        id: Uuid,
+        validator: ValidatorIdentityRequest,
+        pool: &PgPool,
+    ) -> Result<Self> {
+        let mut tx = pool.begin().await.unwrap();
+        let validator = sqlx::query_as::<_, Self>(
+            r#"UPDATE validators SET version=$1, address=$2, swarm_key=$3 WHERE id = $4 RETURNING *"#
+        )
+        .bind(validator.version)
+        .bind(validator.address)
+        .bind(validator.swarm_key)
+        .bind(id)
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await.unwrap();
+        Ok(validator)
+    }
+
     pub async fn delete(id: Uuid, pool: &PgPool) -> Result<u64> {
         let mut tx = pool.begin().await?;
         let deleted = sqlx::query("DELETE FROM validators WHERE id = $1")
@@ -401,6 +387,13 @@ pub struct ValidatorStatusRequest {
     pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
     pub score: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidatorIdentityRequest {
+    pub version: Option<String>,
+    pub address: Option<String>,
+    pub swarm_key: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
