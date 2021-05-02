@@ -47,6 +47,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(get_host)
             .service(get_host_by_token)
             .service(update_host)
+            .service(update_host_status)
             .service(list_hosts)
             .service(delete_host)
             .service(list_validators)
@@ -78,7 +79,7 @@ async fn list_hosts(db_pool: DbPool, params: web::Query<QueryParams>) -> impl Re
     }
 }
 
-#[get("/hosts/token/{token_id}")]
+#[get("/hosts/token/{token}")]
 async fn get_host_by_token(db_pool: DbPool, token: web::Path<String>) -> impl Responder {
     let result = Host::find_by_token(&token.into_inner(), db_pool.get_ref()).await;
     match result {
@@ -87,7 +88,7 @@ async fn get_host_by_token(db_pool: DbPool, token: web::Path<String>) -> impl Re
     }
 }
 
-#[get("/hosts/{host_id}")]
+#[get("/hosts/{id}")]
 async fn get_host(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
     let id = id.into_inner();
     let result = Host::find_by_id(id, db_pool.get_ref()).await;
@@ -111,7 +112,7 @@ async fn add_host(db_pool: DbPool, host: web::Json<HostCreateRequest>) -> impl R
     }
 }
 
-#[put("/host/{id}")]
+#[put("/hosts/{id}")]
 async fn update_host(
     db_pool: DbPool,
     id: web::Path<Uuid>,
@@ -124,6 +125,22 @@ async fn update_host(
         Err(e) => HttpResponse::BadRequest().json(e.to_string()),
     }
 }
+
+#[put("/hosts/{id}/status")]
+async fn update_host_status(
+    db_pool: DbPool,
+    id: web::Path<Uuid>,
+    host: web::Json<HostStatusRequest>,
+) -> impl Responder {
+    let host = host.into_inner();
+    let result = Host::update_status(id.into_inner(), host, db_pool.get_ref()).await;
+    match result {
+        Ok(host) => HttpResponse::Ok().json(host),
+        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
+    }
+}
+
+
 
 #[delete("/hosts/{id}")]
 async fn delete_host(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
@@ -317,6 +334,40 @@ mod tests {
 
         assert_eq!(resp.host_id, host.id);
         assert_eq!(resp.score, 1000000);
+    }
+
+    #[actix_rt::test]
+    async fn it_shoud_update_host_status() {
+        let db_pool = setup().await;
+
+        let mut app = test::init_service(
+            App::new()
+                .data(db_pool.clone())
+                .wrap(middleware::Logger::default())
+                .service(update_host_status),
+        )
+        .await;
+
+        let host = get_test_host(db_pool.clone()).await;
+
+        let path = format!(
+            "/hosts/{}/status",
+            host.id
+        );
+
+        let req = test::TestRequest::put()
+            .uri(&path)
+            .set_json(&HostStatusRequest {
+                version: Some("2.0".to_string()),
+                status: ConnectionStatus::Online,
+            })
+            .to_request();
+
+        let resp: Host = test::read_response_json(&mut app, req).await;
+
+        assert_eq!(resp.id, host.id);
+        assert_eq!(resp.version, Some("2.0".to_string()));
+        assert_eq!(resp.status, ConnectionStatus::Online);
     }
 
     async fn setup() -> PgPool {

@@ -194,6 +194,24 @@ impl Host {
         Ok(host)
     }
 
+    pub async fn update_status(id: Uuid, host: HostStatusRequest, pool: &PgPool) -> Result<Self> {
+        let mut tx = pool.begin().await.unwrap();
+        let host = sqlx::query(
+            r#"UPDATE hosts SET version = $1, status = $2  WHERE id = $3 RETURNING *"#
+        )
+        .bind(host.version)
+        .bind(host.status)
+        .bind(id)
+        .map(|row: PgRow| {
+            Self::from(row)
+        })
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await.unwrap();
+        Ok(host)
+    }
+
     pub async fn delete(id: Uuid, pool: &PgPool) -> Result<u64> {
         let mut tx = pool.begin().await?;
         let deleted = sqlx::query("DELETE FROM hosts WHERE id = $1")
@@ -250,6 +268,13 @@ pub struct HostCreateRequest {
     pub ip_addr: IpNetwork,
     pub val_ip_addrs: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostStatusRequest {
+    pub version: Option<String>,
+    pub status: ConnectionStatus,
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Validator {
