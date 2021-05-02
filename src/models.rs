@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use ipnetwork::IpNetwork;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool, Result, Row};
@@ -55,7 +56,7 @@ pub struct Host {
     pub token: String,
     pub status: ConnectionStatus,
     pub validators: Option<Vec<Validator>>,
-    pub created_at: time::PrimitiveDateTime,
+    pub created_at: DateTime<Utc>,
 }
 
 impl From<PgRow> for Host {
@@ -196,17 +197,14 @@ impl Host {
 
     pub async fn update_status(id: Uuid, host: HostStatusRequest, pool: &PgPool) -> Result<Self> {
         let mut tx = pool.begin().await.unwrap();
-        let host = sqlx::query(
-            r#"UPDATE hosts SET version = $1, status = $2  WHERE id = $3 RETURNING *"#
-        )
-        .bind(host.version)
-        .bind(host.status)
-        .bind(id)
-        .map(|row: PgRow| {
-            Self::from(row)
-        })
-        .fetch_one(&mut tx)
-        .await?;
+        let host =
+            sqlx::query(r#"UPDATE hosts SET version = $1, status = $2  WHERE id = $3 RETURNING *"#)
+                .bind(host.version)
+                .bind(host.status)
+                .bind(id)
+                .map(|row: PgRow| Self::from(row))
+                .fetch_one(&mut tx)
+                .await?;
 
         tx.commit().await.unwrap();
         Ok(host)
@@ -224,14 +222,21 @@ impl Host {
     }
 
     pub fn new_token() -> String {
-        Uuid::new_v4().to_simple().encode_lower(&mut Uuid::encode_buffer()).to_string()
+        Uuid::new_v4()
+            .to_simple()
+            .encode_lower(&mut Uuid::encode_buffer())
+            .to_string()
     }
 
     pub fn validator_ips(&self) -> Vec<IpNetwork> {
-        self.val_ip_addrs.split(",").map(|ip| {
-            ip.trim().parse().expect("Could not parse validator ip addresses.")
-        }).collect()
-
+        self.val_ip_addrs
+            .split(",")
+            .map(|ip| {
+                ip.trim()
+                    .parse()
+                    .expect("Could not parse validator ip addresses.")
+            })
+            .collect()
     }
 }
 
@@ -275,7 +280,6 @@ pub struct HostStatusRequest {
     pub status: ConnectionStatus,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Validator {
     pub id: Uuid,
@@ -289,7 +293,7 @@ pub struct Validator {
     pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
     pub score: i64,
-    pub created_at: time::PrimitiveDateTime,
+    pub created_at: DateTime<Utc>,
 }
 
 impl Validator {
@@ -382,7 +386,6 @@ impl Validator {
         tx.commit().await.unwrap();
         Ok(validator)
     }
-
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

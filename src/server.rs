@@ -1,7 +1,7 @@
 use crate::models::*;
 use actix_cors::Cors;
 use actix_web::{
-    App, HttpResponse, HttpServer, Responder, delete, get, http, middleware, post, put, web,
+    delete, get, http, middleware, post, put, web, App, HttpResponse, HttpServer, Responder,
 };
 use serde::Deserialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -32,12 +32,16 @@ pub async fn start() -> anyhow::Result<()> {
 
     Ok(HttpServer::new(move || {
         let cors = Cors::default()
-              .allowed_origin("http://localhost:3000")
-              .allowed_origin_fn(|origin, _req_head| {
-                  origin.as_bytes().ends_with(b".stakejoy.com")
-              })
-              .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"])
-              .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT, http::header::CONTENT_TYPE]);
+            .allowed_origin("http://localhost:3000")
+            .allowed_origin_fn(|origin, _req_head| origin.as_bytes().ends_with(b".stakejoy.com"))
+            .allowed_methods(vec![
+                "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH",
+            ])
+            .allowed_headers(vec![
+                http::header::AUTHORIZATION,
+                http::header::ACCEPT,
+                http::header::CONTENT_TYPE,
+            ]);
 
         App::new()
             .data(db_pool.clone())
@@ -139,8 +143,6 @@ async fn update_host_status(
         Err(e) => HttpResponse::BadRequest().json(e.to_string()),
     }
 }
-
-
 
 #[delete("/hosts/{id}")]
 async fn delete_host(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
@@ -350,10 +352,7 @@ mod tests {
 
         let host = get_test_host(db_pool.clone()).await;
 
-        let path = format!(
-            "/hosts/{}/status",
-            host.id
-        );
+        let path = format!("/hosts/{}/status", host.id);
 
         let req = test::TestRequest::put()
             .uri(&path)

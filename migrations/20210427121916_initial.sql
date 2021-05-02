@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT UNIQUE NOT NULL,
     hashword TEXT NOT NULL,
     salt TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email on users (email);
 
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS hosts (
     val_ip_addrs TEXT NOT NULL,
     token TEXT UNIQUE NOT NULL,
     status enum_conn_status NOT NULL DEFAULT 'offline',
-    created_at TIMESTAMP NOT NULL default now()
+    created_at TIMESTAMPTZ NOT NULL default now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_hosts_name on hosts (name);
 
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS validators (
     stake_status enum_stake_status NOT NULL DEFAULT 'available',
     status enum_validator_status NOT NULL DEFAULT 'provisioning',
     score BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT now(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT fk_validators_hosts FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE,
     CONSTRAINT fk_validators_users FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
