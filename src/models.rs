@@ -37,12 +37,46 @@ pub enum StakeStatus {
     Disabled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: Uuid,
     pub email: String,
     pub hashword: String,
     pub salt: String,
+}
+
+impl User {
+    pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM users")
+            .fetch_all(pool)
+            .await
+    }
+
+    pub async fn find_by_email(email: Uuid, pool: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM users WHERE email = $1 limit 1",
+        )
+        .bind(email)
+        .fetch_one(pool)
+        .await
+    }
+
+    pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM users WHERE id = $1 limit 1",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+    }
+
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserRequest {
+    pub email: String,
+    pub password: String,
+    pub password_confirm: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
