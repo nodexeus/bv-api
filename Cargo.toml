@@ -16,11 +16,10 @@ anyhow = "1.0.40"
 chrono = {version = "0.4.19", features = ["serde"] }
 dotenv = "0.15.0"
 env_logger = "0.8.3"
-ipnetwork = { version = "0.17.0", features = ["serde"] }
 petname = "1.1.0"
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = "1.0.64"
-sqlx = { version = "0.5.2", features = ["postgres", "runtime-tokio-rustls", "migrate", "chrono", "ipnetwork", "uuid" ] }
+sqlx = { version = "0.5.2", features = ["postgres", "runtime-tokio-rustls", "migrate", "chrono", "uuid" ] }
 tokio = { version = "1.2.0", default-features = false, features = ["io-util", "sync"] }
 uuid = { version = "0.8", features = ["serde", "v4"] }
 

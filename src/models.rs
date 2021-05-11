@@ -1,5 +1,4 @@
 use chrono::{DateTime, Utc};
-use ipnetwork::IpNetwork;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool, Result, Row};
 use sqlx::{postgres::PgRow, PgConnection};
@@ -85,7 +84,7 @@ pub struct Host {
     pub name: String,
     pub version: Option<String>,
     pub location: Option<String>,
-    pub ip_addr: IpNetwork,
+    pub ip_addr: String,
     pub val_ip_addrs: String,
     pub token: String,
     pub status: ConnectionStatus,
@@ -262,13 +261,11 @@ impl Host {
             .to_string()
     }
 
-    pub fn validator_ips(&self) -> Vec<IpNetwork> {
+    pub fn validator_ips(&self) -> Vec<String> {
         self.val_ip_addrs
             .split(",")
             .map(|ip| {
-                ip.trim()
-                    .parse()
-                    .expect("Could not parse validator ip addresses.")
+                ip.trim().to_string()
             })
             .collect()
     }
@@ -279,7 +276,7 @@ pub struct HostRequest {
     pub name: String,
     pub version: Option<String>,
     pub location: Option<String>,
-    pub ip_addr: IpNetwork,
+    pub ip_addr: String,
     pub val_ip_addrs: String,
     pub token: String,
     pub status: ConnectionStatus,
@@ -304,7 +301,7 @@ pub struct HostCreateRequest {
     pub name: String,
     pub version: Option<String>,
     pub location: Option<String>,
-    pub ip_addr: IpNetwork,
+    pub ip_addr: String,
     pub val_ip_addrs: String,
 }
 
@@ -319,7 +316,7 @@ pub struct Validator {
     pub id: Uuid,
     pub name: String,
     pub version: Option<String>,
-    pub ip_addr: IpNetwork,
+    pub ip_addr: String,
     pub host_id: Uuid,
     pub user_id: Option<Uuid>,
     pub address: Option<String>,
@@ -426,7 +423,7 @@ impl Validator {
 pub struct ValidatorRequest {
     pub name: String,
     pub version: Option<String>,
-    pub ip_addr: IpNetwork,
+    pub ip_addr: String,
     pub host_id: Uuid,
     pub user_id: Option<Uuid>,
     pub address: Option<String>,

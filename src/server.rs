@@ -411,7 +411,7 @@ mod tests {
             name: "Test user".to_string(),
             version: Some("0.1.0".to_string()),
             location: Some("Virgina".to_string()),
-            ip_addr: "192.168.1.1".parse().expect("Couldn't parse ip address"),
+            ip_addr: "192.168.1.1".to_string(),
             val_ip_addrs: "192.168.0.1, 192.168.0.2".to_string(),
             token: "123".to_string(),
             status: ConnectionStatus::Online,

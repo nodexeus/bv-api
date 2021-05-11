@@ -263,7 +263,6 @@ dependencies = [
  "chrono",
  "dotenv",
  "env_logger",
- "ipnetwork",
  "petname",
  "serde",
  "serde_json",
@@ -871,15 +870,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61124eeebbd69b8190558df225adf7e4caafce0d743919e5d6b19652314ec5ec"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "ipnetwork"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02c3eaab3ac0ede60ffa41add21970a7df7d91772c03383aac6c2c3d53cc716b"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -1529,7 +1519,6 @@ dependencies = [
  "hashlink",
  "hex",
  "hmac",
- "ipnetwork",
  "itoa",
  "libc",
  "log",
