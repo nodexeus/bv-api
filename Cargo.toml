@@ -22,6 +22,10 @@ serde_json = "1.0.64"
 sqlx = { version = "0.5.2", features = ["postgres", "runtime-tokio-rustls", "migrate", "chrono", "uuid" ] }
 tokio = { version = "1.2.0", default-features = false, features = ["io-util", "sync"] }
 uuid = { version = "0.8", features = ["serde", "v4"] }
+tracing = "0.1.26"
+tracing-futures = "0.2.5"
+tracing-log = { version = "0.1.2", features = ["env_logger"] }
+tracing-subscriber = "0.2.18"
 
 [dev-dependencies]
 actix-rt = "2.2.0"
