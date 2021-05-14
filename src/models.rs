@@ -4,6 +4,7 @@ use sqlx::{FromRow, PgPool, Result, Row};
 use sqlx::{postgres::PgRow, PgConnection};
 use std::convert::From;
 use uuid::Uuid;
+use validator::{Validate, ValidationError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -40,6 +41,7 @@ pub enum StakeStatus {
 pub struct User {
     pub id: Uuid,
     pub email: String,
+    #[serde(skip_serializing)]
     pub hashword: String,
     pub salt: String,
 }
@@ -71,9 +73,11 @@ impl User {
 
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UserRequest {
+    #[validate(email)]
     pub email: String,
+    #[validate(length(min = 8), must_match = "password_confirm")]
     pub password: String,
     pub password_confirm: String,
 }
