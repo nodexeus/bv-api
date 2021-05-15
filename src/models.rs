@@ -39,7 +39,7 @@ pub enum StakeStatus {
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "enum_stake_status", rename_all = "snake_case")]
+#[sqlx(type_name = "enum_host_cmd", rename_all = "snake_case")]
 pub enum HostCmd {
     RestartMiner,
     RestartJail,
@@ -351,7 +351,7 @@ impl Command {
     }
 
     pub async fn create(host_id: Uuid, command: CommandRequest, pool: &PgPool) -> Result<Command> {
-        sqlx::query_as::<_, Self>("INSERT INTO commands host_id, cmd, sub_cmd) VALUES ($1, $2, $3) RETURNING *")
+        sqlx::query_as::<_, Self>("INSERT INTO commands (host_id, cmd, sub_cmd) VALUES ($1, $2, $3) RETURNING *")
         .bind(host_id)
         .bind(command.cmd)
         .bind(command.sub_cmd)

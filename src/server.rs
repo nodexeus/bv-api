@@ -439,6 +439,35 @@ mod tests {
         assert_eq!(resp.version, Some("48".to_string()));
     }
 
+    #[actix_rt::test]
+    async fn it_shoud_create_command() {
+        let db_pool = setup().await;
+
+        let mut app = test::init_service(
+            App::new()
+                .data(db_pool.clone())
+                .wrap(middleware::Logger::default())
+                .service(create_command),
+        )
+        .await;
+
+        let host = get_test_host(db_pool.clone()).await;
+
+        let path = format!("/hosts/{}/commands", host.id);
+
+        let req = test::TestRequest::post()
+            .uri(&path)
+            .set_json(&CommandRequest {
+                cmd: HostCmd::RestartJail,
+                sub_cmd: Some("blue_angel".to_string()),
+            })
+            .to_request();
+
+        let resp: Command = test::read_response_json(&mut app, req).await;
+
+        assert_eq!(resp.host_id, host.id);
+    }
+
     async fn setup() -> PgPool {
         dotenv::dotenv().ok();
 
