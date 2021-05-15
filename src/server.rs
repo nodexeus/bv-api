@@ -59,6 +59,12 @@ pub async fn start() -> anyhow::Result<()> {
             .service(get_validator)
             .service(update_validator_status)
             .service(update_validator_identity)
+            .service(get_command)
+            .service(list_commands)
+            .service(list_pending_commands)
+            .service(create_command)
+            .service(update_command_response)
+            .service(delete_command)
     })
     .bind(&addr)?
     .run()
@@ -210,6 +216,68 @@ async fn update_validator_identity(
     }
 }
 
+#[get("/commands/{id}")]
+async fn get_command(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
+    let result = Command::find_by_id(id.into_inner(), db_pool.as_ref()).await;
+
+    match result {
+        Ok(command) => HttpResponse::Ok().json(command),
+        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
+    }
+}
+
+#[get("/hosts/(host_id}/commands")]
+async fn list_commands(db_pool: DbPool, host_id: web::Path<Uuid>) -> impl Responder {
+    let result = Command::find_all_by_host(host_id.into_inner(), db_pool.as_ref()).await;
+
+    match result {
+        Ok(command) => HttpResponse::Ok().json(command),
+        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
+    }
+}
+
+#[get("/hosts/(host_id}/commands/pending")]
+async fn list_pending_commands(db_pool: DbPool, host_id: web::Path<Uuid>) -> impl Responder {
+    let result = Command::find_pending_by_host(host_id.into_inner(), db_pool.as_ref()).await;
+
+    match result {
+        Ok(command) => HttpResponse::Ok().json(command),
+        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
+    }
+}
+
+#[post("/hosts/{host_id}/commands")]
+async fn create_command(db_pool: DbPool, host_id: web::Path<Uuid>, command: web::Json<CommandRequest>) -> impl Responder {
+
+    let result = Command::create(host_id.into_inner(), command .into_inner(), db_pool.as_ref()).await;
+
+    match result {
+        Ok(command) => HttpResponse::Ok().json(command),
+        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
+    }
+}
+
+#[put("/commands/{id}/response")]
+async fn update_command_response(db_pool: DbPool, id: web::Path<Uuid>, response: web::Json<CommandResponseRequest>) -> impl Responder {
+    let result = Command::update_response(id.into_inner(), response.into_inner(), db_pool.as_ref()).await;
+
+    match result {
+        Ok(command) => HttpResponse::Ok().json(command),
+        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
+    }
+}
+
+#[delete("/command/{id}")]
+async fn delete_command(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
+    let result = Command::delete(id.into_inner(), db_pool.get_ref()).await;
+    match result {
+        Ok(rows) if rows > 0 => {
+            HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", rows))
+        }
+        _ => HttpResponse::BadRequest().json("Host not found."),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,7 +405,6 @@ mod tests {
         assert_eq!(resp.host_id, host.id);
         assert_eq!(resp.score, 1000000);
     }
-    
 
     #[actix_rt::test]
     async fn it_shoud_update_validator_identity() {
@@ -370,9 +437,7 @@ mod tests {
 
         assert_eq!(resp.id, validator.id);
         assert_eq!(resp.version, Some("48".to_string()));
-        
     }
-
 
     async fn setup() -> PgPool {
         dotenv::dotenv().ok();

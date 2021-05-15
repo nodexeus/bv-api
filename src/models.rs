@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool, Result, Row};
 use sqlx::{postgres::PgRow, PgConnection};
+use sqlx::{FromRow, PgPool, Result, Row};
 use std::convert::From;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
@@ -37,6 +37,17 @@ pub enum StakeStatus {
     Disabled,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "enum_stake_status", rename_all = "snake_case")]
+pub enum HostCmd {
+    RestartMiner,
+    RestartJail,
+    GetMinerName,
+    GetBlockHeight,
+    All,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: Uuid,
@@ -54,23 +65,18 @@ impl User {
     }
 
     pub async fn find_by_email(email: Uuid, pool: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM users WHERE email = $1 limit 1",
-        )
-        .bind(email)
-        .fetch_one(pool)
-        .await
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE email = $1 limit 1")
+            .bind(email)
+            .fetch_one(pool)
+            .await
     }
 
     pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM users WHERE id = $1 limit 1",
-        )
-        .bind(id)
-        .fetch_one(pool)
-        .await
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE id = $1 limit 1")
+            .bind(id)
+            .fetch_one(pool)
+            .await
     }
-
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -216,9 +222,6 @@ impl Host {
         .bind(host.version)
         .bind(host.location)
         .bind(host.ip_addr)
-        //TODO: disable until we can figure out how best to handle
-        //.bind(host.val_ip_addr_start)
-        //.bind(host.val_count)
         .bind(host.token)
         .bind(host.status)
         .bind(id)
@@ -268,9 +271,7 @@ impl Host {
     pub fn validator_ips(&self) -> Vec<String> {
         self.val_ip_addrs
             .split(",")
-            .map(|ip| {
-                ip.trim().to_string()
-            })
+            .map(|ip| ip.trim().to_string())
             .collect()
     }
 }
@@ -313,6 +314,82 @@ pub struct HostCreateRequest {
 pub struct HostStatusRequest {
     pub version: Option<String>,
     pub status: ConnectionStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Command {
+    pub id: Uuid,
+    pub host_id: Uuid,
+    pub cmd: HostCmd,
+    pub sub_cmd: Option<String>,
+    pub response: Option<String>,
+    pub exit_status: Option<i32>,
+    pub created_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+impl Command {
+    pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, Self>("SELECT * FROM commands where id = $1")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+    }
+
+    pub async fn find_all_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Command>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM commands where host_id = $1 ORDER BY created_at DESC")
+        .bind(host_id)
+        .fetch_all(pool)
+        .await
+    }
+
+    pub async fn find_pending_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Command>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM commands where host_id = $1 AND completed_at IS NULL ORDER BY created_at_DESC")
+        .bind(host_id)
+        .fetch_all(pool)
+        .await
+    }
+
+    pub async fn create(host_id: Uuid, command: CommandRequest, pool: &PgPool) -> Result<Command> {
+        sqlx::query_as::<_, Self>("INSERT INTO commands host_id, cmd, sub_cmd) VALUES ($1, $2, $3) RETURNING *")
+        .bind(host_id)
+        .bind(command.cmd)
+        .bind(command.sub_cmd)
+        .fetch_one(pool)
+        .await
+    }
+
+    pub async fn update_response(id: Uuid, response: CommandResponseRequest, pool: &PgPool) -> Result<Command> {
+        sqlx::query_as::<_, Self>("UPDATE commands SET response = $1, exit_status = $2, completed_at = now() WHERE id = $3 RETURNING *")
+        .bind(response.response)
+        .bind(response.exit_status)
+        .bind(id)
+        .fetch_one(pool)
+        .await
+    }
+
+    pub async fn delete(id: Uuid, pool: &PgPool) -> Result<u64> {
+        let mut tx = pool.begin().await?;
+        let deleted = sqlx::query("DELETE FROM commands WHERE id = $1")
+            .bind(id)
+            .execute(&mut tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(deleted.rows_affected())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandRequest {
+    pub cmd: HostCmd,
+    pub sub_cmd: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandResponseRequest {
+    pub response: Option<String>,
+    pub exit_status: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

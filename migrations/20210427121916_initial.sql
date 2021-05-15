@@ -5,7 +5,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE enum_conn_status AS ENUM ('online', 'offline');
 CREATE TYPE enum_validator_status AS ENUM ('provisioning', 'syncing', 'upgrading', 'synced', 'consensus', 'stopped');
 CREATE TYPE enum_stake_status AS ENUM ('available', 'staking', 'staked', 'delinquent', 'disabled');
- 
+CREATE TYPE enum_host_cmd AS ENUM ('restart_miner', 'restart_jail', 'get_miner_name', 'get_block_height', 'all');
+
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email TEXT UNIQUE NOT NULL,
@@ -50,6 +51,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_validators_address on validators(address);
 CREATE INDEX IF NOT EXISTS idx_validators_status on validators(status);
 CREATE INDEX IF NOT EXISTS idx_validators_stake_status on validators(stake_status);
 CREATE INDEX IF NOT EXISTS idx_validators_created_at on validators(created_at);
+
+CREATE TABLE IF NOT EXISTS commands (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    host_id UUID NOT NULL,
+    cmd enum_host_cmd NOT NULL,
+    sub_cmd TEXT,
+    response TEXT,
+    exit_status INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ,
+    CONSTRAINT fk_host_commands_hosts FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_commands_host_id on commands(host_id);
+CREATE INDEX IF NOT EXISTS idx_commands_created_at on commands(created_at);
+CREATE INDEX IF NOT EXISTS idx_commands_completed_at on commands(completed_at);
 
 CREATE TABLE IF NOT EXISTS rewards (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
