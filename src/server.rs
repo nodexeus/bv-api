@@ -337,37 +337,42 @@ mod tests {
         assert_eq!(resp.host_id, host.id);
         assert_eq!(resp.score, 1000000);
     }
+    
 
     #[actix_rt::test]
-    async fn it_shoud_update_host_status() {
+    async fn it_shoud_update_validator_identity() {
         let db_pool = setup().await;
 
         let mut app = test::init_service(
             App::new()
                 .data(db_pool.clone())
                 .wrap(middleware::Logger::default())
-                .service(update_host_status),
+                .service(update_validator_identity),
         )
         .await;
 
         let host = get_test_host(db_pool.clone()).await;
+        let validators = host.validators.expect("missing validators");
+        let validator = &validators.first().expect("missing validator");
 
-        let path = format!("/hosts/{}/status", host.id);
+        let path = format!("/validators/{}/identity", validator.id);
 
         let req = test::TestRequest::put()
             .uri(&path)
-            .set_json(&HostStatusRequest {
-                version: Some("2.0".to_string()),
-                status: ConnectionStatus::Online,
+            .set_json(&ValidatorIdentityRequest {
+                version: Some("48".to_string()),
+                address: Some("Z729x5EeguKsNZbqBJYCh9p7wVg35RybQjNoqxQcx9u81k2jpY".to_string()),
+                swarm_key: Some("EN1VKTRg_ym6SlR83y7dWtc0_uDJG380znHFcWeTy2ztBIPxqD93D__U3JK5mrrFjvcDtPtGLbwwRRGp2rr8YfAnQ_OL7S5pSOINHLIxgEqtz00wn8T74A9d9anlTOb-BHM=".to_string()),
             })
             .to_request();
 
-        let resp: Host = test::read_response_json(&mut app, req).await;
+        let resp: Validator = test::read_response_json(&mut app, req).await;
 
-        assert_eq!(resp.id, host.id);
-        assert_eq!(resp.version, Some("2.0".to_string()));
-        assert_eq!(resp.status, ConnectionStatus::Online);
+        assert_eq!(resp.id, validator.id);
+        assert_eq!(resp.version, Some("48".to_string()));
+        
     }
+
 
     async fn setup() -> PgPool {
         dotenv::dotenv().ok();

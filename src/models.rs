@@ -324,7 +324,7 @@ pub struct Validator {
     pub host_id: Uuid,
     pub user_id: Option<Uuid>,
     pub address: Option<String>,
-    pub swarm_key: Option<Vec<u8>>,
+    pub swarm_key: Option<String>,
     pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
     pub score: i64,
@@ -431,7 +431,7 @@ pub struct ValidatorRequest {
     pub host_id: Uuid,
     pub user_id: Option<Uuid>,
     pub address: Option<String>,
-    pub swarm_key: Option<Vec<u8>>,
+    pub swarm_key: Option<String>,
     pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
     pub score: i64,
@@ -449,7 +449,7 @@ pub struct ValidatorStatusRequest {
 pub struct ValidatorIdentityRequest {
     pub version: Option<String>,
     pub address: Option<String>,
-    pub swarm_key: Option<Vec<u8>>,
+    pub swarm_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
