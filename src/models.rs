@@ -1,10 +1,16 @@
+use crate::errors::{ApiError, Result};
+use argon2::{
+    password_hash::{PasswordHasher, PasswordVerifier, SaltString},
+    Argon2,
+};
 use chrono::{DateTime, Utc};
+use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgRow, PgConnection};
-use sqlx::{FromRow, PgPool, Result, Row};
+use sqlx::{FromRow, PgPool, Row};
 use std::convert::From;
 use uuid::Uuid;
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -58,17 +64,28 @@ pub struct User {
 }
 
 impl User {
+    pub fn verify_password(&self, password: &str) -> Result<()> {
+        let argon2 = Argon2::default();
+        let parsed_hash = argon2.hash_password_simple(password.as_bytes(), &self.salt)?;
+
+        argon2
+            .verify_password(self.hashword.as_bytes(), &parsed_hash)
+            .map_err(ApiError::from)
+    }
+
     pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM users")
             .fetch_all(pool)
             .await
+            .map_err(ApiError::from)
     }
 
-    pub async fn find_by_email(email: Uuid, pool: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE email = $1 limit 1")
+    pub async fn find_by_email(email: &str, pool: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1")
             .bind(email)
             .fetch_one(pool)
             .await
+            .map_err(ApiError::from)
     }
 
     pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
@@ -76,6 +93,25 @@ impl User {
             .bind(id)
             .fetch_one(pool)
             .await
+            .map_err(ApiError::from)
+    }
+
+    pub async fn create(user: UserRequest, pool: &PgPool) -> Result<Self> {
+        let argon2 = Argon2::default();
+        let salt = SaltString::generate(&mut OsRng);
+        let hashword = argon2
+            .hash_password_simple(user.password.as_bytes(), salt.as_str())?
+            .to_string();
+
+        sqlx::query_as::<_, Self>(
+            "INSERT INTO users (email, hashword, salt) values (LOWER($1),$2,$3) RETURNING *",
+        )
+        .bind(user.email)
+        .bind(hashword)
+        .bind(salt.as_str())
+        .fetch_one(pool)
+        .await
+        .map_err(ApiError::from)
     }
 }
 
@@ -86,6 +122,22 @@ pub struct UserRequest {
     #[validate(length(min = 8), must_match = "password_confirm")]
     pub password: String,
     pub password_confirm: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct UserLoginRequest {
+    #[validate(email)]
+    pub email: String,
+    #[validate(length(min = 8))]
+    pub password: String,
+}
+
+impl UserLoginRequest {
+    pub async fn is_valid(&self, pool: &PgPool) -> Result<bool> {
+        let user = User::find_by_email(&self.email, pool).await?;
+
+        Ok(user.verify_password(&self.password).is_ok())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +193,7 @@ impl Host {
             .map(|row: PgRow| Self::from(row))
             .fetch_all(pool)
             .await
+            .map_err(ApiError::from)
     }
 
     pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
@@ -334,38 +387,49 @@ impl Command {
             .bind(id)
             .fetch_one(pool)
             .await
+            .map_err(ApiError::from)
     }
 
     pub async fn find_all_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Command>> {
-        sqlx::query_as::<_, Self>("SELECT * FROM commands where host_id = $1 ORDER BY created_at DESC")
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM commands where host_id = $1 ORDER BY created_at DESC",
+        )
         .bind(host_id)
         .fetch_all(pool)
         .await
+        .map_err(ApiError::from)
     }
 
     pub async fn find_pending_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Command>> {
         sqlx::query_as::<_, Self>("SELECT * FROM commands where host_id = $1 AND completed_at IS NULL ORDER BY created_at_DESC")
         .bind(host_id)
         .fetch_all(pool)
-        .await
+            .await.map_err(ApiError::from)
     }
 
     pub async fn create(host_id: Uuid, command: CommandRequest, pool: &PgPool) -> Result<Command> {
-        sqlx::query_as::<_, Self>("INSERT INTO commands (host_id, cmd, sub_cmd) VALUES ($1, $2, $3) RETURNING *")
+        sqlx::query_as::<_, Self>(
+            "INSERT INTO commands (host_id, cmd, sub_cmd) VALUES ($1, $2, $3) RETURNING *",
+        )
         .bind(host_id)
         .bind(command.cmd)
         .bind(command.sub_cmd)
         .fetch_one(pool)
         .await
+        .map_err(ApiError::from)
     }
 
-    pub async fn update_response(id: Uuid, response: CommandResponseRequest, pool: &PgPool) -> Result<Command> {
+    pub async fn update_response(
+        id: Uuid,
+        response: CommandResponseRequest,
+        pool: &PgPool,
+    ) -> Result<Command> {
         sqlx::query_as::<_, Self>("UPDATE commands SET response = $1, exit_status = $2, completed_at = now() WHERE id = $3 RETURNING *")
         .bind(response.response)
         .bind(response.exit_status)
         .bind(id)
         .fetch_one(pool)
-        .await
+        .await.map_err(ApiError::from)
     }
 
     pub async fn delete(id: Uuid, pool: &PgPool) -> Result<u64> {
@@ -413,6 +477,7 @@ impl Validator {
         sqlx::query_as::<_, Self>("SELECT * FROM validators")
             .fetch_all(pool)
             .await
+            .map_err(ApiError::from)
     }
 
     pub async fn find_all_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Self>> {
@@ -422,6 +487,7 @@ impl Validator {
         .bind(host_id)
         .fetch_all(pool)
         .await
+        .map_err(ApiError::from)
     }
 
     pub async fn find_all_by_user(user_id: Uuid, pool: &PgPool) -> Result<Vec<Self>> {
@@ -431,6 +497,7 @@ impl Validator {
         .bind(user_id)
         .fetch_all(pool)
         .await
+        .map_err(ApiError::from)
     }
 
     pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
@@ -438,6 +505,7 @@ impl Validator {
             .bind(id)
             .fetch_one(pool)
             .await
+            .map_err(ApiError::from)
     }
 
     pub async fn create_tx(validator: ValidatorRequest, tx: &mut PgConnection) -> Result<Self> {

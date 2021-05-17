@@ -6,29 +6,35 @@ edition = "2018"
 publish = false
 resolver = "2"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release]
+opt-level = 'z'
+lto = true
+codegen-units = 1
+
 
 [dependencies]
-#actix-cors = "0.5.4"
+#actix-cors = "0.5"
 actix-cors = { git = "https://github.com/lumeohq/actix-extras", rev = "1023b996" }
 actix-web = { version = "=4.0.0-beta.5", features = ["rustls"] }
 anyhow = "1.0.40"
+argon2 = "0.2.0"
 chrono = {version = "0.4.19", features = ["serde"] }
 dotenv = "0.15.0"
 env_logger = "0.8.3"
+jsonwebtoken = "7.2.0"
 petname = "1.1.0"
+rand_core = { version = "0.6", features = ["std"] }
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = "1.0.64"
 sqlx = { version = "0.5.2", features = ["postgres", "runtime-tokio-rustls", "migrate", "chrono", "uuid" ] }
+thiserror = "1.0.24"
 tokio = { version = "1.2.0", default-features = false, features = ["io-util", "sync"] }
-uuid = { version = "0.8", features = ["serde", "v4"] }
 tracing = "0.1.26"
 tracing-futures = "0.2.5"
 tracing-log = { version = "0.1.2", features = ["env_logger"] }
 tracing-subscriber = "0.2.18"
+uuid = { version = "0.8", features = ["serde", "v4"] }
 validator = { version = "0.13.0", features = ["derive"] }
-jsonwebtoken = "7.2.0"
-argon2 = "0.2.0"
 
 [dev-dependencies]
 actix-rt = "2.2.0"

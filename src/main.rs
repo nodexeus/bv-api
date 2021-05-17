@@ -1,5 +1,4 @@
-mod models;
-mod server;
+use api::server;
 
 fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();

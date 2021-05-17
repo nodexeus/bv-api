@@ -11,6 +11,7 @@ COPY . .
 ENV RUSTFLAGS -Ctarget-feature=-crt-static
 ENV SQLX_OFFLINE true
 RUN cargo build --release
+RUN strip target/release/api
 
 # Slim output image not containing any build tools / artefacts
 FROM alpine:latest

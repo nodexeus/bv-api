@@ -1,3 +1,4 @@
+use crate::errors;
 use crate::models::*;
 use actix_cors::Cors;
 use actix_web::{
@@ -6,6 +7,8 @@ use actix_web::{
 use serde::Deserialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
+
+type ApiResponse = errors::Result<HttpResponse>;
 
 type DbPool = web::Data<PgPool>;
 
@@ -73,19 +76,14 @@ pub async fn start() -> anyhow::Result<()> {
 
 // Can pass ?token= to get a host by token
 #[get("/hosts")]
-async fn list_hosts(db_pool: DbPool, params: web::Query<QueryParams>) -> impl Responder {
+async fn list_hosts(db_pool: DbPool, params: web::Query<QueryParams>) -> ApiResponse {
     if let Some(token) = params.token.clone() {
-        let result = Host::find_by_token(&token, db_pool.get_ref()).await;
-        match result {
-            Ok(host) => HttpResponse::Ok().json(host),
-            Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-        }
+        let result = Host::find_by_token(&token, db_pool.get_ref()).await?;
+        Ok(HttpResponse::Ok().json(result))
+
     } else {
-        let result = Host::find_all(db_pool.get_ref()).await;
-        match result {
-            Ok(hosts) => HttpResponse::Ok().json(hosts),
-            Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-        }
+        let result = Host::find_all(db_pool.get_ref()).await?;
+        Ok(HttpResponse::Ok().json(result))
     }
 }
 
@@ -247,9 +245,13 @@ async fn list_pending_commands(db_pool: DbPool, host_id: web::Path<Uuid>) -> imp
 }
 
 #[post("/hosts/{host_id}/commands")]
-async fn create_command(db_pool: DbPool, host_id: web::Path<Uuid>, command: web::Json<CommandRequest>) -> impl Responder {
-
-    let result = Command::create(host_id.into_inner(), command .into_inner(), db_pool.as_ref()).await;
+async fn create_command(
+    db_pool: DbPool,
+    host_id: web::Path<Uuid>,
+    command: web::Json<CommandRequest>,
+) -> impl Responder {
+    let result =
+        Command::create(host_id.into_inner(), command.into_inner(), db_pool.as_ref()).await;
 
     match result {
         Ok(command) => HttpResponse::Ok().json(command),
@@ -258,8 +260,13 @@ async fn create_command(db_pool: DbPool, host_id: web::Path<Uuid>, command: web:
 }
 
 #[put("/commands/{id}/response")]
-async fn update_command_response(db_pool: DbPool, id: web::Path<Uuid>, response: web::Json<CommandResponseRequest>) -> impl Responder {
-    let result = Command::update_response(id.into_inner(), response.into_inner(), db_pool.as_ref()).await;
+async fn update_command_response(
+    db_pool: DbPool,
+    id: web::Path<Uuid>,
+    response: web::Json<CommandResponseRequest>,
+) -> impl Responder {
+    let result =
+        Command::update_response(id.into_inner(), response.into_inner(), db_pool.as_ref()).await;
 
     match result {
         Ok(command) => HttpResponse::Ok().json(command),
