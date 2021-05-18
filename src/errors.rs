@@ -1,5 +1,5 @@
 use actix_web::http::StatusCode;
-use actix_web::{Responder, ResponseError};
+use actix_web::ResponseError;
 
 pub type Result<T> = std::result::Result<T, ApiError>;
 

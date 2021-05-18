@@ -1,9 +1,7 @@
 use crate::errors;
 use crate::models::*;
 use actix_cors::Cors;
-use actix_web::{
-    delete, get, http, middleware, post, put, web, App, HttpResponse, HttpServer, Responder,
-};
+use actix_web::{delete, get, http, middleware, post, put, web, App, HttpResponse, HttpServer};
 use serde::Deserialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
@@ -78,46 +76,33 @@ pub async fn start() -> anyhow::Result<()> {
 #[get("/hosts")]
 async fn list_hosts(db_pool: DbPool, params: web::Query<QueryParams>) -> ApiResponse {
     if let Some(token) = params.token.clone() {
-        let result = Host::find_by_token(&token, db_pool.get_ref()).await?;
-        Ok(HttpResponse::Ok().json(result))
-
+        let host = Host::find_by_token(&token, db_pool.get_ref()).await?;
+        Ok(HttpResponse::Ok().json(host))
     } else {
-        let result = Host::find_all(db_pool.get_ref()).await?;
-        Ok(HttpResponse::Ok().json(result))
+        let host = Host::find_all(db_pool.get_ref()).await?;
+        Ok(HttpResponse::Ok().json(host))
     }
 }
 
 #[get("/hosts/token/{token}")]
-async fn get_host_by_token(db_pool: DbPool, token: web::Path<String>) -> impl Responder {
-    let result = Host::find_by_token(&token.into_inner(), db_pool.get_ref()).await;
-    match result {
-        Ok(host) => HttpResponse::Ok().json(host),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+async fn get_host_by_token(db_pool: DbPool, token: web::Path<String>) -> ApiResponse {
+    let host = Host::find_by_token(&token.into_inner(), db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(host))
 }
 
 #[get("/hosts/{id}")]
-async fn get_host(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
+async fn get_host(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
     let id = id.into_inner();
-    let result = Host::find_by_id(id, db_pool.get_ref()).await;
-    match result {
-        Ok(host) => HttpResponse::Ok().json(host),
-        Err(e) => HttpResponse::NotFound().json(e.to_string()),
-    }
+    let host = Host::find_by_id(id, db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(host))
 }
 
 #[post("/hosts")]
-async fn add_host(db_pool: DbPool, host: web::Json<HostCreateRequest>) -> impl Responder {
+async fn add_host(db_pool: DbPool, host: web::Json<HostCreateRequest>) -> ApiResponse {
     let host = host.into_inner().into();
 
-    let result = Host::create(host, db_pool.get_ref()).await;
-    match result {
-        Ok(host) => HttpResponse::Ok().json(host),
-        Err(e) => {
-            dbg!(&e);
-            HttpResponse::BadRequest().json(e.to_string())
-        }
-    }
+    let host = Host::create(host, db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(host))
 }
 
 #[put("/hosts/{id}")]
@@ -125,13 +110,9 @@ async fn update_host(
     db_pool: DbPool,
     id: web::Path<Uuid>,
     host: web::Json<HostRequest>,
-) -> impl Responder {
-    let host = host.into_inner();
-    let result = Host::update(id.into_inner(), host, db_pool.get_ref()).await;
-    match result {
-        Ok(host) => HttpResponse::Ok().json(host),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+) -> ApiResponse {
+    let host = Host::update(id.into_inner(), host.into_inner(), db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(host))
 }
 
 #[put("/hosts/{id}/status")]
@@ -139,51 +120,33 @@ async fn update_host_status(
     db_pool: DbPool,
     id: web::Path<Uuid>,
     host: web::Json<HostStatusRequest>,
-) -> impl Responder {
-    let host = host.into_inner();
-    let result = Host::update_status(id.into_inner(), host, db_pool.get_ref()).await;
-    match result {
-        Ok(host) => HttpResponse::Ok().json(host),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+) -> ApiResponse {
+    let host = Host::update_status(id.into_inner(), host.into_inner(), db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(host))
 }
 
 #[delete("/hosts/{id}")]
-async fn delete_host(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
-    let result = Host::delete(id.into_inner(), db_pool.get_ref()).await;
-    match result {
-        Ok(rows) if rows > 0 => {
-            HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", rows))
-        }
-        _ => HttpResponse::BadRequest().json("Host not found."),
-    }
+async fn delete_host(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
+    let rows = Host::delete(id.into_inner(), db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", rows)))
 }
 
 #[get("/validators")]
-async fn list_validators(db_pool: DbPool) -> impl Responder {
-    let result = Validator::find_all(db_pool.get_ref()).await;
-    match result {
-        Ok(validators) => HttpResponse::Ok().json(validators),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+async fn list_validators(db_pool: DbPool) -> ApiResponse {
+    let validators = Validator::find_all(db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(validators))
 }
 
 #[get("/users/{id}/validators")]
-async fn list_validators_by_user(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
-    let result = Validator::find_all_by_user(id.into_inner(), db_pool.get_ref()).await;
-    match result {
-        Ok(validators) => HttpResponse::Ok().json(validators),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+async fn list_validators_by_user(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
+    let validators = Validator::find_all_by_user(id.into_inner(), db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(validators))
 }
 
 #[get("/validators/{id}")]
-async fn get_validator(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
-    let result = Validator::find_by_id(id.into_inner(), db_pool.get_ref()).await;
-    match result {
-        Ok(validator) => HttpResponse::Ok().json(validator),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+async fn get_validator(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
+    let validator = Validator::find_by_id(id.into_inner(), db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(validator))
 }
 
 #[put("/validators/{id}/status")]
@@ -191,13 +154,10 @@ async fn update_validator_status(
     db_pool: DbPool,
     id: web::Path<Uuid>,
     validator: web::Json<ValidatorStatusRequest>,
-) -> impl Responder {
-    let result =
-        Validator::update_status(id.into_inner(), validator.into_inner(), db_pool.as_ref()).await;
-    match result {
-        Ok(validator) => HttpResponse::Ok().json(validator),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+) -> ApiResponse {
+    let validator =
+        Validator::update_status(id.into_inner(), validator.into_inner(), db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(validator))
 }
 
 #[put("/validators/{id}/identity")]
@@ -205,43 +165,29 @@ async fn update_validator_identity(
     db_pool: DbPool,
     id: web::Path<Uuid>,
     validator: web::Json<ValidatorIdentityRequest>,
-) -> impl Responder {
-    let result =
-        Validator::update_identity(id.into_inner(), validator.into_inner(), db_pool.as_ref()).await;
-    match result {
-        Ok(validator) => HttpResponse::Ok().json(validator),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+) -> ApiResponse {
+    let validator =
+        Validator::update_identity(id.into_inner(), validator.into_inner(), db_pool.as_ref())
+            .await?;
+    Ok(HttpResponse::Ok().json(validator))
 }
 
 #[get("/commands/{id}")]
-async fn get_command(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
-    let result = Command::find_by_id(id.into_inner(), db_pool.as_ref()).await;
-
-    match result {
-        Ok(command) => HttpResponse::Ok().json(command),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+async fn get_command(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
+    let command = Command::find_by_id(id.into_inner(), db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(command))
 }
 
 #[get("/hosts/(host_id}/commands")]
-async fn list_commands(db_pool: DbPool, host_id: web::Path<Uuid>) -> impl Responder {
-    let result = Command::find_all_by_host(host_id.into_inner(), db_pool.as_ref()).await;
-
-    match result {
-        Ok(command) => HttpResponse::Ok().json(command),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+async fn list_commands(db_pool: DbPool, host_id: web::Path<Uuid>) -> ApiResponse {
+    let commands = Command::find_all_by_host(host_id.into_inner(), db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(commands))
 }
 
 #[get("/hosts/(host_id}/commands/pending")]
-async fn list_pending_commands(db_pool: DbPool, host_id: web::Path<Uuid>) -> impl Responder {
-    let result = Command::find_pending_by_host(host_id.into_inner(), db_pool.as_ref()).await;
-
-    match result {
-        Ok(command) => HttpResponse::Ok().json(command),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+async fn list_pending_commands(db_pool: DbPool, host_id: web::Path<Uuid>) -> ApiResponse {
+    let commands = Command::find_pending_by_host(host_id.into_inner(), db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(commands))
 }
 
 #[post("/hosts/{host_id}/commands")]
@@ -249,14 +195,10 @@ async fn create_command(
     db_pool: DbPool,
     host_id: web::Path<Uuid>,
     command: web::Json<CommandRequest>,
-) -> impl Responder {
-    let result =
-        Command::create(host_id.into_inner(), command.into_inner(), db_pool.as_ref()).await;
-
-    match result {
-        Ok(command) => HttpResponse::Ok().json(command),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+) -> ApiResponse {
+    let command =
+        Command::create(host_id.into_inner(), command.into_inner(), db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(command))
 }
 
 #[put("/commands/{id}/response")]
@@ -264,25 +206,16 @@ async fn update_command_response(
     db_pool: DbPool,
     id: web::Path<Uuid>,
     response: web::Json<CommandResponseRequest>,
-) -> impl Responder {
-    let result =
-        Command::update_response(id.into_inner(), response.into_inner(), db_pool.as_ref()).await;
-
-    match result {
-        Ok(command) => HttpResponse::Ok().json(command),
-        Err(e) => HttpResponse::BadRequest().json(e.to_string()),
-    }
+) -> ApiResponse {
+    let command =
+        Command::update_response(id.into_inner(), response.into_inner(), db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(command))
 }
 
 #[delete("/command/{id}")]
-async fn delete_command(db_pool: DbPool, id: web::Path<Uuid>) -> impl Responder {
-    let result = Command::delete(id.into_inner(), db_pool.get_ref()).await;
-    match result {
-        Ok(rows) if rows > 0 => {
-            HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", rows))
-        }
-        _ => HttpResponse::BadRequest().json("Host not found."),
-    }
+async fn delete_command(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
+    let result = Command::delete(id.into_inner(), db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", result)))
 }
 
 #[cfg(test)]
