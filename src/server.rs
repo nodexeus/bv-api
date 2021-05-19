@@ -66,12 +66,24 @@ pub async fn start() -> anyhow::Result<()> {
             .service(create_command)
             .service(update_command_response)
             .service(delete_command)
+            .service(login)
     })
     .bind(&addr)?
     .run()
     .await?)
 }
 
+#[post("/login")]
+async fn login(db_pool: DbPool, login: web::Json<UserLoginRequest>) -> ApiResponse {
+    let user = User::login(login.into_inner(), db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(user))
+}
+
+#[post("/users")]
+async fn create_user(db_pool: DbPool, user: web::Json<UserRequest>) -> ApiResponse {
+    let user = User::create(user.into_inner(), db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(user))
+}
 // Can pass ?token= to get a host by token
 #[get("/hosts")]
 async fn list_hosts(db_pool: DbPool, params: web::Query<QueryParams>) -> ApiResponse {
@@ -223,6 +235,48 @@ mod tests {
     use super::*;
     use actix_web::test;
     use sqlx::postgres::{PgPool, PgPoolOptions};
+
+    #[actix_rt::test]
+    async fn it_should_create_and_login_user() {
+        let db_pool = setup().await;
+        let mut app = test::init_service(
+            App::new()
+                .data(db_pool.clone())
+                .wrap(middleware::Logger::default())
+                .service(login)
+                .service(create_user),
+        )
+        .await;
+
+        let req = test::TestRequest::post()
+            .uri("/users")
+            .set_json(&UserRequest {
+                email: "chris@here.com".to_string(),
+                password: "password".to_string(),
+                password_confirm: "password".to_string(),
+            })
+            .to_request();
+
+        #[derive(Debug, Clone, Deserialize)]
+        pub struct UserTest {
+            pub id: Uuid,
+            pub email: String,
+        }
+
+        let resp: UserTest = test::read_response_json(&mut app, req).await;
+        assert_eq!(resp.email, "chris@here.com");
+
+        let req = test::TestRequest::post()
+            .uri("/login")
+            .set_json(&UserLoginRequest {
+                email: "chris@here.com".to_string(),
+                password: "password".to_string(),
+            })
+            .to_request();
+
+        let resp: UserTest = test::read_response_json(&mut app, req).await;
+        assert_eq!(resp.email, "chris@here.com");
+    }
 
     #[actix_rt::test]
     async fn it_shoud_add_host() {

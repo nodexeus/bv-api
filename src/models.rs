@@ -1,6 +1,7 @@
 use crate::errors::{ApiError, Result};
+use anyhow::anyhow;
 use argon2::{
-    password_hash::{PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
 use chrono::{DateTime, Utc};
@@ -60,6 +61,7 @@ pub struct User {
     pub email: String,
     #[serde(skip_serializing)]
     pub hashword: String,
+    #[serde(skip_serializing)]
     pub salt: String,
 }
 
@@ -68,9 +70,15 @@ impl User {
         let argon2 = Argon2::default();
         let parsed_hash = argon2.hash_password_simple(password.as_bytes(), &self.salt)?;
 
-        argon2
-            .verify_password(self.hashword.as_bytes(), &parsed_hash)
-            .map_err(ApiError::from)
+        if let Some(output) = parsed_hash.hash {
+            if self.hashword == output.to_string() {
+                return Ok(());
+            }
+        }
+
+        Err(ApiError::InvalidAuthentication(anyhow!(
+            "Inavlid email or password."
+        )))
     }
 
     pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
@@ -99,19 +107,32 @@ impl User {
     pub async fn create(user: UserRequest, pool: &PgPool) -> Result<Self> {
         let argon2 = Argon2::default();
         let salt = SaltString::generate(&mut OsRng);
-        let hashword = argon2
+        if let Some(hashword) = argon2
             .hash_password_simple(user.password.as_bytes(), salt.as_str())?
-            .to_string();
+            .hash
+        {
+            return sqlx::query_as::<_, Self>(
+                "INSERT INTO users (email, hashword, salt) values (LOWER($1),$2,$3) RETURNING *",
+            )
+            .bind(user.email)
+            .bind(hashword.to_string())
+            .bind(salt.as_str())
+            .fetch_one(pool)
+            .await
+            .map_err(ApiError::from);
+        }
 
-        sqlx::query_as::<_, Self>(
-            "INSERT INTO users (email, hashword, salt) values (LOWER($1),$2,$3) RETURNING *",
-        )
-        .bind(user.email)
-        .bind(hashword)
-        .bind(salt.as_str())
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::from)
+        Err(ApiError::ValidationError("Invalid password.".to_string()))
+    }
+
+    pub async fn login(login: UserLoginRequest, pool: &PgPool) -> Result<Self> {
+        let user = Self::find_by_email(&login.email, pool)
+            .await
+            .map_err(|_e| {
+                ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
+            })?;
+        let _ = user.verify_password(&login.password)?;
+        Ok(user)
     }
 }
 
