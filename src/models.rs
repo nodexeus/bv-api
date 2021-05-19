@@ -105,6 +105,10 @@ impl User {
     }
 
     pub async fn create(user: UserRequest, pool: &PgPool) -> Result<Self> {
+        let _ = user
+            .validate()
+            .map_err(|e| ApiError::ValidationError(e.to_string()))?;
+
         let argon2 = Argon2::default();
         let salt = SaltString::generate(&mut OsRng);
         if let Some(hashword) = argon2
