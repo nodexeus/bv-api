@@ -1,7 +1,7 @@
 use crate::errors;
 use crate::models::*;
 use actix_cors::Cors;
-use actix_web::{delete, get, http, middleware, post, put, web, App, HttpResponse, HttpServer};
+use actix_web::{delete, get, middleware, post, put, web, App, HttpResponse, HttpServer};
 use serde::Deserialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
@@ -32,7 +32,7 @@ pub async fn start() -> anyhow::Result<()> {
         .expect("Could not create db connection pool.");
 
     Ok(HttpServer::new(move || {
-        let cors = Cors::default();
+        let cors = Cors::permissive();
 
         App::new()
             .data(db_pool.clone())

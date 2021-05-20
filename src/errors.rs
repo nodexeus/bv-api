@@ -1,4 +1,5 @@
 use actix_web::http::StatusCode;
+use actix_web::HttpResponse;
 use actix_web::ResponseError;
 
 pub type Result<T> = std::result::Result<T, ApiError>;
@@ -47,6 +48,10 @@ impl ResponseError for ApiError {
             ApiError::InvalidAuthentication(_) => StatusCode::UNAUTHORIZED,
             ApiError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
+    }
+
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(self.to_string())
     }
 }
 
