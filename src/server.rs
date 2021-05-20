@@ -67,6 +67,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(update_command_response)
             .service(delete_command)
             .service(login)
+            .service(create_user)
     })
     .bind(&addr)?
     .run()
