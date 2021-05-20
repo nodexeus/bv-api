@@ -36,7 +36,7 @@ pub async fn start() -> anyhow::Result<()> {
             .allow_any_header()
             .allow_any_method()
             .allow_any_origin()
-            .send_wildcard();
+            .supports_credentials();
 
         App::new()
             .data(db_pool.clone())
@@ -383,6 +383,7 @@ mod tests {
             .uri(&path)
             .set_json(&ValidatorStatusRequest {
                 version: Some("1.0".to_string()),
+                block_height: Some(192),
                 stake_status: StakeStatus::Available,
                 status: ValidatorStatus::Provisioning,
                 score: 1000000,

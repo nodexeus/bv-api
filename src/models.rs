@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgRow, PgConnection};
 use sqlx::{FromRow, PgPool, Row};
 use std::convert::From;
+use std::fmt;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -55,6 +56,23 @@ pub enum HostCmd {
     All,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "enum_user_role", rename_all = "snake_case")]
+pub enum UserRole {
+    User,
+    Admin,
+}
+
+impl fmt::Display for UserRole {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Admin => write!(f, "admin"),
+            Self::User => write!(f, "user"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: Uuid,
@@ -63,6 +81,11 @@ pub struct User {
     pub hashword: String,
     #[serde(skip_serializing)]
     pub salt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refresh: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 impl User {
@@ -275,6 +298,7 @@ impl Host {
                 user_id: None,
                 address: None,
                 swarm_key: None,
+                block_height: None,
                 stake_status: StakeStatus::Available,
                 status: ValidatorStatus::Provisioning,
                 score: 0,
@@ -491,10 +515,12 @@ pub struct Validator {
     pub user_id: Option<Uuid>,
     pub address: Option<String>,
     pub swarm_key: Option<String>,
+    pub block_height: Option<i64>,
     pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
     pub score: i64,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl Validator {
@@ -534,7 +560,7 @@ impl Validator {
     }
 
     pub async fn create_tx(validator: ValidatorRequest, tx: &mut PgConnection) -> Result<Self> {
-        let validator = sqlx::query_as::<_, Self>("INSERT INTO validators (name, version, ip_addr, host_id, user_id, address, swarm_key, stake_status, status, score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *")
+        let validator = sqlx::query_as::<_, Self>("INSERT INTO validators (name, version, ip_addr, host_id, user_id, address, swarm_key, block_height, stake_status, status, score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *")
         .bind(validator.name)
         .bind(validator.version)
         .bind(validator.ip_addr)
@@ -542,6 +568,7 @@ impl Validator {
         .bind(validator.user_id)
         .bind(validator.address)
         .bind(validator.swarm_key)
+        .bind(validator.block_height)
         .bind(validator.stake_status)
         .bind(validator.status)
         .bind(validator.score)
@@ -558,9 +585,10 @@ impl Validator {
     ) -> Result<Self> {
         let mut tx = pool.begin().await.unwrap();
         let validator = sqlx::query_as::<_, Self>(
-            r#"UPDATE validators SET version=$1, stake_status=$2, status=$3, score=$4  WHERE id = $5 RETURNING *"#
+            r#"UPDATE validators SET version=$1, block_height=$2, stake_status=$3, status=$4, score=$5, updated_at=now()  WHERE id = $6 RETURNING *"#
         )
         .bind(validator.version)
+        .bind(validator.block_height)
         .bind(validator.stake_status)
         .bind(validator.status)
         .bind(validator.score)
@@ -579,7 +607,7 @@ impl Validator {
     ) -> Result<Self> {
         let mut tx = pool.begin().await.unwrap();
         let validator = sqlx::query_as::<_, Self>(
-            r#"UPDATE validators SET version=$1, address=$2, swarm_key=$3 WHERE id = $4 RETURNING *"#
+            r#"UPDATE validators SET version=$1, address=$2, swarm_key=$3, updated_at=now() WHERE id = $4 RETURNING *"#
         )
         .bind(validator.version)
         .bind(validator.address)
@@ -602,6 +630,7 @@ pub struct ValidatorRequest {
     pub user_id: Option<Uuid>,
     pub address: Option<String>,
     pub swarm_key: Option<String>,
+    pub block_height: Option<i64>,
     pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
     pub score: i64,
@@ -610,6 +639,7 @@ pub struct ValidatorRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatorStatusRequest {
     pub version: Option<String>,
+    pub block_height: Option<i64>,
     pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
     pub score: i64,

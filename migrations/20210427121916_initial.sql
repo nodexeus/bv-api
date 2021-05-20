@@ -6,15 +6,20 @@ CREATE TYPE enum_conn_status AS ENUM ('online', 'offline');
 CREATE TYPE enum_validator_status AS ENUM ('provisioning', 'syncing', 'upgrading', 'synced', 'consensus', 'stopped');
 CREATE TYPE enum_stake_status AS ENUM ('available', 'staking', 'staked', 'delinquent', 'disabled');
 CREATE TYPE enum_host_cmd AS ENUM ('restart_miner', 'restart_jail', 'get_miner_name', 'get_block_height', 'all');
+CREATE TYPE enum_user_role AS ENUM ('user', 'admin');
 
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email TEXT UNIQUE NOT NULL,
     hashword TEXT NOT NULL,
     salt TEXT NOT NULL,
+    token TEXT UNIQUE,
+    refresh TEXT UNIQUE DEFAULT uuid_generate_v4(),
+    role enum_user_role NOT NULL DEFAULT 'user',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email on users (email);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_refresh on users (refresh);
 
 CREATE TABLE IF NOT EXISTS hosts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -38,10 +43,12 @@ CREATE TABLE IF NOT EXISTS validators (
     ip_addr TEXT UNIQUE NOT NULL,
     address TEXT UNIQUE,
     swarm_key TEXT,
+    block_height BIGINT,
     stake_status enum_stake_status NOT NULL DEFAULT 'available',
     status enum_validator_status NOT NULL DEFAULT 'provisioning',
     score BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT fk_validators_hosts FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE,
     CONSTRAINT fk_validators_users FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
