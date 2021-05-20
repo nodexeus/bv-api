@@ -37,11 +37,6 @@ pub async fn start() -> anyhow::Result<()> {
             .allowed_origin_fn(|origin, _req_head| origin.as_bytes().ends_with(b".stakejoy.com"))
             .allowed_methods(vec![
                 "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH",
-            ])
-            .allowed_headers(vec![
-                http::header::AUTHORIZATION,
-                http::header::ACCEPT,
-                http::header::CONTENT_TYPE,
             ]);
 
         App::new()
