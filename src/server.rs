@@ -32,7 +32,11 @@ pub async fn start() -> anyhow::Result<()> {
         .expect("Could not create db connection pool.");
 
     Ok(HttpServer::new(move || {
-        let cors = Cors::permissive().supports_credentials();
+        let cors = Cors::default()
+            .allow_any_header()
+            .allow_any_method()
+            .allow_any_origin()
+            .send_wildcard();
 
         App::new()
             .data(db_pool.clone())
