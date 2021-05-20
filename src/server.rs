@@ -32,12 +32,7 @@ pub async fn start() -> anyhow::Result<()> {
         .expect("Could not create db connection pool.");
 
     Ok(HttpServer::new(move || {
-        let cors = Cors::default()
-            .allowed_origin("http://localhost:3000")
-            .allowed_origin_fn(|origin, _req_head| origin.as_bytes().ends_with(b".stakejoy.com"))
-            .allowed_methods(vec![
-                "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH",
-            ]);
+        let cors = Cors::default();
 
         App::new()
             .data(db_pool.clone())
