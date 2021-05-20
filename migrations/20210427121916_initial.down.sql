@@ -12,3 +12,4 @@ DROP TYPE IF EXISTS enum_conn_status;
 DROP TYPE IF EXISTS enum_validator_status;
 DROP TYPE IF EXISTS enum_stake_status;
 DROP TYPE IF EXISTS enum_host_cmd;
+DROP TYPE IF EXISTS enum_user_role;
