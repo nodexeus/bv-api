@@ -12,6 +12,9 @@ pub enum ApiError {
     #[error("Record not found.")]
     NotFoundError(sqlx::Error),
 
+    #[error("Duplicate resource conflict.")]
+    DuplicateResource,
+
     #[error("Invalid email or password")]
     InvalidAuthentication(anyhow::Error),
 
@@ -29,6 +32,7 @@ impl From<sqlx::Error> for ApiError {
     fn from(e: sqlx::Error) -> Self {
         match e {
             sqlx::Error::RowNotFound => Self::NotFoundError(e),
+            sqlx::Error::Database(dbe) if dbe.to_string().contains("duplicate key value") => Self::DuplicateResource,
             _ => Self::UnexpectedError(anyhow::Error::from(e)),
         }
     }
@@ -45,6 +49,7 @@ impl ResponseError for ApiError {
         match self {
             ApiError::ValidationError(_) => StatusCode::BAD_REQUEST,
             ApiError::NotFoundError(_) => StatusCode::NOT_FOUND,
+            ApiError::DuplicateResource => StatusCode::CONFLICT,
             ApiError::InvalidAuthentication(_) => StatusCode::UNAUTHORIZED,
             ApiError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
