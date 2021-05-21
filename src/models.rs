@@ -13,6 +13,7 @@ use std::convert::From;
 use std::fmt;
 use uuid::Uuid;
 use validator::Validate;
+use crate::auth;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -79,6 +80,7 @@ pub struct User {
     pub email: String,
     #[serde(skip_serializing)]
     pub hashword: String,
+    pub role: UserRole,
     #[serde(skip_serializing)]
     pub salt: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -102,6 +104,11 @@ impl User {
         Err(ApiError::InvalidAuthentication(anyhow!(
             "Inavlid email or password."
         )))
+    }
+
+    pub fn set_jwt(&mut self) -> Result<Self> {
+        self.token = Some(auth::create_jwt(self.id, &self.role.to_string())?);
+        Ok(self.to_owned())
     }
 
     pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
@@ -146,20 +153,22 @@ impl User {
             .bind(salt.as_str())
             .fetch_one(pool)
             .await
-            .map_err(ApiError::from);
+            .map_err(ApiError::from)?
+            .set_jwt();
         }
 
         Err(ApiError::ValidationError("Invalid password.".to_string()))
     }
 
     pub async fn login(login: UserLoginRequest, pool: &PgPool) -> Result<Self> {
-        let user = Self::find_by_email(&login.email, pool)
+        let mut user = Self::find_by_email(&login.email, pool)
             .await
             .map_err(|_e| {
                 ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
             })?;
         let _ = user.verify_password(&login.password)?;
-        Ok(user)
+        
+        user.set_jwt()
     }
 }
 

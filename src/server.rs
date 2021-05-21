@@ -256,6 +256,8 @@ mod tests {
         pub struct UserTest {
             pub id: Uuid,
             pub email: String,
+            pub token: Option<String>,
+            pub refresh: Option<String>,
         }
 
         let resp: UserTest = test::read_response_json(&mut app, req).await;
@@ -271,6 +273,7 @@ mod tests {
 
         let resp: UserTest = test::read_response_json(&mut app, req).await;
         assert_eq!(resp.email, "chris@here.com");
+        assert!(resp.token.is_some());
     }
 
     #[actix_rt::test]

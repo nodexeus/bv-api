@@ -19,7 +19,7 @@ dependencies = [
 [[package]]
 name = "actix-cors"
 version = "0.5.4"
-source = "git+https://github.com/lumeohq/actix-extras?rev=1023b996#1023b99630330255c559e7a5b5a394812f948792"
+source = "git+https://github.com/stakejoy/actix-extras?rev=1023b996#1023b99630330255c559e7a5b5a394812f948792"
 dependencies = [
  "actix-web",
  "derive_more",
