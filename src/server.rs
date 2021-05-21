@@ -61,6 +61,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(update_command_response)
             .service(delete_command)
             .service(login)
+            .service(refresh)
             .service(create_user)
     })
     .bind(&addr)?
@@ -71,6 +72,12 @@ pub async fn start() -> anyhow::Result<()> {
 #[post("/login")]
 async fn login(db_pool: DbPool, login: web::Json<UserLoginRequest>) -> ApiResponse {
     let user = User::login(login.into_inner(), db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(user))
+}
+
+#[post("/refresh")]
+async fn refresh(db_pool: DbPool, req: web::Json<UserRefreshRequest>) -> ApiResponse {
+    let user = User::refresh(req.into_inner(), db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(user))
 }
 

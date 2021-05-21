@@ -1,3 +1,4 @@
+use crate::auth;
 use crate::errors::{ApiError, Result};
 use anyhow::anyhow;
 use argon2::{
@@ -13,7 +14,6 @@ use std::convert::From;
 use std::fmt;
 use uuid::Uuid;
 use validator::Validate;
-use crate::auth;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -107,7 +107,12 @@ impl User {
     }
 
     pub fn set_jwt(&mut self) -> Result<Self> {
-        self.token = Some(auth::create_jwt(self.id, &self.role.to_string())?);
+        let auth_data = auth::AuthData {
+            user_id: self.id,
+            user_role: self.role.to_string(),
+        };
+
+        self.token = Some(auth::create_jwt(&auth_data)?);
         Ok(self.to_owned())
     }
 
@@ -121,6 +126,14 @@ impl User {
     pub async fn find_by_email(email: &str, pool: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, Self>("SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1")
             .bind(email)
+            .fetch_one(pool)
+            .await
+            .map_err(ApiError::from)
+    }
+
+    pub async fn find_by_refresh(refresh: &str, pool: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE refresh = $1 limit 1")
+            .bind(refresh)
             .fetch_one(pool)
             .await
             .map_err(ApiError::from)
@@ -167,8 +180,26 @@ impl User {
                 ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
             })?;
         let _ = user.verify_password(&login.password)?;
-        
+
         user.set_jwt()
+    }
+
+    pub async fn refresh(req: UserRefreshRequest, pool: &PgPool) -> Result<User> {
+        let mut user = Self::find_by_refresh(&req.refresh, pool).await?;
+        let auth_data = match auth::validate_jwt(&req.token)? {
+            auth::JwtValidationStatus::Invalid => {
+                return Err(ApiError::InvalidAuthentication(anyhow!("JWT is invalid.")))
+            }
+            auth::JwtValidationStatus::Expired(auth_data) => auth_data,
+            auth::JwtValidationStatus::Valid(auth_data) => auth_data,
+        };
+        if user.id != auth_data.user_id {
+            return Err(ApiError::InvalidAuthentication(anyhow!(
+                "JWT and Refresh token do not match."
+            )));
+        }
+
+        Ok(user.set_jwt()?)
     }
 }
 
@@ -195,6 +226,12 @@ impl UserLoginRequest {
 
         Ok(user.verify_password(&self.password).is_ok())
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserRefreshRequest {
+    pub token: String,
+    pub refresh: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
