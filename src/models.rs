@@ -105,28 +105,32 @@ impl Authentication {
         self.host_token.is_some()
     }
 
+    pub fn is_admin(&self) -> bool {
+        self.user_role.is_some() && UserRole::Admin == self.user_role.unwrap()
+    }
+
     /// Returns an error if not an admin
-    pub fn try_admin(&self) -> Result<()> {
+    pub fn try_admin(&self) -> Result<bool> {
         match self.user_role {
-            Some(UserRole::Admin) => Ok(()),
+            Some(UserRole::Admin) => Ok(true),
             _ => Err(ApiError::InsufficientPermissionsError),
         }
     }
 
     /// Returns an error if user doesn't have access
-    pub fn try_user_access(&self, user_id: Uuid) -> Result<()> {
+    pub fn try_user_access(&self, user_id: Uuid) -> Result<bool> {
         match self.user_id {
-            Some(id) if id == user_id => Ok(()),
+            Some(id) if id == user_id => Ok(true),
             _ => Err(ApiError::InsufficientPermissionsError),
         }
     }
 
     /// Returns an error if user doesn't have access
-    pub async fn try_host_access(&self, host_id: Uuid, pool: &PgPool) -> Result<()> {
+    pub async fn try_host_access(&self, host_id: Uuid, pool: &PgPool) -> Result<bool> {
         if self.is_host() {
             let host = self.get_host(pool).await?;
                 if host.id == host_id {
-                    return Ok(())
+                    return Ok(true)
                 }
         }
 
@@ -750,7 +754,16 @@ impl Validator {
         .fetch_one(pool).await?;
 
         Ok(row.0)
+    }
 
+    pub async fn stake(pool: &PgPool, user_id: Uuid) -> Result<Validator> {
+        sqlx::query_as::<_, Self>("UPDATE validators set user_id = $1 where status - $1 AND stake_status = $2 LIMIT 1 RETURNING *")
+        .bind(user_id)
+        .bind(ValidatorStatus::Synced)
+        .bind(StakeStatus::Available)
+        .fetch_one(pool)
+        .await
+        .map_err(ApiError::from)
     }
 }
 

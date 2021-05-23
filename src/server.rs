@@ -12,6 +12,7 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::borrow::Cow;
 use std::str::FromStr;
 use uuid::Uuid;
+use crate::errors::ApiError;
 
 type ApiResponse = errors::Result<HttpResponse>;
 
@@ -102,6 +103,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(validator_inventory_count)
             .service(list_validators)
             .service(list_validators_by_user)
+            .service(stake_validator)
             .service(get_validator)
             .service(update_validator_status)
             .service(update_validator_identity)
@@ -227,6 +229,18 @@ async fn validator_inventory_count(db_pool: DbPool, _auth: Authentication) -> Ap
 async fn list_validators_by_user(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
     let validators = Validator::find_all_by_user(id.into_inner(), db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(validators))
+}
+
+#[post("/users/{id}/validators")]
+async fn stake_validator(db_pool: DbPool, id: web::Path<Uuid>, auth: Authentication) -> ApiResponse {
+    let id = id.into_inner();
+
+    if auth.is_admin() || auth.try_user_access(id)? {
+        let validator = Validator::stake(db_pool.as_ref(), id).await?;
+        return Ok(HttpResponse::Ok().json(validator));
+    }
+
+    Err(ApiError::InsufficientPermissionsError)
 }
 
 #[get("/validators/{id}")]
