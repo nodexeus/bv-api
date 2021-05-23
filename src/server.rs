@@ -7,7 +7,6 @@ use actix_web::{
 };
 use anyhow::anyhow;
 use futures_util::future::{err, ok, Ready};
-use log::debug;
 use serde::Deserialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::borrow::Cow;
@@ -36,7 +35,6 @@ impl FromRequest for Authentication {
             .and_then(|hv| {
                 let words = hv.split("Bearer").collect::<Vec<&str>>();
                 let token = words.get(1).map(|w| w.trim());
-                debug!("JWT.Authorization: {} -> {:?}", hv, token);
                 token.map(|t| Cow::Borrowed(t))
             })
         {
