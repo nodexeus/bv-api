@@ -12,6 +12,7 @@ use sqlx::{postgres::PgRow, PgConnection};
 use sqlx::{FromRow, PgPool, Row};
 use std::convert::From;
 use std::fmt;
+use std::str::FromStr;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -62,6 +63,7 @@ pub enum HostCmd {
 #[sqlx(type_name = "enum_user_role", rename_all = "snake_case")]
 pub enum UserRole {
     User,
+    Host,
     Admin,
 }
 
@@ -69,9 +71,29 @@ impl fmt::Display for UserRole {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Admin => write!(f, "admin"),
+            Self::Host => write!(f, "host"),
             Self::User => write!(f, "user"),
         }
     }
+}
+
+impl FromStr for UserRole {
+    type Err = ApiError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "admin" => Ok(Self::Admin),
+            "host" => Ok(Self::Host),
+            _ => Ok(Self::User),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Authentication {
+    pub user_id: Option<Uuid>,
+    pub user_role: Option<UserRole>,
+    pub host_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

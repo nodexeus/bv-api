@@ -1,9 +1,17 @@
-use crate::errors;
 use crate::models::*;
+use crate::{auth, errors};
 use actix_cors::Cors;
-use actix_web::{delete, get, middleware, post, put, web, App, HttpResponse, HttpServer};
+use actix_web::{
+    delete, dev, get, middleware, post, put, web, App, FromRequest, HttpRequest, HttpResponse,
+    HttpServer,
+};
+use anyhow::anyhow;
+use futures_util::future::{err, ok, Ready};
+use log::debug;
 use serde::Deserialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use std::borrow::Cow;
+use std::str::FromStr;
 use uuid::Uuid;
 
 type ApiResponse = errors::Result<HttpResponse>;
@@ -13,6 +21,50 @@ type DbPool = web::Data<PgPool>;
 #[derive(Deserialize)]
 struct QueryParams {
     token: Option<String>,
+}
+
+impl FromRequest for Authentication {
+    type Error = errors::ApiError;
+    type Future = Ready<Result<Self, Self::Error>>;
+    type Config = ();
+
+    fn from_request(req: &HttpRequest, _payload: &mut dev::Payload) -> Self::Future {
+        if let Some(token) = req
+            .headers()
+            .get("Authorization")
+            .and_then(|hv| hv.to_str().ok())
+            .and_then(|hv| {
+                let words = hv.split("Bearer").collect::<Vec<&str>>();
+                let token = words.get(1).map(|w| w.trim());
+                debug!("JWT.Authorization: {} -> {:?}", hv, token);
+                token.map(|t| Cow::Borrowed(t))
+            })
+        {
+            if token.starts_with("eyJ") {
+                if let Ok(auth::JwtValidationStatus::Valid(auth_data)) =
+                    auth::validate_jwt(token.as_ref())
+                {
+                    if let Ok(role) = UserRole::from_str(&auth_data.user_role) {
+                        return ok(Self {
+                            user_id: Some(auth_data.user_id),
+                            user_role: Some(role),
+                            host_token: None,
+                        });
+                    }
+                }
+            } else {
+                return ok(Self {
+                    user_id: None,
+                    user_role: None,
+                    host_token: Some(token.as_ref().to_string()),
+                });
+            };
+        };
+
+        err(Self::Error::InvalidAuthentication(anyhow!(
+            "invalid authentication credentials"
+        )))
+    }
 }
 
 pub async fn start() -> anyhow::Result<()> {
