@@ -93,6 +93,7 @@ pub async fn start() -> anyhow::Result<()> {
             .data(db_pool.clone())
             .wrap(cors)
             .wrap(middleware::Logger::default())
+            .wrap(middleware::Compress::default())
             .service(add_host)
             .service(get_host)
             .service(get_host_by_token)
