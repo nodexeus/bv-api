@@ -15,8 +15,11 @@ pub enum ApiError {
     #[error("Duplicate resource conflict.")]
     DuplicateResource,
 
-    #[error("Invalid email or password")]
+    #[error("invalid authentication credentials")]
     InvalidAuthentication(anyhow::Error),
+
+    #[error("Insufficient permission.")]
+    InsufficientPermissionsError,
 
     #[error("Error processing JWT")]
     JWTError(#[from] jsonwebtoken::errors::Error),
@@ -56,6 +59,7 @@ impl ResponseError for ApiError {
             ApiError::NotFoundError(_) => StatusCode::NOT_FOUND,
             ApiError::DuplicateResource => StatusCode::CONFLICT,
             ApiError::InvalidAuthentication(_) => StatusCode::UNAUTHORIZED,
+            ApiError::InsufficientPermissionsError => StatusCode::FORBIDDEN,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

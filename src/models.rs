@@ -96,6 +96,60 @@ pub struct Authentication {
     pub host_token: Option<String>,
 }
 
+impl Authentication {
+    pub fn is_user(&self) -> bool {
+        self.user_id.is_some()
+    }
+
+    pub fn is_host(&self) -> bool {
+        self.host_token.is_some()
+    }
+
+    /// Returns an error if not an admin
+    pub fn try_admin(&self) -> Result<()> {
+        match self.user_role {
+            Some(UserRole::Admin) => Ok(()),
+            _ => Err(ApiError::InsufficientPermissionsError),
+        }
+    }
+
+    /// Returns an error if user doesn't have access
+    pub fn try_user_access(&self, user_id: Uuid) -> Result<()> {
+        match self.user_id {
+            Some(id) if id == user_id => Ok(()),
+            _ => Err(ApiError::InsufficientPermissionsError),
+        }
+    }
+
+    /// Returns an error if user doesn't have access
+    pub async fn try_host_access(&self, host_id: Uuid, pool: &PgPool) -> Result<()> {
+        if self.is_host() {
+            let host = self.get_host(pool).await?;
+                if host.id == host_id {
+                    return Ok(())
+                }
+        }
+
+        Err(ApiError::InsufficientPermissionsError)
+    }
+
+    pub async fn get_user(&self, pool: &PgPool) -> Result<User> {
+        if let Some(id) = self.user_id {
+            User::find_by_id(id, pool).await
+        } else {
+            Err(anyhow!("Authentication is not a user.").into())
+        }
+    }
+
+    pub async fn get_host(&self, pool: &PgPool) -> Result<Host> {
+        if let Some(token) = self.host_token.as_ref() {
+            Host::find_by_token(token, pool).await
+        } else {
+            Err(anyhow!("Autentication is not a host.").into())
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: Uuid,

@@ -133,6 +133,17 @@ async fn refresh(db_pool: DbPool, req: web::Json<UserRefreshRequest>) -> ApiResp
     Ok(HttpResponse::Ok().json(user))
 }
 
+#[get("whoami")]
+async fn whoami(db_pool: DbPool, auth: Authentication) -> ApiResponse {
+    if auth.is_user() {
+        let user = auth.get_user(db_pool.as_ref()).await?;
+        return Ok(HttpResponse::Ok().json(user));
+    } else {
+        let host = auth.get_host(db_pool.as_ref()).await?;
+        return Ok(HttpResponse::Ok().json(host));
+    }
+}
+
 #[post("/users")]
 async fn create_user(db_pool: DbPool, user: web::Json<UserRequest>) -> ApiResponse {
     let user = User::create(user.into_inner(), db_pool.as_ref()).await?;
