@@ -163,6 +163,7 @@ pub struct User {
     pub refresh: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    pub fee_bps: i64,
     pub created_at: DateTime<Utc>,
 }
 

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
     token TEXT UNIQUE,
     refresh TEXT UNIQUE DEFAULT uuid_generate_v4(),
     role enum_user_role NOT NULL DEFAULT 'user',
+    fee_bps BIGINT NOT NULL DEFAULT 500,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email on users (email);
