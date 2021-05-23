@@ -741,6 +741,16 @@ impl Validator {
         tx.commit().await.unwrap();
         Ok(validator)
     }
+
+    pub async fn inventory_count(pool: &PgPool) -> Result<u32> {
+        let row:(u32, ) = sqlx::query_as("SELECT COUNT(*) AS available FROM validators where status = $1 and stake_status = $2")
+        .bind(ValidatorStatus::Synced)
+        .bind(StakeStatus::Available)
+        .fetch_one(pool).await?;
+
+        Ok(row.0)
+
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

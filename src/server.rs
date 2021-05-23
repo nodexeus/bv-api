@@ -99,6 +99,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(update_host_status)
             .service(list_hosts)
             .service(delete_host)
+            .service(validator_inventory_count)
             .service(list_validators)
             .service(list_validators_by_user)
             .service(get_validator)
@@ -208,10 +209,19 @@ async fn delete_host(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
 }
 
 #[get("/validators")]
-async fn list_validators(db_pool: DbPool) -> ApiResponse {
+async fn list_validators(db_pool: DbPool, auth: Authentication) -> ApiResponse {
+    let _ = auth.try_admin()?;
+
     let validators = Validator::find_all(db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(validators))
 }
+
+#[get("/validators/inventory/count")]
+async fn validator_inventory_count(db_pool: DbPool, _auth: Authentication) -> ApiResponse {
+    let count = Validator::inventory_count(db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(count))
+}
+
 
 #[get("/users/{id}/validators")]
 async fn list_validators_by_user(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
