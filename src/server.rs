@@ -113,6 +113,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(login)
             .service(refresh)
             .service(create_user)
+            .service(whoami)
     })
     .bind(&addr)?
     .run()
