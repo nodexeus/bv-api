@@ -742,8 +742,8 @@ impl Validator {
         Ok(validator)
     }
 
-    pub async fn inventory_count(pool: &PgPool) -> Result<u32> {
-        let row:(u32, ) = sqlx::query_as("SELECT COUNT(*) AS available FROM validators where status = $1 and stake_status = $2")
+    pub async fn inventory_count(pool: &PgPool) -> Result<i64> {
+        let row:(i64, ) = sqlx::query_as("SELECT COUNT(*) AS available FROM validators where status = $1 and stake_status = $2")
         .bind(ValidatorStatus::Synced)
         .bind(StakeStatus::Available)
         .fetch_one(pool).await?;
