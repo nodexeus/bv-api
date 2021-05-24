@@ -809,3 +809,26 @@ pub struct Reward {
     pub account: String,
     pub amount: i64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Info {
+    pub block_height: i64,
+}
+
+impl Info {
+    pub async fn update_info(pool: &PgPool, info: &Info) -> Result<Info> {
+        sqlx::query_as::<_, Info>("UPDATE info SET block_height = $1 RETURNING *")
+        .bind(info.block_height)
+        .fetch_one(pool)
+        .await
+        .map_err(ApiError::from)
+    }
+
+    pub async fn get_info(pool: &PgPool) -> Result<Info> {
+        sqlx::query_as::<_, Info>("SELECT * FROM info LIMIT 1")
+        .fetch_one(pool)
+        .await
+        .map_err(ApiError::from)
+    }
+
+}

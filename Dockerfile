@@ -9,7 +9,6 @@ WORKDIR /usr/src/api
 COPY . .
 
 ENV RUSTFLAGS -Ctarget-feature=-crt-static
-ENV SQLX_OFFLINE true
 RUN cargo build --release
 RUN strip target/release/api
 

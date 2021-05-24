@@ -118,6 +118,8 @@ pub async fn start() -> anyhow::Result<()> {
             .service(refresh)
             .service(create_user)
             .service(whoami)
+            .service(get_block_height)
+            .service(update_block_height)
     })
     .bind(&addr)?
     .run()
@@ -136,7 +138,7 @@ async fn refresh(db_pool: DbPool, req: web::Json<UserRefreshRequest>) -> ApiResp
     Ok(HttpResponse::Ok().json(user))
 }
 
-#[get("whoami")]
+#[get("/whoami")]
 async fn whoami(db_pool: DbPool, auth: Authentication) -> ApiResponse {
     if auth.is_user() {
         let user = auth.get_user(db_pool.as_ref()).await?;
@@ -145,6 +147,18 @@ async fn whoami(db_pool: DbPool, auth: Authentication) -> ApiResponse {
         let host = auth.get_host(db_pool.as_ref()).await?;
         return Ok(HttpResponse::Ok().json(host));
     }
+}
+
+#[get("/block_height")]
+async fn get_block_height(db_pool: DbPool, _auth: Authentication) -> ApiResponse {
+    let info = Info::get_info(db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(info.block_height))
+}
+
+#[put("/block_height")]
+async fn update_block_height(db_pool: DbPool, height: web::Json<i64>) -> ApiResponse {
+    let info = Info::update_info(db_pool.as_ref(), &Info{block_height: height.into_inner()}).await?;
+    Ok(HttpResponse::Ok().json(info.block_height))
 }
 
 #[post("/users")]
