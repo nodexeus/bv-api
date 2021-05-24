@@ -13,7 +13,6 @@ codegen-units = 1
 
 
 [dependencies]
-#actix-cors = "0.5"
 actix-cors = { git = "https://github.com/stakejoy/actix-extras", rev = "1023b996" }
 actix-web = { version = "=4.0.0-beta.5", features = ["rustls"] }
 anyhow = "1.0.40"
