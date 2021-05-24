@@ -817,7 +817,7 @@ pub struct Info {
 
 impl Info {
     pub async fn update_info(pool: &PgPool, info: &Info) -> Result<Info> {
-        sqlx::query_as::<_, Info>("UPDATE info SET block_height = $1 RETURNING *")
+        sqlx::query_as::<_, Info>("UPDATE info SET block_height = $1 WHERE block_height <> $1 RETURNING *")
         .bind(info.block_height)
         .fetch_one(pool)
         .await
