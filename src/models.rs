@@ -418,7 +418,7 @@ impl Host {
         // Create and add validators
         for ip in host.validator_ips() {
             let val = ValidatorRequest {
-                name: petname::petname(2, "_"),
+                name: petname::petname(2, "."),
                 version: None,
                 ip_addr: ip.to_owned(),
                 host_id: host.id,
@@ -757,8 +757,9 @@ impl Validator {
     }
 
     pub async fn stake(pool: &PgPool, user_id: Uuid) -> Result<Validator> {
-        sqlx::query_as::<_, Self>("UPDATE validators set user_id = $1 where status - $1 AND stake_status = $2 LIMIT 1 RETURNING *")
+        sqlx::query_as::<_, Self>("UPDATE validators set user_id = $1, stake_status = $2 where status - $3 AND stake_status = $4 LIMIT 1 RETURNING *")
         .bind(user_id)
+        .bind(StakeStatus::Staking)
         .bind(ValidatorStatus::Synced)
         .bind(StakeStatus::Available)
         .fetch_one(pool)
