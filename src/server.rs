@@ -1,3 +1,4 @@
+use crate::errors::ApiError;
 use crate::models::*;
 use crate::{auth, errors};
 use actix_cors::Cors;
@@ -12,7 +13,6 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::borrow::Cow;
 use std::str::FromStr;
 use uuid::Uuid;
-use crate::errors::ApiError;
 
 type ApiResponse = errors::Result<HttpResponse>;
 
@@ -157,7 +157,13 @@ async fn get_block_height(db_pool: DbPool, _auth: Authentication) -> ApiResponse
 
 #[put("/block_height")]
 async fn update_block_height(db_pool: DbPool, height: web::Json<i64>) -> ApiResponse {
-    let info = Info::update_info(db_pool.as_ref(), &Info{block_height: height.into_inner()}).await?;
+    let info = Info::update_info(
+        db_pool.as_ref(),
+        &Info {
+            block_height: height.into_inner(),
+        },
+    )
+    .await?;
     Ok(HttpResponse::Ok().json(info.block_height))
 }
 
@@ -239,7 +245,6 @@ async fn validator_inventory_count(db_pool: DbPool, _auth: Authentication) -> Ap
     Ok(HttpResponse::Ok().json(count))
 }
 
-
 #[get("/users/{id}/validators")]
 async fn list_validators_by_user(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
     let validators = Validator::find_all_by_user(id.into_inner(), db_pool.get_ref()).await?;
@@ -247,7 +252,11 @@ async fn list_validators_by_user(db_pool: DbPool, id: web::Path<Uuid>) -> ApiRes
 }
 
 #[post("/users/{id}/validators")]
-async fn stake_validator(db_pool: DbPool, id: web::Path<Uuid>, auth: Authentication) -> ApiResponse {
+async fn stake_validator(
+    db_pool: DbPool,
+    id: web::Path<Uuid>,
+    auth: Authentication,
+) -> ApiResponse {
     let id = id.into_inner();
 
     if auth.is_admin() || auth.try_user_access(id)? {
@@ -497,14 +506,17 @@ mod tests {
                 block_height: Some(192),
                 stake_status: StakeStatus::Available,
                 status: ValidatorStatus::Provisioning,
-                score: 1000000,
+                tenure_penalty: 1.0,
+                dkg_penalty: 1.0,
+                performance_penalty: 1.0,
+                total_penalty: 1.0,
             })
             .to_request();
 
         let resp: Validator = test::read_response_json(&mut app, req).await;
 
         assert_eq!(resp.host_id, host.id);
-        assert_eq!(resp.score, 1000000);
+        assert_eq!(resp.tenure_penalty, 1.0);
     }
 
     #[actix_rt::test]

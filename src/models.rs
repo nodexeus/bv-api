@@ -129,9 +129,9 @@ impl Authentication {
     pub async fn try_host_access(&self, host_id: Uuid, pool: &PgPool) -> Result<bool> {
         if self.is_host() {
             let host = self.get_host(pool).await?;
-                if host.id == host_id {
-                    return Ok(true)
-                }
+            if host.id == host_id {
+                return Ok(true);
+            }
         }
 
         Err(ApiError::InsufficientPermissionsError)
@@ -428,7 +428,10 @@ impl Host {
                 block_height: None,
                 stake_status: StakeStatus::Available,
                 status: ValidatorStatus::Provisioning,
-                score: 0,
+                tenure_penalty: 0.0,
+                dkg_penalty: 0.0,
+                performance_penalty: 0.0,
+                total_penalty: 0.0,
             };
 
             let val = Validator::create_tx(val, &mut tx).await?;
@@ -645,7 +648,10 @@ pub struct Validator {
     pub block_height: Option<i64>,
     pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
-    pub score: i64,
+    pub tenure_penalty: f64,
+    pub dkg_penalty: f64,
+    pub performance_penalty: f64,
+    pub total_penalty: f64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -687,7 +693,7 @@ impl Validator {
     }
 
     pub async fn create_tx(validator: ValidatorRequest, tx: &mut PgConnection) -> Result<Self> {
-        let validator = sqlx::query_as::<_, Self>("INSERT INTO validators (name, version, ip_addr, host_id, user_id, address, swarm_key, block_height, stake_status, status, score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *")
+        let validator = sqlx::query_as::<_, Self>("INSERT INTO validators (name, version, ip_addr, host_id, user_id, address, swarm_key, block_height, stake_status, status, tenure_penalty, dkg_penalty, performance_penalty, total_penalty) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *")
         .bind(validator.name)
         .bind(validator.version)
         .bind(validator.ip_addr)
@@ -698,7 +704,10 @@ impl Validator {
         .bind(validator.block_height)
         .bind(validator.stake_status)
         .bind(validator.status)
-        .bind(validator.score)
+        .bind(validator.tenure_penalty)
+        .bind(validator.dkg_penalty)
+        .bind(validator.performance_penalty)
+        .bind(validator.total_penalty)
         .fetch_one(tx)
         .await?;
 
@@ -712,13 +721,16 @@ impl Validator {
     ) -> Result<Self> {
         let mut tx = pool.begin().await.unwrap();
         let validator = sqlx::query_as::<_, Self>(
-            r#"UPDATE validators SET version=$1, block_height=$2, stake_status=$3, status=$4, score=$5, updated_at=now()  WHERE id = $6 RETURNING *"#
+            r#"UPDATE validators SET version=$1, block_height=$2, stake_status=$3, status=$4, tenure_penalty=$5, dkg_penalty=$6, performance_penalty=$7, total_penalty=$8, updated_at=now()  WHERE id = $9 RETURNING *"#
         )
         .bind(validator.version)
         .bind(validator.block_height)
         .bind(validator.stake_status)
         .bind(validator.status)
-        .bind(validator.score)
+        .bind(validator.tenure_penalty)
+        .bind(validator.dkg_penalty)
+        .bind(validator.performance_penalty)
+        .bind(validator.total_penalty)
         .bind(id)
         .fetch_one(&mut tx)
         .await?;
@@ -748,10 +760,13 @@ impl Validator {
     }
 
     pub async fn inventory_count(pool: &PgPool) -> Result<i64> {
-        let row:(i64, ) = sqlx::query_as("SELECT COUNT(*) AS available FROM validators where status = $1 and stake_status = $2")
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) AS available FROM validators where status = $1 and stake_status = $2",
+        )
         .bind(ValidatorStatus::Synced)
         .bind(StakeStatus::Available)
-        .fetch_one(pool).await?;
+        .fetch_one(pool)
+        .await?;
 
         Ok(row.0)
     }
@@ -780,7 +795,10 @@ pub struct ValidatorRequest {
     pub block_height: Option<i64>,
     pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
-    pub score: i64,
+    pub tenure_penalty: f64,
+    pub dkg_penalty: f64,
+    pub performance_penalty: f64,
+    pub total_penalty: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -789,7 +807,10 @@ pub struct ValidatorStatusRequest {
     pub block_height: Option<i64>,
     pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
-    pub score: i64,
+    pub tenure_penalty: f64,
+    pub dkg_penalty: f64,
+    pub performance_penalty: f64,
+    pub total_penalty: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -817,7 +838,9 @@ pub struct Info {
 
 impl Info {
     pub async fn update_info(pool: &PgPool, info: &Info) -> Result<Info> {
-        sqlx::query_as::<_, Info>("UPDATE info SET block_height = $1 WHERE block_height <> $1 RETURNING *")
+        sqlx::query_as::<_, Info>(
+            "UPDATE info SET block_height = $1 WHERE block_height <> $1 RETURNING *",
+        )
         .bind(info.block_height)
         .fetch_one(pool)
         .await
@@ -826,9 +849,8 @@ impl Info {
 
     pub async fn get_info(pool: &PgPool) -> Result<Info> {
         sqlx::query_as::<_, Info>("SELECT * FROM info LIMIT 1")
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::from)
+            .fetch_one(pool)
+            .await
+            .map_err(ApiError::from)
     }
-
 }
