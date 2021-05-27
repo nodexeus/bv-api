@@ -772,11 +772,24 @@ impl Validator {
     }
 
     pub async fn stake(pool: &PgPool, user_id: Uuid) -> Result<Validator> {
-        sqlx::query_as::<_, Self>("UPDATE validators set user_id = $1, stake_status = $2 where status - $3 AND stake_status = $4 LIMIT 1 RETURNING *")
-        .bind(user_id)
-        .bind(StakeStatus::Staking)
+        sqlx::query_as::<_, Self>(
+            r#"
+            WITH inv AS (
+                SELECT * FROM validators
+                WHERE status = $1 AND stake_status = $2
+                LIMIT 1
+            ) 
+            UPDATE validators SET 
+                user_id = $3, 
+                stake_status = $2
+            FROM inv
+            WHERE validators.id = inv.id
+            RETURNING *"#,
+        )
         .bind(ValidatorStatus::Synced)
         .bind(StakeStatus::Available)
+        .bind(user_id)
+        .bind(StakeStatus::Staking)
         .fetch_one(pool)
         .await
         .map_err(ApiError::from)
