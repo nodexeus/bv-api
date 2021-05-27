@@ -781,7 +781,7 @@ impl Validator {
             ) 
             UPDATE validators SET 
                 user_id = $3, 
-                stake_status = $2
+                stake_status = $4
             FROM inv
             WHERE validators.id = inv.id
             RETURNING *"#,
