@@ -775,7 +775,7 @@ impl Validator {
         sqlx::query_as::<_, Self>(
             r#"
             WITH inv AS (
-                SELECT * FROM validators
+                SELECT id FROM validators
                 WHERE status = $1 AND stake_status = $2
                 LIMIT 1
             ) 
