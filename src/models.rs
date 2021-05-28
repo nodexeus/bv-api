@@ -418,7 +418,7 @@ impl Host {
         // Create and add validators
         for ip in host.validator_ips() {
             let val = ValidatorRequest {
-                name: petname::petname(2, "."),
+                name: petname::petname(2, "_"),
                 version: None,
                 ip_addr: ip.to_owned(),
                 host_id: host.id,
