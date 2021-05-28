@@ -58,7 +58,7 @@ async fn it_should_add_host() {
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
-            .service(add_host),
+            .service(create_host),
     )
     .await;
 
