@@ -168,6 +168,7 @@ pub struct User {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
     pub fee_bps: i64,
+    pub staking_quota: i64,
     pub created_at: DateTime<Utc>,
 }
 
@@ -195,6 +196,23 @@ impl User {
 
         self.token = Some(auth::create_jwt(&auth_data)?);
         Ok(self.to_owned())
+    }
+
+    pub async fn can_stake(&self, pool: &PgPool, count: i64) -> Result<bool> {
+        Ok(self.staking_quota >= (self.staking_count(pool).await? + count))
+    }
+
+    /// Returns the number of validators in "Staking"
+    pub async fn staking_count(&self, pool: &PgPool) -> Result<i64> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM validators where user_id = $1 AND stake_status = $2",
+        )
+        .bind(self.id)
+        .bind(StakeStatus::Staking)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(row.0)
     }
 
     pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
@@ -771,28 +789,35 @@ impl Validator {
         Ok(row.0)
     }
 
-    pub async fn stake(pool: &PgPool, user_id: Uuid) -> Result<Validator> {
-        sqlx::query_as::<_, Self>(
-            r#"
+    pub async fn stake(pool: &PgPool, user: &User, count: i64) -> Result<Validator> {
+        if user.can_stake(pool, count).await? {
+            return sqlx::query_as::<_, Self>(
+                r#"
             WITH inv AS (
                 SELECT id FROM validators
                 WHERE status = $1 AND stake_status = $2
-                LIMIT 1
+                LIMIT $3
             ) 
             UPDATE validators SET 
-                user_id = $3, 
-                stake_status = $4
+                user_id = $4, 
+                stake_status = $5
             FROM inv
             WHERE validators.id = inv.id
             RETURNING *"#,
-        )
-        .bind(ValidatorStatus::Synced)
-        .bind(StakeStatus::Available)
-        .bind(user_id)
-        .bind(StakeStatus::Staking)
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::from)
+            )
+            .bind(ValidatorStatus::Synced)
+            .bind(StakeStatus::Available)
+            .bind(count)
+            .bind(user.id)
+            .bind(StakeStatus::Staking)
+            .fetch_one(pool)
+            .await
+            .map_err(ApiError::from);
+        }
+
+        Err(ApiError::ValidationError(
+            "User's staking quota over limit.".to_string(),
+        ))
     }
 }
 
@@ -831,6 +856,11 @@ pub struct ValidatorIdentityRequest {
     pub version: Option<String>,
     pub address: Option<String>,
     pub swarm_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidatorStakeRequest {
+    pub count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

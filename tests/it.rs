@@ -1,4 +1,4 @@
-use actix_web::{http::StatusCode, middleware, test, App};
+use actix_web::{middleware, test, App};
 use api::models::*;
 use api::server::*;
 use serde::Deserialize;
@@ -51,7 +51,7 @@ async fn it_should_create_and_login_user() {
 }
 
 #[actix_rt::test]
-async fn it_shoud_add_host() {
+async fn it_should_add_host() {
     let db_pool = setup().await;
 
     let mut app = test::init_service(
@@ -69,8 +69,8 @@ async fn it_shoud_add_host() {
             name: "Test user 1".to_string(),
             version: Some("0.1.0".to_string()),
             location: Some("Virgina".to_string()),
-            ip_addr: "192.168.1.2".parse().expect("Couldn't parse ip address"),
-            val_ip_addrs: "192.168.0.3, 192.168.0.4".to_string(),
+            ip_addr: "192.168.8.2".parse().expect("Couldn't parse ip address"),
+            val_ip_addrs: "192.168.8.3, 192.168.8.4".to_string(),
             token: "1234".to_string(),
             status: ConnectionStatus::Online,
         })
@@ -238,6 +238,49 @@ async fn it_shoud_create_command() {
     assert_eq!(resp.host_id, host.id);
 }
 
+#[actix_rt::test]
+async fn it_shoud_stake_one_validator() {
+    let db_pool = setup().await;
+
+    let app = test::init_service(
+        App::new()
+            .data(db_pool.clone())
+            .wrap(middleware::Logger::default())
+            .service(stake_validator),
+    )
+    .await;
+    let login_req = UserLoginRequest {
+        email: "test@here.com".into(),
+        password: "abc12345".into(),
+    };
+
+    let user = User::login(login_req, &db_pool).await.expect("could not login test user");
+
+    let path = format!(
+        "/users/{}/validators",
+        user.id
+    );
+
+
+    let stake_req = ValidatorStakeRequest {
+        count: 1,
+    };
+
+    let req = test::TestRequest::post()
+        .uri(&path)
+        .append_header(build_auth_header(&user))
+        .set_json(&stake_req)
+        .to_request();
+
+    let res = test::call_service(&app, req).await;
+    assert_eq!(res.status(), 200);
+
+    //TODO: Assert Content
+
+    // assert_eq!(resp.user_id.unwrap(), user.id);
+    // assert_eq!(resp.stake_status, StakeStatus::Staking);
+}
+
 async fn setup() -> PgPool {
     dotenv::dotenv().ok();
 
@@ -276,23 +319,60 @@ async fn reset_db(pool: &PgPool) {
         .await
         .expect("Error deleting users");
 
+    let user = UserRequest {
+        email: "test@here.com".into(),
+        password: "abc12345".into(),
+        password_confirm: "abc12345".into(),
+    };
+
+    User::create(user, pool)
+        .await
+        .expect("Could not create test user in db.");
+
     let host = HostRequest {
-        name: "Test user".to_string(),
-        version: Some("0.1.0".to_string()),
-        location: Some("Virgina".to_string()),
-        ip_addr: "192.168.1.1".to_string(),
-        val_ip_addrs: "192.168.0.1, 192.168.0.2".to_string(),
-        token: "123".to_string(),
+        name: "Test user".into(),
+        version: Some("0.1.0".into()),
+        location: Some("Virgina".into()),
+        ip_addr: "192.168.1.1".into(),
+        val_ip_addrs: "192.168.0.1, 192.168.0.2, 192.168.0.3, 192.168.0.4, 192.168.0.5".into(),
+        token: "123".into(),
         status: ConnectionStatus::Online,
     };
 
     Host::create(host, &pool)
         .await
         .expect("Could not create test host in db.");
+
+    let host = Host::find_by_token("123", pool)
+        .await
+        .expect("Could not fetch test host in db.");
+
+    let status = ValidatorStatusRequest {
+        version: None,
+        block_height: None,
+        stake_status: StakeStatus::Available,
+        status: ValidatorStatus::Synced,
+        tenure_penalty: 0.0,
+        performance_penalty: 0.0,
+        dkg_penalty: 0.0,
+        total_penalty: 0.0,
+    };
+
+    for v in host.validators.expect("No validators.") {
+        let _ = Validator::update_status(v.id, status.clone(), pool)
+            .await
+            .expect("Error updating validator status in db during setup.");
+    }
 }
 
 async fn get_test_host(db_pool: PgPool) -> Host {
     Host::find_by_token("123", &db_pool)
         .await
         .expect("Could not read test host from db.")
+}
+
+fn build_auth_header(user: &User) -> (String, String) {
+    let token = user.token.clone().unwrap_or("".to_string());
+    let bearer = format!("Bearer {}", token);
+    ("Authorization".to_string(), bearer)
 }

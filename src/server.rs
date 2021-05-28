@@ -255,12 +255,17 @@ async fn list_validators_by_user(db_pool: DbPool, id: web::Path<Uuid>) -> ApiRes
 async fn stake_validator(
     db_pool: DbPool,
     id: web::Path<Uuid>,
+    req: web::Json<ValidatorStakeRequest>,
     auth: Authentication,
 ) -> ApiResponse {
     let id = id.into_inner();
 
+    let count = req.into_inner().count;
+
     if auth.is_admin() || auth.try_user_access(id)? {
-        let validator = Validator::stake(db_pool.as_ref(), id).await?;
+        let user = auth.get_user(db_pool.as_ref()).await?;
+
+        let validator = Validator::stake(db_pool.as_ref(), &user, count).await?;
         return Ok(HttpResponse::Ok().json(validator));
     }
 
