@@ -254,17 +254,13 @@ async fn it_shoud_stake_one_validator() {
         password: "abc12345".into(),
     };
 
-    let user = User::login(login_req, &db_pool).await.expect("could not login test user");
+    let user = User::login(login_req, &db_pool)
+        .await
+        .expect("could not login test user");
 
-    let path = format!(
-        "/users/{}/validators",
-        user.id
-    );
+    let path = format!("/users/{}/validators", user.id);
 
-
-    let stake_req = ValidatorStakeRequest {
-        count: 1,
-    };
+    let stake_req = ValidatorStakeRequest { count: 1 };
 
     let req = test::TestRequest::post()
         .uri(&path)

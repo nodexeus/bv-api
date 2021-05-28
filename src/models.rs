@@ -90,37 +90,71 @@ impl FromStr for UserRole {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Authentication {
-    pub user_id: Option<Uuid>,
-    pub user_role: Option<UserRole>,
-    pub host_token: Option<String>,
+pub struct UserAuthInfo {
+    pub id: Uuid,
+    pub role: UserRole,
+}
+
+pub type AuthToken = String;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Authentication {
+    User(UserAuthInfo),
+    Host(AuthToken),
+    Service(AuthToken),
 }
 
 impl Authentication {
     pub fn is_user(&self) -> bool {
-        self.user_id.is_some()
+        match self {
+            Self::User(_) => true,
+            _ => false,
+        }
     }
 
     pub fn is_host(&self) -> bool {
-        self.host_token.is_some()
+        match self {
+            Self::Host(_) => true,
+            _ => false,
+        }
     }
 
     pub fn is_admin(&self) -> bool {
-        self.user_role.is_some() && UserRole::Admin == self.user_role.unwrap()
+        match self {
+            Self::User(u) if u.role == UserRole::Admin => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_service(&self) -> bool {
+        match self {
+            Self::Service(_) => true,
+            _ => false,
+        }
     }
 
     /// Returns an error if not an admin
     pub fn try_admin(&self) -> Result<bool> {
-        match self.user_role {
-            Some(UserRole::Admin) => Ok(true),
-            _ => Err(ApiError::InsufficientPermissionsError),
+        if self.is_admin() {
+            Ok(true)
+        } else {
+            Err(ApiError::InsufficientPermissionsError)
+        }
+    }
+
+    /// Returns an error if not an admin
+    pub fn try_service(&self) -> Result<bool> {
+        if self.is_service() {
+            Ok(true)
+        } else {
+            Err(ApiError::InsufficientPermissionsError)
         }
     }
 
     /// Returns an error if user doesn't have access
     pub fn try_user_access(&self, user_id: Uuid) -> Result<bool> {
-        match self.user_id {
-            Some(id) if id == user_id => Ok(true),
+        match self {
+            Self::User(u) if u.id == user_id => Ok(true),
             _ => Err(ApiError::InsufficientPermissionsError),
         }
     }
@@ -138,18 +172,16 @@ impl Authentication {
     }
 
     pub async fn get_user(&self, pool: &PgPool) -> Result<User> {
-        if let Some(id) = self.user_id {
-            User::find_by_id(id, pool).await
-        } else {
-            Err(anyhow!("Authentication is not a user.").into())
+        match self {
+            Self::User(u) => User::find_by_id(u.id, pool).await,
+            _ => Err(anyhow!("Authentication is not a user.").into()),
         }
     }
 
     pub async fn get_host(&self, pool: &PgPool) -> Result<Host> {
-        if let Some(token) = self.host_token.as_ref() {
-            Host::find_by_token(token, pool).await
-        } else {
-            Err(anyhow!("Autentication is not a host.").into())
+        match self {
+            Self::Host(token) => Host::find_by_token(token, pool).await,
+            _ => Err(anyhow!("Autentication is not a host.").into()),
         }
     }
 }
@@ -708,6 +740,16 @@ impl Validator {
             .fetch_one(pool)
             .await
             .map_err(ApiError::from)
+    }
+
+    pub async fn find_all_by_stake_status(stake_status: StakeStatus, pool: &PgPool) -> Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM validators WHERE stake_status = $1 order by status, name",
+        )
+        .bind(stake_status)
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::from)
     }
 
     pub async fn create_tx(validator: ValidatorRequest, tx: &mut PgConnection) -> Result<Self> {

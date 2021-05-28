@@ -39,24 +39,23 @@ impl FromRequest for Authentication {
                 token.map(|t| Cow::Borrowed(t))
             })
         {
+            let api_service_secret = std::env::var("API_SERVICE_SECRET").unwrap_or("".into());
+
             if token.starts_with("eyJ") {
                 if let Ok(auth::JwtValidationStatus::Valid(auth_data)) =
                     auth::validate_jwt(token.as_ref())
                 {
                     if let Ok(role) = UserRole::from_str(&auth_data.user_role) {
-                        return ok(Self {
-                            user_id: Some(auth_data.user_id),
-                            user_role: Some(role),
-                            host_token: None,
-                        });
+                        return ok(Self::User(UserAuthInfo {
+                            id: auth_data.user_id,
+                            role: role,
+                        }));
                     }
                 }
+            } else if api_service_secret != "" && token == api_service_secret {
+                return ok(Self::Service(token.as_ref().to_string()));
             } else {
-                return ok(Self {
-                    user_id: None,
-                    user_role: None,
-                    host_token: Some(token.as_ref().to_string()),
-                });
+                return ok(Self::Host(token.as_ref().to_string()));
             };
         };
 
@@ -94,32 +93,33 @@ pub async fn start() -> anyhow::Result<()> {
             .wrap(cors)
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
-            .service(add_host)
+            .service(create_command)
+            .service(create_host)
+            .service(create_user)
+            .service(delete_command)
+            .service(delete_host)
+            .service(get_block_height)
+            .service(get_command)
             .service(get_host)
             .service(get_host_by_token)
-            .service(update_host)
-            .service(update_host_status)
+            .service(get_validator)
+            .service(list_commands)
             .service(list_hosts)
-            .service(delete_host)
-            .service(validator_inventory_count)
+            .service(list_pending_commands)
             .service(list_validators)
             .service(list_validators_by_user)
-            .service(stake_validator)
-            .service(get_validator)
-            .service(update_validator_status)
-            .service(update_validator_identity)
-            .service(get_command)
-            .service(list_commands)
-            .service(list_pending_commands)
-            .service(create_command)
-            .service(update_command_response)
-            .service(delete_command)
+            .service(list_validators_staking)
             .service(login)
             .service(refresh)
-            .service(create_user)
-            .service(whoami)
-            .service(get_block_height)
+            .service(stake_validator)
             .service(update_block_height)
+            .service(update_command_response)
+            .service(update_host)
+            .service(update_host_status)
+            .service(update_validator_identity)
+            .service(update_validator_status)
+            .service(validator_inventory_count)
+            .service(whoami)
     })
     .bind(&addr)?
     .run()
@@ -156,7 +156,9 @@ async fn get_block_height(db_pool: DbPool, _auth: Authentication) -> ApiResponse
 }
 
 #[put("/block_height")]
-async fn update_block_height(db_pool: DbPool, height: web::Json<i64>) -> ApiResponse {
+async fn update_block_height(db_pool: DbPool, height: web::Json<i64>, auth: Authentication) -> ApiResponse {
+    let _ = auth.try_service()?;
+
     let info = Info::update_info(
         db_pool.as_ref(),
         &Info {
@@ -198,7 +200,7 @@ async fn get_host(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
 }
 
 #[post("/hosts")]
-async fn add_host(db_pool: DbPool, host: web::Json<HostCreateRequest>) -> ApiResponse {
+async fn create_host(db_pool: DbPool, host: web::Json<HostCreateRequest>) -> ApiResponse {
     let host = host.into_inner().into();
 
     let host = Host::create(host, db_pool.get_ref()).await?;
@@ -236,6 +238,14 @@ async fn list_validators(db_pool: DbPool, auth: Authentication) -> ApiResponse {
     let _ = auth.try_admin()?;
 
     let validators = Validator::find_all(db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(validators))
+}
+
+#[get("/validators/staking")]
+async fn list_validators_staking(db_pool: DbPool, auth: Authentication) -> ApiResponse {
+    let _ = auth.try_service()?;
+
+    let validators = Validator::find_all_by_stake_status(StakeStatus::Staking, db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(validators))
 }
 
