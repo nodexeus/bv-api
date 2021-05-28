@@ -1,4 +1,5 @@
 use api::server;
+use log::info;
 
 fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
@@ -10,5 +11,8 @@ fn main() -> anyhow::Result<()> {
             .build()
             .unwrap()
     })
-    .block_on(async move { server::start().await })
+    .block_on(async move {
+        info!("Starting server...");
+        server::start().await
+    })
 }

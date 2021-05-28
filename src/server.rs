@@ -8,6 +8,7 @@ use actix_web::{
 };
 use anyhow::anyhow;
 use futures_util::future::{err, ok, Ready};
+use log::debug;
 use serde::Deserialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::borrow::Cow;
@@ -53,6 +54,7 @@ impl FromRequest for Authentication {
                     }
                 }
             } else if api_service_secret != "" && token == api_service_secret {
+                debug!("Api Service token found in bearer.");
                 return ok(Self::Service(token.as_ref().to_string()));
             } else {
                 return ok(Self::Host(token.as_ref().to_string()));
@@ -156,7 +158,11 @@ async fn get_block_height(db_pool: DbPool, _auth: Authentication) -> ApiResponse
 }
 
 #[put("/block_height")]
-async fn update_block_height(db_pool: DbPool, height: web::Json<i64>, auth: Authentication) -> ApiResponse {
+async fn update_block_height(
+    db_pool: DbPool,
+    height: web::Json<i64>,
+    auth: Authentication,
+) -> ApiResponse {
     let _ = auth.try_service()?;
 
     let info = Info::update_info(
@@ -245,7 +251,8 @@ async fn list_validators(db_pool: DbPool, auth: Authentication) -> ApiResponse {
 async fn list_validators_staking(db_pool: DbPool, auth: Authentication) -> ApiResponse {
     let _ = auth.try_service()?;
 
-    let validators = Validator::find_all_by_stake_status(StakeStatus::Staking, db_pool.get_ref()).await?;
+    let validators =
+        Validator::find_all_by_stake_status(StakeStatus::Staking, db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(validators))
 }
 

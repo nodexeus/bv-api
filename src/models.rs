@@ -742,7 +742,10 @@ impl Validator {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_stake_status(stake_status: StakeStatus, pool: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all_by_stake_status(
+        stake_status: StakeStatus,
+        pool: &PgPool,
+    ) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM validators WHERE stake_status = $1 order by status, name",
         )
