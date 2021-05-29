@@ -247,6 +247,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "angry-purple-tiger"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49c749eb8b90a5c85a879ac35bba5374ba18ff41d609878d7d37dd2ac0122a3c"
+dependencies = [
+ "md5",
+]
+
+[[package]]
 name = "ansi_term"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,6 +277,7 @@ dependencies = [
  "actix-cors",
  "actix-rt",
  "actix-web",
+ "angry-purple-tiger",
  "anyhow",
  "argon2",
  "bytes",
@@ -1102,6 +1112,12 @@ dependencies = [
  "digest",
  "opaque-debug",
 ]
+
+[[package]]
+name = "md5"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "memchr"

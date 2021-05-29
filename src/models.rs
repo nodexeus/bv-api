@@ -15,6 +15,7 @@ use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
 use validator::Validate;
+use angry_purple_tiger::AnimalName;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -681,6 +682,7 @@ pub struct Validator {
     pub user_id: Option<Uuid>,
     pub owner_address: Option<String>,
     pub address: Option<String>,
+    pub address_name: Option<String>,
     pub swarm_key: Option<String>,
     pub block_height: Option<i64>,
     pub stake_status: StakeStatus,
@@ -822,13 +824,22 @@ impl Validator {
         validator: ValidatorIdentityRequest,
         pool: &PgPool,
     ) -> Result<Self> {
+        let mut address_name = None;
+        if let Some(val_addr) = &validator.address {
+            address_name = match val_addr.parse::<AnimalName>() {
+                Ok(name) => Some(name.to_string()),
+                Err(_) => None, 
+            }
+        };
+
         let mut tx = pool.begin().await.unwrap();
         let validator = sqlx::query_as::<_, Self>(
-            r#"UPDATE validators SET version=$1, address=$2, swarm_key=$3, updated_at=now() WHERE id = $4 RETURNING *"#
+            r#"UPDATE validators SET version=$1, address=$2, swarm_key=$3, address_name=$4, updated_at=now() WHERE id = $5 RETURNING *"#
         )
         .bind(validator.version)
         .bind(validator.address)
         .bind(validator.swarm_key)
+        .bind(address_name)
         .bind(id)
         .fetch_one(&mut tx)
         .await?;
