@@ -172,7 +172,7 @@ async fn get_block_height(db_pool: DbPool, _auth: Authentication) -> ApiResponse
 async fn update_block_height(
     db_pool: DbPool,
     height: web::Json<i64>,
-    auth: Authentication,
+    _auth: Authentication,
 ) -> ApiResponse {
     debug!("In update_block_height");
     // TODO : let _ = auth.try_service()?;
