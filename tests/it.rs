@@ -302,6 +302,27 @@ async fn it_should_put_block_height_as_service() {
     assert_eq!(res.status(), 200);
 }
 
+#[actix_rt::test]
+async fn it_should_list_validators_staking_as_service() {
+    let db_pool = setup().await;
+
+    let app = test::init_service(
+        App::new()
+            .data(db_pool.clone())
+            .wrap(middleware::Logger::default())
+            .service(list_validators_staking),
+    )
+    .await;
+
+    let req = test::TestRequest::get()
+        .uri("/validators/staking")
+        .append_header(auth_header_for_service())
+        .to_request();
+
+    let res = test::call_service(&app, req).await;
+    assert_eq!(res.status(), 200);
+}
+
 async fn setup() -> PgPool {
     dotenv::dotenv().ok();
 
@@ -321,6 +342,7 @@ async fn setup() -> PgPool {
 
     pool
 }
+
 
 async fn reset_db(pool: &PgPool) {
     sqlx::query("DELETE FROM rewards")

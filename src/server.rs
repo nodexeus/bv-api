@@ -107,12 +107,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(create_user)
             .service(delete_command)
             .service(delete_host)
-            .service(get_block_height)
-            .service(get_command)
-            .service(get_host)
-            .service(get_host_by_token)
             .service(list_validators_staking)
-            .service(get_validator)
             .service(list_commands)
             .service(list_hosts)
             .service(list_pending_commands)
@@ -131,6 +126,11 @@ pub async fn start() -> anyhow::Result<()> {
             .service(update_validator_owner_address)
             .service(validator_inventory_count)
             .service(whoami)
+            .service(get_block_height)
+            .service(get_command)
+            .service(get_host)
+            .service(get_host_by_token)
+            .service(get_validator)
     })
     .bind(&addr)?
     .run()
@@ -323,6 +323,7 @@ async fn update_validator_stake_status(
     auth: Authentication,
 ) -> ApiResponse {
     if !auth.is_admin() && !auth.is_host() && !auth.is_service() {
+        debug!("update_validator_stake_status:Invalid Permissions {:?}", auth);
         return Err(ApiError::InsufficientPermissionsError);
     }
 
