@@ -128,6 +128,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(update_validator_identity)
             .service(update_validator_status)
             .service(update_validator_stake_status)
+            .service(update_validator_owner_address)
             .service(validator_inventory_count)
             .service(whoami)
     })
@@ -327,6 +328,23 @@ async fn update_validator_stake_status(
 
     let validator =
         Validator::update_stake_status(id.into_inner(), status.into_inner(), db_pool.as_ref())
+            .await?;
+    Ok(HttpResponse::Ok().json(validator))
+}
+
+#[put("/validators/{id}/owner_address")]
+async fn update_validator_owner_address(
+    db_pool: DbPool,
+    id: web::Path<Uuid>,
+    owner_address: web::Json<String>,
+    auth: Authentication,
+) -> ApiResponse {
+    if !auth.is_admin() && !auth.is_host() && !auth.is_service() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+
+    let validator =
+        Validator::update_owner_address(id.into_inner(), Some(owner_address.into_inner()), db_pool.as_ref())
             .await?;
     Ok(HttpResponse::Ok().json(validator))
 }

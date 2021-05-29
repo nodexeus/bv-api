@@ -679,6 +679,7 @@ pub struct Validator {
     pub ip_addr: String,
     pub host_id: Uuid,
     pub user_id: Option<Uuid>,
+    pub owner_address: Option<String>,
     pub address: Option<String>,
     pub swarm_key: Option<String>,
     pub block_height: Option<i64>,
@@ -794,6 +795,20 @@ impl Validator {
             r#"UPDATE validators SET stake_status=$1, updated_at=now()  WHERE id = $2 RETURNING *"#,
         )
         .bind(status)
+        .bind(id)
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await.unwrap();
+        Ok(validator)
+    }
+
+    pub async fn update_owner_address(id: Uuid, owner_address: Option<String>, pool: &PgPool) -> Result<Self> {
+        let mut tx = pool.begin().await.unwrap();
+        let validator = sqlx::query_as::<_, Self>(
+            r#"UPDATE validators SET owner_address=$1, updated_at=now()  WHERE id = $2 RETURNING *"#,
+        )
+        .bind(owner_address)
         .bind(id)
         .fetch_one(&mut tx)
         .await?;
