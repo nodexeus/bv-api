@@ -89,7 +89,7 @@ impl FromStr for UserRole {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UserAuthInfo {
     pub id: Uuid,
     pub role: UserRole,
@@ -97,7 +97,7 @@ pub struct UserAuthInfo {
 
 pub type AuthToken = String;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Authentication {
     User(UserAuthInfo),
     Host(AuthToken),
@@ -780,6 +780,20 @@ impl Validator {
         .bind(validator.dkg_penalty)
         .bind(validator.performance_penalty)
         .bind(validator.total_penalty)
+        .bind(id)
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await.unwrap();
+        Ok(validator)
+    }
+
+    pub async fn update_stake_status(id: Uuid, status: StakeStatus, pool: &PgPool) -> Result<Self> {
+        let mut tx = pool.begin().await.unwrap();
+        let validator = sqlx::query_as::<_, Self>(
+            r#"UPDATE validators SET stake_status=$1, updated_at=now()  WHERE id = $2 RETURNING *"#,
+        )
+        .bind(status)
         .bind(id)
         .fetch_one(&mut tx)
         .await?;
