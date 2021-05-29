@@ -317,19 +317,6 @@ impl User {
 
     pub async fn refresh(req: UserRefreshRequest, pool: &PgPool) -> Result<User> {
         let mut user = Self::find_by_refresh(&req.refresh, pool).await?;
-        let auth_data = match auth::validate_jwt(&req.token)? {
-            auth::JwtValidationStatus::Invalid => {
-                return Err(ApiError::InvalidAuthentication(anyhow!("JWT is invalid.")))
-            }
-            auth::JwtValidationStatus::Expired(auth_data) => auth_data,
-            auth::JwtValidationStatus::Valid(auth_data) => auth_data,
-        };
-        if user.id != auth_data.user_id {
-            return Err(ApiError::InvalidAuthentication(anyhow!(
-                "JWT and Refresh token do not match."
-            )));
-        }
-
         Ok(user.set_jwt()?)
     }
 }
@@ -361,7 +348,6 @@ impl UserLoginRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserRefreshRequest {
-    pub token: String,
     pub refresh: String,
 }
 
