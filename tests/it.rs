@@ -239,7 +239,7 @@ async fn it_shoud_create_command() {
 }
 
 #[actix_rt::test]
-async fn it_shoud_stake_one_validator() {
+async fn it_should_stake_one_validator() {
     let db_pool = setup().await;
 
     let app = test::init_service(
@@ -249,6 +249,7 @@ async fn it_shoud_stake_one_validator() {
             .service(stake_validator),
     )
     .await;
+
     let login_req = UserLoginRequest {
         email: "test@here.com".into(),
         password: "abc12345".into(),
@@ -264,7 +265,7 @@ async fn it_shoud_stake_one_validator() {
 
     let req = test::TestRequest::post()
         .uri(&path)
-        .append_header(build_auth_header(&user))
+        .append_header(auth_header_for_user(&user))
         .set_json(&stake_req)
         .to_request();
 
@@ -275,6 +276,30 @@ async fn it_shoud_stake_one_validator() {
 
     // assert_eq!(resp.user_id.unwrap(), user.id);
     // assert_eq!(resp.stake_status, StakeStatus::Staking);
+}
+
+#[actix_rt::test]
+async fn it_should_put_block_height_as_service() {
+    let db_pool = setup().await;
+
+    let app = test::init_service(
+        App::new()
+            .data(db_pool.clone())
+            .wrap(middleware::Logger::default())
+            .service(update_block_height),
+    )
+    .await;
+
+    let height: i64 = 100;
+
+    let req = test::TestRequest::put()
+        .uri("/block_height")
+        .append_header(auth_header_for_service())
+        .set_json(&height)
+        .to_request();
+
+    let res = test::call_service(&app, req).await;
+    assert_eq!(res.status(), 200);
 }
 
 async fn setup() -> PgPool {
@@ -314,6 +339,14 @@ async fn reset_db(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("Error deleting users");
+    sqlx::query("DELETE FROM info")
+        .execute(pool)
+        .await
+        .expect("Error deleting info");
+    sqlx::query("INSERT INTO info (block_height) VALUES (99)")
+        .execute(pool)
+        .await
+        .expect("could not update info in test setup");
 
     let user = UserRequest {
         email: "test@here.com".into(),
@@ -367,8 +400,14 @@ async fn get_test_host(db_pool: PgPool) -> Host {
         .expect("Could not read test host from db.")
 }
 
-fn build_auth_header(user: &User) -> (String, String) {
+fn auth_header_for_user(user: &User) -> (String, String) {
     let token = user.token.clone().unwrap_or("".to_string());
+    let bearer = format!("Bearer {}", token);
+    ("Authorization".to_string(), bearer)
+}
+
+fn auth_header_for_service() -> (String, String) {
+    let token = std::env::var("API_SERVICE_SECRET").expect("Missing API_SERVICE_SECRET");
     let bearer = format!("Bearer {}", token);
     ("Authorization".to_string(), bearer)
 }

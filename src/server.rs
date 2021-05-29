@@ -8,7 +8,7 @@ use actix_web::{
 };
 use anyhow::anyhow;
 use futures_util::future::{err, ok, Ready};
-use log::debug;
+use log::{debug, warn};
 use serde::Deserialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::borrow::Cow;
@@ -43,17 +43,8 @@ impl FromRequest for Authentication {
             let api_service_secret = std::env::var("API_SERVICE_SECRET").unwrap_or("".into());
             let is_service_token = api_service_secret != "" && token == api_service_secret;
 
-            if req.method() == actix_web::http::Method::PUT {
-                debug!(">>> {:?}", req.path());
-                debug!("Api Service Secret: {}", api_service_secret);
-                debug!("Authorizaton header token: {}", token);
-                debug!(
-                    "'{}' != '{}' && '{}' == '{}' evals: {}",
-                    api_service_secret, "", token, api_service_secret, is_service_token
-                );
-                debug!("<<<");
-            }
             if token.starts_with("eyJ") {
+                debug!("JWT Auth in Bearer.");
                 if let Ok(auth::JwtValidationStatus::Valid(auth_data)) =
                     auth::validate_jwt(token.as_ref())
                 {
@@ -65,13 +56,18 @@ impl FromRequest for Authentication {
                     }
                 }
             } else if is_service_token {
-                debug!("Api Service token found in bearer: {}", token);
+                debug!("Service Auth in Bearer.");
                 return ok(Self::Service(token.as_ref().to_string()));
             } else {
+                debug!("Host Auth in Bearer.");
                 return ok(Self::Host(token.as_ref().to_string()));
             };
         };
 
+        warn!(
+            "Invalid token auth: {:?}",
+            req.headers().get("Authorizatoin")
+        );
         err(Self::Error::InvalidAuthentication(anyhow!(
             "invalid authentication credentials"
         )))
@@ -172,10 +168,9 @@ async fn get_block_height(db_pool: DbPool, _auth: Authentication) -> ApiResponse
 async fn update_block_height(
     db_pool: DbPool,
     height: web::Json<i64>,
-    _auth: Authentication,
+    auth: Authentication,
 ) -> ApiResponse {
-    debug!("In update_block_height");
-    // TODO : let _ = auth.try_service()?;
+    let _ = auth.try_service()?;
 
     let info = Info::update_info(
         db_pool.as_ref(),
