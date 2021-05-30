@@ -132,7 +132,7 @@ async fn it_should_get_host_by_token() {
     let host = Host::find_by_token("123", &db_pool)
         .await
         .expect("Could not read test host from db.");
-    
+
     let admin_user = get_admin_user(&db_pool).await;
 
     // Get a host by token

@@ -316,10 +316,12 @@ async fn list_validators_by_user(
 ) -> ApiResponse {
     let id = id.into_inner();
 
-    let _ = auth.try_user_access(id)?;
-
-    let validators = Validator::find_all_by_user(id, db_pool.get_ref()).await?;
-    Ok(HttpResponse::Ok().json(validators))
+    if auth.is_admin() || auth.try_user_access(id)? {
+        let validators = Validator::find_all_by_user(id, db_pool.get_ref()).await?;
+        Ok(HttpResponse::Ok().json(validators))
+    } else {
+        Err(ApiError::InsufficientPermissionsError)
+    }
 }
 
 #[post("/users/{id}/validators")]
@@ -331,13 +333,15 @@ async fn stake_validator(
 ) -> ApiResponse {
     let id = id.into_inner();
 
-    let _ = auth.try_user_access(id)?;
+    if auth.is_admin() || auth.try_user_access(id)? {
+        let count = req.into_inner().count;
+        let user = User::find_by_id(id, db_pool.as_ref()).await?;
+        let validator = Validator::stake(db_pool.as_ref(), &user, count).await?;
 
-    let count = req.into_inner().count;
-    let user = User::find_by_id(id, db_pool.as_ref()).await?;
-    let validator = Validator::stake(db_pool.as_ref(), &user, count).await?;
-
-    Ok(HttpResponse::Ok().json(validator))
+        Ok(HttpResponse::Ok().json(validator))
+    } else {
+        Err(ApiError::InsufficientPermissionsError)
+    }
 }
 
 #[get("/validators/{id}")]
