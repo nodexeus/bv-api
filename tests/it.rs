@@ -58,13 +58,17 @@ async fn it_should_add_host() {
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
-            .service(create_host),
+            .service(create_host)
+            .service(login),
     )
     .await;
+
+    let admin_user = get_admin_user(&db_pool).await;
 
     // Insert a host
     let req = test::TestRequest::post()
         .uri("/hosts")
+        .append_header(auth_header_for_user(&admin_user))
         .set_json(&HostRequest {
             name: "Test user 1".to_string(),
             version: Some("0.1.0".to_string()),
@@ -88,7 +92,7 @@ async fn it_should_add_host() {
 }
 
 #[actix_rt::test]
-async fn it_shoud_get_host() {
+async fn it_should_get_host() {
     let db_pool = setup().await;
 
     let mut app = test::init_service(
@@ -100,10 +104,12 @@ async fn it_shoud_get_host() {
     .await;
 
     let host = get_test_host(db_pool.clone()).await;
+    let admin_user = get_admin_user(&db_pool).await;
 
     // Get a host
     let req = test::TestRequest::get()
         .uri(&format!("/hosts/{}", host.id))
+        .append_header(auth_header_for_user(&admin_user))
         .to_request();
 
     let resp: Host = test::read_response_json(&mut app, req).await;
@@ -112,7 +118,7 @@ async fn it_shoud_get_host() {
 }
 
 #[actix_rt::test]
-async fn it_shoud_get_host_by_token() {
+async fn it_should_get_host_by_token() {
     let db_pool = setup().await;
 
     let mut app = test::init_service(
@@ -126,10 +132,13 @@ async fn it_shoud_get_host_by_token() {
     let host = Host::find_by_token("123", &db_pool)
         .await
         .expect("Could not read test host from db.");
+    
+    let admin_user = get_admin_user(&db_pool).await;
 
     // Get a host by token
     let req = test::TestRequest::get()
         .uri(&format!("/hosts?token={}", host.token))
+        .append_header(auth_header_for_user(&admin_user))
         .to_request();
 
     let resp: Host = test::read_response_json(&mut app, req).await;
@@ -138,7 +147,7 @@ async fn it_shoud_get_host_by_token() {
 }
 
 #[actix_rt::test]
-async fn it_shoud_update_validator_status() {
+async fn it_should_update_validator_status() {
     let db_pool = setup().await;
 
     let mut app = test::init_service(
@@ -158,6 +167,7 @@ async fn it_shoud_update_validator_status() {
 
     let req = test::TestRequest::put()
         .uri(&path)
+        .append_header(auth_header_for_token(&host.token))
         .set_json(&ValidatorStatusRequest {
             version: Some("1.0".to_string()),
             block_height: Some(192),
@@ -177,7 +187,7 @@ async fn it_shoud_update_validator_status() {
 }
 
 #[actix_rt::test]
-async fn it_shoud_update_validator_identity() {
+async fn it_should_update_validator_identity() {
     let db_pool = setup().await;
 
     let mut app = test::init_service(
@@ -196,6 +206,7 @@ async fn it_shoud_update_validator_identity() {
 
     let req = test::TestRequest::put()
         .uri(&path)
+        .append_header(auth_header_for_token(&host.token))
         .set_json(&ValidatorIdentityRequest {
             version: Some("48".to_string()),
             address: Some("Z729x5EeguKsNZbqBJYCh9p7wVg35RybQjNoqxQcx9u81k2jpY".to_string()),
@@ -210,7 +221,7 @@ async fn it_shoud_update_validator_identity() {
 }
 
 #[actix_rt::test]
-async fn it_shoud_create_command() {
+async fn it_should_create_command() {
     let db_pool = setup().await;
 
     let mut app = test::init_service(
@@ -343,7 +354,6 @@ async fn setup() -> PgPool {
     pool
 }
 
-
 async fn reset_db(pool: &PgPool) {
     sqlx::query("DELETE FROM rewards")
         .execute(pool)
@@ -379,6 +389,21 @@ async fn reset_db(pool: &PgPool) {
     User::create(user, pool)
         .await
         .expect("Could not create test user in db.");
+
+    let user = UserRequest {
+        email: "admin@here.com".into(),
+        password: "abc12345".into(),
+        password_confirm: "abc12345".into(),
+    };
+
+    User::create(user, pool)
+        .await
+        .expect("Could not create test user in db.");
+
+    sqlx::query("UPDATE users set role = 'admin' where email = 'admin@here.com'")
+        .execute(pool)
+        .await
+        .expect("could not set admin to admin test user in sql");
 
     let host = HostRequest {
         name: "Test user".into(),
@@ -422,14 +447,25 @@ async fn get_test_host(db_pool: PgPool) -> Host {
         .expect("Could not read test host from db.")
 }
 
+async fn get_admin_user(db_pool: &PgPool) -> User {
+    User::find_by_email("admin@here.com", &db_pool)
+        .await
+        .expect("Could not get admin test user from db.")
+        .set_jwt()
+        .expect("Could not set JWT.")
+}
+
 fn auth_header_for_user(user: &User) -> (String, String) {
     let token = user.token.clone().unwrap_or("".to_string());
-    let bearer = format!("Bearer {}", token);
-    ("Authorization".to_string(), bearer)
+    auth_header_for_token(&token)
 }
 
 fn auth_header_for_service() -> (String, String) {
     let token = std::env::var("API_SERVICE_SECRET").expect("Missing API_SERVICE_SECRET");
+    auth_header_for_token(&token)
+}
+
+fn auth_header_for_token(token: &str) -> (String, String) {
     let bearer = format!("Bearer {}", token);
     ("Authorization".to_string(), bearer)
 }

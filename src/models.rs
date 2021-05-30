@@ -1,5 +1,6 @@
 use crate::auth;
 use crate::errors::{ApiError, Result};
+use angry_purple_tiger::AnimalName;
 use anyhow::anyhow;
 use argon2::{
     password_hash::{PasswordHasher, SaltString},
@@ -15,7 +16,6 @@ use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
 use validator::Validate;
-use angry_purple_tiger::AnimalName;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -137,6 +137,15 @@ impl Authentication {
     /// Returns an error if not an admin
     pub fn try_admin(&self) -> Result<bool> {
         if self.is_admin() {
+            Ok(true)
+        } else {
+            Err(ApiError::InsufficientPermissionsError)
+        }
+    }
+
+    /// Returns an error if not an host
+    pub fn try_host(&self) -> Result<bool> {
+        if self.is_host() {
             Ok(true)
         } else {
             Err(ApiError::InsufficientPermissionsError)
@@ -805,7 +814,11 @@ impl Validator {
         Ok(validator)
     }
 
-    pub async fn update_owner_address(id: Uuid, owner_address: Option<String>, pool: &PgPool) -> Result<Self> {
+    pub async fn update_owner_address(
+        id: Uuid,
+        owner_address: Option<String>,
+        pool: &PgPool,
+    ) -> Result<Self> {
         let mut tx = pool.begin().await.unwrap();
         let validator = sqlx::query_as::<_, Self>(
             r#"UPDATE validators SET owner_address=$1, updated_at=now()  WHERE id = $2 RETURNING *"#,
@@ -828,7 +841,7 @@ impl Validator {
         if let Some(val_addr) = &validator.address {
             address_name = match val_addr.parse::<AnimalName>() {
                 Ok(name) => Some(name.to_string()),
-                Err(_) => None, 
+                Err(_) => None,
             }
         };
 

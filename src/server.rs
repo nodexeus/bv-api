@@ -189,9 +189,16 @@ async fn create_user(db_pool: DbPool, user: web::Json<UserRequest>) -> ApiRespon
     let user = User::create(user.into_inner(), db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(user))
 }
+
 // Can pass ?token= to get a host by token
 #[get("/hosts")]
-async fn list_hosts(db_pool: DbPool, params: web::Query<QueryParams>) -> ApiResponse {
+async fn list_hosts(
+    db_pool: DbPool,
+    params: web::Query<QueryParams>,
+    auth: Authentication,
+) -> ApiResponse {
+    let _ = auth.try_admin()?;
+
     if let Some(token) = params.token.clone() {
         let host = Host::find_by_token(&token, db_pool.get_ref()).await?;
         Ok(HttpResponse::Ok().json(host))
@@ -202,20 +209,38 @@ async fn list_hosts(db_pool: DbPool, params: web::Query<QueryParams>) -> ApiResp
 }
 
 #[get("/hosts/token/{token}")]
-async fn get_host_by_token(db_pool: DbPool, token: web::Path<String>) -> ApiResponse {
+async fn get_host_by_token(
+    db_pool: DbPool,
+    token: web::Path<String>,
+    auth: Authentication,
+) -> ApiResponse {
+    if !auth.is_admin() && !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+
     let host = Host::find_by_token(&token.into_inner(), db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(host))
 }
 
 #[get("/hosts/{id}")]
-async fn get_host(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
+async fn get_host(db_pool: DbPool, id: web::Path<Uuid>, auth: Authentication) -> ApiResponse {
+    if !auth.is_admin() && !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+
     let id = id.into_inner();
     let host = Host::find_by_id(id, db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(host))
 }
 
 #[post("/hosts")]
-async fn create_host(db_pool: DbPool, host: web::Json<HostCreateRequest>) -> ApiResponse {
+async fn create_host(
+    db_pool: DbPool,
+    host: web::Json<HostCreateRequest>,
+    auth: Authentication,
+) -> ApiResponse {
+    let _ = auth.try_admin()?;
+
     let host = host.into_inner().into();
 
     let host = Host::create(host, db_pool.get_ref()).await?;
@@ -227,7 +252,10 @@ async fn update_host(
     db_pool: DbPool,
     id: web::Path<Uuid>,
     host: web::Json<HostRequest>,
+    auth: Authentication,
 ) -> ApiResponse {
+    let _ = auth.try_admin()?;
+
     let host = Host::update(id.into_inner(), host.into_inner(), db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(host))
 }
@@ -237,20 +265,29 @@ async fn update_host_status(
     db_pool: DbPool,
     id: web::Path<Uuid>,
     host: web::Json<HostStatusRequest>,
+    auth: Authentication,
 ) -> ApiResponse {
-    let host = Host::update_status(id.into_inner(), host.into_inner(), db_pool.get_ref()).await?;
+    let id = id.into_inner();
+
+    let _ = auth.try_host_access(id, db_pool.as_ref()).await?;
+
+    let host = Host::update_status(id, host.into_inner(), db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(host))
 }
 
 #[delete("/hosts/{id}")]
-async fn delete_host(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
+async fn delete_host(db_pool: DbPool, id: web::Path<Uuid>, auth: Authentication) -> ApiResponse {
+    let _ = auth.try_admin()?;
+
     let rows = Host::delete(id.into_inner(), db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", rows)))
 }
 
 #[get("/validators")]
 async fn list_validators(db_pool: DbPool, auth: Authentication) -> ApiResponse {
-    let _ = auth.try_admin()?;
+    if !auth.is_admin() && !auth.is_service() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
 
     let validators = Validator::find_all(db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(validators))
@@ -272,8 +309,16 @@ async fn validator_inventory_count(db_pool: DbPool, _auth: Authentication) -> Ap
 }
 
 #[get("/users/{id}/validators")]
-async fn list_validators_by_user(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
-    let validators = Validator::find_all_by_user(id.into_inner(), db_pool.get_ref()).await?;
+async fn list_validators_by_user(
+    db_pool: DbPool,
+    id: web::Path<Uuid>,
+    auth: Authentication,
+) -> ApiResponse {
+    let id = id.into_inner();
+
+    let _ = auth.try_user_access(id)?;
+
+    let validators = Validator::find_all_by_user(id, db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(validators))
 }
 
@@ -286,20 +331,21 @@ async fn stake_validator(
 ) -> ApiResponse {
     let id = id.into_inner();
 
+    let _ = auth.try_user_access(id)?;
+
     let count = req.into_inner().count;
+    let user = User::find_by_id(id, db_pool.as_ref()).await?;
+    let validator = Validator::stake(db_pool.as_ref(), &user, count).await?;
 
-    if auth.is_admin() || auth.try_user_access(id)? {
-        let user = auth.get_user(db_pool.as_ref()).await?;
-
-        let validator = Validator::stake(db_pool.as_ref(), &user, count).await?;
-        return Ok(HttpResponse::Ok().json(validator));
-    }
-
-    Err(ApiError::InsufficientPermissionsError)
+    Ok(HttpResponse::Ok().json(validator))
 }
 
 #[get("/validators/{id}")]
-async fn get_validator(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
+async fn get_validator(db_pool: DbPool, id: web::Path<Uuid>, auth: Authentication) -> ApiResponse {
+    if auth.is_user() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+
     let validator = Validator::find_by_id(id.into_inner(), db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(validator))
 }
@@ -309,7 +355,12 @@ async fn update_validator_status(
     db_pool: DbPool,
     id: web::Path<Uuid>,
     validator: web::Json<ValidatorStatusRequest>,
+    auth: Authentication,
 ) -> ApiResponse {
+    if auth.is_user() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+
     let validator =
         Validator::update_status(id.into_inner(), validator.into_inner(), db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(validator))
@@ -323,7 +374,10 @@ async fn update_validator_stake_status(
     auth: Authentication,
 ) -> ApiResponse {
     if !auth.is_admin() && !auth.is_host() && !auth.is_service() {
-        debug!("update_validator_stake_status:Invalid Permissions {:?}", auth);
+        debug!(
+            "update_validator_stake_status:Invalid Permissions {:?}",
+            auth
+        );
         return Err(ApiError::InsufficientPermissionsError);
     }
 
@@ -344,9 +398,12 @@ async fn update_validator_owner_address(
         return Err(ApiError::InsufficientPermissionsError);
     }
 
-    let validator =
-        Validator::update_owner_address(id.into_inner(), Some(owner_address.into_inner()), db_pool.as_ref())
-            .await?;
+    let validator = Validator::update_owner_address(
+        id.into_inner(),
+        Some(owner_address.into_inner()),
+        db_pool.as_ref(),
+    )
+    .await?;
     Ok(HttpResponse::Ok().json(validator))
 }
 
@@ -355,10 +412,14 @@ async fn update_validator_identity(
     db_pool: DbPool,
     id: web::Path<Uuid>,
     validator: web::Json<ValidatorIdentityRequest>,
+    auth: Authentication,
 ) -> ApiResponse {
+    let id = id.into_inner();
+
+    let _ = auth.try_host_access(id, db_pool.get_ref());
+
     let validator =
-        Validator::update_identity(id.into_inner(), validator.into_inner(), db_pool.as_ref())
-            .await?;
+        Validator::update_identity(id, validator.into_inner(), db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(validator))
 }
 
