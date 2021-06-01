@@ -340,9 +340,9 @@ async fn stake_validator(
     if auth.is_admin() || auth.try_user_access(id)? {
         let count = req.into_inner().count;
         let user = User::find_by_id(id, db_pool.as_ref()).await?;
-        let validator = Validator::stake(db_pool.as_ref(), &user, count).await?;
+        let validators = Validator::stake(db_pool.as_ref(), &user, count).await?;
 
-        Ok(HttpResponse::Ok().json(validator))
+        Ok(HttpResponse::Ok().json(validators))
     } else {
         Err(ApiError::InsufficientPermissionsError)
     }

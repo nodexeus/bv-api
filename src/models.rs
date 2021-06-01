@@ -873,7 +873,7 @@ impl Validator {
         Ok(row.0)
     }
 
-    pub async fn stake(pool: &PgPool, user: &User, count: i64) -> Result<Validator> {
+    pub async fn stake(pool: &PgPool, user: &User, count: i64) -> Result<Vec<Validator>> {
         if user.can_stake(pool, count).await? {
             return sqlx::query_as::<_, Self>(
                 r#"
@@ -894,7 +894,7 @@ impl Validator {
             .bind(count)
             .bind(user.id)
             .bind(StakeStatus::Staking)
-            .fetch_one(pool)
+            .fetch_all(pool)
             .await
             .map_err(ApiError::from);
         }
