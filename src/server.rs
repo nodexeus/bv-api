@@ -317,7 +317,11 @@ async fn list_validators_by_user(
     let id = id.into_inner();
 
     if auth.is_admin() || auth.try_user_access(id)? {
-        let validators = Validator::find_all_by_user(id, db_pool.get_ref()).await?;
+        let mut validators = Validator::find_all_by_user(id, db_pool.get_ref()).await?;
+        if auth.is_user() {
+            //users should get swarmkey
+            validators.iter_mut().for_each(|v| v.swarm_key = None);
+        }
         Ok(HttpResponse::Ok().json(validators))
     } else {
         Err(ApiError::InsufficientPermissionsError)
