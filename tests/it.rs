@@ -272,7 +272,7 @@ async fn it_should_stake_one_validator() {
 
     let path = format!("/users/{}/validators", user.id);
 
-    let stake_req = ValidatorStakeRequest { count: 1 };
+    let stake_req = ValidatorStakeRequest { count: 2 };
 
     let req = test::TestRequest::post()
         .uri(&path)
