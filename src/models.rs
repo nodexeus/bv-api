@@ -695,6 +695,7 @@ pub struct Validator {
     pub swarm_key: Option<String>,
     pub block_height: Option<i64>,
     pub stake_status: StakeStatus,
+    pub staking_height: Option<i64>,
     pub status: ValidatorStatus,
     pub tenure_penalty: f64,
     pub dkg_penalty: f64,
@@ -782,11 +783,10 @@ impl Validator {
     ) -> Result<Self> {
         let mut tx = pool.begin().await.unwrap();
         let validator = sqlx::query_as::<_, Self>(
-            r#"UPDATE validators SET version=$1, block_height=$2, stake_status=$3, status=$4, tenure_penalty=$5, dkg_penalty=$6, performance_penalty=$7, total_penalty=$8, updated_at=now()  WHERE id = $9 RETURNING *"#
+            r#"UPDATE validators SET version=$1, block_height=$2, status=$3, tenure_penalty=$4, dkg_penalty=$5, performance_penalty=$6, total_penalty=$7, updated_at=now()  WHERE id = $8 RETURNING *"#
         )
         .bind(validator.version)
         .bind(validator.block_height)
-        .bind(validator.stake_status)
         .bind(validator.status)
         .bind(validator.tenure_penalty)
         .bind(validator.dkg_penalty)
@@ -801,17 +801,23 @@ impl Validator {
     }
 
     pub async fn update_stake_status(id: Uuid, status: StakeStatus, pool: &PgPool) -> Result<Self> {
-        let mut tx = pool.begin().await.unwrap();
-        let validator = sqlx::query_as::<_, Self>(
-            r#"UPDATE validators SET stake_status=$1, updated_at=now()  WHERE id = $2 RETURNING *"#,
-        )
-        .bind(status)
-        .bind(id)
-        .fetch_one(&mut tx)
-        .await?;
+        let query = match status {
+            StakeStatus::Available => {
+                r#"UPDATE validators SET stake_status=$1, owner_address=NULL, user_id=NULL, staking_height=NULL, updated_at=now()  WHERE id = $2 RETURNING *"#
+            }
+            StakeStatus::Staking => {
+                r#"UPDATE validators SET stake_status=$1, staking_height=block_height, updated_at=now() FROM (SELECT block_height FROM info LIMIT 1) WHERE id = $2 RETURNING *"#
+            }
+            _ => {
+                r#"UPDATE validators SET stake_status=$1, staking_height=NULL, updated_at=now()  WHERE id = $2 RETURNING *"#
+            }
+        };
 
-        tx.commit().await.unwrap();
-        Ok(validator)
+        Ok(sqlx::query_as::<_, Self>(query)
+            .bind(status)
+            .bind(id)
+            .fetch_one(pool)
+            .await?)
     }
 
     pub async fn update_owner_address(
@@ -927,7 +933,6 @@ pub struct ValidatorRequest {
 pub struct ValidatorStatusRequest {
     pub version: Option<String>,
     pub block_height: Option<i64>,
-    pub stake_status: StakeStatus,
     pub status: ValidatorStatus,
     pub tenure_penalty: f64,
     pub dkg_penalty: f64,

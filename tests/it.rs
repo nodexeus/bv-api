@@ -171,7 +171,6 @@ async fn it_should_update_validator_status() {
         .set_json(&ValidatorStatusRequest {
             version: Some("1.0".to_string()),
             block_height: Some(192),
-            stake_status: StakeStatus::Available,
             status: ValidatorStatus::Provisioning,
             tenure_penalty: 1.0,
             dkg_penalty: 1.0,
@@ -426,7 +425,6 @@ async fn reset_db(pool: &PgPool) {
     let status = ValidatorStatusRequest {
         version: None,
         block_height: None,
-        stake_status: StakeStatus::Available,
         status: ValidatorStatus::Synced,
         tenure_penalty: 0.0,
         performance_penalty: 0.0,
@@ -438,6 +436,9 @@ async fn reset_db(pool: &PgPool) {
         let _ = Validator::update_status(v.id, status.clone(), pool)
             .await
             .expect("Error updating validator status in db during setup.");
+        let _ = Validator::update_stake_status(v.id, StakeStatus::Available, pool)
+            .await
+            .expect("Error updating validator stake status in db during setup.");
     }
 }
 
