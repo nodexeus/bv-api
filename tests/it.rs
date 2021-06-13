@@ -333,6 +333,40 @@ async fn it_should_list_validators_staking_as_service() {
     assert_eq!(res.status(), 200);
 }
 
+#[actix_rt::test]
+async fn it_should_create_rewards() {
+    let db_pool = setup().await;
+
+    let app = test::init_service(
+        App::new()
+            .data(db_pool.clone())
+            .wrap(middleware::Logger::default())
+            .service(create_rewards),
+    )
+    .await;
+
+    let mut rewards: Vec<RewardRequest> = Vec::new();
+    rewards.push(RewardRequest{
+        block: 1,
+        hash: 1,
+        txn_time: DateTime::now(),
+        validator_id: 1,
+        user_id: 1,
+        account: 1,
+        validator: 1,
+        amount: 5000,
+    });
+
+    let req = test::TestRequest::post()
+        .uri("/rewards")
+        .append_header(auth_header_for_service())
+        .set_json(rewards)
+        .to_request();
+
+    let res = test::call_service(&app, req).await;
+    assert_eq!(res.status(), 200);
+}
+
 async fn setup() -> PgPool {
     dotenv::dotenv().ok();
 

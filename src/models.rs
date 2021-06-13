@@ -7,6 +7,7 @@ use argon2::{
     Argon2,
 };
 use chrono::{DateTime, Utc};
+use log::warn;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgRow, PgConnection};
@@ -956,10 +957,59 @@ pub struct ValidatorStakeRequest {
 pub struct Reward {
     pub id: Uuid,
     pub block: i64,
-    pub transaction_hash: String,
-    pub time: i64,
+    pub hash: String,
+    pub txn_time: DateTime<Utc>,
     pub validator_id: Uuid,
+    pub user_id: Option<Uuid>,
     pub account: String,
+    pub validator: String,
+    pub amount: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+impl Reward {
+    pub async fn total_by_user(pool: &PgPool, user_id: &Uuid) -> Result<i64> {
+        let row: (i64, ) = sqlx::query_as("SELECT SUM(amout) FROM rewards WHERE user_id=$1")
+        .bind(user_id)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(row.0)
+    }
+
+    pub async fn create(pool: &PgPool, rewards: &Vec<RewardRequest>) -> Result<()> {
+        for reward in rewards {
+            let res = sqlx::query("INSERT INTO rewards (block, hash, txn_time, validator_id, user_id, account, validator, amount) values ($1,$2,$3,$4,$5,$6,$7,$8)")
+            .bind(&reward.block)
+            .bind(&reward.hash)
+            .bind(&reward.txn_time)
+            .bind(&reward.validator_id)
+            .bind(&reward.user_id)
+            .bind(&reward.account)
+            .bind(&reward.validator)
+            .bind(&reward.amount)
+            .execute(pool)
+            .await;
+
+            if let Err(e) = res {
+                warn!("Creating rewards (duplicate violations expected): {}", e);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RewardRequest {
+    pub block: i64,
+    pub hash: String,
+    pub txn_time: DateTime<Utc>,
+    pub validator_id: Uuid,
+    pub user_id: Option<Uuid>,
+    pub account: String,
+    pub validator: String,
     pub amount: i64,
 }
 
