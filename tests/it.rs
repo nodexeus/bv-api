@@ -413,6 +413,7 @@ async fn it_should_create_rewards() {
     let summary: RewardSummary = test::read_response_json(&mut app, req).await;
 
     assert_eq!(summary.total, 15000);
+    assert_eq!(summary.last_30, 15000)
 }
 
 async fn setup() -> PgPool {

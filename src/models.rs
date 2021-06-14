@@ -6,7 +6,7 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use log::warn;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
@@ -969,23 +969,16 @@ pub struct Reward {
 
 impl Reward {
     pub async fn summary_by_user(pool: &PgPool, user_id: &Uuid) -> Result<RewardSummary> {
-        let now = Utc::now();
-
         let row: RewardSummary = sqlx::query_as(
             r##"SELECT 
-                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN $1 AND $2), 0)::BIGINT as last_30,
-                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN $1 AND $3), 0)::BIGINT as last_14,
-                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN $1 AND $4), 0)::BIGINT as last_7,
-                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN $1 AND $5), 0)::BIGINT as last_1,
+                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN now() - '30 day'::interval AND now()), 0)::BIGINT as last_30,
+                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN now() - '14 day'::interval AND now()), 0)::BIGINT as last_14,
+                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN now() - '7 day'::interval AND now()), 0)::BIGINT as last_7,
+                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN now() - '1 day'::interval AND now()), 0)::BIGINT as last_1,
                         COALESCE(SUM(amount), 0)::BIGINT as total
                     FROM rewards 
-                    WHERE user_id=$6"##
+                    WHERE user_id=$1"##
             )
-            .bind(now)
-            .bind(now - Duration::days(30))
-            .bind(now - Duration::days(14))
-            .bind(now - Duration::days(7))
-            .bind(now - Duration::days(1))
             .bind(user_id)
             .fetch_one(pool)
             .await?;
