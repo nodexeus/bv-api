@@ -1,6 +1,7 @@
 use actix_web::{middleware, test, App};
 use api::models::*;
 use api::server::*;
+use chrono::Utc;
 use serde::Deserialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
@@ -331,6 +332,83 @@ async fn it_should_list_validators_staking_as_service() {
 
     let res = test::call_service(&app, req).await;
     assert_eq!(res.status(), 200);
+}
+
+#[actix_rt::test]
+async fn it_should_create_rewards() {
+    let db_pool = setup().await;
+
+    let app = test::init_service(
+        App::new()
+            .data(db_pool.clone())
+            .wrap(middleware::Logger::default())
+            .service(create_rewards)
+            .service(get_reward_summary),
+    )
+    .await;
+
+    let login_req = UserLoginRequest {
+        email: "test@here.com".into(),
+        password: "abc12345".into(),
+    };
+
+    let user = User::login(login_req, &db_pool)
+        .await
+        .expect("could not login test user");
+
+    let validator = Validator::find_all(&db_pool)
+        .await
+        .expect("could not get list of validators")
+        .first()
+        .expect("could not get first validator")
+        .to_owned();
+
+    let mut rewards: Vec<RewardRequest> = Vec::new();
+    rewards.push(RewardRequest {
+        block: 1,
+        hash: "1".into(),
+        txn_time: Utc::now(),
+        validator_id: validator.id,
+        user_id: Some(user.id),
+        account: "1".into(),
+        validator: "1".into(),
+        amount: 5000,
+    });
+    rewards.push(RewardRequest {
+        block: 1,
+        hash: "2".into(),
+        txn_time: Utc::now(),
+        validator_id: validator.id,
+        user_id: Some(user.id),
+        account: "1".into(),
+        validator: "1".into(),
+        amount: 10000,
+    });
+    rewards.push(RewardRequest {
+        block: 1,
+        hash: "1".into(),
+        txn_time: Utc::now(),
+        validator_id: validator.id,
+        user_id: Some(user.id),
+        account: "1".into(),
+        validator: "1".into(),
+        amount: 5000,
+    });
+
+    let req = test::TestRequest::post()
+        .uri("/rewards")
+        .append_header(auth_header_for_service())
+        .set_json(&rewards)
+        .to_request();
+
+    let res = test::call_service(&app, req).await;
+    assert_eq!(res.status(), 200);
+
+    let summary = api::models::Reward::summary_by_user(&db_pool, &user.id)
+        .await
+        .expect("Couldn't get total rewards for user");
+
+    assert_eq!(summary.total, 15000);
 }
 
 async fn setup() -> PgPool {

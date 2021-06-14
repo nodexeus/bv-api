@@ -6,7 +6,8 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
+use log::warn;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgRow, PgConnection};
@@ -956,11 +957,84 @@ pub struct ValidatorStakeRequest {
 pub struct Reward {
     pub id: Uuid,
     pub block: i64,
-    pub transaction_hash: String,
-    pub time: i64,
+    pub hash: String,
+    pub txn_time: DateTime<Utc>,
     pub validator_id: Uuid,
+    pub user_id: Option<Uuid>,
     pub account: String,
+    pub validator: String,
     pub amount: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+impl Reward {
+    pub async fn summary_by_user(pool: &PgPool, user_id: &Uuid) -> Result<RewardSummary> {
+        let now = Utc::now();
+
+        let row: RewardSummary = sqlx::query_as(
+            r##"SELECT 
+                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN $1 AND $2), 0)::BIGINT as last_30,
+                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN $1 AND $3), 0)::BIGINT as last_14,
+                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN $1 AND $4), 0)::BIGINT as last_7,
+                        COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN $1 AND $5), 0)::BIGINT as last_1,
+                        COALESCE(SUM(amount), 0)::BIGINT as total
+                    FROM rewards 
+                    WHERE user_id=$6"##
+            )
+            .bind(now)
+            .bind(now - Duration::days(30))
+            .bind(now - Duration::days(14))
+            .bind(now - Duration::days(7))
+            .bind(now - Duration::days(1))
+            .bind(user_id)
+            .fetch_one(pool)
+            .await?;
+
+        Ok(row)
+    }
+
+    pub async fn create(pool: &PgPool, rewards: &Vec<RewardRequest>) -> Result<()> {
+        for reward in rewards {
+            let res = sqlx::query("INSERT INTO rewards (block, hash, txn_time, validator_id, user_id, account, validator, amount) values ($1,$2,$3,$4,$5,$6,$7,$8)")
+            .bind(&reward.block)
+            .bind(&reward.hash)
+            .bind(&reward.txn_time)
+            .bind(&reward.validator_id)
+            .bind(&reward.user_id)
+            .bind(&reward.account)
+            .bind(&reward.validator)
+            .bind(&reward.amount)
+            .execute(pool)
+            .await;
+
+            if let Err(e) = res {
+                warn!("Creating rewards (duplicate violations expected): {}", e);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RewardRequest {
+    pub block: i64,
+    pub hash: String,
+    pub txn_time: DateTime<Utc>,
+    pub validator_id: Uuid,
+    pub user_id: Option<Uuid>,
+    pub account: String,
+    pub validator: String,
+    pub amount: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct RewardSummary {
+    pub total: i64,
+    pub last_30: i64,
+    pub last_14: i64,
+    pub last_7: i64,
+    pub last_1: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
