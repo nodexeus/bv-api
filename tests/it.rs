@@ -253,7 +253,7 @@ async fn it_should_create_command() {
 async fn it_should_stake_one_validator() {
     let db_pool = setup().await;
 
-    let app = test::init_service(
+    let mut app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -280,13 +280,11 @@ async fn it_should_stake_one_validator() {
         .set_json(&stake_req)
         .to_request();
 
-    let res = test::call_service(&app, req).await;
-    assert_eq!(res.status(), 200);
-
-    //TODO: Assert Content
-
-    // assert_eq!(resp.user_id.unwrap(), user.id);
-    // assert_eq!(resp.stake_status, StakeStatus::Staking);
+    let validators: Vec<Validator> = test::read_response_json(&mut app, req).await;
+    validators.iter().for_each(|v| {
+        assert_eq!(v.stake_status, StakeStatus::Staking);
+        assert!(v.staking_height.is_some());
+    })
 }
 
 #[actix_rt::test]

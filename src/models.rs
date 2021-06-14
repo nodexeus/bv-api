@@ -807,7 +807,7 @@ impl Validator {
                 r#"UPDATE validators SET stake_status=$1, owner_address=NULL, user_id=NULL, staking_height=NULL, updated_at=now()  WHERE id = $2 RETURNING *"#
             }
             StakeStatus::Staking => {
-                r#"UPDATE validators SET stake_status=$1, staking_height=block_height, updated_at=now() FROM (SELECT block_height FROM info LIMIT 1) WHERE id = $2 RETURNING *"#
+                r#"UPDATE validators SET stake_status=$1, staking_height=(SELECT block_height FROM info LIMIT 1), updated_at=now() WHERE id = $2 RETURNING *"#
             }
             _ => {
                 r#"UPDATE validators SET stake_status=$1, staking_height=NULL, updated_at=now()  WHERE id = $2 RETURNING *"#
@@ -891,7 +891,8 @@ impl Validator {
             ) 
             UPDATE validators SET 
                 user_id = $4, 
-                stake_status = $5
+                stake_status = $5,
+                staking_height = (SELECT block_height FROM info LIMIT 1)
             FROM inv
             WHERE validators.id = inv.id
             RETURNING *"#,
