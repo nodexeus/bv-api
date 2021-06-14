@@ -6,7 +6,7 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use log::warn;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
@@ -1051,5 +1051,46 @@ impl Info {
             .fetch_one(pool)
             .await
             .map_err(ApiError::from)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Bill {
+    pub user_id: Uuid,
+    pub date: NaiveDate,
+    pub amount: i64,
+}
+
+impl Bill {
+    pub async fn find_all_by_user(pool: &PgPool, user_id: &Uuid) -> Result<Vec<Bill>> {
+        sqlx::query_as::<_, Bill>(
+            r##"SELECT
+                        user_id, 
+                        EXTRACT(ISOYEAR FROM txn_time) AS year, 
+                        EXTRACT(WEEK FROM txn_time) AS week, 
+                        TO_DATE(CONCAT(EXTRACT(ISOYEAR FROM txn_time), 
+                        EXTRACT(WEEK FROM txn_time)), 'IYYYIW') AS date, 
+                        (SUM(amount) * (users.fee_bps * 1000))::BIGINT AS amount 
+                    FROM 
+                        rewards
+                    INNER JOIN
+                        users
+                    ON
+                        users.id = rewards.user_id
+                    WHERE
+                        user_id = $1
+                    GROUP BY 
+                        user_id,
+                        fee_bps, 
+                        year, 
+                        week 
+                    ORDER BY 
+                        date DESC
+                    "##,
+        )
+        .bind(user_id)
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::from)
     }
 }

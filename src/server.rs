@@ -133,6 +133,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(get_host_by_token)
             .service(get_validator)
             .service(create_rewards)
+            .service(list_bills)
     })
     .bind(&addr)?
     .run()
@@ -325,6 +326,18 @@ async fn list_validators_by_user(
             validators.iter_mut().for_each(|v| v.swarm_key = None);
         }
         Ok(HttpResponse::Ok().json(validators))
+    } else {
+        Err(ApiError::InsufficientPermissionsError)
+    }
+}
+
+#[get("/users/{id}/bills")]
+async fn list_bills(db_pool: DbPool, id: web::Path<Uuid>, auth: Authentication) -> ApiResponse {
+    let id = id.into_inner();
+
+    if auth.is_admin() || auth.try_user_access(id)? {
+        let bills = Bill::find_all_by_user(db_pool.as_ref(), &id).await?;
+        Ok(HttpResponse::Ok().json(bills))
     } else {
         Err(ApiError::InsufficientPermissionsError)
     }
