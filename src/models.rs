@@ -1070,7 +1070,7 @@ impl Bill {
                         EXTRACT(WEEK FROM txn_time) AS week, 
                         TO_DATE(CONCAT(EXTRACT(ISOYEAR FROM txn_time), 
                         EXTRACT(WEEK FROM txn_time)), 'IYYYIW') AS date, 
-                        (SUM(amount) * (users.fee_bps * 1000))::BIGINT AS amount 
+                        (SUM(amount) * (users.fee_bps / 1000))::BIGINT AS amount 
                     FROM 
                         rewards
                     INNER JOIN
