@@ -338,7 +338,7 @@ async fn it_should_list_validators_staking_as_service() {
 async fn it_should_create_rewards() {
     let db_pool = setup().await;
 
-    let app = test::init_service(
+    let mut app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -404,9 +404,13 @@ async fn it_should_create_rewards() {
     let res = test::call_service(&app, req).await;
     assert_eq!(res.status(), 200);
 
-    let summary = api::models::Reward::summary_by_user(&db_pool, &user.id)
-        .await
-        .expect("Couldn't get total rewards for user");
+    let path = format!("/users/{}/rewards/summary", user.id);
+    let req = test::TestRequest::get()
+        .uri(&path)
+        .append_header(auth_header_for_user(&user))
+        .to_request();
+
+    let summary: RewardSummary = test::read_response_json(&mut app, req).await;
 
     assert_eq!(summary.total, 15000);
 }
