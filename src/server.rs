@@ -103,7 +103,7 @@ pub async fn start() -> anyhow::Result<()> {
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .service(create_command)
-            .service(get_reward_total)
+            .service(get_reward_summary)
             .service(create_host)
             .service(create_user)
             .service(delete_command)
@@ -433,17 +433,25 @@ async fn update_validator_identity(
     Ok(HttpResponse::Ok().json(validator))
 }
 
-#[get("/users/{id}/rewards/total")]
-async fn get_reward_total(db_pool: DbPool, id:web::Path<Uuid>, auth: Authentication) -> ApiResponse {
+#[get("/users/{id}/rewards/summary")]
+async fn get_reward_summary(
+    db_pool: DbPool,
+    id: web::Path<Uuid>,
+    auth: Authentication,
+) -> ApiResponse {
     let id = id.into_inner();
 
     let _ = auth.try_user_access(id);
-    let total = Reward::total_by_user(db_pool.as_ref(), &id).await?;
+    let total = Reward::summary_by_user(db_pool.as_ref(), &id).await?;
     Ok(HttpResponse::Ok().json(total))
 }
 
 #[post("/rewards")]
-async fn create_rewards(db_pool: DbPool, rewards: web::Json<Vec<RewardRequest>>, auth: Authentication) -> ApiResponse {
+async fn create_rewards(
+    db_pool: DbPool,
+    rewards: web::Json<Vec<RewardRequest>>,
+    auth: Authentication,
+) -> ApiResponse {
     let _ = auth.try_service();
     Reward::create(db_pool.as_ref(), &rewards.into_inner()).await?;
     Ok(HttpResponse::Ok().json("no content"))
