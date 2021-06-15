@@ -274,12 +274,13 @@ impl User {
                     email,
                     staking_quota,
                     fee_bps,
-                    (SELECT count(*) from validators where validators.user_id=users.id) as validator_count,
-                    COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0) as rewards_total
+                    (SELECT count(*) from validators where validators.user_id=users.id)::BIGINT as validator_count,
+                    COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0)::BIGINT as rewards_total,
+                    users.created_at as joined_at
                 FROM
                     users
                 ORDER BY
-                    validator_count, users.email
+                    users.email
             "##
         )
         .fetch_all(pool)
@@ -362,6 +363,7 @@ pub struct UserSummary {
     pub fee_bps: i64,
     pub validator_count: i64,
     pub rewards_total: i64,
+    pub joined_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
