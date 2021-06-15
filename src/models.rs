@@ -275,7 +275,7 @@ impl User {
                     staking_quota,
                     fee_bps,
                     (SELECT count(*) from validators where validators.user_id=users.id) as validator_count,
-                    COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0) as reward_total
+                    COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0) as rewards_total
                 FROM
                     users
                 ORDER BY
@@ -361,7 +361,7 @@ pub struct UserSummary {
     pub staking_quota: i64,
     pub fee_bps: i64,
     pub validator_count: i64,
-    pub total_rewards: i64,
+    pub rewards_total: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
