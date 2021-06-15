@@ -102,6 +102,7 @@ pub async fn start() -> anyhow::Result<()> {
             .wrap(cors)
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
+            .service(users_summary)
             .service(create_command)
             .service(get_reward_summary)
             .service(create_host)
@@ -191,6 +192,13 @@ async fn update_block_height(
 async fn create_user(db_pool: DbPool, user: web::Json<UserRequest>) -> ApiResponse {
     let user = User::create(user.into_inner(), db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(user))
+}
+
+#[get("/users/summary")]
+async fn users_summary(db_pool: DbPool, auth: Authentication) -> ApiResponse {
+    let _ = auth.try_admin();
+    let users = User::find_all_summary(db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(users))
 }
 
 // Can pass ?token= to get a host by token

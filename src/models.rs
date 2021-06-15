@@ -265,6 +265,28 @@ impl User {
             .map_err(ApiError::from)
     }
 
+    /// Gets a summary list of all users
+    pub async fn find_all_summary(pool: &PgPool) -> Result<Vec<UserSummary>> {
+        sqlx::query_as::<_, UserSummary>(
+            r##"
+                SELECT 
+                    users.id, 
+                    email,
+                    staking_quota,
+                    fee_bps,
+                    (SELECT count(*) from validators where validators.user_id=users.id) as validator_count,
+                    COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0) as reward_total
+                FROM
+                    users
+                ORDER BY
+                    validator_count, users.email
+            "##
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::from)
+    }
+
     pub async fn find_by_email(email: &str, pool: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, Self>("SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1")
             .bind(email)
@@ -330,6 +352,16 @@ impl User {
         let mut user = Self::find_by_refresh(&req.refresh, pool).await?;
         Ok(user.set_jwt()?)
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct UserSummary {
+    pub id: Uuid,
+    pub email: String,
+    pub staking_quota: i64,
+    pub fee_bps: i64,
+    pub validator_count: i64,
+    pub total_rewards: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
