@@ -789,6 +789,17 @@ impl Validator {
         .map_err(ApiError::from)
     }
 
+    pub async fn list_bulk_staking(user_id: &Uuid, pool: &PgPool) -> Result<Vec<ValidatorStaking>> {
+        sqlx::query_as::<_, ValidatorStaking>(
+            "SELECT address, 10000 as stake FROM validators where user_id=$1 and stake_status=$2",
+        )
+        .bind(user_id)
+        .bind(StakeStatus::Staking)
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::from)
+    }
+
     pub async fn create_tx(validator: ValidatorRequest, tx: &mut PgConnection) -> Result<Self> {
         let validator = sqlx::query_as::<_, Self>("INSERT INTO validators (name, version, ip_addr, host_id, user_id, address, swarm_key, block_height, stake_status, status, tenure_penalty, dkg_penalty, performance_penalty, total_penalty) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *")
         .bind(validator.name)
@@ -986,6 +997,12 @@ pub struct ValidatorIdentityRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatorStakeRequest {
     pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ValidatorStaking {
+    pub address: String,
+    pub stake: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -103,6 +103,7 @@ pub async fn start() -> anyhow::Result<()> {
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .service(users_summary)
+            .service(users_staking_export)
             .service(create_command)
             .service(get_reward_summary)
             .service(create_host)
@@ -196,7 +197,7 @@ async fn create_user(db_pool: DbPool, user: web::Json<UserRequest>) -> ApiRespon
 
 #[get("/users/summary")]
 async fn users_summary(db_pool: DbPool, auth: Authentication) -> ApiResponse {
-    let _ = auth.try_admin();
+    let _ = auth.try_admin()?;
     let users = User::find_all_summary(db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(users))
 }
@@ -317,6 +318,26 @@ async fn list_validators_staking(db_pool: DbPool, auth: Authentication) -> ApiRe
 async fn validator_inventory_count(db_pool: DbPool, _auth: Authentication) -> ApiResponse {
     let count = Validator::inventory_count(db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(count))
+}
+
+#[get("/users/{id}/validators/staking/export")]
+async fn users_staking_export(
+    db_pool: DbPool,
+    user_id: web::Path<Uuid>,
+    auth: Authentication,
+) -> ApiResponse {
+    let user_id = user_id.into_inner();
+
+    let _ = auth.try_user_access(user_id)?;
+    let export = Validator::list_bulk_staking(&user_id, db_pool.as_ref()).await?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/octet-stream")
+        .append_header((
+            "Content-Disposition",
+            "attachment; filename=validators.json",
+        ))
+        .json(export))
 }
 
 #[get("/users/{id}/validators")]
@@ -447,7 +468,9 @@ async fn update_validator_identity(
 ) -> ApiResponse {
     let id = id.into_inner();
 
-    let _ = auth.try_host_access(id, db_pool.get_ref());
+    let _ = auth.try_host()?;
+
+    //TODO: Validator host has access to validator
 
     let validator =
         Validator::update_identity(id, validator.into_inner(), db_pool.as_ref()).await?;
@@ -462,7 +485,7 @@ async fn get_reward_summary(
 ) -> ApiResponse {
     let id = id.into_inner();
 
-    let _ = auth.try_user_access(id);
+    let _ = auth.try_user_access(id)?;
     let total = Reward::summary_by_user(db_pool.as_ref(), &id).await?;
     Ok(HttpResponse::Ok().json(total))
 }
@@ -473,7 +496,7 @@ async fn create_rewards(
     rewards: web::Json<Vec<RewardRequest>>,
     auth: Authentication,
 ) -> ApiResponse {
-    let _ = auth.try_service();
+    let _ = auth.try_service()?;
     Reward::create(db_pool.as_ref(), &rewards.into_inner()).await?;
     Ok(HttpResponse::Ok().json("no content"))
 }
