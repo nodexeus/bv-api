@@ -789,9 +789,12 @@ impl Validator {
         .map_err(ApiError::from)
     }
 
-    pub async fn list_bulk_staking(user_id: &Uuid, pool: &PgPool) -> Result<Vec<ValidatorStaking>> {
+    pub async fn list_staking_export(
+        user_id: &Uuid,
+        pool: &PgPool,
+    ) -> Result<Vec<ValidatorStaking>> {
         sqlx::query_as::<_, ValidatorStaking>(
-            "SELECT address, 10000 as stake FROM validators where user_id=$1 and stake_status=$2",
+            "SELECT address, 10000::BIGINT as stake FROM validators where user_id=$1 and stake_status=$2",
         )
         .bind(user_id)
         .bind(StakeStatus::Staking)

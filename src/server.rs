@@ -321,13 +321,10 @@ async fn validator_inventory_count(db_pool: DbPool, _auth: Authentication) -> Ap
 }
 
 #[get("/users/{id}/validators/staking/export")]
-async fn users_staking_export(
-    db_pool: DbPool,
-    user_id: web::Path<Uuid>,
-) -> ApiResponse {
+async fn users_staking_export(db_pool: DbPool, user_id: web::Path<Uuid>) -> ApiResponse {
     let user_id = user_id.into_inner();
 
-    let export = Validator::list_bulk_staking(&user_id, db_pool.as_ref()).await?;
+    let export = Validator::list_staking_export(&user_id, db_pool.as_ref()).await?;
 
     Ok(HttpResponse::Ok()
         .content_type("application/octet-stream")
