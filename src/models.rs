@@ -918,7 +918,7 @@ impl Validator {
 
     pub async fn inventory_count(pool: &PgPool) -> Result<i64> {
         let row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) AS available FROM validators where stake_status = 'available' and (status = 'synced' or status = 'syncing')",
+            "SELECT COUNT(*) AS available FROM validators where stake_status = 'available' and (status = 'synced' OR status = 'syncing')",
         )
         .fetch_one(pool)
         .await?;
@@ -932,7 +932,7 @@ impl Validator {
                 r#"
             WITH inv AS (
                 SELECT id FROM validators
-                WHERE (status = 'synced' AND status = 'syncing') AND stake_status = 'available'
+                WHERE (status = 'synced' OR status = 'syncing') AND stake_status = 'available'
                 LIMIT $1
             ) 
             UPDATE validators SET 
