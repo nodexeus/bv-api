@@ -933,6 +933,7 @@ impl Validator {
             WITH inv AS (
                 SELECT id FROM validators
                 WHERE (status = 'synced' OR status = 'syncing') AND stake_status = 'available'
+                ORDER BY random()
                 LIMIT $1
             ) 
             UPDATE validators SET 
