@@ -333,6 +333,31 @@ async fn it_should_list_validators_staking_as_service() {
 }
 
 #[actix_rt::test]
+async fn it_should_list_validators_that_need_attention() {
+    let db_pool = setup().await;
+
+    let app = test::init_service(
+        App::new()
+            .data(db_pool.clone())
+            .wrap(middleware::Logger::default())
+            .service(list_validators_attention),
+    )
+    .await;
+
+    let admin_user = get_admin_user(&db_pool).await;
+
+    let req = test::TestRequest::get()
+        .uri("/validators/needs_attention")
+        .append_header(auth_header_for_user(&admin_user))
+        .to_request();
+
+    //let resp: Host = test::read_response_json(&mut app, req).await;
+
+    let res = test::call_service(&app, req).await;
+    assert_eq!(res.status(), 200);
+}
+
+#[actix_rt::test]
 async fn it_should_create_rewards() {
     let db_pool = setup().await;
 

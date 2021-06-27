@@ -958,6 +958,39 @@ impl Validator {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ValidatorDetail {
+    pub id: Uuid,
+    pub name: String,
+    pub version:Option<String>,
+    pub host_name: String,
+    pub host_id: Uuid,
+    pub user_id: Option<Uuid> ,
+    pub user_email: Option<String>,
+    pub address: Option<String>,
+    pub address_name: Option<String>,
+    pub block_height: Option<i64>,
+    pub stake_status: StakeStatus,
+    pub status: ValidatorStatus,
+    pub tenure_penalty: f64,
+    pub dkg_penalty: f64,
+    pub performance_penalty: f64,
+    pub total_penalty: f64,
+    pub staking_height: Option<i64>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+
+}
+
+impl ValidatorDetail {
+    pub async fn list_needs_attention(pool: &PgPool) -> Result<Vec<ValidatorDetail>> {
+        sqlx::query_as::<_, ValidatorDetail> ("SELECT hosts.name as host_name, users.email as user_email, validators.* FROM validators inner join hosts on hosts.id = validators.host_id left join users on users.id = validators.user_id where validators.status <> 'synced' or validators.status <> 'syncing'")
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::from)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatorRequest {
     pub name: String,

@@ -111,6 +111,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(delete_command)
             .service(delete_host)
             .service(list_validators_staking)
+            .service(list_validators_attention)
             .service(list_commands)
             .service(list_hosts)
             .service(list_pending_commands)
@@ -311,6 +312,15 @@ async fn list_validators_staking(db_pool: DbPool, auth: Authentication) -> ApiRe
 
     let validators =
         Validator::find_all_by_stake_status(StakeStatus::Staking, db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(validators))
+}
+
+#[get("/validators/needs_attention")]
+async fn list_validators_attention(db_pool: DbPool, auth: Authentication) -> ApiResponse {
+    let _ = auth.try_admin()?;
+
+    let validators =
+        ValidatorDetail::list_needs_attention( db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(validators))
 }
 
