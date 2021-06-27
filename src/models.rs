@@ -984,7 +984,7 @@ pub struct ValidatorDetail {
 
 impl ValidatorDetail {
     pub async fn list_needs_attention(pool: &PgPool) -> Result<Vec<ValidatorDetail>> {
-        sqlx::query_as::<_, ValidatorDetail> ("SELECT hosts.name as host_name, users.email as user_email, validators.* FROM validators inner join hosts on hosts.id = validators.host_id left join users on users.id = validators.user_id where validators.status <> 'synced' or validators.status <> 'syncing'")
+        sqlx::query_as::<_, ValidatorDetail> ("SELECT hosts.name as host_name, users.email as user_email, validators.* FROM validators inner join hosts on hosts.id = validators.host_id left join users on users.id = validators.user_id where (validators.status <> 'synced' AND validators.status <> 'syncing')")
         .fetch_all(pool)
         .await
         .map_err(ApiError::from)
