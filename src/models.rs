@@ -928,7 +928,8 @@ impl Validator {
 
     pub async fn stake(pool: &PgPool, user: &User, count: i64) -> Result<Vec<Validator>> {
         if user.can_stake(pool, count).await? {
-            return sqlx::query_as::<_, Self>(
+            let mut tx = pool.begin().await?;
+            let res = sqlx::query_as::<_, Self>(
                 r#"
             WITH inv AS (
                 SELECT id FROM validators
@@ -942,14 +943,17 @@ impl Validator {
                 staking_height = (SELECT block_height FROM info LIMIT 1)
             FROM inv
             WHERE validators.id = inv.id
-            RETURNING *"#,
+            RETURNING *;
+            "#,
             )
             .bind(count)
             .bind(user.id)
             .bind(StakeStatus::Staking)
-            .fetch_all(pool)
-            .await
-            .map_err(ApiError::from);
+            .fetch_all(&mut tx)
+            .await?;
+
+            tx.commit().await?;
+            return Ok(res);
         }
 
         Err(ApiError::ValidationError(
@@ -962,10 +966,10 @@ impl Validator {
 pub struct ValidatorDetail {
     pub id: Uuid,
     pub name: String,
-    pub version:Option<String>,
+    pub version: Option<String>,
     pub host_name: String,
     pub host_id: Uuid,
-    pub user_id: Option<Uuid> ,
+    pub user_id: Option<Uuid>,
     pub user_email: Option<String>,
     pub address: Option<String>,
     pub address_name: Option<String>,
@@ -979,7 +983,6 @@ pub struct ValidatorDetail {
     pub staking_height: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-
 }
 
 impl ValidatorDetail {
