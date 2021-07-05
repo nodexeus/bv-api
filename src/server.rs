@@ -120,7 +120,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(login)
             .service(refresh)
             .service(stake_validator)
-            .service(update_block_height)
+            .service(update_block_info)
             .service(update_command_response)
             .service(update_host)
             .service(update_host_status)
@@ -131,6 +131,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(validator_inventory_count)
             .service(whoami)
             .service(get_block_height)
+            .service(get_block_info)
             .service(get_command)
             .service(get_host)
             .service(get_host_by_token)
@@ -172,22 +173,26 @@ async fn get_block_height(db_pool: DbPool, _auth: Authentication) -> ApiResponse
     Ok(HttpResponse::Ok().json(info.block_height))
 }
 
-#[put("/block_height")]
-async fn update_block_height(
+#[get("/block_info")]
+async fn get_block_info(db_pool: DbPool, _auth: Authentication) -> ApiResponse {
+    let info = Info::get_info(db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(info))
+}
+
+#[put("/block_info")]
+async fn update_block_info(
     db_pool: DbPool,
-    height: web::Json<i64>,
+    info: web::Json<InfoRequest>,
     auth: Authentication,
 ) -> ApiResponse {
     let _ = auth.try_service()?;
 
     let info = Info::update_info(
         db_pool.as_ref(),
-        &Info {
-            block_height: height.into_inner(),
-        },
+        &info.into_inner(),
     )
     .await?;
-    Ok(HttpResponse::Ok().json(info.block_height))
+    Ok(HttpResponse::Ok().json(info))
 }
 
 #[post("/users")]

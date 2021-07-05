@@ -295,16 +295,19 @@ async fn it_should_put_block_height_as_service() {
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
-            .service(update_block_height),
+            .service(update_block_info),
     )
     .await;
-
-    let height: i64 = 100;
+    
+    let ir = InfoRequest {
+        block_height: 100,
+        oracle_price: 10,
+    };
 
     let req = test::TestRequest::put()
-        .uri("/block_height")
+        .uri("/block_info")
         .append_header(auth_header_for_service())
-        .set_json(&height)
+        .set_json(&ir)
         .to_request();
 
     let res = test::call_service(&app, req).await;
