@@ -168,13 +168,13 @@ async fn whoami(db_pool: DbPool, auth: Authentication) -> ApiResponse {
 }
 
 #[get("/block_height")]
-async fn get_block_height(db_pool: DbPool, _auth: Authentication) -> ApiResponse {
+async fn get_block_height(db_pool: DbPool) -> ApiResponse {
     let info = Info::get_info(db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(info.block_height))
 }
 
 #[get("/block_info")]
-async fn get_block_info(db_pool: DbPool, _auth: Authentication) -> ApiResponse {
+async fn get_block_info(db_pool: DbPool) -> ApiResponse {
     let info = Info::get_info(db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(info))
 }
