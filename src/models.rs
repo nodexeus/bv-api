@@ -930,6 +930,11 @@ impl Validator {
         .fetch_one(&mut tx)
         .await?;
 
+        let _ = sqlx::query("UPDATE validators SET address = NULL, address_name = NULL, owner_address = NULL, user_id = NULL, swarm_key = NULL, status='stopped', stake_status = 'disabled' WHERE id = $1")
+         .bind(val.id)
+         .execute(&mut tx)
+         .await?;
+
         let new_val = sqlx::query_as::<_, Self>("UPDATE validators SET address=$1, address_name=$2, owner_address=$3, user_id=$4, swarm_key=$5,status='migrating', stake_status=$6, staking_height=$7 where id=$8 RETURNING *")
          .bind(val.address)
          .bind(val.address_name)
@@ -942,10 +947,6 @@ impl Validator {
          .fetch_one(&mut tx)
          .await?;
 
-        let _ = sqlx::query("UPDATE validators SET address = NULL, address_name = NULL, owner_address = NULL, user_id = NULL, swarm_key = NULL, status='stopped', stake_status = 'disabled' WHERE id = $1")
-         .bind(val.id)
-         .execute(&mut tx)
-         .await?;
 
         tx.commit().await?;
 
@@ -1023,7 +1024,7 @@ pub struct ValidatorDetail {
 
 impl ValidatorDetail {
     pub async fn list_needs_attention(pool: &PgPool) -> Result<Vec<ValidatorDetail>> {
-        sqlx::query_as::<_, ValidatorDetail> ("SELECT hosts.name as host_name, users.email as user_email, validators.* FROM validators inner join hosts on hosts.id = validators.host_id left join users on users.id = validators.user_id where (validators.status <> 'synced' OR validators.stake_status = 'staking')")
+        sqlx::query_as::<_, ValidatorDetail> ("SELECT hosts.name as host_name, users.email as user_email, validators.* FROM validators inner join hosts on hosts.id = validators.host_id left join users on users.id = validators.user_id where (validators.status <> 'synced' OR validators.stake_status = 'staking' OR validators.status = 'migrating' OR validators.status = 'upgrading')")
         .fetch_all(pool)
         .await
         .map_err(ApiError::from)
