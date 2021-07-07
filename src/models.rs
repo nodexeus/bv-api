@@ -33,6 +33,7 @@ pub enum ValidatorStatus {
     Provisioning,
     Syncing,
     Upgrading,
+    Migrating,
     Synced,
     Consensus,
     Stopped,
@@ -916,6 +917,41 @@ impl Validator {
         Ok(validator)
     }
 
+    pub async fn migrate(pool: &PgPool, id: Uuid) -> Result<Validator> {
+        let mut tx = pool.begin().await?;
+        let val = sqlx::query_as::<_, Self>("SELECT * FROM validators where id = $1")
+            .bind(id)
+            .fetch_one(&mut tx)
+            .await?;
+
+        //TODO: This could just select id
+        let new_val = sqlx::query_as::<_, Self>("SELECT * FROM validators WHERE (status = 'synced' OR status = 'syncing') AND stake_status = 'available' and host_id <> $1 ORDER BY random() LIMIT 1")
+        .bind(val.host_id)
+        .fetch_one(&mut tx)
+        .await?;
+
+        let new_val = sqlx::query_as::<_, Self>("UPDATE validators SET address=$1, address_name=$2, owner_address=$3, user_id=$4, swarm_key=$5,status='migrating', stake_status=$6, staking_height=$7 where id=$8 RETURNING *")
+         .bind(val.address)
+         .bind(val.address_name)
+         .bind(val.owner_address)
+         .bind(val.user_id)
+         .bind(val.swarm_key)
+         .bind(val.stake_status)
+         .bind(val.staking_height)
+         .bind(new_val.id)
+         .fetch_one(&mut tx)
+         .await?;
+
+        let _ = sqlx::query("UPDATE validators SET address = NULL, address_name = NULL, owner_address = NULL, user_id = NULL, swarm_key = NULL, status='stopped', stake_status = 'disabled' WHERE id = $1")
+         .bind(val.id)
+         .execute(&mut tx)
+         .await?;
+
+        tx.commit().await?;
+
+        Ok(new_val)
+    }
+
     pub async fn inventory_count(pool: &PgPool) -> Result<i64> {
         let row: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) AS available FROM validators where stake_status = 'available' and (status = 'synced' OR status = 'syncing')",
@@ -1122,7 +1158,7 @@ pub struct RewardSummary {
 pub struct InfoRequest {
     pub block_height: i64,
     /// Divide by 100000000 to get USD value
-    pub oracle_price: i64, 
+    pub oracle_price: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -1130,7 +1166,7 @@ pub struct Info {
     pub block_height: i64,
     pub staked_count: i64,
     /// Divide by 100000000 to get USD value
-    pub oracle_price: i64, 
+    pub oracle_price: i64,
 }
 
 impl Info {

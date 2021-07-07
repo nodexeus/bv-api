@@ -120,6 +120,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(login)
             .service(refresh)
             .service(stake_validator)
+            .service(migrate_validator)
             .service(update_block_info)
             .service(update_command_response)
             .service(update_host)
@@ -187,11 +188,7 @@ async fn update_block_info(
 ) -> ApiResponse {
     let _ = auth.try_service()?;
 
-    let info = Info::update_info(
-        db_pool.as_ref(),
-        &info.into_inner(),
-    )
-    .await?;
+    let info = Info::update_info(db_pool.as_ref(), &info.into_inner()).await?;
     Ok(HttpResponse::Ok().json(info))
 }
 
@@ -299,6 +296,18 @@ async fn delete_host(db_pool: DbPool, id: web::Path<Uuid>, auth: Authentication)
 
     let rows = Host::delete(id.into_inner(), db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", rows)))
+}
+
+#[post("/validators/{id}/migrate")]
+async fn migrate_validator(
+    db_pool: DbPool,
+    id: web::Path<Uuid>,
+    auth: Authentication,
+) -> ApiResponse {
+    let _ = auth.try_admin()?;
+
+    let val = Validator::migrate(db_pool.as_ref(), id.into_inner()).await?;
+    Ok(HttpResponse::Ok().json(val))
 }
 
 #[get("/validators")]

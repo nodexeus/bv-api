@@ -288,6 +288,54 @@ async fn it_should_stake_one_validator() {
 }
 
 #[actix_rt::test]
+async fn it_should_migrate_one_validator() {
+    let db_pool = setup().await;
+
+    let mut app = test::init_service(
+        App::new()
+            .data(db_pool.clone())
+            .wrap(middleware::Logger::default())
+            .service(migrate_validator),
+    )
+    .await;
+
+    let admin = get_admin_user(&db_pool).await;
+
+    let host = get_test_host(db_pool.clone()).await;
+    let validators = host.validators.expect("host to have validators");
+    let validator = &validators.first().expect("validators to have at least one");
+
+    let path = format!("/validators/{}/migrate", validator.id);
+
+    let req = test::TestRequest::post()
+        .uri(&path)
+        .append_header(auth_header_for_user(&admin))
+        .to_request();
+
+    let new_validator: Validator = test::read_response_json(&mut app, req).await;
+
+    let new_host = Host::find_by_token("1234", &db_pool)
+        .await
+        .expect("host to be returned.");
+
+    assert_ne!(host.id, new_validator.host_id);
+    assert_eq!(new_validator.host_id, new_host.id);
+    assert_eq!(new_validator.address, validator.address);
+    assert_eq!(new_validator.address_name, validator.address_name);
+    assert_eq!(new_validator.owner_address, validator.owner_address);
+    assert_eq!(new_validator.user_id, validator.user_id);
+    assert_eq!(new_validator.swarm_key, validator.swarm_key);
+    assert_eq!(new_validator.stake_status, validator.stake_status);
+    assert_eq!(new_validator.status, ValidatorStatus::Migrating);
+
+    let old_validator = Validator::find_by_id(validator.id, &db_pool)
+        .await
+        .expect("the old validator to be returned");
+    assert_eq!(old_validator.status, ValidatorStatus::Stopped);
+    assert_eq!(old_validator.stake_status, StakeStatus::Disabled);
+}
+
+#[actix_rt::test]
 async fn it_should_put_block_height_as_service() {
     let db_pool = setup().await;
 
@@ -298,7 +346,7 @@ async fn it_should_put_block_height_as_service() {
             .service(update_block_info),
     )
     .await;
-    
+
     let ir = InfoRequest {
         block_height: 100,
         oracle_price: 10,
@@ -609,6 +657,43 @@ async fn reset_db(pool: &PgPool) {
         .expect("Could not create test host in db.");
 
     let host = Host::find_by_token("123", pool)
+        .await
+        .expect("Could not fetch test host in db.");
+
+    let status = ValidatorStatusRequest {
+        version: None,
+        block_height: None,
+        status: ValidatorStatus::Synced,
+        tenure_penalty: 0.0,
+        performance_penalty: 0.0,
+        dkg_penalty: 0.0,
+        total_penalty: 0.0,
+    };
+
+    for v in host.validators.expect("No validators.") {
+        let _ = Validator::update_status(v.id, status.clone(), pool)
+            .await
+            .expect("Error updating validator status in db during setup.");
+        let _ = Validator::update_stake_status(v.id, StakeStatus::Available, pool)
+            .await
+            .expect("Error updating validator stake status in db during setup.");
+    }
+
+    let host = HostRequest {
+        name: "Test Host2".into(),
+        version: Some("0.1.0".into()),
+        location: Some("Ohio".into()),
+        ip_addr: "192.168.2.1".into(),
+        val_ip_addrs: "192.168.3.1, 192.168.3.2, 192.168.3.3, 192.168.3.4, 192.168.3.5".into(),
+        token: "1234".into(),
+        status: ConnectionStatus::Online,
+    };
+
+    Host::create(host, &pool)
+        .await
+        .expect("Could not create test host in db.");
+
+    let host = Host::find_by_token("1234", pool)
         .await
         .expect("Could not fetch test host in db.");
 
