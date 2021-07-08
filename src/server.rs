@@ -111,6 +111,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(delete_command)
             .service(delete_host)
             .service(list_validators_staking)
+            .service(list_validators_consensus)
             .service(list_validators_attention)
             .service(list_commands)
             .service(list_hosts)
@@ -326,6 +327,15 @@ async fn list_validators_staking(db_pool: DbPool, auth: Authentication) -> ApiRe
 
     let validators =
         Validator::find_all_by_stake_status(StakeStatus::Staking, db_pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(validators))
+}
+
+#[get("/validators/consensus")]
+async fn list_validators_consensus(db_pool: DbPool, auth: Authentication) -> ApiResponse {
+    let _ = auth.try_admin()?;
+
+    let validators =
+        Validator::find_all_by_status(ValidatorStatus::Consensus, db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(validators))
 }
 
