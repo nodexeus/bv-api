@@ -751,7 +751,7 @@ impl Validator {
 
     pub async fn find_all_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
-            "SELECT * FROM validators WHERE host_id = $1 order by status, name",
+            "SELECT * FROM validators WHERE host_id = $1 order by status, stake_status, name",
         )
         .bind(host_id)
         .fetch_all(pool)
@@ -761,7 +761,7 @@ impl Validator {
 
     pub async fn find_all_by_user(user_id: Uuid, pool: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
-            "SELECT * FROM validators WHERE user_id = $1 order by status, name",
+            "SELECT * FROM validators WHERE user_id = $1 order by status, stake_status, name",
         )
         .bind(user_id)
         .fetch_all(pool)
@@ -782,7 +782,7 @@ impl Validator {
         pool: &PgPool,
     ) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
-            "SELECT * FROM validators WHERE stake_status = $1 order by status, name",
+            "SELECT * FROM validators WHERE stake_status = $1 order by status, stake_status, name",
         )
         .bind(stake_status)
         .fetch_all(pool)
@@ -795,7 +795,7 @@ impl Validator {
         pool: &PgPool,
     ) -> Result<Vec<Validator>> {
         sqlx::query_as::<_, Self>(
-            "SELECT * FROM validators where status = $1 order by status, name",
+            "SELECT * FROM validators where status = $1 order by status, stake_status, name",
         )
         .bind(status)
         .fetch_all(pool)
@@ -1036,7 +1036,7 @@ pub struct ValidatorDetail {
 
 impl ValidatorDetail {
     pub async fn list_needs_attention(pool: &PgPool) -> Result<Vec<ValidatorDetail>> {
-        sqlx::query_as::<_, ValidatorDetail> ("SELECT hosts.name as host_name, users.email as user_email, validators.* FROM validators inner join hosts on hosts.id = validators.host_id left join users on users.id = validators.user_id where (validators.status <> 'synced' OR validators.stake_status = 'staking' OR validators.status = 'migrating' OR validators.status = 'upgrading')")
+        sqlx::query_as::<_, ValidatorDetail> ("SELECT hosts.name as host_name, users.email as user_email, validators.* FROM validators inner join hosts on hosts.id = validators.host_id left join users on users.id = validators.user_id where (validators.status <> 'synced' OR validators.stake_status = 'staking' OR validators.status = 'migrating' OR validators.status = 'upgrading') order by status, stake_status, name")
         .fetch_all(pool)
         .await
         .map_err(ApiError::from)
