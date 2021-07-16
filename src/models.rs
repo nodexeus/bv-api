@@ -846,15 +846,11 @@ impl Validator {
     ) -> Result<Self> {
         let mut tx = pool.begin().await.unwrap();
         let validator = sqlx::query_as::<_, Self>(
-            r#"UPDATE validators SET version=$1, block_height=$2, status=$3, tenure_penalty=$4, dkg_penalty=$5, performance_penalty=$6, total_penalty=$7, updated_at=now()  WHERE id = $8 RETURNING *"#
+            r#"UPDATE validators SET version=$1, block_height=$2, status=$3, updated_at=now()  WHERE id = $4 RETURNING *"#
         )
         .bind(validator.version)
         .bind(validator.block_height)
         .bind(validator.status)
-        .bind(validator.tenure_penalty)
-        .bind(validator.dkg_penalty)
-        .bind(validator.performance_penalty)
-        .bind(validator.total_penalty)
         .bind(id)
         .fetch_one(&mut tx)
         .await?;
@@ -899,6 +895,21 @@ impl Validator {
 
         tx.commit().await.unwrap();
         Ok(validator)
+    }
+
+    pub async fn update_penalty(
+        id: Uuid,
+        penalty: ValidatorPenaltyRequest,
+        pool: &PgPool,
+    ) -> Result<Validator> {
+        Ok(sqlx::query_as::<_, Self>("UPDATE validators SET tenure_penalty=$1, dkg_penalty=$2, performance_penalty=$3, total_penalty=$4 where id = $5 RETURNING *")
+        .bind(penalty.tenure_penalty)
+        .bind(penalty.dkg_penalty)
+        .bind(penalty.performance_penalty)
+        .bind(penalty.total_penalty)
+        .bind(id)
+        .fetch_one(pool)
+        .await?)
     }
 
     pub async fn update_identity(
@@ -1066,6 +1077,10 @@ pub struct ValidatorStatusRequest {
     pub version: Option<String>,
     pub block_height: Option<i64>,
     pub status: ValidatorStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidatorPenaltyRequest {
     pub tenure_penalty: f64,
     pub dkg_penalty: f64,
     pub performance_penalty: f64,

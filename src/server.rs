@@ -130,6 +130,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(update_validator_status)
             .service(update_validator_stake_status)
             .service(update_validator_owner_address)
+            .service(update_validator_penalty)
             .service(validator_inventory_count)
             .service(whoami)
             .service(get_block_height)
@@ -484,6 +485,20 @@ async fn update_validator_owner_address(
         db_pool.as_ref(),
     )
     .await?;
+    Ok(HttpResponse::Ok().json(validator))
+}
+
+#[put("/validators/{id}/penalty")]
+async fn update_validator_penalty(
+    db_pool: DbPool,
+    id: web::Path<Uuid>,
+    penalty: web::Json<ValidatorPenaltyRequest>,
+    auth: Authentication,
+) -> ApiResponse {
+    let _ = auth.try_service()?;
+
+    let validator =
+        Validator::update_penalty(id.into_inner(), penalty.into_inner(), db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(validator))
 }
 

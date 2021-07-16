@@ -173,17 +173,50 @@ async fn it_should_update_validator_status() {
             version: Some("1.0".to_string()),
             block_height: Some(192),
             status: ValidatorStatus::Provisioning,
-            tenure_penalty: 1.0,
-            dkg_penalty: 1.0,
-            performance_penalty: 1.0,
-            total_penalty: 1.0,
         })
         .to_request();
 
     let resp: Validator = test::read_response_json(&mut app, req).await;
 
     assert_eq!(resp.host_id, host.id);
-    assert_eq!(resp.tenure_penalty, 1.0);
+}
+
+#[actix_rt::test]
+async fn it_should_update_validator_penalty() {
+    let db_pool = setup().await;
+
+    let mut app = test::init_service(
+        App::new()
+            .data(db_pool.clone())
+            .wrap(middleware::Logger::default())
+            .service(update_validator_penalty),
+    )
+    .await;
+
+    let host = get_test_host(db_pool.clone()).await;
+
+    let path = format!(
+        "/validators/{}/penalty",
+        host.validators.unwrap().first().unwrap().id
+    );
+
+    let req = test::TestRequest::put()
+        .uri(&path)
+        .append_header(auth_header_for_service())
+        .set_json(&ValidatorPenaltyRequest {
+            tenure_penalty: 1.5,
+            dkg_penalty: 2.5,
+            performance_penalty: 3.5,
+            total_penalty: 7.5,
+        })
+        .to_request();
+
+    let resp: Validator = test::read_response_json(&mut app, req).await;
+
+    assert_eq!(resp.tenure_penalty, 1.5);
+    assert_eq!(resp.dkg_penalty, 2.5);
+    assert_eq!(resp.performance_penalty, 3.5);
+    assert_eq!(resp.total_penalty, 7.5);
 }
 
 #[actix_rt::test]
@@ -664,10 +697,6 @@ async fn reset_db(pool: &PgPool) {
         version: None,
         block_height: None,
         status: ValidatorStatus::Synced,
-        tenure_penalty: 0.0,
-        performance_penalty: 0.0,
-        dkg_penalty: 0.0,
-        total_penalty: 0.0,
     };
 
     for v in host.validators.expect("No validators.") {
@@ -701,10 +730,6 @@ async fn reset_db(pool: &PgPool) {
         version: None,
         block_height: None,
         status: ValidatorStatus::Synced,
-        tenure_penalty: 0.0,
-        performance_penalty: 0.0,
-        dkg_penalty: 0.0,
-        total_penalty: 0.0,
     };
 
     for v in host.validators.expect("No validators.") {
