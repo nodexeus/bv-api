@@ -65,8 +65,9 @@ impl FromRequest for Authentication {
         };
 
         warn!(
-            "Invalid token auth: {:?}",
-            req.headers().get("Authorizatoin")
+            "Invalid token auth: {:?} - {:?}",
+            req.headers().get("Authorization"),
+            req.path()
         );
         err(Self::Error::InvalidAuthentication(anyhow!(
             "invalid authentication credentials"

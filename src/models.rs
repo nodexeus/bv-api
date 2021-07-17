@@ -1161,7 +1161,7 @@ impl Reward {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct RewardRequest {
     pub block: i64,
     pub hash: String,
@@ -1170,6 +1170,7 @@ pub struct RewardRequest {
     pub user_id: Option<Uuid>,
     pub account: String,
     pub validator: String,
+    #[validate(range(min = 1))]
     pub amount: i64,
 }
 
