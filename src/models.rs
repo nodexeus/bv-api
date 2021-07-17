@@ -7,7 +7,7 @@ use argon2::{
     Argon2,
 };
 use chrono::{DateTime, NaiveDate, Utc};
-use log::warn;
+use log::debug;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgRow, PgConnection};
@@ -1153,7 +1153,7 @@ impl Reward {
             .await;
 
             if let Err(e) = res {
-                warn!("Creating rewards (duplicate violations expected): {}", e);
+                debug!("Creating rewards (duplicate violations expected): {}", e);
             }
         }
 
