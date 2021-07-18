@@ -7,7 +7,7 @@ use argon2::{
     Argon2,
 };
 use chrono::{DateTime, NaiveDate, Utc};
-use log::debug;
+use log::{debug, error};
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgRow, PgConnection};
@@ -1140,17 +1140,20 @@ impl Reward {
 
     pub async fn create(pool: &PgPool, rewards: &Vec<RewardRequest>) -> Result<()> {
         for reward in rewards {
+            if reward.amount < 1 {
+                error!("Reward has zero amount. {:?}", reward);
+            }
             let res = sqlx::query("INSERT INTO rewards (block, hash, txn_time, validator_id, user_id, account, validator, amount) values ($1,$2,$3,$4,$5,$6,$7,$8)")
-            .bind(&reward.block)
-            .bind(&reward.hash)
-            .bind(&reward.txn_time)
-            .bind(&reward.validator_id)
-            .bind(&reward.user_id)
-            .bind(&reward.account)
-            .bind(&reward.validator)
-            .bind(&reward.amount)
-            .execute(pool)
-            .await;
+                .bind(&reward.block)
+                .bind(&reward.hash)
+                .bind(&reward.txn_time)
+                .bind(&reward.validator_id)
+                .bind(&reward.user_id)
+                .bind(&reward.account)
+                .bind(&reward.validator)
+                .bind(&reward.amount)
+                .execute(pool)
+                .await;
 
             if let Err(e) = res {
                 debug!("Creating rewards (duplicate violations expected): {}", e);
@@ -1161,7 +1164,7 @@ impl Reward {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RewardRequest {
     pub block: i64,
     pub hash: String,
@@ -1170,7 +1173,6 @@ pub struct RewardRequest {
     pub user_id: Option<Uuid>,
     pub account: String,
     pub validator: String,
-    #[validate(range(min = 1))]
     pub amount: i64,
 }
 
