@@ -141,7 +141,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(get_host_by_token)
             .service(get_validator)
             .service(create_rewards)
-            .service(list_bills)
+            .service(list_invoices)
     })
     .bind(&addr)?
     .run()
@@ -390,13 +390,13 @@ async fn list_validators_by_user(
     }
 }
 
-#[get("/users/{id}/bills")]
-async fn list_bills(db_pool: DbPool, id: web::Path<Uuid>, auth: Authentication) -> ApiResponse {
+#[get("/users/{id}/invoices")]
+async fn list_invoices(db_pool: DbPool, id: web::Path<Uuid>, auth: Authentication) -> ApiResponse {
     let id = id.into_inner();
 
     if auth.is_admin() || auth.try_user_access(id)? {
-        let bills = Bill::find_all_by_user(db_pool.as_ref(), &id).await?;
-        Ok(HttpResponse::Ok().json(bills))
+        let invoices = Invoice::find_all_by_user(db_pool.as_ref(), &id).await?;
+        Ok(HttpResponse::Ok().json(invoices))
     } else {
         Err(ApiError::InsufficientPermissionsError)
     }

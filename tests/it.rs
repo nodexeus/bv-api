@@ -524,15 +524,15 @@ async fn it_should_create_rewards() {
 }
 
 #[actix_rt::test]
-async fn it_should_list_bills() {
+async fn it_should_list_invoices() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
             .service(create_rewards)
-            .service(list_bills),
+            .service(list_invoices),
     )
     .await;
 
@@ -545,63 +545,14 @@ async fn it_should_list_bills() {
         .await
         .expect("could not login test user");
 
-    let validator = Validator::find_all(&db_pool)
-        .await
-        .expect("could not get list of validators")
-        .first()
-        .expect("could not get first validator")
-        .to_owned();
-
-    let mut rewards: Vec<RewardRequest> = Vec::new();
-    rewards.push(RewardRequest {
-        block: 1,
-        hash: "1".into(),
-        txn_time: Utc::now(),
-        validator_id: validator.id,
-        user_id: Some(user.id),
-        account: "1".into(),
-        validator: "1".into(),
-        amount: 5000,
-    });
-    rewards.push(RewardRequest {
-        block: 1,
-        hash: "2".into(),
-        txn_time: Utc::now(),
-        validator_id: validator.id,
-        user_id: Some(user.id),
-        account: "1".into(),
-        validator: "1".into(),
-        amount: 10000,
-    });
-    rewards.push(RewardRequest {
-        block: 1,
-        hash: "1".into(),
-        txn_time: Utc::now(),
-        validator_id: validator.id,
-        user_id: Some(user.id),
-        account: "1".into(),
-        validator: "1".into(),
-        amount: 5000,
-    });
-
-    let req = test::TestRequest::post()
-        .uri("/rewards")
-        .append_header(auth_header_for_service())
-        .set_json(&rewards)
-        .to_request();
-
-    let res = test::call_service(&app, req).await;
-    assert_eq!(res.status(), 200);
-
-    let path = format!("/users/{}/bills", user.id);
+    let path = format!("/users/{}/invoices", user.id);
     let req = test::TestRequest::get()
         .uri(&path)
         .append_header(auth_header_for_user(&user))
         .to_request();
 
-    let bills: Vec<Bill> = test::read_response_json(&mut app, req).await;
-
-    assert_eq!(bills.len(), 1)
+    let res = test::call_service(&app, req).await;
+    assert_eq!(res.status(), 200);
 }
 
 async fn setup() -> PgPool {

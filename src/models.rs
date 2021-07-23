@@ -1222,37 +1222,29 @@ impl Info {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct Bill {
+pub struct Invoice {
+    pub id: i64,
     pub user_id: Uuid,
-    pub date: NaiveDate,
+    pub earnings: i64,
+    pub fee_bps: i64,
     pub amount: i64,
+    pub validator_count: i64,
+    pub starts_at: NaiveDate,
+    pub ends_at: NaiveDate,
+    pub is_paid: bool,
 }
 
-impl Bill {
-    pub async fn find_all_by_user(pool: &PgPool, user_id: &Uuid) -> Result<Vec<Bill>> {
-        sqlx::query_as::<_, Bill>(
+impl Invoice {
+    pub async fn find_all_by_user(pool: &PgPool, user_id: &Uuid) -> Result<Vec<Invoice>> {
+        sqlx::query_as::<_, Invoice>(
             r##"SELECT
-                        user_id, 
-                        EXTRACT(ISOYEAR FROM txn_time) AS year, 
-                        EXTRACT(WEEK FROM txn_time) AS week, 
-                        TO_DATE(CONCAT(EXTRACT(ISOYEAR FROM txn_time), 
-                        EXTRACT(WEEK FROM txn_time)), 'IYYYIW') AS date, 
-                        (SUM(amount) * (users.fee_bps::DECIMAL / 10000))::BIGINT AS amount 
-                    FROM 
-                        rewards
-                    INNER JOIN
-                        users
-                    ON
-                        users.id = rewards.user_id
+                        *
+                    FROM
+                        invoices
                     WHERE
-                        user_id = $1
-                    GROUP BY 
-                        user_id,
-                        fee_bps, 
-                        year, 
-                        week 
+                        user_id = $1 
                     ORDER BY 
-                        date DESC
+                        ends_at DESC
                     "##,
         )
         .bind(user_id)
