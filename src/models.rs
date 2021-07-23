@@ -1223,7 +1223,7 @@ impl Info {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Invoice {
-    pub id: i64,
+    pub id: i32,
     pub user_id: Uuid,
     pub pay_address: String,
     pub earnings: i64,
