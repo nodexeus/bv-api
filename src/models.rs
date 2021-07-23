@@ -6,7 +6,7 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 use log::{debug, error};
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
@@ -1230,8 +1230,8 @@ pub struct Invoice {
     pub fee_bps: i64,
     pub amount: i64,
     pub validators_count: i64,
-    pub starts_at: NaiveDate,
-    pub ends_at: NaiveDate,
+    pub starts_at: DateTime<Utc>,
+    pub ends_at: DateTime<Utc>,
     pub is_paid: bool,
 }
 
