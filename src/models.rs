@@ -1229,7 +1229,7 @@ pub struct Invoice {
     pub earnings: i64,
     pub fee_bps: i64,
     pub amount: i64,
-    pub validator_count: i64,
+    pub validators_count: i64,
     pub starts_at: NaiveDate,
     pub ends_at: NaiveDate,
     pub is_paid: bool,
