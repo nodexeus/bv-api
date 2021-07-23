@@ -1225,6 +1225,7 @@ impl Info {
 pub struct Invoice {
     pub id: i64,
     pub user_id: Uuid,
+    pub pay_address: String,
     pub earnings: i64,
     pub fee_bps: i64,
     pub amount: i64,
@@ -1238,9 +1239,12 @@ impl Invoice {
     pub async fn find_all_by_user(pool: &PgPool, user_id: &Uuid) -> Result<Vec<Invoice>> {
         sqlx::query_as::<_, Invoice>(
             r##"SELECT
-                        *
+                        invoices.*,
+                        users.pay_address
                     FROM
                         invoices
+                    INNER JOIN
+                        users on users.id = invoices.user_id
                     WHERE
                         user_id = $1 
                     ORDER BY 
