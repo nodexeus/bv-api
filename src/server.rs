@@ -142,6 +142,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(get_validator)
             .service(create_rewards)
             .service(list_invoices)
+            .service(list_payments_due)
     })
     .bind(&addr)?
     .run()
@@ -400,6 +401,15 @@ async fn list_invoices(db_pool: DbPool, id: web::Path<Uuid>, auth: Authenticatio
     } else {
         Err(ApiError::InsufficientPermissionsError)
     }
+}
+
+#[get("/payments_due")]
+async fn list_payments_due(db_pool: DbPool, auth: Authentication) -> ApiResponse {
+
+    let _ = auth.try_service()?;
+
+    let payments_due = Invoice::find_all_payments_due(db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(payments_due))
 }
 
 #[post("/users/{id}/validators")]

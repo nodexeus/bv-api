@@ -1256,4 +1256,18 @@ impl Invoice {
         .await
         .map_err(ApiError::from)
     }
+
+    /// Gets all wallets addresses with a due amount.
+    pub async fn find_all_payments_due(pool: &PgPool) -> Result<Vec<PaymentDue>> {
+        sqlx::query_as::<_, PaymentDue>("SELECT users.pay_address, sum(amount), min(ends_at) FROM invoices INNER JOIN users on users.id = invoices.user_id WHERE is_paid = false GROUP BY address")
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::from)
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct PaymentDue {
+    pub pay_address: String,
+    pub amount: i64,
+    pub due_date: DateTime<Utc>,
 }
