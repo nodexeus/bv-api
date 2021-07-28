@@ -737,6 +737,7 @@ pub struct Validator {
     pub dkg_penalty: f64,
     pub performance_penalty: f64,
     pub total_penalty: f64,
+    pub transferred_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
