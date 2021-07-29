@@ -3,12 +3,17 @@ use crate::models::*;
 use crate::{auth, errors};
 use actix_cors::Cors;
 use actix_web::{
-    delete, dev, get, middleware, post, put, web, App, FromRequest, HttpRequest, HttpResponse,
-    HttpServer,
+    delete, dev, get,
+    http::header::{CacheControl, ContentType, CacheDirective},
+    middleware, post, put, web,
+    web::Bytes,
+    App, FromRequest, HttpRequest, HttpResponse, HttpServer,
 };
 use anyhow::anyhow;
 use futures_util::future::{err, ok, Ready};
 use log::{debug, warn};
+use qrcode_generator;
+use qrcode_generator::QrCodeEcc;
 use serde::Deserialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::borrow::Cow;
@@ -143,6 +148,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(create_rewards)
             .service(list_invoices)
             .service(list_payments_due)
+            .service(get_qr)
     })
     .bind(&addr)?
     .run()
@@ -405,7 +411,6 @@ async fn list_invoices(db_pool: DbPool, id: web::Path<Uuid>, auth: Authenticatio
 
 #[get("/payments_due")]
 async fn list_payments_due(db_pool: DbPool, auth: Authentication) -> ApiResponse {
-
     let _ = auth.try_service()?;
 
     let payments_due = Invoice::find_all_payments_due(db_pool.as_ref()).await?;
@@ -599,4 +604,18 @@ async fn update_command_response(
 async fn delete_command(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
     let result = Command::delete(id.into_inner(), db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", result)))
+}
+
+#[get("/qr/{address}")]
+async fn get_qr(address: web::Path<String>) -> ApiResponse {
+    let png: Vec<u8> =
+        qrcode_generator::to_png_to_vec(address.into_inner(), QrCodeEcc::Low, 1024).unwrap();
+
+    Ok(HttpResponse::Ok()
+        .insert_header(ContentType::png())
+        .insert_header(CacheControl(vec![
+            CacheDirective::Public,
+            CacheDirective::MaxAge(86400u32),
+        ]))
+        .body(Bytes::from(png)))
 }
