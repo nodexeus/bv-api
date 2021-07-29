@@ -442,6 +442,37 @@ async fn it_should_list_validators_that_need_attention() {
 }
 
 #[actix_rt::test]
+async fn it_should_get_qr_code() {
+    let db_pool = setup().await;
+
+    let app = test::init_service(
+        App::new()
+            .data(db_pool.clone())
+            .wrap(middleware::Logger::default())
+            .service(get_qr),
+    )
+    .await;
+
+    let u = User::find_by_email("test@here.com", &db_pool)
+        .await
+        .expect("Could not fetch test user.");
+
+    let inv = Invoice::find_all_by_user(&db_pool, &u.id)
+        .await
+        .expect("it to get bill")
+        .first()
+        .expect("should have at least 1 bill")
+        .clone();
+
+    let url = format!("/qr/{}", inv.id);
+
+    let req = test::TestRequest::get().uri(&url).to_request();
+
+    let res = test::call_service(&app, req).await;
+    assert_eq!(res.status(), 200);
+}
+
+#[actix_rt::test]
 async fn it_should_create_rewards() {
     let db_pool = setup().await;
 
@@ -596,6 +627,10 @@ async fn reset_db(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("Error deleting info");
+    sqlx::query("DELETE FROM invoices")
+        .execute(pool)
+        .await
+        .expect("Error deleting invoices");
     sqlx::query("INSERT INTO info (block_height) VALUES (99)")
         .execute(pool)
         .await
@@ -607,9 +642,20 @@ async fn reset_db(pool: &PgPool) {
         password_confirm: "abc12345".into(),
     };
 
-    User::create(user, pool)
+    let user = User::create(user, pool)
         .await
         .expect("Could not create test user in db.");
+
+    sqlx::query("UPDATE users set pay_address = '123456' where email = 'test@here.com'")
+        .execute(pool)
+        .await
+        .expect("could not set user's pay address for user test user in sql");
+
+    sqlx::query("INSERT INTO invoices (user_id, earnings, fee_bps, validators_count, amount, starts_at, ends_at, is_paid) values ($1, 99, 200, 1, 10, now(), now(), false)")
+        .bind(user.id)
+        .execute(pool)
+            .await
+            .expect("could insert test invoice into db");
 
     let user = UserRequest {
         email: "admin@here.com".into(),

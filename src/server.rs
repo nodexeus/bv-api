@@ -4,7 +4,7 @@ use crate::{auth, errors};
 use actix_cors::Cors;
 use actix_web::{
     delete, dev, get,
-    http::header::{CacheControl, ContentType, CacheDirective},
+    http::header::{CacheControl, CacheDirective, ContentType},
     middleware, post, put, web,
     web::Bytes,
     App, FromRequest, HttpRequest, HttpResponse, HttpServer,
@@ -108,6 +108,7 @@ pub async fn start() -> anyhow::Result<()> {
             .wrap(cors)
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
+            .service(get_qr)
             .service(users_summary)
             .service(users_staking_export)
             .service(create_command)
@@ -148,7 +149,6 @@ pub async fn start() -> anyhow::Result<()> {
             .service(create_rewards)
             .service(list_invoices)
             .service(list_payments_due)
-            .service(get_qr)
     })
     .bind(&addr)?
     .run()
@@ -606,10 +606,10 @@ async fn delete_command(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
     Ok(HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", result)))
 }
 
-#[get("/qr/{address}")]
-async fn get_qr(address: web::Path<String>) -> ApiResponse {
-    let png: Vec<u8> =
-        qrcode_generator::to_png_to_vec(address.into_inner(), QrCodeEcc::Low, 1024).unwrap();
+#[get("/qr/{inv_id}")]
+async fn get_qr(db_pool: DbPool, inv_id: web::Path<i32>) -> ApiResponse {
+    let qr_data = Invoice::get_qr_by_id(db_pool.as_ref(), inv_id.into_inner()).await?;
+    let png: Vec<u8> = qrcode_generator::to_png_to_vec(qr_data, QrCodeEcc::Low, 1024).unwrap();
 
     Ok(HttpResponse::Ok()
         .insert_header(ContentType::png())

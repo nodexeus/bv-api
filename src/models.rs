@@ -1265,6 +1265,34 @@ impl Invoice {
         .await
         .map_err(ApiError::from)
     }
+
+    /// QR Code data for specific invoice
+    pub async fn get_qr_by_id(pool: &PgPool, invoice_id: i32) -> Result<String> {
+        let invoice = sqlx::query_as::<_, Invoice>(
+            r##"SELECT
+                        invoices.*,
+                        users.pay_address
+                    FROM
+                        invoices
+                    INNER JOIN
+                        users on users.id = invoices.user_id
+                    WHERE
+                        invoices.id = $1
+                    ORDER BY 
+                        ends_at DESC
+                    "##,
+        )
+        .bind(invoice_id)
+        .fetch_one(pool)
+        .await?;
+
+        let amount = invoice.amount as f64 / 1000000000000.00;
+
+        Ok(format!(
+            r#"{{"type":"payment","address":"{}","amount":{:.8}}}"#,
+            invoice.pay_address, amount,
+        ))
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct PaymentDue {
