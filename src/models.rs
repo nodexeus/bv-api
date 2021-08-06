@@ -266,6 +266,15 @@ impl User {
             .map_err(ApiError::from)
     }
 
+    pub async fn find_all_pay_address(pool: &PgPool) -> Result<Vec<UserPayAddress>> {
+        sqlx::query_as::<_, UserPayAddress>(
+            "SELECT id, pay_address FROM users where pay_address is not NULL",
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::from)
+    }
+
     /// Gets a summary list of all users
     pub async fn find_all_summary(pool: &PgPool) -> Result<Vec<UserSummary>> {
         sqlx::query_as::<_, UserSummary>(
@@ -395,6 +404,12 @@ impl UserLoginRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserRefreshRequest {
     pub refresh: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct UserPayAddress {
+    pub id: Uuid,
+    pub pay_address: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

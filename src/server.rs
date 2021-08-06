@@ -150,6 +150,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(create_payments)
             .service(list_invoices)
             .service(list_payments_due)
+            .service(list_pay_addresses)
     })
     .bind(&addr)?
     .run()
@@ -416,6 +417,14 @@ async fn list_payments_due(db_pool: DbPool, auth: Authentication) -> ApiResponse
 
     let payments_due = Invoice::find_all_payments_due(db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(payments_due))
+}
+
+#[get("/pay_addresses")]
+async fn list_pay_addresses(db_pool: DbPool, auth: Authentication) -> ApiResponse {
+    let _ = auth.try_service()?;
+
+    let addresses = User::find_all_pay_address(db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(addresses))
 }
 
 #[post("/users/{id}/validators")]
