@@ -555,6 +555,49 @@ async fn it_should_create_rewards() {
 }
 
 #[actix_rt::test]
+async fn it_should_create_payments() {
+    let db_pool = setup().await;
+
+    let app = test::init_service(
+        App::new()
+            .data(db_pool.clone())
+            .wrap(middleware::Logger::default())
+            .service(create_payments),
+    )
+    .await;
+
+    let login_req = UserLoginRequest {
+        email: "test@here.com".into(),
+        password: "abc12345".into(),
+    };
+
+    let user = User::login(login_req, &db_pool)
+        .await
+        .expect("could not login test user");
+
+    let mut payments: Vec<Payment> = Vec::new();
+    payments.push(Payment {
+        block: 1,
+        hash: "1".into(),
+        user_id: user.id,
+        payer: "123".into(),
+        payee: "124".into(),
+        amount: 5000,
+        oracle_price: 1000,
+        created_at: None,
+    });
+
+    let req = test::TestRequest::post()
+        .uri("/payments")
+        .append_header(auth_header_for_service())
+        .set_json(&payments)
+        .to_request();
+
+    let res = test::call_service(&app, req).await;
+    assert_eq!(res.status(), 200);
+}
+
+#[actix_rt::test]
 async fn it_should_list_invoices() {
     let db_pool = setup().await;
 
@@ -590,6 +633,9 @@ async fn setup() -> PgPool {
     dotenv::dotenv().ok();
 
     let db_url = std::env::var("DATABASE_URL").expect("Missing DATABASE_URL");
+    if db_url.contains("digitalocean") {
+        panic!("Attempting to use production db?");
+    }
     let db_max_conn = std::env::var("DB_MAX_CONN")
         .unwrap_or("10".to_string())
         .parse()
@@ -607,6 +653,10 @@ async fn setup() -> PgPool {
 }
 
 async fn reset_db(pool: &PgPool) {
+    sqlx::query("DELETE FROM payments")
+        .execute(pool)
+        .await
+        .expect("Error deleting payments");
     sqlx::query("DELETE FROM rewards")
         .execute(pool)
         .await

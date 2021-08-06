@@ -147,6 +147,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(get_host_by_token)
             .service(get_validator)
             .service(create_rewards)
+            .service(create_payments)
             .service(list_invoices)
             .service(list_payments_due)
     })
@@ -557,6 +558,17 @@ async fn create_rewards(
 ) -> ApiResponse {
     let _ = auth.try_service()?;
     Reward::create(db_pool.as_ref(), &rewards.into_inner()).await?;
+    Ok(HttpResponse::Ok().json("no content"))
+}
+
+#[post("/payments")]
+async fn create_payments(
+    db_pool: DbPool,
+    rewards: web::Json<Vec<Payment>>,
+    auth: Authentication,
+) -> ApiResponse {
+    let _ = auth.try_service()?;
+    Payment::create(db_pool.as_ref(), &rewards.into_inner()).await?;
     Ok(HttpResponse::Ok().json("no content"))
 }
 

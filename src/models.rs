@@ -1300,3 +1300,49 @@ pub struct PaymentDue {
     pub amount: i64,
     pub due_date: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Payment {
+    pub hash: String,
+    pub user_id: Uuid,
+    pub block: i64,
+    pub payer: String,
+    pub payee: String,
+    pub amount: i64,
+    pub oracle_price: i64,
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+impl Payment {
+    pub async fn create(pool: &PgPool, payments: &Vec<Payment>) -> Result<()> {
+        for payment in payments {
+            let res = sqlx::query(
+                r##"
+                INSERT INTO payments (
+                    hash,
+                    user_id,
+                    block, 
+                    payer,
+                    payee,
+                    amount,
+                    oracle_price
+                ) values ($1,$2,$3,$4,$5,$6,$7)"##,
+            )
+            .bind(&payment.block)
+            .bind(&payment.user_id)
+            .bind(&payment.hash)
+            .bind(&payment.payer)
+            .bind(&payment.payee)
+            .bind(&payment.amount)
+            .bind(&payment.oracle_price)
+            .execute(pool)
+            .await;
+
+            if let Err(e) = res {
+                debug!("Creating payments (duplicate violations expected): {}", e);
+            }
+        }
+
+        Ok(())
+    }
+}
