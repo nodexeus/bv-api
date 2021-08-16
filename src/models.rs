@@ -334,7 +334,7 @@ impl User {
             .hash
         {
             return sqlx::query_as::<_, Self>(
-                "INSERT INTO users (email, hashword, salt) values (LOWER($1),$2,$3) RETURNING *",
+                "INSERT INTO users (email, hashword, salt, staking_quota) values (LOWER($1),$2,$3,0) RETURNING *",
             )
             .bind(user.email)
             .bind(hashword.to_string())
