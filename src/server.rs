@@ -224,7 +224,9 @@ async fn list_hosts(
     params: web::Query<QueryParams>,
     auth: Authentication,
 ) -> ApiResponse {
-    let _ = auth.try_admin()?;
+    if !auth.is_admin() && !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
 
     if let Some(token) = params.token.clone() {
         let host = Host::find_by_token(&token, db_pool.get_ref()).await?;
@@ -281,7 +283,9 @@ async fn update_host(
     host: web::Json<HostRequest>,
     auth: Authentication,
 ) -> ApiResponse {
-    let _ = auth.try_admin()?;
+    if !auth.is_admin() && !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
 
     let host = Host::update(id.into_inner(), host.into_inner(), db_pool.get_ref()).await?;
     Ok(HttpResponse::Ok().json(host))
