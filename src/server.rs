@@ -224,7 +224,7 @@ async fn list_hosts(
     params: web::Query<QueryParams>,
     auth: Authentication,
 ) -> ApiResponse {
-    if !auth.is_admin() && !auth.is_host() {
+    if !auth.is_admin() && !auth.is_service() {
         return Err(ApiError::InsufficientPermissionsError);
     }
 
