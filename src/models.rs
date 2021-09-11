@@ -394,10 +394,13 @@ impl User {
     pub async fn get_qr_by_id(pool: &PgPool, user_id: Uuid) -> Result<String> {
         let user_summary = Self::find_summary_by_user(pool, user_id).await?;
 
-        let bal = user_summary.balance();
+        let mut bal = user_summary.balance();
+        if bal < 0 {
+            bal = 0;
+        }
 
-        if user_summary.pay_address.is_some() && bal > 0 {
-            let hnt = bal as f64 / 1000000000.00;
+        if user_summary.pay_address.is_some() {
+            let hnt = bal as f64 / 100000000.00;
             return Ok(format!(
                 r#"{{"type":"payment","address":"{}","amount":{:.8}}}"#,
                 user_summary.pay_address.as_ref().unwrap(),
