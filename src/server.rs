@@ -3,11 +3,8 @@ use crate::models::*;
 use crate::{auth, errors};
 use actix_cors::Cors;
 use actix_web::{
-    delete, dev, get,
-    http::header::{CacheControl, CacheDirective, ContentType},
-    middleware, post, put, web,
-    web::Bytes,
-    App, FromRequest, HttpRequest, HttpResponse, HttpServer,
+    delete, dev, get, http::header::ContentType, middleware, post, put, web, web::Bytes, App,
+    FromRequest, HttpRequest, HttpResponse, HttpServer,
 };
 use anyhow::anyhow;
 use futures_util::future::{err, ok, Ready};
@@ -111,6 +108,7 @@ pub async fn start() -> anyhow::Result<()> {
             .service(get_qr)
             .service(users_summary)
             .service(user_summary)
+            .service(user_payments)
             .service(users_staking_export)
             .service(create_command)
             .service(get_reward_summary)
@@ -229,6 +227,19 @@ async fn user_summary(
     let _ = auth.try_user_access(user_id.clone())?;
     let summary = User::find_summary_by_user(db_pool.as_ref(), user_id.clone()).await?;
     Ok(HttpResponse::Ok().json(summary))
+}
+
+#[get("/users/{user_id}/payments")]
+async fn user_payments(
+    db_pool: DbPool,
+    user_id: web::Path<Uuid>,
+    auth: Authentication,
+) -> ApiResponse {
+    let user_id = user_id.into_inner();
+
+    let _ = auth.try_user_access(user_id.clone())?;
+    let payments = Payment::find_all_by_user(db_pool.as_ref(), user_id.clone()).await?;
+    Ok(HttpResponse::Ok().json(payments))
 }
 
 // Can pass ?token= to get a host by token
@@ -645,16 +656,12 @@ async fn delete_command(db_pool: DbPool, id: web::Path<Uuid>) -> ApiResponse {
     Ok(HttpResponse::Ok().json(format!("Successfully deleted {} record(s).", result)))
 }
 
-#[get("/qr/{inv_id}")]
-async fn get_qr(db_pool: DbPool, inv_id: web::Path<i32>) -> ApiResponse {
-    let qr_data = Invoice::get_qr_by_id(db_pool.as_ref(), inv_id.into_inner()).await?;
+#[get("/qr/{user_id}")]
+async fn get_qr(db_pool: DbPool, user_id: web::Path<Uuid>) -> ApiResponse {
+    let qr_data = User::get_qr_by_id(db_pool.as_ref(), user_id.into_inner()).await?;
     let png: Vec<u8> = qrcode_generator::to_png_to_vec(qr_data, QrCodeEcc::Low, 1024).unwrap();
 
     Ok(HttpResponse::Ok()
         .insert_header(ContentType::png())
-        .insert_header(CacheControl(vec![
-            CacheDirective::Public,
-            CacheDirective::MaxAge(86400u32),
-        ]))
         .body(Bytes::from(png)))
 }

@@ -389,6 +389,24 @@ impl User {
         let mut user = Self::find_by_refresh(&req.refresh, pool).await?;
         Ok(user.set_jwt()?)
     }
+
+    /// QR Code data for specific invoice
+    pub async fn get_qr_by_id(pool: &PgPool, user_id: Uuid) -> Result<String> {
+        let user_summary = Self::find_summary_by_user(pool, user_id).await?;
+
+        let bal = user_summary.balance();
+
+        if user_summary.pay_address.is_some() && bal > 0 {
+            let hnt = bal as f64 / 100000000.00;
+            return Ok(format!(
+                r#"{{"type":"payment","address":"{}","amount":{:.8}}}"#,
+                user_summary.pay_address.as_ref().unwrap(),
+                hnt
+            ));
+        }
+
+        Err(ApiError::UnexpectedError(anyhow!("No Balance")))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -403,6 +421,12 @@ pub struct UserSummary {
     pub invoices_total: i64,
     pub payments_total: i64,
     pub joined_at: DateTime<Utc>,
+}
+
+impl UserSummary {
+    pub fn balance(&self) -> i64 {
+        (self.invoices_total - (self.payments_total * 1000)) / 1000
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -1308,34 +1332,6 @@ impl Invoice {
         .fetch_all(pool)
         .await
         .map_err(ApiError::from)
-    }
-
-    /// QR Code data for specific invoice
-    pub async fn get_qr_by_id(pool: &PgPool, invoice_id: i32) -> Result<String> {
-        let invoice = sqlx::query_as::<_, Invoice>(
-            r##"SELECT
-                        invoices.*,
-                        users.pay_address
-                    FROM
-                        invoices
-                    INNER JOIN
-                        users on users.id = invoices.user_id
-                    WHERE
-                        invoices.id = $1
-                    ORDER BY 
-                        ends_at DESC
-                    "##,
-        )
-        .bind(invoice_id)
-        .fetch_one(pool)
-        .await?;
-
-        let amount = invoice.amount as f64 / 1000000000000.00;
-
-        Ok(format!(
-            r#"{{"type":"payment","address":"{}","amount":{:.8}}}"#,
-            invoice.pay_address, amount,
-        ))
     }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

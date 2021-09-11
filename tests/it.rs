@@ -457,14 +457,20 @@ async fn it_should_get_qr_code() {
         .await
         .expect("Could not fetch test user.");
 
-    let inv = Invoice::find_all_by_user(&db_pool, &u.id)
+    let us = User::find_summary_by_user(&db_pool, u.id)
+        .await
+        .expect("fetch user summary");
+
+    assert_eq!(us.balance(), 1000000000);
+
+    let _inv = Invoice::find_all_by_user(&db_pool, &u.id)
         .await
         .expect("it to get bill")
         .first()
         .expect("should have at least 1 bill")
         .clone();
 
-    let url = format!("/qr/{}", inv.id);
+    let url = format!("/qr/{}", u.id);
 
     let req = test::TestRequest::get().uri(&url).to_request();
 
@@ -703,7 +709,7 @@ async fn reset_db(pool: &PgPool) {
     .await
     .expect("could not set user's pay address for user test user in sql");
 
-    sqlx::query("INSERT INTO invoices (user_id, earnings, fee_bps, validators_count, amount, starts_at, ends_at, is_paid) values ($1, 99, 200, 1, 10, now(), now(), false)")
+    sqlx::query("INSERT INTO invoices (user_id, earnings, fee_bps, validators_count, amount, starts_at, ends_at, is_paid) values ($1, 99, 200, 1, 1000000000000, now(), now(), false)")
         .bind(user.id)
         .execute(pool)
             .await
