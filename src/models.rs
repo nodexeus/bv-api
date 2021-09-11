@@ -286,6 +286,8 @@ impl User {
                     fee_bps,
                     (SELECT count(*) from validators where validators.user_id=users.id)::BIGINT as validator_count,
                     COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0)::BIGINT as rewards_total,
+                    COALESCE((SELECT sum(invoices.amount)/100000000000) FROM invoices where invoices.user_id = users.id), 0)::BIGINT as invoices_total,
+                    COALESCE((SELECT sum(payments.amount)/100000000 FROM payments where payments.user_id = users.id), 0)::BIGINT as payments_total,
                     users.created_at as joined_at
                 FROM
                     users
@@ -373,6 +375,8 @@ pub struct UserSummary {
     pub fee_bps: i64,
     pub validator_count: i64,
     pub rewards_total: i64,
+    pub invoices_total: i64,
+    pub payments_total: i64,
     pub joined_at: DateTime<Utc>,
 }
 
@@ -1359,5 +1363,14 @@ impl Payment {
         }
 
         Ok(())
+    }
+
+    pub async fn find_all_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Payment>> {
+        Ok(sqlx::query_as::<_, Payment>(
+            "SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC",
+        )
+        .bind(user_id)
+        .fetch_all(pool)
+        .await?)
     }
 }
