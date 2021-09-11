@@ -280,6 +280,7 @@ impl User {
             SELECT 
                 users.id, 
                 email,
+                pay_address,
                 staking_quota,
                 fee_bps,
                 (SELECT count(*) from validators where validators.user_id=users.id)::BIGINT as validator_count,
@@ -304,6 +305,7 @@ impl User {
                 SELECT 
                     users.id, 
                     email,
+                    pay_address,
                     staking_quota,
                     fee_bps,
                     (SELECT count(*) from validators where validators.user_id=users.id)::BIGINT as validator_count,
@@ -393,6 +395,7 @@ impl User {
 pub struct UserSummary {
     pub id: Uuid,
     pub email: String,
+    pub pay_address: Option<String>,
     pub staking_quota: i64,
     pub fee_bps: i64,
     pub validator_count: i64,
