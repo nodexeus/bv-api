@@ -110,6 +110,7 @@ pub async fn start() -> anyhow::Result<()> {
             .wrap(middleware::Compress::default())
             .service(get_qr)
             .service(users_summary)
+            .service(user_summary)
             .service(users_staking_export)
             .service(create_command)
             .service(get_reward_summary)
@@ -215,6 +216,19 @@ async fn users_summary(db_pool: DbPool, auth: Authentication) -> ApiResponse {
     let _ = auth.try_admin()?;
     let users = User::find_all_summary(db_pool.as_ref()).await?;
     Ok(HttpResponse::Ok().json(users))
+}
+
+#[get("/users/{user_id}/summary")]
+async fn user_summary(
+    db_pool: DbPool,
+    user_id: web::Path<Uuid>,
+    auth: Authentication,
+) -> ApiResponse {
+    let user_id = user_id.into_inner();
+
+    let _ = auth.try_user_access(user_id.clone())?;
+    let summary = User::find_summary_by_user(db_pool.as_ref(), user_id.clone()).await?;
+    Ok(HttpResponse::Ok().json(summary))
 }
 
 // Can pass ?token= to get a host by token

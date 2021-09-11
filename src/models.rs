@@ -275,6 +275,28 @@ impl User {
         .map_err(ApiError::from)
     }
 
+    pub async fn find_summary_by_user(pool: &PgPool, user_id: Uuid) -> Result<UserSummary> {
+        Ok(sqlx::query_as::<_, UserSummary>(r##"
+            SELECT 
+                users.id, 
+                email,
+                staking_quota,
+                fee_bps,
+                (SELECT count(*) from validators where validators.user_id=users.id)::BIGINT as validator_count,
+                COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0)::BIGINT as rewards_total,
+                COALESCE((SELECT sum(invoices.amount) FROM invoices where invoices.user_id = users.id), 0)::BIGINT as invoices_total,
+                COALESCE((SELECT sum(payments.amount) FROM payments where payments.user_id = users.id), 0)::BIGINT as payments_total,
+                users.created_at as joined_at
+            FROM
+                users
+            WHERE
+                users.id = $1
+        "##)
+        .bind(user_id)
+        .fetch_one(pool)
+        .await?)
+    }
+
     /// Gets a summary list of all users
     pub async fn find_all_summary(pool: &PgPool) -> Result<Vec<UserSummary>> {
         sqlx::query_as::<_, UserSummary>(
