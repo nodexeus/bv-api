@@ -425,7 +425,7 @@ pub struct UserSummary {
 
 impl UserSummary {
     pub fn balance(&self) -> i64 {
-        (self.invoices_total - (self.payments_total * 1000)) / 1000
+        self.invoices_total - self.payments_total
     }
 }
 

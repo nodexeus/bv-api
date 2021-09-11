@@ -461,7 +461,7 @@ async fn it_should_get_qr_code() {
         .await
         .expect("fetch user summary");
 
-    assert_eq!(us.balance(), 10000000000);
+    assert_eq!(us.balance(), 1000000000);
 
     let _inv = Invoice::find_all_by_user(&db_pool, &u.id)
         .await
@@ -709,7 +709,7 @@ async fn reset_db(pool: &PgPool) {
     .await
     .expect("could not set user's pay address for user test user in sql");
 
-    sqlx::query("INSERT INTO invoices (user_id, earnings, fee_bps, validators_count, amount, starts_at, ends_at, is_paid) values ($1, 99, 200, 1, 10000000000000, now(), now(), false)")
+    sqlx::query("INSERT INTO invoices (user_id, earnings, fee_bps, validators_count, amount, starts_at, ends_at, is_paid) values ($1, 99, 200, 1, 1000000000, now(), now(), false)")
         .bind(user.id)
         .execute(pool)
             .await
