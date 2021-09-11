@@ -286,7 +286,7 @@ impl User {
                     fee_bps,
                     (SELECT count(*) from validators where validators.user_id=users.id)::BIGINT as validator_count,
                     COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0)::BIGINT as rewards_total,
-                    COALESCE((SELECT sum(invoices.amount)/100000000000) FROM invoices where invoices.user_id = users.id), 0)::BIGINT as invoices_total,
+                    COALESCE((SELECT sum(invoices.amount)/100000000000 FROM invoices where invoices.user_id = users.id), 0)::BIGINT as invoices_total,
                     COALESCE((SELECT sum(payments.amount)/100000000 FROM payments where payments.user_id = users.id), 0)::BIGINT as payments_total,
                     users.created_at as joined_at
                 FROM
