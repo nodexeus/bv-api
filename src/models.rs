@@ -397,7 +397,7 @@ impl User {
         let bal = user_summary.balance();
 
         if user_summary.pay_address.is_some() && bal > 0 {
-            let hnt = bal as f64 / 100000000.00;
+            let hnt = bal as f64 / 1000000000.00;
             return Ok(format!(
                 r#"{{"type":"payment","address":"{}","amount":{:.8}}}"#,
                 user_summary.pay_address.as_ref().unwrap(),
