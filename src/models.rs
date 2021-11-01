@@ -18,6 +18,9 @@ use std::str::FromStr;
 use uuid::Uuid;
 use validator::Validate;
 
+const STAKE_QUOTA_DEFAULT: i64 = 5;
+const FEE_BPS_DEFAULT: i64 = 300;
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_conn_status", rename_all = "snake_case")]
@@ -360,11 +363,13 @@ impl User {
             .hash
         {
             return sqlx::query_as::<_, Self>(
-                "INSERT INTO users (email, hashword, salt, staking_quota) values (LOWER($1),$2,$3,0) RETURNING *",
+                "INSERT INTO users (email, hashword, salt, staking_quota, fee_bps) values (LOWER($1),$2,$3,$4,$5) RETURNING *",
             )
             .bind(user.email)
             .bind(hashword.to_string())
             .bind(salt.as_str())
+            .bind(STAKE_QUOTA_DEFAULT)
+            .bind(FEE_BPS_DEFAULT)
             .fetch_one(pool)
             .await
             .map_err(ApiError::from)?
