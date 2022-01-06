@@ -166,6 +166,12 @@ pub async fn start() -> anyhow::Result<()> {
     .await?)
 }
 
+#[post("/reset_pwd")]
+async fn reset_pwd(db_pool: DbPool, email: web::Json<PasswordResetRequest>) -> ApiResponse {
+    let _ = User::reset_password(db_pool.get_ref(), email.into_inner()).await;
+    Ok(HttpResponse::Ok().json("An email with reset instructions has been sent.".to_string()))
+}
+
 #[post("/login")]
 async fn login(db_pool: DbPool, login: web::Json<UserLoginRequest>) -> ApiResponse {
     let user = User::login(login.into_inner(), db_pool.get_ref()).await?;
