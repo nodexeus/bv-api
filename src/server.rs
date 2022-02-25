@@ -166,10 +166,16 @@ pub async fn start() -> anyhow::Result<()> {
     .await?)
 }
 
-#[post("/reset_pwd")]
-async fn reset_pwd(db_pool: DbPool, email: web::Json<PasswordResetRequest>) -> ApiResponse {
-    let _ = User::reset_password(db_pool.get_ref(), email.into_inner()).await;
+#[post("/reset")]
+async fn reset_pwd(db_pool: DbPool, req: web::Json<PasswordResetRequest>) -> ApiResponse {
+    let _ = User::reset_password(db_pool.get_ref(), req.into_inner()).await;
     Ok(HttpResponse::Ok().json("An email with reset instructions has been sent.".to_string()))
+}
+
+#[put("/users/{user_id}/pwd")]
+async fn change_pwd(_db_pool: DbPool, info: web::Query<PwdResetInfo>) -> ApiResponse {
+    let _email = &info.email;
+    Ok(HttpResponse::Ok().json("hello"))
 }
 
 #[post("/login")]

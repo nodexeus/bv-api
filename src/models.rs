@@ -202,6 +202,10 @@ impl Authentication {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PwdResetInfo {
+    pub email: String,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: Uuid,
