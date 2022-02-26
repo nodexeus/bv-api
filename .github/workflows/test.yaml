@@ -63,7 +63,6 @@ jobs:
         with:
           command: sqlx
           args: migrate run
-      - uses: actions/checkout@v2
       - name: Test
         uses: actions-rs/cargo@v1
         with:
