@@ -380,7 +380,7 @@ impl User {
 
     pub async fn refresh(req: UserRefreshRequest, pool: &PgPool) -> Result<User> {
         let mut user = Self::find_by_refresh(&req.refresh, pool).await?;
-        Ok(user.set_jwt()?)
+        user.set_jwt()
     }
 
     /// QR Code data for specific invoice
