@@ -49,6 +49,12 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:10891/stakejoy
 
     steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
       - name: Install sqlx-cli
         run: >
           cargo install sqlx-cli --features postgres
