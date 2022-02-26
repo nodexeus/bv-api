@@ -49,24 +49,20 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:10891/stakejoy
 
     steps:
+      - name: Install sqlx-cli
+        run: >
+          cargo install sqlx-cli --no-default-features --features postgres
+      - name: Migrate
+        uses: actions-rs/cargo@v1
+        with:
+          command: sqlx
+          args: migrate run
       - uses: actions/checkout@v2
       - name: Test
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: test-threads=1
-      # Could use actions-rs/install here for future automatic caching, but it currently lacks:
-      # * feature selection support: https://github.com/actions-rs/install/issues/1
-      # * `--locked` support: https://github.com/actions-rs/install/issues/13
-      - name: Install sqlx-cli
-        run: >
-          cargo install sqlx-cli --no-default-features --features postgres
-      - name: Check whether SQLx query cache is up to date
-        uses: actions-rs/cargo@v1
-        with:
-          command: sqlx
-          args: prepare --check -- --lib
-
   lints:
     name: Lints
     runs-on: ubuntu-latest
