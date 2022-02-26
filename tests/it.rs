@@ -7,9 +7,6 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
 
 #[actix_rt::test]
-async fn it_should_fail() {
-    assert!(false);
-}
 async fn it_should_create_and_login_user() {
     let db_pool = setup().await;
     let app = test::init_service(
