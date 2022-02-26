@@ -22,7 +22,7 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
       - name: Log in to DigitalOcean Container Registry with short-lived credentials
-        run: doctl registry login --expiry-seconds 600
+        run: doctl registry login --expiry-seconds 1200
 
       - name: Push image to DigitalOcean Container Registry
         run: docker push registry.digitalocean.com/registry.digitalocean.com/stakejoy/stakejoy-api:$(echo $GITHUB_SHA | head -c7)
