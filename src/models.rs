@@ -257,8 +257,8 @@ impl User {
             r##"
             <h1>Password Reset</h1>
             <p>You have requested to reset your StakeJoy password. 
-            Please visit <a href="https://console.stakejoy.com/reset&t={:?}">
-            https://console.stakejoy.com/reset&t={:?}</a>.</p><br /><br /><p>Thank You!</p>"##,
+            Please visit <a href="https://console.stakejoy.com/reset?t={:?}">
+            https://console.stakejoy.com/reset?t={:?}</a>.</p><br /><br /><p>Thank You!</p>"##,
             token, token
         );
 
