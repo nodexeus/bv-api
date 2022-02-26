@@ -3,8 +3,8 @@ use crate::models::*;
 use crate::{auth, errors};
 use actix_cors::Cors;
 use actix_web::{
-    delete, dev, get, http::header::ContentType, middleware, post, put, web, web::Bytes, App,
-    FromRequest, HttpRequest, HttpResponse, HttpServer,
+    delete, dev, get, http::header::ContentType, middleware, post, put, web, web::Bytes, web::Data,
+    App, FromRequest, HttpRequest, HttpResponse, HttpServer,
 };
 use anyhow::anyhow;
 use futures_util::future::{err, ok, Ready};
@@ -30,7 +30,6 @@ struct QueryParams {
 impl FromRequest for Authentication {
     type Error = errors::ApiError;
     type Future = Ready<Result<Self, Self::Error>>;
-    type Config = ();
 
     fn from_request(req: &HttpRequest, _payload: &mut dev::Payload) -> Self::Future {
         if let Some(token) = req
@@ -112,10 +111,12 @@ pub async fn start() -> anyhow::Result<()> {
             .supports_credentials();
 
         App::new()
-            .data(db_pool.clone())
+            .app_data(Data::new(db_pool.clone()))
             .wrap(cors)
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
+            .service(reset_pwd)
+            .service(change_pwd)
             .service(get_qr)
             .service(users_summary)
             .service(user_summary)
@@ -165,6 +166,18 @@ pub async fn start() -> anyhow::Result<()> {
     .bind(&addr)?
     .run()
     .await?)
+}
+
+#[post("/reset")]
+async fn reset_pwd(db_pool: DbPool, req: web::Json<PasswordResetRequest>) -> ApiResponse {
+    let _ = User::reset_password(db_pool.get_ref(), req.into_inner()).await;
+    Ok(HttpResponse::Ok().json("An email with reset instructions has been sent.".to_string()))
+}
+
+#[put("/users/{user_id}/pwd")]
+async fn change_pwd(_db_pool: DbPool, info: web::Query<PwdResetInfo>) -> ApiResponse {
+    let _email = &info.email;
+    Ok(HttpResponse::Ok().json("hello"))
 }
 
 #[post("/login")]

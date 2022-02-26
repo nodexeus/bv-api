@@ -9,6 +9,7 @@ use argon2::{
 use chrono::{DateTime, Utc};
 use log::{debug, error};
 use rand_core::OsRng;
+use sendgrid::v3::*;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgRow, PgConnection};
 use sqlx::{FromRow, PgPool, Row};
@@ -189,6 +190,10 @@ impl Authentication {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PwdResetInfo {
+    pub email: String,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: Uuid,
@@ -231,6 +236,37 @@ impl User {
 
         self.token = Some(auth::create_jwt(&auth_data)?);
         Ok(self.to_owned())
+    }
+
+    pub async fn reset_password(pool: &PgPool, req: PasswordResetRequest) -> Result<()> {
+        let user = User::find_by_email(&req.email, pool).await?;
+
+        let auth_data = auth::AuthData {
+            user_id: user.id,
+            user_role: user.role.to_string(),
+        };
+
+        let token = auth::create_jwt(&auth_data)?;
+
+        let p = Personalization::new(Email::new(&user.email));
+
+        let subject = "StakeJoy Reset Password".to_string();
+        let body = format!("<h1>Password Reset</h1>\n<p>You have requested to reset your StakeJoy password. Please visit <a href=\"https://console.stakejoy.com/update_pwd&t={:?}\">Reset Your Password</a>.</p><br /><br /><p>Thank You!</p>", token);
+
+        let sender = Sender::new(dotenv::var("SENDGRID_API_KEY").map_err(|_| {
+            ApiError::UnexpectedError(anyhow!("Could not find SENDGRID_API_KEY in env."))
+        })?);
+        let m = Message::new(Email::new("StakeJoy <hello@stakejoy.com>"))
+            .set_subject(&subject)
+            .add_content(Content::new().set_content_type("text/html").set_value(body))
+            .add_personalization(p);
+
+        sender
+            .send(&m)
+            .await
+            .map_err(|_| ApiError::UnexpectedError(anyhow!("Could not send email")))?;
+
+        Ok(())
     }
 
     pub async fn can_stake(&self, pool: &PgPool, count: i64) -> Result<bool> {
@@ -432,6 +468,12 @@ pub struct UserRequest {
     #[validate(length(min = 8), must_match = "password_confirm")]
     pub password: String,
     pub password_confirm: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct PasswordResetRequest {
+    #[validate(email)]
+    pub email: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
