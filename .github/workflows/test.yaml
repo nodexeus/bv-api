@@ -66,8 +66,8 @@ jobs:
       - name: Test
         uses: actions-rs/cargo@v1
         with:
-          command: cargo
-          args: test -- test-threads=1
+          command: test
+          args: -- test-threads=1
   lints:
     name: Lints
     runs-on: ubuntu-latest
