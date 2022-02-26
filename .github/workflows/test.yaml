@@ -54,6 +54,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+          args: test-threads=1
       # Could use actions-rs/install here for future automatic caching, but it currently lacks:
       # * feature selection support: https://github.com/actions-rs/install/issues/1
       # * `--locked` support: https://github.com/actions-rs/install/issues/13
