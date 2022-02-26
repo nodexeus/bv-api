@@ -236,7 +236,7 @@ async fn user_summary(
     let user_id = user_id.into_inner();
 
     let _ = auth.try_user_access(user_id)?;
-    let summary = User::find_summary_by_user(db_pool.as_ref(), user_id.clone()).await?;
+    let summary = User::find_summary_by_user(db_pool.as_ref(), user_id).await?;
     Ok(HttpResponse::Ok().json(summary))
 }
 
@@ -249,7 +249,7 @@ async fn user_payments(
     let user_id = user_id.into_inner();
 
     let _ = auth.try_user_access(user_id)?;
-    let payments = Payment::find_all_by_user(db_pool.as_ref(), user_id.clone()).await?;
+    let payments = Payment::find_all_by_user(db_pool.as_ref(), user_id).await?;
     Ok(HttpResponse::Ok().json(payments))
 }
 
