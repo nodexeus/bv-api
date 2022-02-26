@@ -3,8 +3,8 @@ use crate::models::*;
 use crate::{auth, errors};
 use actix_cors::Cors;
 use actix_web::{
-    delete, dev, get, http::header::ContentType, middleware, post, put, web, web::Bytes, App,
-    FromRequest, HttpRequest, HttpResponse, HttpServer,
+    delete, dev, get, http::header::ContentType, middleware, post, put, web, web::Bytes, web::Data,
+    App, FromRequest, HttpRequest, HttpResponse, HttpServer,
 };
 use anyhow::anyhow;
 use futures_util::future::{err, ok, Ready};
@@ -30,7 +30,6 @@ struct QueryParams {
 impl FromRequest for Authentication {
     type Error = errors::ApiError;
     type Future = Ready<Result<Self, Self::Error>>;
-    type Config = ();
 
     fn from_request(req: &HttpRequest, _payload: &mut dev::Payload) -> Self::Future {
         if let Some(token) = req
@@ -112,7 +111,7 @@ pub async fn start() -> anyhow::Result<()> {
             .supports_credentials();
 
         App::new()
-            .data(db_pool.clone())
+            .app_data(Data::new(db_pool.clone()))
             .wrap(cors)
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())

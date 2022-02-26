@@ -12,8 +12,8 @@ lto = true
 opt-level = 'z'
 
 [dependencies]
-actix-cors = {git = "https://github.com/stakejoy/actix-extras", rev = "1023b996"}
-actix-web = {version = "=4.0.0-beta.5", features = ["rustls"]}
+actix-cors = "0.6"
+actix-web = {version = "4", features = ["rustls"]}
 angry-purple-tiger = "0.1.0"
 anyhow = "1.0.40"
 argon2 = "0.2.0"
@@ -30,7 +30,7 @@ rand_core = {version = "0.6", features = ["std"]}
 sendgrid = {version = "0.17.4", default-features = false, features = ["rustls", "async"]}
 serde = {version = "1.0.125", features = ["derive"]}
 serde_json = "1.0.64"
-sqlx = {version = "0.5.2", features = ["postgres", "runtime-tokio-rustls", "migrate", "chrono", "uuid"]}
+sqlx = {version = "0.5", features = ["postgres", "runtime-tokio-rustls", "migrate", "chrono", "uuid"]}
 thiserror = "1.0.24"
 tokio = {version = "1.2.0", default-features = false, features = ["io-util", "sync"]}
 tracing = "0.1.26"
