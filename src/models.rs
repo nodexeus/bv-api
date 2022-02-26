@@ -250,8 +250,15 @@ impl User {
 
         let p = Personalization::new(Email::new(&user.email));
 
-        let subject = "StakeJoy Reset Password".to_string();
-        let body = format!("<h1>Password Reset</h1>\n<p>You have requested to reset your StakeJoy password. Please visit <a href=\"https://console.stakejoy.com/update_pwd&t={:?}\">Reset Your Password</a>.</p><br /><br /><p>Thank You!</p>", token);
+        let subject = "Reset Password".to_string();
+        let body = format!(
+            r##"
+            <h1>Password Reset</h1>
+            <p>You have requested to reset your StakeJoy password. 
+            Please visit <a href="https://console.stakejoy.com/reset&t={:?}">
+            https://console.stakejoy.com/reset&t={:?}</a>.</p><br /><br /><p>Thank You!</p>"##,
+            token, token
+        );
 
         let sender = Sender::new(dotenv::var("SENDGRID_API_KEY").map_err(|_| {
             ApiError::UnexpectedError(anyhow!("Could not find SENDGRID_API_KEY in env."))
