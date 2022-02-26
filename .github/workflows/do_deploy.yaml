@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
-      - uses: actions/checkout@v2
+        uses: actions/checkout@v2
 
       - name: Build container image
         run: docker build -t registry.digitalocean.com/registry.digitalocean.com/stakejoy/stakejoy-api:$(echo $GITHUB_SHA | head -c7) .
