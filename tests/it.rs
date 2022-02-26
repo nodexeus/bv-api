@@ -9,7 +9,7 @@ use uuid::Uuid;
 #[actix_rt::test]
 async fn it_should_create_and_login_user() {
     let db_pool = setup().await;
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -35,7 +35,7 @@ async fn it_should_create_and_login_user() {
         pub refresh: Option<String>,
     }
 
-    let resp: UserTest = test::read_response_json(&mut app, req).await;
+    let resp: UserTest = test::read_response_json(&app, req).await;
     assert_eq!(resp.email, "chris@here.com");
 
     let req = test::TestRequest::post()
@@ -46,7 +46,7 @@ async fn it_should_create_and_login_user() {
         })
         .to_request();
 
-    let resp: UserTest = test::read_response_json(&mut app, req).await;
+    let resp: UserTest = test::read_response_json(&app, req).await;
     assert_eq!(resp.email, "chris@here.com");
     assert!(resp.token.is_some());
 }
@@ -55,7 +55,7 @@ async fn it_should_create_and_login_user() {
 async fn it_should_add_host() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -81,7 +81,7 @@ async fn it_should_add_host() {
         })
         .to_request();
 
-    let resp: Host = test::read_response_json(&mut app, req).await;
+    let resp: Host = test::read_response_json(&app, req).await;
 
     assert_eq!(resp.name, "Test user 1");
     assert!(resp.validators.is_some());
@@ -96,7 +96,7 @@ async fn it_should_add_host() {
 async fn it_should_get_host() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -113,7 +113,7 @@ async fn it_should_get_host() {
         .append_header(auth_header_for_user(&admin_user))
         .to_request();
 
-    let resp: Host = test::read_response_json(&mut app, req).await;
+    let resp: Host = test::read_response_json(&app, req).await;
 
     assert_eq!(resp.name, "Test user");
 }
@@ -122,7 +122,7 @@ async fn it_should_get_host() {
 async fn it_should_get_host_by_token() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -142,7 +142,7 @@ async fn it_should_get_host_by_token() {
         .append_header(auth_header_for_user(&admin_user))
         .to_request();
 
-    let resp: Host = test::read_response_json(&mut app, req).await;
+    let resp: Host = test::read_response_json(&app, req).await;
 
     assert_eq!(resp.name, "Test user");
 }
@@ -151,7 +151,7 @@ async fn it_should_get_host_by_token() {
 async fn it_should_update_validator_status() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -176,7 +176,7 @@ async fn it_should_update_validator_status() {
         })
         .to_request();
 
-    let resp: Validator = test::read_response_json(&mut app, req).await;
+    let resp: Validator = test::read_response_json(&app, req).await;
 
     assert_eq!(resp.host_id, host.id);
 }
@@ -185,7 +185,7 @@ async fn it_should_update_validator_status() {
 async fn it_should_update_validator_penalty() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -211,7 +211,7 @@ async fn it_should_update_validator_penalty() {
         })
         .to_request();
 
-    let resp: Validator = test::read_response_json(&mut app, req).await;
+    let resp: Validator = test::read_response_json(&app, req).await;
 
     assert_eq!(resp.tenure_penalty, 1.5);
     assert_eq!(resp.dkg_penalty, 2.5);
@@ -223,7 +223,7 @@ async fn it_should_update_validator_penalty() {
 async fn it_should_update_validator_identity() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -247,7 +247,7 @@ async fn it_should_update_validator_identity() {
         })
         .to_request();
 
-    let resp: Validator = test::read_response_json(&mut app, req).await;
+    let resp: Validator = test::read_response_json(&app, req).await;
 
     assert_eq!(resp.id, validator.id);
     assert_eq!(resp.version, Some("48".to_string()));
@@ -257,7 +257,7 @@ async fn it_should_update_validator_identity() {
 async fn it_should_create_command() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -277,7 +277,7 @@ async fn it_should_create_command() {
         })
         .to_request();
 
-    let resp: Command = test::read_response_json(&mut app, req).await;
+    let resp: Command = test::read_response_json(&app, req).await;
 
     assert_eq!(resp.host_id, host.id);
 }
@@ -286,7 +286,7 @@ async fn it_should_create_command() {
 async fn it_should_stake_one_validator() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -313,7 +313,7 @@ async fn it_should_stake_one_validator() {
         .set_json(&stake_req)
         .to_request();
 
-    let validators: Vec<Validator> = test::read_response_json(&mut app, req).await;
+    let validators: Vec<Validator> = test::read_response_json(&app, req).await;
     validators.iter().for_each(|v| {
         assert_eq!(v.stake_status, StakeStatus::Staking);
         assert!(v.staking_height.is_some());
@@ -324,7 +324,7 @@ async fn it_should_stake_one_validator() {
 async fn it_should_migrate_one_validator() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -345,7 +345,7 @@ async fn it_should_migrate_one_validator() {
         .append_header(auth_header_for_user(&admin))
         .to_request();
 
-    let new_validator: Validator = test::read_response_json(&mut app, req).await;
+    let new_validator: Validator = test::read_response_json(&app, req).await;
 
     let new_host = Host::find_by_token("1234", &db_pool)
         .await
@@ -435,7 +435,7 @@ async fn it_should_list_validators_that_need_attention() {
         .append_header(auth_header_for_user(&admin_user))
         .to_request();
 
-    //let resp: Host = test::read_response_json(&mut app, req).await;
+    //let resp: Host = test::read_response_json(&app, req).await;
 
     let res = test::call_service(&app, req).await;
     assert_eq!(res.status(), 200);
@@ -482,7 +482,7 @@ async fn it_should_get_qr_code() {
 async fn it_should_create_rewards() {
     let db_pool = setup().await;
 
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .data(db_pool.clone())
             .wrap(middleware::Logger::default())
@@ -507,37 +507,38 @@ async fn it_should_create_rewards() {
         .expect("could not get first validator")
         .to_owned();
 
-    let mut rewards: Vec<RewardRequest> = Vec::new();
-    rewards.push(RewardRequest {
-        block: 1,
-        hash: "1".into(),
-        txn_time: Utc::now(),
-        validator_id: validator.id,
-        user_id: Some(user.id),
-        account: "1".into(),
-        validator: "1".into(),
-        amount: 5000,
-    });
-    rewards.push(RewardRequest {
-        block: 1,
-        hash: "2".into(),
-        txn_time: Utc::now(),
-        validator_id: validator.id,
-        user_id: Some(user.id),
-        account: "1".into(),
-        validator: "1".into(),
-        amount: 10000,
-    });
-    rewards.push(RewardRequest {
-        block: 1,
-        hash: "1".into(),
-        txn_time: Utc::now(),
-        validator_id: validator.id,
-        user_id: Some(user.id),
-        account: "1".into(),
-        validator: "1".into(),
-        amount: 5000,
-    });
+    let rewards: Vec<RewardRequest> = vec![
+        RewardRequest {
+            block: 1,
+            hash: "1".into(),
+            txn_time: Utc::now(),
+            validator_id: validator.id,
+            user_id: Some(user.id),
+            account: "1".into(),
+            validator: "1".into(),
+            amount: 5000,
+        },
+        RewardRequest {
+            block: 1,
+            hash: "2".into(),
+            txn_time: Utc::now(),
+            validator_id: validator.id,
+            user_id: Some(user.id),
+            account: "1".into(),
+            validator: "1".into(),
+            amount: 10000,
+        },
+        RewardRequest {
+            block: 1,
+            hash: "1".into(),
+            txn_time: Utc::now(),
+            validator_id: validator.id,
+            user_id: Some(user.id),
+            account: "1".into(),
+            validator: "1".into(),
+            amount: 5000,
+        },
+    ];
 
     let req = test::TestRequest::post()
         .uri("/rewards")
@@ -554,7 +555,7 @@ async fn it_should_create_rewards() {
         .append_header(auth_header_for_user(&user))
         .to_request();
 
-    let summary: RewardSummary = test::read_response_json(&mut app, req).await;
+    let summary: RewardSummary = test::read_response_json(&app, req).await;
 
     assert_eq!(summary.total, 15000);
     assert_eq!(summary.last_30, 15000)
