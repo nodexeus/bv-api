@@ -115,6 +115,8 @@ pub async fn start() -> anyhow::Result<()> {
             .wrap(cors)
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
+            .service(reset_pwd)
+            .service(change_pwd)
             .service(get_qr)
             .service(users_summary)
             .service(user_summary)
