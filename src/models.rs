@@ -112,31 +112,19 @@ pub enum Authentication {
 
 impl Authentication {
     pub fn is_user(&self) -> bool {
-        match self {
-            Self::User(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::User(_))
     }
 
     pub fn is_host(&self) -> bool {
-        match self {
-            Self::Host(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Host(_))
     }
 
     pub fn is_admin(&self) -> bool {
-        match self {
-            Self::User(u) if u.role == UserRole::Admin => true,
-            _ => false,
-        }
+        matches!(self, Self::User(u) if u.role == UserRole::Admin)
     }
 
     pub fn is_service(&self) -> bool {
-        match self {
-            Self::Service(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Service(_))
     }
 
     /// Returns an error if not an admin
@@ -523,7 +511,7 @@ impl From<PgRow> for Host {
 impl Host {
     pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
         sqlx::query("SELECT * FROM hosts")
-            .map(|row: PgRow| Self::from(row))
+            .map(Self::from)
             .fetch_all(pool)
             .await
             .map_err(ApiError::from)
@@ -532,7 +520,7 @@ impl Host {
     pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
         let mut host = sqlx::query("SELECT * FROM hosts WHERE id = $1")
             .bind(id)
-            .map(|row: PgRow| Self::from(row))
+            .map(Self::from)
             .fetch_one(pool)
             .await?;
 
@@ -545,7 +533,7 @@ impl Host {
     pub async fn find_by_token(token: &str, pool: &PgPool) -> Result<Self> {
         let mut host = sqlx::query("SELECT * FROM hosts WHERE token = $1")
             .bind(token)
-            .map(|row: PgRow| Self::from(row))
+            .map(Self::from)
             .fetch_one(pool)
             .await?;
 
@@ -632,7 +620,7 @@ impl Host {
                 .bind(host.version)
                 .bind(host.status)
                 .bind(id)
-                .map(|row: PgRow| Self::from(row))
+                .map(Self::from)
                 .fetch_one(&mut tx)
                 .await?;
 
@@ -660,7 +648,7 @@ impl Host {
 
     pub fn validator_ips(&self) -> Vec<String> {
         self.val_ip_addrs
-            .split(",")
+            .split(',')
             .map(|ip| ip.trim().to_string())
             .collect()
     }
@@ -1215,7 +1203,7 @@ impl Reward {
         Ok(row)
     }
 
-    pub async fn create(pool: &PgPool, rewards: &Vec<RewardRequest>) -> Result<()> {
+    pub async fn create(pool: &PgPool, rewards: &[RewardRequest]) -> Result<()> {
         for reward in rewards {
             if reward.amount < 1 {
                 error!("Reward has zero amount. {:?}", reward);
@@ -1362,7 +1350,7 @@ pub struct Payment {
 }
 
 impl Payment {
-    pub async fn create(pool: &PgPool, payments: &Vec<Payment>) -> Result<()> {
+    pub async fn create(pool: &PgPool, payments: &[Payment]) -> Result<()> {
         for payment in payments {
             let res = sqlx::query(
                 r##"

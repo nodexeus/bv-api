@@ -7,7 +7,7 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-const JWT_SECRET: &'static str = "?G'A$jNW<$6x(PdFP?4VdRvmotIV^^";
+const JWT_SECRET: &str = "?G'A$jNW<$6x(PdFP?4VdRvmotIV^^";
 
 pub struct AuthData {
     pub user_id: uuid::Uuid,
@@ -56,8 +56,8 @@ pub fn validate_jwt(jwt: &str) -> Result<JwtValidationStatus> {
     };
 
     let result = match decode::<Claims>(
-        &jwt,
-        &DecodingKey::from_secret(&jwt_secret().as_bytes()),
+        jwt,
+        &DecodingKey::from_secret(jwt_secret().as_bytes()),
         &validation,
     ) {
         Ok(decoded) => {
@@ -84,7 +84,7 @@ pub fn validate_jwt(jwt: &str) -> Result<JwtValidationStatus> {
 }
 
 fn jwt_secret() -> String {
-    env::var("JWT_SECRET").unwrap_or(JWT_SECRET.to_string())
+    env::var("JWT_SECRET").unwrap_or_else(|_| JWT_SECRET.to_string())
 }
 
 fn get_current_timestamp() -> u64 {

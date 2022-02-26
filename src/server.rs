@@ -40,11 +40,12 @@ impl FromRequest for Authentication {
             .and_then(|hv| {
                 let words = hv.split("Bearer").collect::<Vec<&str>>();
                 let token = words.get(1).map(|w| w.trim());
-                token.map(|t| Cow::Borrowed(t))
+                token.map(Cow::Borrowed)
             })
         {
-            let api_service_secret = std::env::var("API_SERVICE_SECRET").unwrap_or("".into());
-            let is_service_token = api_service_secret != "" && token == api_service_secret;
+            let api_service_secret =
+                std::env::var("API_SERVICE_SECRET").unwrap_or_else(|_| "".into());
+            let is_service_token = !api_service_secret.is_empty() && token == api_service_secret;
 
             if token.starts_with("eyJ") {
                 debug!("JWT Auth in Bearer.");
@@ -54,7 +55,7 @@ impl FromRequest for Authentication {
                     if let Ok(role) = UserRole::from_str(&auth_data.user_role) {
                         return ok(Self::User(UserAuthInfo {
                             id: auth_data.user_id,
-                            role: role,
+                            role,
                         }));
                     }
                 }
@@ -82,16 +83,16 @@ pub async fn start() -> anyhow::Result<()> {
     let db_url = std::env::var("DATABASE_URL").expect("Missing DATABASE_URL");
 
     let db_max_conn: u32 = std::env::var("DB_MAX_CONN")
-        .unwrap_or("10".to_string())
+        .unwrap_or_else(|_| "10".to_string())
         .parse()
         .unwrap();
     let db_min_conn: u32 = std::env::var("DB_MIN_CONN")
-        .unwrap_or("2".to_string())
+        .unwrap_or_else(|_| "2".to_string())
         .parse()
         .unwrap();
 
-    let port = std::env::var("PORT").unwrap_or("8080".to_string());
-    let bind_ip = std::env::var("BIND_IP").unwrap_or("0.0.0.0".to_string());
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+    let bind_ip = std::env::var("BIND_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
     let addr = format!("{}:{}", bind_ip, port);
 
     let db_pool = PgPoolOptions::new()
@@ -182,10 +183,10 @@ async fn refresh(db_pool: DbPool, req: web::Json<UserRefreshRequest>) -> ApiResp
 async fn whoami(db_pool: DbPool, auth: Authentication) -> ApiResponse {
     if auth.is_user() {
         let user = auth.get_user(db_pool.as_ref()).await?;
-        return Ok(HttpResponse::Ok().json(user));
+        Ok(HttpResponse::Ok().json(user))
     } else {
         let host = auth.get_host(db_pool.as_ref()).await?;
-        return Ok(HttpResponse::Ok().json(host));
+        Ok(HttpResponse::Ok().json(host))
     }
 }
 
@@ -234,7 +235,7 @@ async fn user_summary(
 ) -> ApiResponse {
     let user_id = user_id.into_inner();
 
-    let _ = auth.try_user_access(user_id.clone())?;
+    let _ = auth.try_user_access(user_id)?;
     let summary = User::find_summary_by_user(db_pool.as_ref(), user_id.clone()).await?;
     Ok(HttpResponse::Ok().json(summary))
 }
@@ -247,7 +248,7 @@ async fn user_payments(
 ) -> ApiResponse {
     let user_id = user_id.into_inner();
 
-    let _ = auth.try_user_access(user_id.clone())?;
+    let _ = auth.try_user_access(user_id)?;
     let payments = Payment::find_all_by_user(db_pool.as_ref(), user_id.clone()).await?;
     Ok(HttpResponse::Ok().json(payments))
 }
