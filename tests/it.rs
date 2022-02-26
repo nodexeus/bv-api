@@ -582,8 +582,7 @@ async fn it_should_create_payments() {
         .await
         .expect("could not login test user");
 
-    let mut payments: Vec<Payment> = Vec::new();
-    payments.push(Payment {
+    let payments: Vec<Payment> = vec![Payment {
         block: 1,
         hash: "1".into(),
         user_id: user.id,
@@ -592,7 +591,7 @@ async fn it_should_create_payments() {
         amount: 5000,
         oracle_price: 1000,
         created_at: None,
-    });
+    }];
 
     let req = test::TestRequest::post()
         .uri("/payments")
@@ -644,7 +643,7 @@ async fn setup() -> PgPool {
         panic!("Attempting to use production db?");
     }
     let db_max_conn = std::env::var("DB_MAX_CONN")
-        .unwrap_or("10".to_string())
+        .unwrap_or_else(|_| "10".to_string())
         .parse()
         .unwrap();
 
@@ -741,7 +740,7 @@ async fn reset_db(pool: &PgPool) {
         status: ConnectionStatus::Online,
     };
 
-    Host::create(host, &pool)
+    Host::create(host, pool)
         .await
         .expect("Could not create test host in db.");
 
@@ -774,7 +773,7 @@ async fn reset_db(pool: &PgPool) {
         status: ConnectionStatus::Online,
     };
 
-    Host::create(host, &pool)
+    Host::create(host, pool)
         .await
         .expect("Could not create test host in db.");
 
@@ -805,7 +804,7 @@ async fn get_test_host(db_pool: PgPool) -> Host {
 }
 
 async fn get_admin_user(db_pool: &PgPool) -> User {
-    User::find_by_email("admin@here.com", &db_pool)
+    User::find_by_email("admin@here.com", db_pool)
         .await
         .expect("Could not get admin test user from db.")
         .set_jwt()
@@ -813,7 +812,7 @@ async fn get_admin_user(db_pool: &PgPool) -> User {
 }
 
 fn auth_header_for_user(user: &User) -> (String, String) {
-    let token = user.token.clone().unwrap_or("".to_string());
+    let token = user.token.clone().unwrap_or_else(|| "".to_string());
     auth_header_for_token(&token)
 }
 
