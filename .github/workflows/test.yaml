@@ -1,0 +1,89 @@
+name: Rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  SQLX_OFFLINE: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:12
+        env:
+          POSTRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: stakejoy
+        ports:
+          # Port expected by integration tests
+          - 10891:5432
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:10891/stakejoy
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+      # Could use actions-rs/install here for future automatic caching, but it currently lacks:
+      # * feature selection support: https://github.com/actions-rs/install/issues/1
+      # * `--locked` support: https://github.com/actions-rs/install/issues/13
+      - name: Install sqlx-cli
+        run: >
+          cargo install sqlx-cli --no-default-features --features postgres
+      - name: Check whether SQLx query cache is up to date
+        uses: actions-rs/cargo@v1
+        with:
+          command: sqlx
+          args: prepare --check -- --lib
+
+  lints:
+    name: Lints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          profile: minimal
+          components: clippy, rustfmt
+          override: true
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+      - name: Catch common mistakes
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --tests -- -D warnings
