@@ -37,6 +37,7 @@ tracing = "0.1.26"
 tracing-futures = "0.2.5"
 tracing-log = {version = "0.1.2", features = ["env_logger"]}
 tracing-subscriber = "0.2.18"
+url-escape = "0.1.0"
 uuid = {version = "0.8", features = ["serde", "v4"]}
 validator = {version = "0.13.0", features = ["derive"]}
 
