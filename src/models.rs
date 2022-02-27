@@ -16,7 +16,6 @@ use sqlx::{FromRow, PgPool, Row};
 use std::convert::From;
 use std::fmt;
 use std::str::FromStr;
-use url_escape;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -265,7 +264,6 @@ impl User {
         };
 
         let token = auth::create_temp_jwt(&auth_data)?;
-        let token = url_escape::encode_fragment(&token);
 
         let p = Personalization::new(Email::new(&user.email));
 
