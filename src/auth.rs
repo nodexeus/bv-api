@@ -27,9 +27,20 @@ struct Claims {
     exp: usize,
 }
 
+/// Creates a jwt with default duration for expires.
 pub fn create_jwt(data: &AuthData) -> Result<String> {
+    let duration = chrono::Duration::days(1);
+    create_jwt_with_duration(data, duration)
+}
+
+pub fn create_temp_jwt(data: &AuthData) -> Result<String> {
+    let duration = chrono::Duration::seconds(60 * 12);
+    create_jwt_with_duration(data, duration)
+}
+
+pub fn create_jwt_with_duration(data: &AuthData, duration: chrono::Duration) -> Result<String> {
     let exp = Utc::now()
-        .checked_add_signed(chrono::Duration::days(1))
+        .checked_add_signed(duration)
         .expect("valid timestamp")
         .timestamp();
 

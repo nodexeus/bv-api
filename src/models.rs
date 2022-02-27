@@ -191,9 +191,12 @@ impl Authentication {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct PwdResetInfo {
-    pub email: String,
+    pub token: String,
+    #[validate(length(min = 8), must_match = "password_confirm")]
+    pub password: String,
+    pub password_confirm: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
@@ -239,7 +242,21 @@ impl User {
         Ok(self.to_owned())
     }
 
-    pub async fn reset_password(pool: &PgPool, req: PasswordResetRequest) -> Result<()> {
+    pub async fn reset_password(pool: &PgPool, req: &PwdResetInfo) -> Result<User> {
+        let _ = req
+            .validate()
+            .map_err(|e| ApiError::ValidationError(e.to_string()))?;
+
+        match auth::validate_jwt(&req.token)? {
+            auth::JwtValidationStatus::Valid(auth_data) => {
+                let user = User::find_by_id(auth_data.user_id, pool).await?;
+                return Ok(user.update_password(&req.password, pool).await?);
+            }
+            _ => Err(anyhow!("Autentication is not a host.").into()),
+        }
+    }
+
+    pub async fn email_reset_password(pool: &PgPool, req: PasswordResetRequest) -> Result<()> {
         let user = User::find_by_email(&req.email, pool).await?;
 
         let auth_data = auth::AuthData {
@@ -247,7 +264,7 @@ impl User {
             user_role: user.role.to_string(),
         };
 
-        let token = auth::create_jwt(&auth_data)?;
+        let token = auth::create_temp_jwt(&auth_data)?;
         let token = url_escape::encode_fragment(&token);
 
         let p = Personalization::new(Email::new(&user.email));
@@ -382,6 +399,28 @@ impl User {
             .fetch_one(pool)
             .await
             .map_err(ApiError::from)
+    }
+
+    pub async fn update_password(&self, password: &str, pool: &PgPool) -> Result<Self> {
+        let argon2 = Argon2::default();
+        let salt = SaltString::generate(&mut OsRng);
+        if let Some(hashword) = argon2
+            .hash_password_simple(password.as_bytes(), salt.as_str())?
+            .hash
+        {
+            return sqlx::query_as::<_, Self>(
+                "UPDATE users set hashword = $1, salt = $2) WHERE id = $3 RETURNING *",
+            )
+            .bind(hashword.to_string())
+            .bind(salt.as_str())
+            .bind(self.id)
+            .fetch_one(pool)
+            .await
+            .map_err(ApiError::from)?
+            .set_jwt();
+        }
+
+        Err(ApiError::ValidationError("Invalid password.".to_string()))
     }
 
     pub async fn create(user: UserRequest, pool: &PgPool) -> Result<Self> {

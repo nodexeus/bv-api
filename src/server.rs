@@ -116,7 +116,7 @@ pub async fn start() -> anyhow::Result<()> {
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .service(reset_pwd)
-            .service(change_pwd)
+            .service(update_pwd)
             .service(get_qr)
             .service(users_summary)
             .service(user_summary)
@@ -170,13 +170,12 @@ pub async fn start() -> anyhow::Result<()> {
 
 #[post("/reset")]
 async fn reset_pwd(db_pool: DbPool, req: web::Json<PasswordResetRequest>) -> ApiResponse {
-    let _ = User::reset_password(db_pool.get_ref(), req.into_inner()).await;
+    let _ = User::email_reset_password(db_pool.get_ref(), req.into_inner()).await;
     Ok(HttpResponse::Ok().json("An email with reset instructions has been sent.".to_string()))
 }
 
-#[put("/users/{user_id}/pwd")]
-async fn change_pwd(_db_pool: DbPool, info: web::Query<PwdResetInfo>) -> ApiResponse {
-    let _email = &info.email;
+#[put("/reset")]
+async fn update_pwd(_db_pool: DbPool, req: web::Json<PwdResetInfo>) -> ApiResponse {
     Ok(HttpResponse::Ok().json("hello"))
 }
 
