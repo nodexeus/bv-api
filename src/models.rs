@@ -272,9 +272,8 @@ impl User {
             r##"
             <h1>Password Reset</h1>
             <p>You have requested to reset your StakeJoy password. 
-            Please visit <a href="https://console.stakejoy.com/reset?t={:?}">
-            https://console.stakejoy.com/reset?t={:?}</a>.</p><br /><br /><p>Thank You!</p>"##,
-            token, token
+            Please visit <a href="https://console.stakejoy.com/reset?t={token}">
+            https://console.stakejoy.com/reset?t={token}</a>.</p><br /><br /><p>Thank You!</p>"##
         );
 
         let sender = Sender::new(dotenv::var("SENDGRID_API_KEY").map_err(|_| {
