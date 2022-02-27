@@ -250,7 +250,7 @@ impl User {
         match auth::validate_jwt(&req.token)? {
             auth::JwtValidationStatus::Valid(auth_data) => {
                 let user = User::find_by_id(auth_data.user_id, pool).await?;
-                return Ok(user.update_password(&req.password, pool).await?);
+                return user.update_password(&req.password, pool).await;
             }
             _ => Err(anyhow!("Autentication is not a host.").into()),
         }

@@ -175,8 +175,9 @@ async fn reset_pwd(db_pool: DbPool, req: web::Json<PasswordResetRequest>) -> Api
 }
 
 #[put("/reset")]
-async fn update_pwd(_db_pool: DbPool, req: web::Json<PwdResetInfo>) -> ApiResponse {
-    Ok(HttpResponse::Ok().json("hello"))
+async fn update_pwd(db_pool: DbPool, req: web::Json<PwdResetInfo>) -> ApiResponse {
+    let user = User::reset_password(&db_pool, &req.into_inner()).await?;
+    Ok(HttpResponse::Ok().json(user))
 }
 
 #[post("/login")]
