@@ -185,7 +185,7 @@ impl Authentication {
     pub async fn get_host(&self, pool: &PgPool) -> Result<Host> {
         match self {
             Self::Host(token) => Host::find_by_token(token, pool).await,
-            _ => Err(anyhow!("Autentication is not a host.").into()),
+            _ => Err(anyhow!("Authentication is not a host.").into()),
         }
     }
 }
@@ -251,7 +251,7 @@ impl User {
                 let user = User::find_by_id(auth_data.user_id, pool).await?;
                 return user.update_password(&req.password, pool).await;
             }
-            _ => Err(anyhow!("Autentication is not a host.").into()),
+            _ => Err(ApiError::InsufficientPermissionsError),
         }
     }
 
@@ -406,7 +406,7 @@ impl User {
             .hash
         {
             return sqlx::query_as::<_, Self>(
-                "UPDATE users set hashword = $1, salt = $2) WHERE id = $3 RETURNING *",
+                "UPDATE users set hashword = $1, salt = $2 WHERE id = $3 RETURNING *",
             )
             .bind(hashword.to_string())
             .bind(salt.as_str())
