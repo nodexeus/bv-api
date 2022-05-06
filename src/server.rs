@@ -333,7 +333,9 @@ async fn create_host(
     host: web::Json<HostCreateRequest>,
     auth: Authentication,
 ) -> ApiResponse {
-    let _ = auth.try_admin()?;
+    if !auth.is_admin() && !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
 
     let host = host.into_inner().into();
 
