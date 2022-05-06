@@ -597,11 +597,17 @@ pub struct UserPayAddress {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Host {
     pub id: Uuid,
+    pub org_id: Option<Uuid>,
     pub name: String,
     pub version: Option<String>,
+    pub cpu_count: Option<i64>,
+    pub mem_size: Option<i64>,
+    pub disk_size: Option<i64>,
+    pub os: Option<String>,
+    pub os_version: Option<String>,
     pub location: Option<String>,
     pub ip_addr: String,
-    pub val_ip_addrs: String,
+    pub val_ip_addrs: Option<String>,
     pub token: String,
     pub status: ConnectionStatus,
     pub validators: Option<Vec<Validator>>,
@@ -612,9 +618,25 @@ impl From<PgRow> for Host {
     fn from(row: PgRow) -> Self {
         Host {
             id: row.try_get("id").expect("Couldn't try_get id for host."),
+            org_id: row
+                .try_get("org_id")
+                .expect("Couldn't try_get org_id for host."),
             name: row
                 .try_get("name")
                 .expect("Couldn't try_get name for host."),
+            cpu_count: row
+                .try_get("cpu_count")
+                .expect("Couldn't try_get cpu_count for host."),
+            mem_size: row
+                .try_get("mem_size")
+                .expect("Couldn't try_get mem_size for host."),
+            disk_size: row
+                .try_get("disk_size")
+                .expect("Couldn't try_get cpu_count for host."),
+            os: row.try_get("os").expect("Couldn't try_get os for host."),
+            os_version: row
+                .try_get("os_version")
+                .expect("Couldn't try_get os_version for host."),
             version: row
                 .try_get("version")
                 .expect("Couldn't try_get version for host."),
@@ -678,7 +700,7 @@ impl Host {
 
     pub async fn create(host: HostRequest, pool: &PgPool) -> Result<Self> {
         let mut tx = pool.begin().await?;
-        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, token, status) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *")
+        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, token, status, org_id, cpu_count, mem_size, disk_size, os, os_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *")
         .bind(host.name)
         .bind(host.version)
         .bind(host.location)
@@ -686,6 +708,12 @@ impl Host {
         .bind(host.val_ip_addrs)
         .bind(host.token)
         .bind(host.status)
+        .bind(host.org_id)
+        .bind(host.cpu_count)
+        .bind(host.mem_size)
+        .bind(host.disk_size)
+        .bind(host.os)
+        .bind(host.os_version)
         .map(|row: PgRow| {
             Self::from(row)
         })
@@ -727,7 +755,7 @@ impl Host {
     pub async fn update(id: Uuid, host: HostRequest, pool: &PgPool) -> Result<Self> {
         let mut tx = pool.begin().await.unwrap();
         let host = sqlx::query(
-            r#"UPDATE hosts SET name = $1, version = $2, location = $3, ip_addr = $4, token = $5, status = $6  WHERE id = $7 RETURNING *"#
+            r#"UPDATE hosts SET name = $1, version = $2, location = $3, ip_addr = $4, token = $5, status = $6, org_id = $7, cpu_count = $8, mem_size = $9, disk_size = $10, os = $11, os_version = $12 WHERE id = $13 RETURNING *"#
         )
         .bind(host.name)
         .bind(host.version)
@@ -735,6 +763,12 @@ impl Host {
         .bind(host.ip_addr)
         .bind(host.token)
         .bind(host.status)
+        .bind(host.org_id)
+        .bind(host.cpu_count)
+        .bind(host.mem_size)
+        .bind(host.disk_size)
+        .bind(host.os)
+        .bind(host.os_version)
         .bind(id)
         .map(|row: PgRow| {
             Self::from(row)
@@ -780,20 +814,26 @@ impl Host {
     }
 
     pub fn validator_ips(&self) -> Vec<String> {
-        self.val_ip_addrs
-            .split(',')
-            .map(|ip| ip.trim().to_string())
-            .collect()
+        match &self.val_ip_addrs {
+            Some(s) => s.split(',').map(|ip| ip.trim().to_string()).collect(),
+            None => vec![],
+        }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostRequest {
+    pub org_id: Option<Uuid>,
     pub name: String,
     pub version: Option<String>,
     pub location: Option<String>,
+    pub cpu_count: Option<i64>,
+    pub mem_size: Option<i64>,
+    pub disk_size: Option<i64>,
+    pub os: Option<String>,
+    pub os_version: Option<String>,
     pub ip_addr: String,
-    pub val_ip_addrs: String,
+    pub val_ip_addrs: Option<String>,
     pub token: String,
     pub status: ConnectionStatus,
 }
@@ -801,9 +841,15 @@ pub struct HostRequest {
 impl From<HostCreateRequest> for HostRequest {
     fn from(host: HostCreateRequest) -> Self {
         Self {
+            org_id: host.org_id,
             name: host.name,
             version: host.version,
             location: host.location,
+            cpu_count: host.cpu_count,
+            mem_size: host.mem_size,
+            disk_size: host.disk_size,
+            os: host.os,
+            os_version: host.os_version,
             ip_addr: host.ip_addr,
             val_ip_addrs: host.val_ip_addrs,
             token: Host::new_token(),
@@ -814,11 +860,17 @@ impl From<HostCreateRequest> for HostRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostCreateRequest {
+    pub org_id: Option<Uuid>,
     pub name: String,
     pub version: Option<String>,
     pub location: Option<String>,
+    pub cpu_count: Option<i64>,
+    pub mem_size: Option<i64>,
+    pub disk_size: Option<i64>,
+    pub os: Option<String>,
+    pub os_version: Option<String>,
     pub ip_addr: String,
-    pub val_ip_addrs: String,
+    pub val_ip_addrs: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

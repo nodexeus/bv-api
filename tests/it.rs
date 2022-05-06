@@ -71,11 +71,17 @@ async fn it_should_add_host() {
         .uri("/hosts")
         .append_header(auth_header_for_user(&admin_user))
         .set_json(&HostRequest {
+            org_id: None,
             name: "Test user 1".to_string(),
             version: Some("0.1.0".to_string()),
             location: Some("Virgina".to_string()),
+            cpu_count: None,
+            mem_size: None,
+            disk_size: None,
+            os: None,
+            os_version: None,
             ip_addr: "192.168.8.2".parse().expect("Couldn't parse ip address"),
-            val_ip_addrs: "192.168.8.3, 192.168.8.4".to_string(),
+            val_ip_addrs: Some("192.168.8.3, 192.168.8.4".to_string()),
             token: "1234".to_string(),
             status: ConnectionStatus::Online,
         })
@@ -86,6 +92,66 @@ async fn it_should_add_host() {
     assert_eq!(resp.name, "Test user 1");
     assert!(resp.validators.is_some());
     assert_eq!(resp.validators.unwrap().len(), 2);
+
+    // Delete new host from table
+    let res = Host::delete(resp.id, &db_pool).await;
+    assert_eq!(1, res.unwrap());
+}
+
+#[actix_rt::test]
+async fn it_should_add_host_from_provision() {
+    let db_pool = setup().await;
+
+    let app = test::init_service(
+        App::new()
+            .app_data(Data::new(db_pool.clone()))
+            .wrap(middleware::Logger::default())
+            .service(create_host)
+            .service(login),
+    )
+    .await;
+
+    let admin_user = get_admin_user(&db_pool).await;
+
+    let org_id = Uuid::new_v4();
+    let cpu_count = 64;
+    let mem_size = 64_000_000;
+    let disk_size = 128_000_000;
+    let os = "Debian".to_string();
+    let os_version = "4.1.4".to_string();
+
+    // Insert a host
+    let req = test::TestRequest::post()
+        .uri("/hosts")
+        .append_header(auth_header_for_user(&admin_user))
+        .set_json(&HostRequest {
+            org_id: Some(org_id),
+            name: "Test user 1".to_string(),
+            version: Some("0.1.0".to_string()),
+            location: Some("Virgina".to_string()),
+            cpu_count: Some(cpu_count),
+            mem_size: Some(mem_size),
+            disk_size: Some(disk_size),
+            os: Some(os.clone()),
+            os_version: Some(os_version.clone()),
+            ip_addr: "192.168.8.2".parse().expect("Couldn't parse ip address"),
+            val_ip_addrs: None,
+            token: "1234".to_string(),
+            status: ConnectionStatus::Online,
+        })
+        .to_request();
+
+    let resp: Host = test::call_and_read_body_json(&app, req).await;
+
+    assert_eq!(resp.name, "Test user 1");
+    assert_eq!(resp.org_id, Some(org_id));
+    assert_eq!(resp.cpu_count, Some(cpu_count));
+    assert_eq!(resp.mem_size, Some(mem_size));
+    assert_eq!(resp.disk_size, Some(disk_size));
+    assert_eq!(resp.os, Some(os));
+    assert_eq!(resp.os_version, Some(os_version));
+    assert!(resp.validators.is_some());
+    assert_eq!(resp.validators.unwrap().len(), 0);
 
     // Delete new host from table
     let res = Host::delete(resp.id, &db_pool).await;
@@ -731,11 +797,19 @@ async fn reset_db(pool: &PgPool) {
         .expect("could not set admin to admin test user in sql");
 
     let host = HostRequest {
+        org_id: None,
         name: "Test user".into(),
         version: Some("0.1.0".into()),
         location: Some("Virgina".into()),
+        cpu_count: None,
+        mem_size: None,
+        disk_size: None,
+        os: None,
+        os_version: None,
         ip_addr: "192.168.1.1".into(),
-        val_ip_addrs: "192.168.0.1, 192.168.0.2, 192.168.0.3, 192.168.0.4, 192.168.0.5".into(),
+        val_ip_addrs: Some(
+            "192.168.0.1, 192.168.0.2, 192.168.0.3, 192.168.0.4, 192.168.0.5".into(),
+        ),
         token: "123".into(),
         status: ConnectionStatus::Online,
     };
@@ -764,11 +838,19 @@ async fn reset_db(pool: &PgPool) {
     }
 
     let host = HostRequest {
+        org_id: None,
         name: "Test Host2".into(),
         version: Some("0.1.0".into()),
         location: Some("Ohio".into()),
+        cpu_count: None,
+        mem_size: None,
+        disk_size: None,
+        os: None,
+        os_version: None,
         ip_addr: "192.168.2.1".into(),
-        val_ip_addrs: "192.168.3.1, 192.168.3.2, 192.168.3.3, 192.168.3.4, 192.168.3.5".into(),
+        val_ip_addrs: Some(
+            "192.168.3.1, 192.168.3.2, 192.168.3.3, 192.168.3.4, 192.168.3.5".into(),
+        ),
         token: "1234".into(),
         status: ConnectionStatus::Online,
     };
