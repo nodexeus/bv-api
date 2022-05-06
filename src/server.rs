@@ -174,6 +174,8 @@ pub async fn start() -> anyhow::Result<()> {
         .route("/commands/:id/response", put(update_command_response))
         .route("/command/:id", delete(delete_command))
         .route("/qr/:user_id", get(get_qr))
+        .route("/groups/nodes", get(list_node_groups))
+        .route("/groups/nodes/:id", get(get_node_group))
         .layer(
             CorsLayer::new()
                 .allow_headers(Any)
@@ -258,6 +260,25 @@ pub async fn update_block_info(
 
     let info = Info::update_info(db_pool.as_ref(), &info).await?;
     Ok((StatusCode::OK, Json(info)))
+}
+
+pub async fn list_node_groups(
+    Extension(db_pool): Extension<DbPool>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let _ = auth.try_admin()?;
+    let groups = NodeGroup::find_all(db_pool.as_ref()).await?;
+    Ok((StatusCode::OK, Json(groups)))
+}
+
+pub async fn get_node_group(
+    Extension(db_pool): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let _ = auth.try_admin()?;
+    let node_group = NodeGroup::find_by_id(db_pool.as_ref(), id).await?;
+    Ok((StatusCode::OK, Json(node_group)))
 }
 
 pub async fn create_user(
