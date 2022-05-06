@@ -162,6 +162,8 @@ pub async fn start() -> anyhow::Result<()> {
             .service(list_invoices)
             .service(list_payments_due)
             .service(list_pay_addresses)
+            .service(list_node_groups)
+            .service(get_node_group)
     })
     .bind(&addr)?
     .run()
@@ -225,6 +227,20 @@ async fn update_block_info(
 
     let info = Info::update_info(db_pool.as_ref(), &info.into_inner()).await?;
     Ok(HttpResponse::Ok().json(info))
+}
+
+#[get("/groups/nodes")]
+async fn list_node_groups(db_pool: DbPool, auth: Authentication) -> ApiResponse {
+    let _ = auth.try_admin()?;
+    let groups = NodeGroup::find_all(db_pool.as_ref()).await?;
+    Ok(HttpResponse::Ok().json(groups))
+}
+
+#[get("/groups/nodes/{id}")]
+async fn get_node_group(db_pool: DbPool, id: web::Path<Uuid>, auth: Authentication) -> ApiResponse {
+    let _ = auth.try_admin()?;
+    let node_group = NodeGroup::find_by_id(db_pool.as_ref(), id.into_inner()).await?;
+    Ok(HttpResponse::Ok().json(node_group))
 }
 
 #[post("/users")]
