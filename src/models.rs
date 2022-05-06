@@ -202,7 +202,7 @@ pub struct NodeGroup {
 impl NodeGroup {
     pub async fn find_all(pool: &PgPool) -> Result<Vec<NodeGroup>> {
         sqlx::query("SELECT user_id as id, users.email as name, count(*) as node_count, null as nodes FROM validators INNER JOIN users on users.id = validators.user_id  GROUP BY user_id, users.email ORDER BY node_count DESC")
-            .map(Self::from)    
+            .map(Self::from)
             .fetch_all(pool)
             .await
             .map_err(ApiError::from)
@@ -211,14 +211,12 @@ impl NodeGroup {
     pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<NodeGroup> {
         let validators = Validator::find_all_by_user(id, pool).await?;
         let name = validators.first().unwrap().name.clone();
-        Ok(
-            NodeGroup {
-                id,
-                name,
-                node_count: validators.len() as i64,
-                nodes: Some(validators),
-            }
-        )
+        Ok(NodeGroup {
+            id,
+            name,
+            node_count: validators.len() as i64,
+            nodes: Some(validators),
+        })
     }
 }
 
