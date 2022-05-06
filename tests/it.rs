@@ -903,7 +903,7 @@ async fn reset_db(pool: &PgPool) {
 }
 
 async fn get_test_host(db_pool: &PgPool) -> Host {
-    Host::find_by_token("123", &db_pool)
+    Host::find_by_token("123", db_pool)
         .await
         .expect("Could not read test host from db.")
 }
