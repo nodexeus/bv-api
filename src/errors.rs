@@ -1,6 +1,6 @@
-use actix_web::http::StatusCode;
-use actix_web::HttpResponse;
-use actix_web::ResponseError;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use axum::Json;
 
 pub type Result<T> = std::result::Result<T, ApiError>;
 
@@ -52,20 +52,19 @@ impl From<argon2::password_hash::Error> for ApiError {
     }
 }
 
-impl ResponseError for ApiError {
-    fn status_code(&self) -> StatusCode {
-        match self {
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let status_code = match self {
             ApiError::ValidationError(_) => StatusCode::BAD_REQUEST,
             ApiError::NotFoundError(_) => StatusCode::NOT_FOUND,
             ApiError::DuplicateResource => StatusCode::CONFLICT,
             ApiError::InvalidAuthentication(_) => StatusCode::UNAUTHORIZED,
             ApiError::InsufficientPermissionsError => StatusCode::FORBIDDEN,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(self.to_string())
+        };
+        let response = (status_code, Json(self.to_string())).into_response();
+        tracing::error!("{:?}", response);
+        response
     }
 }
 
