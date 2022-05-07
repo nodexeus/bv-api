@@ -368,7 +368,9 @@ pub async fn create_host(
     Json(host): Json<HostCreateRequest>,
     auth: Authentication,
 ) -> ApiResult<impl IntoResponse> {
-    let _ = auth.try_admin()?;
+    if !auth.is_admin() && !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
 
     let host = Host::create(host.into(), db_pool.as_ref()).await?;
     Ok((StatusCode::OK, Json(host)))
