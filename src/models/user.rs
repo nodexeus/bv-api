@@ -1,4 +1,4 @@
-use super::{Host, StakeStatus, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
+use super::{Host, Org, StakeStatus, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
 use crate::auth;
 use crate::errors::{ApiError, Result};
 use anyhow::anyhow;
@@ -397,6 +397,26 @@ impl User {
             .map_err(ApiError::from)?
             .set_jwt();
 
+            if let Ok(u) = &user {
+                let org = sqlx::query_as::<_, Org>(
+                    "INSERT INTO orgs (name, is_personal) values (LOWER($1), true) RETURNING *",
+                )
+                .bind(&u.email)
+                .fetch_one(&mut tx)
+                .await
+                .map_err(ApiError::from)?;
+
+                dbg!("here");
+
+                sqlx::query(
+                    "INSERT INTO orgs_users (org_id, user_id, role) values($1, $2, 'owner')",
+                )
+                .bind(org.id)
+                .bind(u.id)
+                .execute(&mut tx)
+                .await
+                .map_err(ApiError::from)?;
+            }
             tx.commit().await?;
 
             return user;

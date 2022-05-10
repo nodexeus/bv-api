@@ -14,18 +14,18 @@ pub enum OrgRole {
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Org {
-    id: Uuid,
-    name: String,
-    is_personal: bool,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    pub id: Uuid,
+    pub name: String,
+    pub is_personal: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
-pub struct OrgUsers {
-    org_id: Uuid,
-    user_id: Uuid,
-    role: OrgRole,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+pub struct OrgUser {
+    pub org_id: Uuid,
+    pub user_id: Uuid,
+    pub role: OrgRole,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
