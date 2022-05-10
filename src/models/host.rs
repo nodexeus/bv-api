@@ -1,9 +1,9 @@
-use super::{StakeStatus, Validator, ValidatorRequest, ValidatorStatus};
+use super::{Validator, ValidatorRequest};
 use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::PgRow, PgConnection};
-use sqlx::{FromRow, PgPool, Row};
+use sqlx::postgres::PgRow;
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
@@ -145,22 +145,7 @@ impl Host {
         // Create and add validators
         for ip in host.validator_ips() {
             // TODO: Refactor this
-            let val = ValidatorRequest {
-                name: petname::petname(2, "_"),
-                version: None,
-                ip_addr: ip.to_owned(),
-                host_id: host.id,
-                user_id: None,
-                address: None,
-                swarm_key: None,
-                block_height: None,
-                stake_status: StakeStatus::Available,
-                status: ValidatorStatus::Provisioning,
-                tenure_penalty: 0.0,
-                dkg_penalty: 0.0,
-                performance_penalty: 0.0,
-                total_penalty: 0.0,
-            };
+            let val = ValidatorRequest::new(host.id, &ip);
 
             let val = Validator::create_tx(val, &mut tx).await?;
             vals.push(val.to_owned());

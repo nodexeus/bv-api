@@ -994,6 +994,27 @@ pub struct ValidatorRequest {
     pub total_penalty: f64,
 }
 
+impl ValidatorRequest {
+    pub fn new(host_id: Uuid, ip_addr: &str) -> Self {
+        Self {
+            name: petname::petname(2, "_"),
+            version: None,
+            ip_addr: ip_addr.to_owned(),
+            host_id,
+            user_id: None,
+            address: None,
+            swarm_key: None,
+            block_height: None,
+            stake_status: StakeStatus::Available,
+            status: ValidatorStatus::Provisioning,
+            tenure_penalty: 0.0,
+            dkg_penalty: 0.0,
+            performance_penalty: 0.0,
+            total_penalty: 0.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatorStatusRequest {
     pub version: Option<String>,
