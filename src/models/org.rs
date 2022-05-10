@@ -1,8 +1,6 @@
-use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::PgRow, PgConnection};
-use sqlx::{FromRow, PgPool, Row};
+use sqlx::FromRow;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
