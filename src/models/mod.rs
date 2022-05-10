@@ -19,6 +19,13 @@ use std::str::FromStr;
 use uuid::Uuid;
 use validator::Validate;
 
+mod host;
+pub use host::*;
+mod node;
+pub use node::*;
+mod org;
+pub use org::*;
+
 const STAKE_QUOTA_DEFAULT: i64 = 5;
 const FEE_BPS_DEFAULT: i64 = 300;
 
@@ -190,52 +197,6 @@ impl Authentication {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow)]
-pub struct NodeGroup {
-    id: Uuid,
-    name: String,
-    node_count: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    nodes: Option<Vec<Validator>>,
-}
-
-impl NodeGroup {
-    pub async fn find_all(pool: &PgPool) -> Result<Vec<NodeGroup>> {
-        sqlx::query("SELECT user_id as id, users.email as name, count(*) as node_count, null as nodes FROM validators INNER JOIN users on users.id = validators.user_id  GROUP BY user_id, users.email ORDER BY node_count DESC")
-            .map(Self::from)
-            .fetch_all(pool)
-            .await
-            .map_err(ApiError::from)
-    }
-
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<NodeGroup> {
-        let validators = Validator::find_all_by_user(id, pool).await?;
-        let name = validators.first().unwrap().name.clone();
-        Ok(NodeGroup {
-            id,
-            name,
-            node_count: validators.len() as i64,
-            nodes: Some(validators),
-        })
-    }
-}
-
-impl From<PgRow> for NodeGroup {
-    fn from(row: PgRow) -> Self {
-        NodeGroup {
-            id: row
-                .try_get("id")
-                .expect("Couldn't try_get id for node_group."),
-            name: row
-                .try_get("name")
-                .expect("Couldn't try_get name node_group."),
-            node_count: row
-                .try_get("node_count")
-                .expect("Couldn't try_get node_count node_group."),
-            nodes: None,
-        }
-    }
-}
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct PwdResetInfo {
     pub token: String,
@@ -477,7 +438,8 @@ impl User {
             .hash_password_simple(user.password.as_bytes(), salt.as_str())?
             .hash
         {
-            return sqlx::query_as::<_, Self>(
+            let mut tx = pool.begin().await?;
+            let user = sqlx::query_as::<_, Self>(
                 "INSERT INTO users (email, hashword, salt, staking_quota, fee_bps) values (LOWER($1),$2,$3,$4,$5) RETURNING *",
             )
             .bind(user.email)
@@ -485,10 +447,14 @@ impl User {
             .bind(salt.as_str())
             .bind(STAKE_QUOTA_DEFAULT)
             .bind(FEE_BPS_DEFAULT)
-            .fetch_one(pool)
+            .fetch_one(&mut tx)
             .await
             .map_err(ApiError::from)?
             .set_jwt();
+
+            tx.commit().await?;
+
+            return user;
         }
 
         Err(ApiError::ValidationError("Invalid password.".to_string()))
