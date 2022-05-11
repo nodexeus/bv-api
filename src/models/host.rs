@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Row};
+use std::convert::From;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
@@ -240,7 +241,7 @@ pub struct HostRequest {
     pub os_version: Option<String>,
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
-    pub token: String,
+    pub token: String, //TODO: Protect this
     pub status: ConnectionStatus,
 }
 
@@ -292,6 +293,7 @@ pub struct HostProvision {
     created_at: DateTime<Utc>,
     claimed_at: Option<DateTime<Utc>>,
     install_cmd: Option<String>,
+    host_id: Option<Uuid>,
 }
 
 impl HostProvision {
@@ -322,12 +324,41 @@ impl HostProvision {
         Ok(host_provision)
     }
 
+    pub async fn claim(
+        host_provision_id: &str,
+        mut req: HostCreateRequest,
+        pool: &PgPool,
+    ) -> Result<Host> {
+        let host_provision = Self::find_by_id(host_provision_id, pool).await?;
+
+        if host_provision.is_claimed() {
+            return Err(anyhow::anyhow!("Host provision has already been claimed.").into());
+        }
+
+        req.org_id = Some(host_provision.org_id);
+
+        //TODO: transaction this
+        let host = Host::create(req.into(), pool).await?;
+
+        sqlx::query("UPDATE host_provisions set claimed_at = now(), host_id = $1 where id = $2")
+            .bind(host.id)
+            .bind(host_provision.id)
+            .execute(pool)
+            .await?;
+
+        Ok(host)
+    }
+
     /// Used to populate the install_cmd field
     fn set_install_cmd(&mut self) {
         self.install_cmd = Some(format!(
             "curl --proto '=https' --tlsv1.2 -sSf https://bvs.sh/{} | sh",
             self.id
         ));
+    }
+
+    pub fn is_claimed(&self) -> bool {
+        self.claimed_at.is_some()
     }
 
     fn generate_token() -> String {

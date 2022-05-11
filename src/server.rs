@@ -133,6 +133,7 @@ pub async fn start() -> anyhow::Result<()> {
         .route("/hosts/:id", delete(delete_host))
         .route("/host_provisions", post(create_host_provision))
         .route("/host_provisions/:id", get(get_host_provision))
+        .route("/host_provisions/:id/hosts", post(claim_host_provision))
         .route("/validators/:id/migrate", post(migrate_validator))
         .route("/validators", get(list_validators))
         .route("/validators/staking", get(list_validators_staking))
@@ -442,6 +443,20 @@ pub async fn create_host_provision(
     }
 
     let host_provision = HostProvision::create(req, db_pool.as_ref()).await?;
+    Ok((StatusCode::OK, Json(host_provision)))
+}
+
+pub async fn claim_host_provision(
+    Extension(db_pool): Extension<DbPool>,
+    Path(id): Path<String>,
+    Json(req): Json<HostCreateRequest>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    if !auth.is_admin() && !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+
+    let host_provision = HostProvision::claim(&id, req, db_pool.as_ref()).await?;
     Ok((StatusCode::OK, Json(host_provision)))
 }
 

@@ -16,7 +16,7 @@ pub struct NodeGroup {
 
 impl NodeGroup {
     pub async fn find_all(pool: &PgPool) -> Result<Vec<NodeGroup>> {
-        sqlx::query("SELECT user_id as id, users.email as name, count(*) as node_count, null as nodes FROM validators INNER JOIN users on users.id = validators.user_id  GROUP BY user_id, users.email ORDER BY node_count DESC")
+        sqlx::query("SELECT user_id as id, users.email as name, count(*) as node_count, null as nodes FROM validators INNER JOIN users on users.id = validators.user_id  GROUP BY user_id, users.email ORDER BY users.email DESC")
             .map(Self::from)
             .fetch_all(pool)
             .await
