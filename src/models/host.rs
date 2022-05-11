@@ -3,7 +3,7 @@ use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
-use sqlx::{PgPool, Row};
+use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
@@ -283,4 +283,50 @@ pub struct HostCreateRequest {
 pub struct HostStatusRequest {
     pub version: Option<String>,
     pub status: ConnectionStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct HostProvision {
+    id: Uuid,
+    org_id: Uuid,
+    created_at: DateTime<Utc>,
+    claimed_at: Option<DateTime<Utc>>,
+    install_cmd: Option<String>,
+}
+
+impl HostProvision {
+    pub async fn create(req: HostProvisionRequest, pool: &PgPool) -> Result<HostProvision> {
+        let mut host_provision = sqlx::query_as::<_, HostProvision>(
+            "INSERT INTO host_provisions (id, org_id) values ($1, $2) RETURNING *",
+        )
+        .bind(Self::generate_token())
+        .bind(req.org_id)
+        .fetch_one(pool)
+        .await
+        .map_err(ApiError::from)?;
+
+        host_provision.set_install_cmd();
+
+        Ok(host_provision)
+    }
+
+    /// Used to populate the install_cmd field
+    fn set_install_cmd(&mut self) {
+        self.install_cmd = Some(format!(
+            "curl --proto '=https' --tlsv1.2 -sSf https://bvs.sh/{} | sh",
+            self.id
+        ));
+    }
+
+    fn generate_token() -> String {
+        random_string::generate(
+            8,
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890",
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostProvisionRequest {
+    org_id: Uuid,
 }
