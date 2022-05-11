@@ -583,7 +583,7 @@ pub async fn get_validator(
     Path(id): Path<Uuid>,
     auth: Authentication,
 ) -> ApiResult<impl IntoResponse> {
-    if auth.is_user() {
+    if !auth.is_admin() && auth.is_user() {
         return Err(ApiError::InsufficientPermissionsError);
     }
 
