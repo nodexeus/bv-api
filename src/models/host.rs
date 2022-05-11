@@ -292,6 +292,7 @@ pub struct HostProvision {
     org_id: Uuid,
     created_at: DateTime<Utc>,
     claimed_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
     install_cmd: Option<String>,
     host_id: Option<Uuid>,
 }
