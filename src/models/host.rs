@@ -287,7 +287,7 @@ pub struct HostStatusRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct HostProvision {
-    id: Uuid,
+    id: String,
     org_id: Uuid,
     created_at: DateTime<Utc>,
     claimed_at: Option<DateTime<Utc>>,
@@ -305,6 +305,18 @@ impl HostProvision {
         .await
         .map_err(ApiError::from)?;
 
+        host_provision.set_install_cmd();
+
+        Ok(host_provision)
+    }
+
+    pub async fn find_by_id(host_provision_id: &str, pool: &PgPool) -> Result<HostProvision> {
+        let mut host_provision =
+            sqlx::query_as::<_, HostProvision>("SELECT * FROM host_provisions where id = $1")
+                .bind(host_provision_id)
+                .fetch_one(pool)
+                .await
+                .map_err(ApiError::from)?;
         host_provision.set_install_cmd();
 
         Ok(host_provision)
