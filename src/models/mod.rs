@@ -48,11 +48,18 @@ pub enum StakeStatus {
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_host_cmd", rename_all = "snake_case")]
 pub enum HostCmd {
-    RestartMiner,
-    RestartJail,
-    GetMinerName,
-    GetBlockHeight,
-    All,
+    CreateNode,
+    RestartNode,
+    KillNode,
+    ShutdownNode,
+    DeleteNode,
+    UpdateNode,
+    MigrateNode,
+    GetNodeVersion,
+    GetBVSVersion,
+    UpdateBVS,
+    RestartBVS,
+    RemoveBVS,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

@@ -438,6 +438,7 @@ pub async fn create_host_provision(
     Json(req): Json<HostProvisionRequest>,
     auth: Authentication,
 ) -> ApiResult<impl IntoResponse> {
+    //TODO: Verify user is member of group
     if !auth.is_admin() && !auth.is_host() {
         return Err(ApiError::InsufficientPermissionsError);
     }

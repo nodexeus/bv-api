@@ -399,7 +399,7 @@ async fn it_should_create_command() -> anyhow::Result<()> {
         .uri(&path)
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_string(&CommandRequest {
-            cmd: HostCmd::RestartJail,
+            cmd: HostCmd::RestartNode,
             sub_cmd: Some("blue_angel".to_string()),
         })?))?;
 
