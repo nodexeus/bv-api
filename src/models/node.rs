@@ -6,6 +6,23 @@ use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Node {
+    id: Uuid,
+    org_id: Uuid,
+    host_id: Uuid,
+    name: String,
+    version: Option<String>,
+    ip_addr: Option<String>,
+    chain_type: String,
+    node_type: String,
+    address: Option<String>,
+    owner_address: Option<String>,
+    block_height: Option<i64>,
+    node_vars: Option<serde_json::Value>,
+    created_at: Uuid,
+    updated_at: Uuid,
+}
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct NodeGroup {
     id: Uuid,
     name: String,

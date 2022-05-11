@@ -451,12 +451,7 @@ pub async fn claim_host_provision(
     Extension(db_pool): Extension<DbPool>,
     Path(id): Path<String>,
     Json(req): Json<HostCreateRequest>,
-    auth: Authentication,
 ) -> ApiResult<impl IntoResponse> {
-    if !auth.is_admin() && !auth.is_host() {
-        return Err(ApiError::InsufficientPermissionsError);
-    }
-
     let host_provision = HostProvision::claim(&id, req, db_pool.as_ref()).await?;
     Ok((StatusCode::OK, Json(host_provision)))
 }
