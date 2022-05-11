@@ -861,6 +861,10 @@ async fn reset_db(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("Error deleting users");
+    sqlx::query("DELETE FROM orgs")
+        .execute(pool)
+        .await
+        .expect("Error deleting orgs");
     sqlx::query("DELETE FROM info")
         .execute(pool)
         .await
