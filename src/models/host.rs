@@ -337,6 +337,7 @@ impl HostProvision {
         }
 
         req.org_id = Some(host_provision.org_id);
+        req.val_ip_addrs = None;
 
         //TODO: transaction this
         let host = Host::create(req.into(), pool).await?;
