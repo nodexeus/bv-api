@@ -5,22 +5,75 @@ use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "enum_node_status", rename_all = "snake_case")]
+pub enum NodeType {
+    Api,
+    Node,
+    Oracle,
+    Relay,
+    Validator,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "enum_node_status", rename_all = "snake_case")]
+pub enum NodeStatus {
+    Available,
+    Broadcasting,
+    Cancelled,
+    Consensus,
+    Creating,
+    Delegating,
+    Delinquent,
+    Disabled,
+    Earning,
+    Electing,
+    Elected,
+    Exporting,
+    Ingesting,
+    Installing,
+    Migrating,
+    Mining,
+    Minting,
+    Processing,
+    Relaying,
+    Removed,
+    Removing,
+    Running,
+    Snapshoting,
+    Staked,
+    Staking,
+    Started,
+    Starting,
+    Stopped,
+    Stopping,
+    Synced,
+    Syncing,
+    Upgrading,
+    Validating,
+}
+
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Node {
     id: Uuid,
     org_id: Uuid,
     host_id: Uuid,
-    name: String,
+    name: Option<String>,
+    groups: Option<String>,
     version: Option<String>,
     ip_addr: Option<String>,
     chain_type: String,
-    node_type: String,
+    node_type: NodeType,
     address: Option<String>,
-    owner_address: Option<String>,
+    wallet_address: Option<String>,
     block_height: Option<i64>,
-    node_vars: Option<serde_json::Value>,
+    node_data: Option<serde_json::Value>,
     created_at: Uuid,
     updated_at: Uuid,
+    status: NodeStatus,
+    is_online: bool,
 }
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct NodeGroup {

@@ -30,7 +30,7 @@ pub struct Host {
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
     pub token: String,
-    pub status: ConnectionStatus,
+    pub status: ConnectionStatus, //TODO: change to is_online:bool
     pub validators: Option<Vec<Validator>>,
     pub created_at: DateTime<Utc>,
 }
