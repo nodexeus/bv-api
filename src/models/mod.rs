@@ -94,7 +94,7 @@ impl Command {
     }
 
     pub async fn find_pending_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Command>> {
-        sqlx::query_as::<_, Self>("SELECT * FROM commands where host_id = $1 AND completed_at IS NULL ORDER BY created_at_DESC")
+        sqlx::query_as::<_, Self>("SELECT * FROM commands where host_id = $1 AND completed_at IS NULL ORDER BY created_at DESC")
         .bind(host_id)
         .fetch_all(pool)
             .await.map_err(ApiError::from)
