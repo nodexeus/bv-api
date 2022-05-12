@@ -103,7 +103,7 @@ impl Node {
                     node_data,
                     status,
                     is_online
-                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,) RETURNING *"##,
+                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *"##,
         )
         .bind(&req.org_id)
         .bind(&req.host_id)
