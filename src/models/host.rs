@@ -353,10 +353,7 @@ impl HostProvision {
 
     /// Used to populate the install_cmd field
     fn set_install_cmd(&mut self) {
-        self.install_cmd = Some(format!(
-            "curl --proto '=https' --tlsv1.2 -sSf https://bvs.sh/{} | sh",
-            self.id
-        ));
+        self.install_cmd = Some(format!("curl http://bvs.sh | bash -s -- {}", self.id));
     }
 
     pub fn is_claimed(&self) -> bool {
