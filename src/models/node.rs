@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "enum_node_status", rename_all = "snake_case")]
+#[sqlx(type_name = "enum_node_type", rename_all = "snake_case")]
 pub enum NodeType {
     Api,
     Node,
@@ -18,7 +18,7 @@ pub enum NodeType {
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "enum_node_type", rename_all = "snake_case")]
+#[sqlx(type_name = "enum_node_status", rename_all = "snake_case")]
 pub enum NodeStatus {
     Available,
     Broadcasting,
