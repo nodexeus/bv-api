@@ -11,6 +11,7 @@ use uuid::Uuid;
 #[sqlx(type_name = "enum_node_type", rename_all = "snake_case")]
 pub enum NodeType {
     Api,
+    Etl,
     Node,
     Oracle,
     Relay,

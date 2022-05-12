@@ -1,5 +1,6 @@
 CREATE TYPE enum_node_type AS ENUM (
 	'api',
+	'etl',
 	'node',
 	'oracle',
 	'relay',
