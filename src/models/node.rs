@@ -1,5 +1,6 @@
 use super::{HostCmd, Validator};
 use crate::errors::{ApiError, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Row};
@@ -70,8 +71,8 @@ pub struct Node {
     wallet_address: Option<String>,
     block_height: Option<i64>,
     node_data: Option<serde_json::Value>,
-    created_at: Uuid,
-    updated_at: Uuid,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
     status: NodeStatus,
     is_online: bool,
 }
