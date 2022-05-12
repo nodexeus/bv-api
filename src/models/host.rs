@@ -86,7 +86,7 @@ impl From<PgRow> for Host {
 
 impl Host {
     pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
-        sqlx::query("SELECT * FROM hosts")
+        sqlx::query("SELECT * FROM hosts order by lower(name)")
             .map(Self::from)
             .fetch_all(pool)
             .await
