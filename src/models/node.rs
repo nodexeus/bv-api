@@ -1,4 +1,4 @@
-use super::Validator;
+use super::{HostCmd, Validator};
 use crate::errors::{ApiError, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -75,6 +75,113 @@ pub struct Node {
     status: NodeStatus,
     is_online: bool,
 }
+
+impl Node {
+    pub async fn find_by_id(id: &Uuid, pool: &PgPool) -> Result<Node> {
+        sqlx::query_as::<_, Node>("SELECT * FROM nodes where id = $1")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .map_err(ApiError::from)
+    }
+
+    pub async fn create(req: &NodeCreateRequest, pool: &PgPool) -> Result<Node> {
+        let mut tx = pool.begin().await?;
+        let node = sqlx::query_as::<_, Node>(
+            r##"INSERT INTO nodes (
+                    org_id, 
+                    host_id,
+                    name, 
+                    groups, 
+                    version, 
+                    ip_addr, 
+                    chain_type, 
+                    node_type, 
+                    address, 
+                    wallet_address, 
+                    block_height, 
+                    node_data,
+                    status,
+                    is_online
+                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,) RETURNING *"##,
+        )
+        .bind(&req.org_id)
+        .bind(&req.host_id)
+        .bind(&req.name)
+        .bind(&req.groups)
+        .bind(&req.version)
+        .bind(&req.ip_addr)
+        .bind(&req.chain_type)
+        .bind(&req.node_type)
+        .bind(&req.address)
+        .bind(&req.wallet_address)
+        .bind(&req.block_height)
+        .bind(&req.node_data)
+        .bind(&req.status)
+        .bind(&req.is_online)
+        .fetch_one(&mut tx)
+        .await
+        .map_err(ApiError::from)?;
+
+        let node_info = serde_json::json!({"node_id": &node.id});
+
+        //TODO: Move this to commands
+        sqlx::query("INSERT INTO commands (host_id, cmd, sub_cmd) values ($1,$2,$3)")
+            .bind(&req.host_id)
+            .bind(HostCmd::CreateNode)
+            .bind(node_info)
+            .execute(&mut tx)
+            .await
+            .map_err(ApiError::from)?;
+
+        tx.commit().await?;
+
+        Ok(node)
+    }
+
+    pub async fn update_info(id: &Uuid, info: &NodeInfo, pool: &PgPool) -> Result<Node> {
+        sqlx::query_as::<_, Node>("UPDATE nodes SET version=$1, ip_addr=$2, block_height=$3, node_data=$4, status=$5, is_online-$6 WHERE id=$7 RETURNING *")
+        .bind(&info.version)
+        .bind(&info.ip_addr)
+        .bind(&info.block_height)
+        .bind(&info.node_data)
+        .bind(&info.status)
+        .bind(&info.is_online)
+        .bind(&id)
+        .fetch_one(pool)
+        .await
+        .map_err(ApiError::from)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NodeCreateRequest {
+    org_id: Uuid,
+    host_id: Uuid,
+    name: Option<String>,
+    groups: Option<String>,
+    version: Option<String>,
+    ip_addr: Option<String>,
+    chain_type: String,
+    node_type: NodeType,
+    address: Option<String>,
+    wallet_address: Option<String>,
+    block_height: Option<i64>,
+    node_data: Option<serde_json::Value>,
+    status: NodeStatus,
+    is_online: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NodeInfo {
+    version: Option<String>,
+    ip_addr: Option<String>,
+    block_height: Option<i64>,
+    node_data: Option<serde_json::Value>,
+    status: NodeStatus,
+    is_online: bool,
+}
+
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct NodeGroup {
     id: Uuid,

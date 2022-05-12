@@ -179,6 +179,9 @@ pub async fn start() -> anyhow::Result<()> {
         .route("/qr/:user_id", get(get_qr))
         .route("/groups/nodes", get(list_node_groups))
         .route("/groups/nodes/:id", get(get_node_group))
+        .route("/nodes/:id", get(get_node))
+        .route("/nodes", post(create_node))
+        .route("/nodes/:id/info", put(update_node_info))
         .layer(
             CorsLayer::new()
                 .allow_headers(Any)
@@ -282,6 +285,46 @@ pub async fn get_node_group(
     let _ = auth.try_admin()?;
     let node_group = NodeGroup::find_by_id(db_pool.as_ref(), id).await?;
     Ok((StatusCode::OK, Json(node_group)))
+}
+
+pub async fn get_node(
+    Extension(db_pool): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    //TODO refactor this for owner/org
+    if !auth.is_admin() && !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+    let node = Node::find_by_id(&id, db_pool.as_ref()).await?;
+    Ok((StatusCode::OK, Json(node)))
+}
+
+pub async fn create_node(
+    Extension(db_pool): Extension<DbPool>,
+    Json(req): Json<NodeCreateRequest>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    //todo refactor correctly
+    if !auth.is_admin() && !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+    let node = Node::create(&req, db_pool.as_ref()).await?;
+    Ok((StatusCode::OK, Json(node)))
+}
+
+pub async fn update_node_info(
+    Extension(db_pool): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<NodeInfo>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    //todo refactor correctly
+    if !auth.is_admin() && !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+    let node = Node::update_info(&id, &req, db_pool.as_ref()).await?;
+    Ok((StatusCode::OK, Json(node)))
 }
 
 pub async fn create_user(
