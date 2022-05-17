@@ -14,10 +14,9 @@ CREATE TABLE IF NOT EXISTS blockchains (
 	project_url TEXT,
 	repo_url TEXT,
 	supports_etl BOOLEAN NOT NULL DEFAULT true,
-	supports_api BOOLEAN NOT NULL DEFAULT true,
+	supports_node BOOLEAN NOT NULL DEFAULT true,
 	supports_staking BOOLEAN NOT NULL DEFAULT true,
 	supports_broadcast BOOLEAN NOT NULL DEFAULT true,
-	is_dev_only BOOLEAN NOT NULL DEFAULT false,
 	version Text,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -75,3 +74,50 @@ CREATE INDEX IF NOT EXISTS idx_broadcast_logs_broadcast_filter_id on broadcast_l
 CREATE INDEX IF NOT EXISTS idx_broadcast_logs_event_type on broadcast_logs(blockchain_id);
 
 CREATE INDEX IF NOT EXISTS idx_broadcast_logs_created_at on broadcast_logs(created_at);
+
+ALTER TABLE nodes DROP COLUMN IF EXISTS chain_type;
+
+ALTER TABLE
+	nodes
+ADD
+	COLUMN IF NOT EXISTS blockchain_id UUID REFERENCES blockchains(id) ON DELETE CASCADE;
+
+INSERT INTO
+	blockchains (name, status)
+values
+	('Helium', 'production');
+
+INSERT INTO
+	blockchains (name, status)
+values
+	('Ehterium 2.0', 'development');
+
+INSERT INTO
+	blockchains (name, status, supports_staking, supports_etl)
+values
+	('Bitcoin', 'development', false, false);
+
+INSERT INTO
+	blockchains (name, status, supports_staking, supports_etl)
+values
+	('Lightning', 'development', false, false);
+
+INSERT INTO
+	blockchains (name, status, supports_staking, supports_etl)
+values
+	('Pockt Networks', 'development', false, false);
+
+INSERT INTO
+	blockchains (name, status)
+values
+	('Solana', 'development');
+
+INSERT INTO
+	blockchains (name, status)
+values
+	('Algorand', 'development');
+
+INSERT INTO
+	blockchains (name, status)
+values
+	('Avax', 'development');

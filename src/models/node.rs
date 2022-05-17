@@ -66,7 +66,7 @@ pub struct Node {
     groups: Option<String>,
     version: Option<String>,
     ip_addr: Option<String>,
-    chain_type: String,
+    blockchain_id: Uuid,
     node_type: NodeType,
     address: Option<String>,
     wallet_address: Option<String>,

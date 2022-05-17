@@ -8,6 +8,8 @@ use sqlx::{FromRow, PgPool};
 use std::convert::From;
 use uuid::Uuid;
 
+mod blockchain;
+pub use blockchain::*;
 mod host;
 pub use host::*;
 mod node;

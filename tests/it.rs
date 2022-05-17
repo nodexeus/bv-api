@@ -567,6 +567,25 @@ async fn it_should_list_validators_staking_as_service() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn it_should_list_blockchains() -> anyhow::Result<()> {
+    let db_pool = setup().await;
+    let app = Router::new()
+        .route("/blockchains", get(list_blockchains))
+        .layer(Extension(Arc::new(db_pool)))
+        .layer(TraceLayer::new_for_http());
+
+    let req = Request::builder()
+        .method("GET")
+        .uri("/blockchains")
+        .body(Body::empty())?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn it_should_list_validators_that_need_attention() -> anyhow::Result<()> {
     let db_pool = Arc::new(setup().await);
     let db_pool_cloned = Arc::clone(&db_pool);
@@ -873,10 +892,18 @@ async fn reset_db(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("Error deleting invoices");
+    sqlx::query("DELETE FROM blockchains")
+        .execute(pool)
+        .await
+        .expect("Error deleting blockchains");
     sqlx::query("INSERT INTO info (block_height) VALUES (99)")
         .execute(pool)
         .await
         .expect("could not update info in test setup");
+    sqlx::query("INSERT INTO blockchains (name,status) values ('Helium', 'production')")
+        .execute(pool)
+        .await
+        .expect("Error inserting blockchains");
 
     let user = UserRequest {
         email: "test@here.com".into(),

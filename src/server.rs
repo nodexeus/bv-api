@@ -182,6 +182,7 @@ pub async fn start() -> anyhow::Result<()> {
         .route("/nodes/:id", get(get_node))
         .route("/nodes", post(create_node))
         .route("/nodes/:id/info", put(update_node_info))
+        .route("/blockchains", get(list_blockchains))
         .layer(
             CorsLayer::new()
                 .allow_headers(Any)
@@ -828,4 +829,11 @@ pub async fn get_qr(
         .header("Content-Type", "image/png")
         .body(Body::from(Bytes::from(png)))
         .map_err(|e| ApiError::UnexpectedError(e.into())))
+}
+
+pub async fn list_blockchains(
+    Extension(db_pool): Extension<DbPool>,
+) -> ApiResult<impl IntoResponse> {
+    let blockchains = Blockchain::find_all(db_pool.as_ref()).await?;
+    Ok((StatusCode::OK, Json(blockchains)))
 }
