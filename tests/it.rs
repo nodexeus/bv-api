@@ -1,5 +1,5 @@
+use api::handlers::*;
 use api::models::*;
-use api::server::*;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::{get, post, put};
