@@ -119,22 +119,22 @@ impl Host {
         Ok(host)
     }
 
-    pub async fn create(host: HostRequest, pool: &PgPool) -> Result<Self> {
+    pub async fn create(req: HostRequest, pool: &PgPool) -> Result<Self> {
         let mut tx = pool.begin().await?;
         let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, token, status, org_id, cpu_count, mem_size, disk_size, os, os_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *")
-        .bind(host.name)
-        .bind(host.version)
-        .bind(host.location)
-        .bind(host.ip_addr)
-        .bind(host.val_ip_addrs)
-        .bind(host.token)
-        .bind(host.status)
-        .bind(host.org_id)
-        .bind(host.cpu_count)
-        .bind(host.mem_size)
-        .bind(host.disk_size)
-        .bind(host.os)
-        .bind(host.os_version)
+        .bind(req.name)
+        .bind(req.version)
+        .bind(req.location)
+        .bind(req.ip_addr)
+        .bind(req.val_ip_addrs)
+        .bind(req.token)
+        .bind(req.status)
+        .bind(req.org_id)
+        .bind(req.cpu_count)
+        .bind(req.mem_size)
+        .bind(req.disk_size)
+        .bind(req.os)
+        .bind(req.os_version)
         .map(|row: PgRow| {
             Self::from(row)
         })
@@ -288,13 +288,13 @@ pub struct HostStatusRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct HostProvision {
-    id: String,
-    org_id: Uuid,
-    created_at: DateTime<Utc>,
-    claimed_at: Option<DateTime<Utc>>,
+    pub id: String,
+    pub org_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub claimed_at: Option<DateTime<Utc>>,
     #[sqlx(default)]
-    install_cmd: Option<String>,
-    host_id: Option<Uuid>,
+    pub install_cmd: Option<String>,
+    pub host_id: Option<Uuid>,
 }
 
 impl HostProvision {
@@ -370,5 +370,5 @@ impl HostProvision {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostProvisionRequest {
-    org_id: Uuid,
+    pub org_id: Uuid,
 }

@@ -414,6 +414,88 @@ async fn it_should_create_command() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn it_should_create_host_provision_and_claim() -> anyhow::Result<()> {
+    let db_pool = Arc::new(setup().await);
+    let db_pool_cloned = Arc::clone(&db_pool);
+    let app = Router::new()
+        .route("/host_provisions", post(create_host_provision))
+        .layer(Extension(db_pool_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    // let host = get_test_host(&db_pool).await;
+    // let path = format!("/hosts/{}/commands", host.id);
+    let user = get_admin_user(&db_pool).await;
+    let org = Org::find_all_by_user(&user.id, &db_pool)
+        .await?
+        .first()
+        .expect("Org to be found for user.")
+        .to_owned();
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/host_provisions")
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&HostProvisionRequest {
+            org_id: org.id,
+        })?))?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(resp.into_body()).await?;
+    let host_provision: HostProvision = serde_json::from_slice(&body)?;
+    assert_eq!(host_provision.org_id, org.id);
+
+    let app = Router::new()
+        .route("/host_provisions/:id/hosts", post(claim_host_provision))
+        .layer(Extension(db_pool_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    let path = format!("/host_provisions/{}/hosts", &host_provision.id);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(&path)
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&HostCreateRequest {
+            name: "my.host.com".into(),
+            org_id: None,
+            version: Some("1.2.1".into()),
+            location: Some("New York".into()),
+            cpu_count: Some(64),
+            mem_size: Some(128_000_000),
+            disk_size: Some(128_000_000),
+            os: Some("Debian".into()),
+            os_version: Some("34".into()),
+            ip_addr: "192.199.99.99".into(),
+            val_ip_addrs: None,
+        })?))?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(resp.into_body()).await?;
+    let host: Host = serde_json::from_slice(&body)?;
+    assert_eq!(host.org_id, Some(org.id));
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn it_should_stake_one_validator() -> anyhow::Result<()> {
     let db_pool = Arc::new(setup().await);
     let db_pool_cloned = Arc::clone(&db_pool);
@@ -926,6 +1008,10 @@ async fn reset_db(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("Error deleting blockchains");
+    sqlx::query("DELETE FROM host_provisions")
+        .execute(pool)
+        .await
+        .expect("Error deleting host_provisions");
     sqlx::query("INSERT INTO info (block_height) VALUES (99)")
         .execute(pool)
         .await

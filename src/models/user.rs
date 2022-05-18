@@ -406,8 +406,6 @@ impl User {
                 .await
                 .map_err(ApiError::from)?;
 
-                dbg!("here");
-
                 sqlx::query(
                     "INSERT INTO orgs_users (org_id, user_id, role) values($1, $2, 'owner')",
                 )
