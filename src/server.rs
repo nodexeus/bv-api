@@ -372,7 +372,7 @@ pub async fn list_user_orgs(
     auth: Authentication,
 ) -> ApiResult<impl IntoResponse> {
     let _ = auth.try_user_access(id)?;
-    
+
     let orgs = Org::find_all_by_user(&id, db_pool.as_ref()).await?;
     Ok((StatusCode::OK, Json(orgs)))
 }
