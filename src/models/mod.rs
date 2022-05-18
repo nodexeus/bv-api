@@ -10,6 +10,8 @@ use uuid::Uuid;
 
 mod blockchain;
 pub use blockchain::*;
+mod broadcast;
+pub use broadcast::*;
 mod host;
 pub use host::*;
 mod node;
