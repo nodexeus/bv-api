@@ -18,16 +18,19 @@ pub struct Org {
     pub id: Uuid,
     pub name: String,
     pub is_personal: bool,
+    #[sqlx(default)]
+    pub role: Option<OrgRole>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 impl Org {
-    pub async fn find_all_by_user_id(id: &Uuid, pool: &PgPool) -> Result<Vec<Org>> {
+    pub async fn find_all_by_user(user_id: &Uuid, pool: &PgPool) -> Result<Vec<Org>> {
         sqlx::query_as::<_, Self>(
             r##"
             SELECT 
-                orgs.* 
+                orgs.*,
+                orgs_users.role
             FROM 
                 orgs 
             INNER JOIN 
@@ -40,7 +43,7 @@ impl Org {
                 lower(orgs.name)
             "##,
         )
-        .bind(&id)
+        .bind(&user_id)
         .fetch_all(pool)
         .await
         .map_err(ApiError::from)

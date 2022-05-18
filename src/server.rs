@@ -120,6 +120,7 @@ pub async fn start() -> anyhow::Result<()> {
         .route("/block_height", get(get_block_height))
         .route("/block_info", get(get_block_info))
         .route("/block_info", put(update_block_info))
+        .route("/users/:id/orgs", get(list_user_orgs))
         .route("/users", post(create_user))
         .route("/users/summary", get(users_summary))
         .route("/users/:user_id/summary", get(user_summary))
@@ -363,6 +364,17 @@ pub async fn user_payments(
     let _ = auth.try_user_access(user_id)?;
     let payments = Payment::find_all_by_user(db_pool.as_ref(), user_id).await?;
     Ok((StatusCode::OK, Json(payments)))
+}
+
+pub async fn list_user_orgs(
+    Extension(db_pool): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let _ = auth.try_user_access(id)?;
+    
+    let orgs = Org::find_all_by_user(&id, db_pool.as_ref()).await?;
+    Ok((StatusCode::OK, Json(orgs)))
 }
 
 // Can pass ?token= to get a host by token

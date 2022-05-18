@@ -586,6 +586,36 @@ async fn it_should_list_blockchains() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn it_should_list_user_orgs() -> anyhow::Result<()> {
+    let db_pool = setup().await;
+    let user = get_admin_user(&db_pool).await;
+
+    let app = Router::new()
+        .route("/users/:id/orgs", get(list_user_orgs))
+        .layer(Extension(Arc::new(db_pool)))
+        .layer(TraceLayer::new_for_http());
+
+    let path = format!("/users/{}/orgs", user.id);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri(path)
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .body(Body::empty())?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn it_should_list_validators_that_need_attention() -> anyhow::Result<()> {
     let db_pool = Arc::new(setup().await);
     let db_pool_cloned = Arc::clone(&db_pool);
