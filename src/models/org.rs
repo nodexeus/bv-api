@@ -25,7 +25,7 @@ pub struct Org {
 }
 
 impl Org {
-    pub async fn find_all_by_user(user_id: &Uuid, pool: &PgPool) -> Result<Vec<Org>> {
+    pub async fn find_all_by_user(user_id: &Uuid, db: &PgPool) -> Result<Vec<Org>> {
         sqlx::query_as::<_, Self>(
             r##"
             SELECT 
@@ -44,9 +44,26 @@ impl Org {
             "##,
         )
         .bind(&user_id)
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
+    }
+
+    /// Checks if the user is a member
+    pub async fn is_member(user_id: &Uuid, org_id: &Uuid, db: &PgPool) -> Result<bool> {
+        dbg!("in is_member");
+        let org_member = sqlx::query_as::<_, Self>(
+            "SELECT * FROM orgs_users where org_id = $1 and user_id = $2",
+        )
+        .bind(&org_id)
+        .bind(&user_id)
+        .fetch_optional(db)
+        .await
+        .map_err(ApiError::from)?;
+
+        dbg!(&org_member);
+
+        Ok(org_member.is_some())
     }
 }
 

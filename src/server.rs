@@ -87,7 +87,7 @@ pub async fn start() -> anyhow::Result<()> {
     let bind_ip = std::env::var("BIND_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
     let addr = format!("{}:{}", bind_ip, port);
 
-    let db_pool = PgPoolOptions::new()
+    let db = PgPoolOptions::new()
         .max_connections(db_max_conn)
         .min_connections(db_min_conn)
         .max_lifetime(Some(Duration::from_secs(60 * 60 * 24)))
@@ -105,7 +105,7 @@ pub async fn start() -> anyhow::Result<()> {
         )
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
-        .layer(Extension(Arc::new(db_pool)));
+        .layer(Extension(Arc::new(db)));
 
     Ok(axum::Server::bind(&addr.parse()?)
         .serve(app.into_make_service())

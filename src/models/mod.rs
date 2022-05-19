@@ -79,39 +79,39 @@ pub struct Command {
 }
 
 impl Command {
-    pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
+    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, Self>("SELECT * FROM commands where id = $1")
             .bind(id)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Command>> {
+    pub async fn find_all_by_host(host_id: Uuid, db: &PgPool) -> Result<Vec<Command>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM commands where host_id = $1 ORDER BY created_at DESC",
         )
         .bind(host_id)
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn find_pending_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Command>> {
+    pub async fn find_pending_by_host(host_id: Uuid, db: &PgPool) -> Result<Vec<Command>> {
         sqlx::query_as::<_, Self>("SELECT * FROM commands where host_id = $1 AND completed_at IS NULL ORDER BY created_at DESC")
         .bind(host_id)
-        .fetch_all(pool)
+        .fetch_all(db)
             .await.map_err(ApiError::from)
     }
 
-    pub async fn create(host_id: Uuid, command: CommandRequest, pool: &PgPool) -> Result<Command> {
+    pub async fn create(host_id: Uuid, command: CommandRequest, db: &PgPool) -> Result<Command> {
         sqlx::query_as::<_, Self>(
             "INSERT INTO commands (host_id, cmd, sub_cmd) VALUES ($1, $2, $3) RETURNING *",
         )
         .bind(host_id)
         .bind(command.cmd)
         .bind(command.sub_cmd)
-        .fetch_one(pool)
+        .fetch_one(db)
         .await
         .map_err(ApiError::from)
     }
@@ -119,18 +119,18 @@ impl Command {
     pub async fn update_response(
         id: Uuid,
         response: CommandResponseRequest,
-        pool: &PgPool,
+        db: &PgPool,
     ) -> Result<Command> {
         sqlx::query_as::<_, Self>("UPDATE commands SET response = $1, exit_status = $2, completed_at = now() WHERE id = $3 RETURNING *")
         .bind(response.response)
         .bind(response.exit_status)
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(db)
         .await.map_err(ApiError::from)
     }
 
-    pub async fn delete(id: Uuid, pool: &PgPool) -> Result<u64> {
-        let mut tx = pool.begin().await?;
+    pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
+        let mut tx = db.begin().await?;
         let deleted = sqlx::query("DELETE FROM commands WHERE id = $1")
             .bind(id)
             .execute(&mut tx)
@@ -179,77 +179,74 @@ pub struct Validator {
 }
 
 impl Validator {
-    pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM validators")
-            .fetch_all(pool)
+            .fetch_all(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_host(host_id: Uuid, pool: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all_by_host(host_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM validators WHERE host_id = $1 order by status DESC, stake_status, name",
         )
         .bind(host_id)
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_user(user_id: Uuid, pool: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all_by_user(user_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM validators WHERE user_id = $1 order by status DESC, stake_status, name",
         )
         .bind(user_id)
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
+    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, Self>("SELECT * FROM validators WHERE id = $1")
             .bind(id)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
 
     pub async fn find_all_by_stake_status(
         stake_status: StakeStatus,
-        pool: &PgPool,
+        db: &PgPool,
     ) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM validators WHERE stake_status = $1 order by status DESC, stake_status, name",
         )
         .bind(stake_status)
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
 
     pub async fn find_all_by_status(
         status: ValidatorStatus,
-        pool: &PgPool,
+        db: &PgPool,
     ) -> Result<Vec<Validator>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM validators where status = $1 order by status DESC, stake_status, name",
         )
         .bind(status)
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn list_staking_export(
-        user_id: &Uuid,
-        pool: &PgPool,
-    ) -> Result<Vec<ValidatorStaking>> {
+    pub async fn list_staking_export(user_id: &Uuid, db: &PgPool) -> Result<Vec<ValidatorStaking>> {
         sqlx::query_as::<_, ValidatorStaking>(
             "SELECT address, 10000::BIGINT as stake FROM validators where user_id=$1 and stake_status=$2",
         )
         .bind(user_id)
         .bind(StakeStatus::Staking)
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
@@ -279,9 +276,9 @@ impl Validator {
     pub async fn update_status(
         id: Uuid,
         validator: ValidatorStatusRequest,
-        pool: &PgPool,
+        db: &PgPool,
     ) -> Result<Self> {
-        let mut tx = pool.begin().await.unwrap();
+        let mut tx = db.begin().await.unwrap();
         let validator = sqlx::query_as::<_, Self>(
             r#"UPDATE validators SET version=$1, block_height=$2, status=$3, updated_at=now()  WHERE id = $4 RETURNING *"#
         )
@@ -296,7 +293,7 @@ impl Validator {
         Ok(validator)
     }
 
-    pub async fn update_stake_status(id: Uuid, status: StakeStatus, pool: &PgPool) -> Result<Self> {
+    pub async fn update_stake_status(id: Uuid, status: StakeStatus, db: &PgPool) -> Result<Self> {
         let query = match status {
             StakeStatus::Available => {
                 r#"UPDATE validators SET stake_status=$1, owner_address=NULL, user_id=NULL, staking_height=NULL, updated_at=now()  WHERE id = $2 RETURNING *"#
@@ -312,16 +309,16 @@ impl Validator {
         Ok(sqlx::query_as::<_, Self>(query)
             .bind(status)
             .bind(id)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await?)
     }
 
     pub async fn update_owner_address(
         id: Uuid,
         owner_address: Option<String>,
-        pool: &PgPool,
+        db: &PgPool,
     ) -> Result<Self> {
-        let mut tx = pool.begin().await.unwrap();
+        let mut tx = db.begin().await.unwrap();
         let validator = sqlx::query_as::<_, Self>(
             r#"UPDATE validators SET owner_address=$1, updated_at=now()  WHERE id = $2 RETURNING *"#,
         )
@@ -337,7 +334,7 @@ impl Validator {
     pub async fn update_penalty(
         id: Uuid,
         penalty: ValidatorPenaltyRequest,
-        pool: &PgPool,
+        db: &PgPool,
     ) -> Result<Validator> {
         Ok(sqlx::query_as::<_, Self>("UPDATE validators SET tenure_penalty=$1, dkg_penalty=$2, performance_penalty=$3, total_penalty=$4 where id = $5 RETURNING *")
         .bind(penalty.tenure_penalty)
@@ -345,14 +342,14 @@ impl Validator {
         .bind(penalty.performance_penalty)
         .bind(penalty.total_penalty)
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(db)
         .await?)
     }
 
     pub async fn update_identity(
         id: Uuid,
         validator: ValidatorIdentityRequest,
-        pool: &PgPool,
+        db: &PgPool,
     ) -> Result<Self> {
         let mut address_name = None;
         if let Some(val_addr) = &validator.address {
@@ -362,7 +359,7 @@ impl Validator {
             }
         };
 
-        let mut tx = pool.begin().await.unwrap();
+        let mut tx = db.begin().await.unwrap();
         let validator = sqlx::query_as::<_, Self>(
             r#"UPDATE validators SET version=$1, address=$2, swarm_key=$3, address_name=$4, updated_at=now() WHERE id = $5 RETURNING *"#
         )
@@ -378,8 +375,8 @@ impl Validator {
         Ok(validator)
     }
 
-    pub async fn migrate(pool: &PgPool, id: Uuid) -> Result<Validator> {
-        let mut tx = pool.begin().await?;
+    pub async fn migrate(db: &PgPool, id: Uuid) -> Result<Validator> {
+        let mut tx = db.begin().await?;
         let val = sqlx::query_as::<_, Self>("SELECT * FROM validators where id = $1")
             .bind(id)
             .fetch_one(&mut tx)
@@ -413,19 +410,19 @@ impl Validator {
         Ok(new_val)
     }
 
-    pub async fn inventory_count(pool: &PgPool) -> Result<i64> {
+    pub async fn inventory_count(db: &PgPool) -> Result<i64> {
         let row: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) AS available FROM validators where stake_status = 'available' and (status = 'synced' OR status = 'syncing')",
         )
-        .fetch_one(pool)
+        .fetch_one(db)
         .await?;
 
         Ok(row.0)
     }
 
-    pub async fn stake(pool: &PgPool, user: &User, count: i64) -> Result<Vec<Validator>> {
-        if user.can_stake(pool, count).await? {
-            let mut tx = pool.begin().await?;
+    pub async fn stake(db: &PgPool, user: &User, count: i64) -> Result<Vec<Validator>> {
+        if user.can_stake(db, count).await? {
+            let mut tx = db.begin().await?;
             let res = sqlx::query_as::<_, Self>(
                 r#"
             WITH inv AS (
@@ -483,9 +480,9 @@ pub struct ValidatorDetail {
 }
 
 impl ValidatorDetail {
-    pub async fn list_needs_attention(pool: &PgPool) -> Result<Vec<ValidatorDetail>> {
+    pub async fn list_needs_attention(db: &PgPool) -> Result<Vec<ValidatorDetail>> {
         sqlx::query_as::<_, ValidatorDetail> ("SELECT hosts.name as host_name, users.email as user_email, validators.* FROM validators inner join hosts on hosts.id = validators.host_id left join users on users.id = validators.user_id where (validators.status <> 'synced' OR validators.stake_status = 'staking' OR validators.status = 'migrating' OR validators.status = 'upgrading') order by status DESC, stake_status, name")
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
@@ -578,7 +575,7 @@ pub struct Reward {
 }
 
 impl Reward {
-    pub async fn summary_by_user(pool: &PgPool, user_id: &Uuid) -> Result<RewardSummary> {
+    pub async fn summary_by_user(db: &PgPool, user_id: &Uuid) -> Result<RewardSummary> {
         let row: RewardSummary = sqlx::query_as(
             r##"SELECT 
                         COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN now() - '30 day'::interval AND now()), 0)::BIGINT as last_30,
@@ -590,13 +587,13 @@ impl Reward {
                     WHERE user_id=$1"##
             )
             .bind(user_id)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await?;
 
         Ok(row)
     }
 
-    pub async fn create(pool: &PgPool, rewards: &[RewardRequest]) -> Result<()> {
+    pub async fn create(db: &PgPool, rewards: &[RewardRequest]) -> Result<()> {
         for reward in rewards {
             if reward.amount < 1 {
                 error!("Reward has zero amount. {:?}", reward);
@@ -610,7 +607,7 @@ impl Reward {
                 .bind(&reward.account)
                 .bind(&reward.validator)
                 .bind(&reward.amount)
-                .execute(pool)
+                .execute(db)
                 .await;
 
             if let Err(e) = res {
@@ -660,20 +657,20 @@ pub struct Info {
 }
 
 impl Info {
-    pub async fn update_info(pool: &PgPool, info: &InfoRequest) -> Result<Info> {
+    pub async fn update_info(db: &PgPool, info: &InfoRequest) -> Result<Info> {
         sqlx::query_as::<_, Info>(
             "UPDATE info SET block_height = $1, oracle_price = $2, total_rewards = COALESCE((SELECT SUM(amount) FROM rewards), 0), staked_count = (SELECT count(*) FROM validators where stake_status = 'staked') WHERE block_height <> $1 RETURNING *",
         )
         .bind(info.block_height)
         .bind(info.oracle_price)
-        .fetch_one(pool)
+        .fetch_one(db)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn get_info(pool: &PgPool) -> Result<Info> {
+    pub async fn get_info(db: &PgPool) -> Result<Info> {
         sqlx::query_as::<_, Info>("SELECT * FROM info LIMIT 1")
-            .fetch_one(pool)
+            .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
@@ -694,7 +691,7 @@ pub struct Invoice {
 }
 
 impl Invoice {
-    pub async fn find_all_by_user(pool: &PgPool, user_id: &Uuid) -> Result<Vec<Invoice>> {
+    pub async fn find_all_by_user(db: &PgPool, user_id: &Uuid) -> Result<Vec<Invoice>> {
         sqlx::query_as::<_, Invoice>(
             r##"SELECT
                         invoices.*,
@@ -710,15 +707,15 @@ impl Invoice {
                     "##,
         )
         .bind(user_id)
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
 
     /// Gets all wallets addresses with a due amount.
-    pub async fn find_all_payments_due(pool: &PgPool) -> Result<Vec<PaymentDue>> {
+    pub async fn find_all_payments_due(db: &PgPool) -> Result<Vec<PaymentDue>> {
         sqlx::query_as::<_, PaymentDue>("SELECT users.pay_address, sum(amount), min(ends_at) FROM invoices INNER JOIN users on users.id = invoices.user_id WHERE is_paid = false GROUP BY address")
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
@@ -743,7 +740,7 @@ pub struct Payment {
 }
 
 impl Payment {
-    pub async fn create(pool: &PgPool, payments: &[Payment]) -> Result<()> {
+    pub async fn create(db: &PgPool, payments: &[Payment]) -> Result<()> {
         for payment in payments {
             let res = sqlx::query(
                 r##"
@@ -764,7 +761,7 @@ impl Payment {
             .bind(&payment.payee)
             .bind(&payment.amount)
             .bind(&payment.oracle_price)
-            .execute(pool)
+            .execute(db)
             .await;
 
             if let Err(e) = res {
@@ -775,12 +772,12 @@ impl Payment {
         Ok(())
     }
 
-    pub async fn find_all_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Payment>> {
+    pub async fn find_all_by_user(db: &PgPool, user_id: Uuid) -> Result<Vec<Payment>> {
         Ok(sqlx::query_as::<_, Payment>(
             "SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC",
         )
         .bind(user_id)
-        .fetch_all(pool)
+        .fetch_all(db)
         .await?)
     }
 }
