@@ -29,19 +29,18 @@ impl BroadcastFilter {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_org_id(id: &Uuid, db: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all_by_org_id(org_id: &Uuid, db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM broadcast_filters where org_id = $1")
-            .bind(&id)
+            .bind(&org_id)
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
     }
 
     pub async fn create(req: &BroadcastFilterRequest, db: &PgPool) -> Result<Self> {
-        //TODO: Validate Org/user
         sqlx::query_as::<_, Self>(
             r##"
-            INSERT INTO filters
+            INSERT INTO broadcast_filters
                 (blockchain_id, org_id, name, addresses, callback_url, auth_token, txn_types, is_active)
             VALUES
                 ($1,$2,$3,$4,$5,$6,$7,$8)
@@ -61,10 +60,9 @@ impl BroadcastFilter {
     }
 
     pub async fn update(id: &Uuid, req: &BroadcastFilterRequest, db: &PgPool) -> Result<Self> {
-        //TODO: Validate Org/user
         sqlx::query_as::<_, Self>(
             r##"
-            UPDATE filters
+            UPDATE broadcast_filters
                 SET blockchain_id=$1, org_id=$2, name=$3, addresses=$4, callback_url=$5, auth_token=$6, txn_types=$7, is_active=$8
             WHERE
                 id=$9
@@ -82,6 +80,15 @@ impl BroadcastFilter {
         .fetch_one(db)
         .await
         .map_err(ApiError::from)
+    }
+
+    pub async fn delete(id: &Uuid, db: &PgPool) -> Result<()> {
+        let _ = sqlx::query("DELETE FROM broadcast_filters WHERE id = $1")
+            .bind(&id)
+            .execute(db)
+            .await?;
+
+        Ok(())
     }
 }
 

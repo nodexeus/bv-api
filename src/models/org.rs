@@ -51,17 +51,14 @@ impl Org {
 
     /// Checks if the user is a member
     pub async fn is_member(user_id: &Uuid, org_id: &Uuid, db: &PgPool) -> Result<bool> {
-        dbg!("in is_member");
-        let org_member = sqlx::query_as::<_, Self>(
-            "SELECT * FROM orgs_users where org_id = $1 and user_id = $2",
+        let org_member = sqlx::query_as::<_, OrgUser>(
+            "SELECT * FROM orgs_users WHERE org_id = $1 AND user_id = $2",
         )
         .bind(&org_id)
         .bind(&user_id)
         .fetch_optional(db)
         .await
         .map_err(ApiError::from)?;
-
-        dbg!(&org_member);
 
         Ok(org_member.is_some())
     }

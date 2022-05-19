@@ -2,7 +2,7 @@ use api::handlers::*;
 use api::models::*;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Extension, Router};
 use chrono::Utc;
 use serde::Deserialize;
@@ -496,7 +496,7 @@ async fn it_should_create_host_provision_and_claim() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn it_should_create_broadcast_filter() -> anyhow::Result<()> {
+async fn it_should_crud_broadcast_filters() -> anyhow::Result<()> {
     let db = Arc::new(setup().await);
     let db_cloned = Arc::clone(&db);
     let app = Router::new()
@@ -538,6 +538,132 @@ async fn it_should_create_broadcast_filter() -> anyhow::Result<()> {
 
     let resp = app.oneshot(req).await?;
     assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(resp.into_body()).await?;
+    let mut filter: BroadcastFilter = serde_json::from_slice(&body)?;
+
+    assert_eq!(filter.org_id, org.id);
+
+    let app = Router::new()
+        .route(
+            "/orgs/:id/broadcast_filters",
+            get(list_org_broadcast_filters),
+        )
+        .layer(Extension(db_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    let path = format!("/orgs/{}/broadcast_filters", &org.id);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri(&path)
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::empty())?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(resp.into_body()).await?;
+    let filters: Vec<BroadcastFilter> = serde_json::from_slice(&body)?;
+    assert_eq!(filters.len(), 1);
+
+    // GET
+    let app = Router::new()
+        .route("/broadcast_filters/:id", get(get_broadcast_filter))
+        .layer(Extension(db_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    let path = format!("/broadcast_filters/{}", &filter.id);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri(&path)
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::empty())?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "Failed to get broadcast filter."
+    );
+
+    // UPDATE
+    let app = Router::new()
+        .route("/broadcast_filters/:id", put(update_broadcast_filter))
+        .layer(Extension(db_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    let path = format!("/broadcast_filters/{}", &filter.id);
+
+    filter.name = "My New Name".into();
+
+    let req = Request::builder()
+        .method("PUT")
+        .uri(&path)
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&filter)?))?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "Failed to UPDATE broadcast filter."
+    );
+
+    let body = hyper::body::to_bytes(resp.into_body()).await?;
+    let filter: BroadcastFilter = serde_json::from_slice(&body)?;
+
+    assert_eq!(filter.name, "My New Name");
+
+    // DELETE
+    let app = Router::new()
+        .route("/broadcast_filters/:id", delete(delete_broadcast_filter))
+        .layer(Extension(db_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    let path = format!("/broadcast_filters/{}", &filter.id);
+
+    let req = Request::builder()
+        .method("DELETE")
+        .uri(&path)
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::empty())?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "Failed to DELETE broadcast filter."
+    );
 
     Ok(())
 }
