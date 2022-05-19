@@ -19,6 +19,7 @@ pub enum BlockchainStatus {
 pub struct Blockchain {
     pub id: Uuid,
     pub name: String,
+    pub token: Option<String>,
     pub description: Option<String>,
     pub status: BlockchainStatus,
     pub project_url: Option<String>,
