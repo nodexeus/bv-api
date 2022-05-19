@@ -79,16 +79,16 @@ pub struct Node {
 }
 
 impl Node {
-    pub async fn find_by_id(id: &Uuid, pool: &PgPool) -> Result<Node> {
+    pub async fn find_by_id(id: &Uuid, db: &PgPool) -> Result<Node> {
         sqlx::query_as::<_, Node>("SELECT * FROM nodes where id = $1")
             .bind(id)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn create(req: &NodeCreateRequest, pool: &PgPool) -> Result<Node> {
-        let mut tx = pool.begin().await?;
+    pub async fn create(req: &NodeCreateRequest, db: &PgPool) -> Result<Node> {
+        let mut tx = db.begin().await?;
         let node = sqlx::query_as::<_, Node>(
             r##"INSERT INTO nodes (
                     org_id, 
@@ -141,7 +141,7 @@ impl Node {
         Ok(node)
     }
 
-    pub async fn update_info(id: &Uuid, info: &NodeInfo, pool: &PgPool) -> Result<Node> {
+    pub async fn update_info(id: &Uuid, info: &NodeInfo, db: &PgPool) -> Result<Node> {
         sqlx::query_as::<_, Node>("UPDATE nodes SET version=$1, ip_addr=$2, block_height=$3, node_data=$4, status=$5, is_online-$6 WHERE id=$7 RETURNING *")
         .bind(&info.version)
         .bind(&info.ip_addr)
@@ -150,7 +150,7 @@ impl Node {
         .bind(&info.status)
         .bind(&info.is_online)
         .bind(&id)
-        .fetch_one(pool)
+        .fetch_one(db)
         .await
         .map_err(ApiError::from)
     }
@@ -194,16 +194,16 @@ pub struct NodeGroup {
 }
 
 impl NodeGroup {
-    pub async fn find_all(pool: &PgPool) -> Result<Vec<NodeGroup>> {
+    pub async fn find_all(db: &PgPool) -> Result<Vec<NodeGroup>> {
         sqlx::query("SELECT user_id as id, users.email as name, count(*) as node_count, null as nodes FROM validators INNER JOIN users on users.id = validators.user_id  GROUP BY user_id, users.email ORDER BY users.email DESC")
             .map(Self::from)
-            .fetch_all(pool)
+            .fetch_all(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<NodeGroup> {
-        let validators = Validator::find_all_by_user(id, pool).await?;
+    pub async fn find_by_id(db: &PgPool, id: Uuid) -> Result<NodeGroup> {
+        let validators = Validator::find_all_by_user(id, db).await?;
         let name = validators.first().unwrap().name.clone();
         Ok(NodeGroup {
             id,

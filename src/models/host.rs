@@ -85,42 +85,42 @@ impl From<PgRow> for Host {
 }
 
 impl Host {
-    pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query("SELECT * FROM hosts order by lower(name)")
             .map(Self::from)
-            .fetch_all(pool)
+            .fetch_all(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
+    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
         let mut host = sqlx::query("SELECT * FROM hosts WHERE id = $1")
             .bind(id)
             .map(Self::from)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await?;
 
         // Add Validators list
-        host.validators = Some(Validator::find_all_by_host(host.id, pool).await?);
+        host.validators = Some(Validator::find_all_by_host(host.id, db).await?);
 
         Ok(host)
     }
 
-    pub async fn find_by_token(token: &str, pool: &PgPool) -> Result<Self> {
+    pub async fn find_by_token(token: &str, db: &PgPool) -> Result<Self> {
         let mut host = sqlx::query("SELECT * FROM hosts WHERE token = $1")
             .bind(token)
             .map(Self::from)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await?;
 
         // Add Validators list
-        host.validators = Some(Validator::find_all_by_host(host.id, pool).await?);
+        host.validators = Some(Validator::find_all_by_host(host.id, db).await?);
 
         Ok(host)
     }
 
-    pub async fn create(req: HostRequest, pool: &PgPool) -> Result<Self> {
-        let mut tx = pool.begin().await?;
+    pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
+        let mut tx = db.begin().await?;
         let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, token, status, org_id, cpu_count, mem_size, disk_size, os, os_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *")
         .bind(req.name)
         .bind(req.version)
@@ -159,8 +159,8 @@ impl Host {
         Ok(host)
     }
 
-    pub async fn update(id: Uuid, host: HostRequest, pool: &PgPool) -> Result<Self> {
-        let mut tx = pool.begin().await.unwrap();
+    pub async fn update(id: Uuid, host: HostRequest, db: &PgPool) -> Result<Self> {
+        let mut tx = db.begin().await.unwrap();
         let host = sqlx::query(
             r#"UPDATE hosts SET name = $1, version = $2, location = $3, ip_addr = $4, token = $5, status = $6, org_id = $7, cpu_count = $8, mem_size = $9, disk_size = $10, os = $11, os_version = $12 WHERE id = $13 RETURNING *"#
         )
@@ -187,8 +187,8 @@ impl Host {
         Ok(host)
     }
 
-    pub async fn update_status(id: Uuid, host: HostStatusRequest, pool: &PgPool) -> Result<Self> {
-        let mut tx = pool.begin().await.unwrap();
+    pub async fn update_status(id: Uuid, host: HostStatusRequest, db: &PgPool) -> Result<Self> {
+        let mut tx = db.begin().await.unwrap();
         let host =
             sqlx::query(r#"UPDATE hosts SET version = $1, status = $2  WHERE id = $3 RETURNING *"#)
                 .bind(host.version)
@@ -202,8 +202,8 @@ impl Host {
         Ok(host)
     }
 
-    pub async fn delete(id: Uuid, pool: &PgPool) -> Result<u64> {
-        let mut tx = pool.begin().await?;
+    pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
+        let mut tx = db.begin().await?;
         let deleted = sqlx::query("DELETE FROM hosts WHERE id = $1")
             .bind(id)
             .execute(&mut tx)
@@ -298,13 +298,13 @@ pub struct HostProvision {
 }
 
 impl HostProvision {
-    pub async fn create(req: HostProvisionRequest, pool: &PgPool) -> Result<HostProvision> {
+    pub async fn create(req: HostProvisionRequest, db: &PgPool) -> Result<HostProvision> {
         let mut host_provision = sqlx::query_as::<_, HostProvision>(
             "INSERT INTO host_provisions (id, org_id) values ($1, $2) RETURNING *",
         )
         .bind(Self::generate_token())
         .bind(req.org_id)
-        .fetch_one(pool)
+        .fetch_one(db)
         .await
         .map_err(ApiError::from)?;
 
@@ -313,11 +313,11 @@ impl HostProvision {
         Ok(host_provision)
     }
 
-    pub async fn find_by_id(host_provision_id: &str, pool: &PgPool) -> Result<HostProvision> {
+    pub async fn find_by_id(host_provision_id: &str, db: &PgPool) -> Result<HostProvision> {
         let mut host_provision =
             sqlx::query_as::<_, HostProvision>("SELECT * FROM host_provisions where id = $1")
                 .bind(host_provision_id)
-                .fetch_one(pool)
+                .fetch_one(db)
                 .await
                 .map_err(ApiError::from)?;
         host_provision.set_install_cmd();
@@ -328,9 +328,9 @@ impl HostProvision {
     pub async fn claim(
         host_provision_id: &str,
         mut req: HostCreateRequest,
-        pool: &PgPool,
+        db: &PgPool,
     ) -> Result<Host> {
-        let host_provision = Self::find_by_id(host_provision_id, pool).await?;
+        let host_provision = Self::find_by_id(host_provision_id, db).await?;
 
         if host_provision.is_claimed() {
             return Err(anyhow::anyhow!("Host provision has already been claimed.").into());
@@ -340,12 +340,12 @@ impl HostProvision {
         req.val_ip_addrs = None;
 
         //TODO: transaction this
-        let host = Host::create(req.into(), pool).await?;
+        let host = Host::create(req.into(), db).await?;
 
         sqlx::query("UPDATE host_provisions set claimed_at = now(), host_id = $1 where id = $2")
             .bind(host.id)
             .bind(host_provision.id)
-            .execute(pool)
+            .execute(db)
             .await?;
 
         Ok(host)

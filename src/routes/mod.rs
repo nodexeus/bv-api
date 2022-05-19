@@ -76,4 +76,12 @@ pub fn api_router() -> Router {
         .route("/nodes", post(create_node))
         .route("/nodes/:id/info", put(update_node_info))
         .route("/blockchains", get(list_blockchains))
+        .route("/broadcast_filters", post(create_broadcast_filter))
+        .route("/broadcast_filters", get(get_broadcast_filter))
+        .route(
+            "/orgs/:id/broadcast_filters",
+            get(list_org_broadcast_filters),
+        )
+        .route("/broadcast_filters/:id", put(update_broadcast_filter))
+        .route("/broadcast_filters/:id", delete(delete_broadcast_filter))
 }

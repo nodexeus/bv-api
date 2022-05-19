@@ -115,9 +115,9 @@ impl Authentication {
     }
 
     /// Returns an error if user doesn't have access
-    pub async fn try_host_access(&self, host_id: Uuid, pool: &PgPool) -> Result<bool> {
+    pub async fn try_host_access(&self, host_id: Uuid, db: &PgPool) -> Result<bool> {
         if self.is_host() {
-            let host = self.get_host(pool).await?;
+            let host = self.get_host(db).await?;
             if host.id == host_id {
                 return Ok(true);
             }
@@ -126,16 +126,24 @@ impl Authentication {
         Err(ApiError::InsufficientPermissionsError)
     }
 
-    pub async fn get_user(&self, pool: &PgPool) -> Result<User> {
+    /// Returns an error if user doesn't have access to Org
+    pub async fn try_org_access(&self, org_id: &Uuid, db: &PgPool) -> Result<bool> {
         match self {
-            Self::User(u) => User::find_by_id(u.id, pool).await,
+            Self::User(auth) if Org::is_member(&auth.id, org_id, db).await? => Ok(true),
+            _ => Err(ApiError::InsufficientPermissionsError),
+        }
+    }
+
+    pub async fn get_user(&self, db: &PgPool) -> Result<User> {
+        match self {
+            Self::User(u) => User::find_by_id(u.id, db).await,
             _ => Err(anyhow!("Authentication is not a user.").into()),
         }
     }
 
-    pub async fn get_host(&self, pool: &PgPool) -> Result<Host> {
+    pub async fn get_host(&self, db: &PgPool) -> Result<Host> {
         match self {
-            Self::Host(token) => Host::find_by_token(token, pool).await,
+            Self::Host(token) => Host::find_by_token(token, db).await,
             _ => Err(anyhow!("Authentication is not a host.").into()),
         }
     }
@@ -193,22 +201,22 @@ impl User {
         Ok(self.to_owned())
     }
 
-    pub async fn reset_password(pool: &PgPool, req: &PwdResetInfo) -> Result<User> {
+    pub async fn reset_password(db: &PgPool, req: &PwdResetInfo) -> Result<User> {
         let _ = req
             .validate()
             .map_err(|e| ApiError::ValidationError(e.to_string()))?;
 
         match auth::validate_jwt(&req.token)? {
             auth::JwtValidationStatus::Valid(auth_data) => {
-                let user = User::find_by_id(auth_data.user_id, pool).await?;
-                return user.update_password(&req.password, pool).await;
+                let user = User::find_by_id(auth_data.user_id, db).await?;
+                return user.update_password(&req.password, db).await;
             }
             _ => Err(ApiError::InsufficientPermissionsError),
         }
     }
 
-    pub async fn email_reset_password(pool: &PgPool, req: PasswordResetRequest) -> Result<()> {
-        let user = User::find_by_email(&req.email, pool).await?;
+    pub async fn email_reset_password(db: &PgPool, req: PasswordResetRequest) -> Result<()> {
+        let user = User::find_by_email(&req.email, db).await?;
 
         let auth_data = auth::AuthData {
             user_id: user.id,
@@ -244,40 +252,40 @@ impl User {
         Ok(())
     }
 
-    pub async fn can_stake(&self, pool: &PgPool, count: i64) -> Result<bool> {
-        Ok(self.staking_quota >= (self.staking_count(pool).await? + count))
+    pub async fn can_stake(&self, db: &PgPool, count: i64) -> Result<bool> {
+        Ok(self.staking_quota >= (self.staking_count(db).await? + count))
     }
 
     /// Returns the number of validators in "Staking"
-    pub async fn staking_count(&self, pool: &PgPool) -> Result<i64> {
+    pub async fn staking_count(&self, db: &PgPool) -> Result<i64> {
         let row: (i64,) = sqlx::query_as(
             "SELECT count(*) FROM validators where user_id = $1 AND stake_status = $2",
         )
         .bind(self.id)
         .bind(StakeStatus::Staking)
-        .fetch_one(pool)
+        .fetch_one(db)
         .await?;
 
         Ok(row.0)
     }
 
-    pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM users")
-            .fetch_all(pool)
+            .fetch_all(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_all_pay_address(pool: &PgPool) -> Result<Vec<UserPayAddress>> {
+    pub async fn find_all_pay_address(db: &PgPool) -> Result<Vec<UserPayAddress>> {
         sqlx::query_as::<_, UserPayAddress>(
             "SELECT id, pay_address FROM users where pay_address is not NULL",
         )
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn find_summary_by_user(pool: &PgPool, user_id: Uuid) -> Result<UserSummary> {
+    pub async fn find_summary_by_user(db: &PgPool, user_id: Uuid) -> Result<UserSummary> {
         Ok(sqlx::query_as::<_, UserSummary>(r##"
             SELECT 
                 users.id, 
@@ -296,12 +304,12 @@ impl User {
                 users.id = $1
         "##)
         .bind(user_id)
-        .fetch_one(pool)
+        .fetch_one(db)
         .await?)
     }
 
     /// Gets a summary list of all users
-    pub async fn find_all_summary(pool: &PgPool) -> Result<Vec<UserSummary>> {
+    pub async fn find_all_summary(db: &PgPool) -> Result<Vec<UserSummary>> {
         sqlx::query_as::<_, UserSummary>(
             r##"
                 SELECT 
@@ -321,36 +329,36 @@ impl User {
                     users.email
             "##
         )
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn find_by_email(email: &str, pool: &PgPool) -> Result<Self> {
+    pub async fn find_by_email(email: &str, db: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, Self>("SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1")
             .bind(email)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_refresh(refresh: &str, pool: &PgPool) -> Result<Self> {
+    pub async fn find_by_refresh(refresh: &str, db: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, Self>("SELECT * FROM users WHERE refresh = $1 limit 1")
             .bind(refresh)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_id(id: Uuid, pool: &PgPool) -> Result<Self> {
+    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, Self>("SELECT * FROM users WHERE id = $1 limit 1")
             .bind(id)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn update_password(&self, password: &str, pool: &PgPool) -> Result<Self> {
+    pub async fn update_password(&self, password: &str, db: &PgPool) -> Result<Self> {
         let argon2 = Argon2::default();
         let salt = SaltString::generate(&mut OsRng);
         if let Some(hashword) = argon2
@@ -363,7 +371,7 @@ impl User {
             .bind(hashword.to_string())
             .bind(salt.as_str())
             .bind(self.id)
-            .fetch_one(pool)
+            .fetch_one(db)
             .await
             .map_err(ApiError::from)?
             .set_jwt();
@@ -372,7 +380,7 @@ impl User {
         Err(ApiError::ValidationError("Invalid password.".to_string()))
     }
 
-    pub async fn create(user: UserRequest, pool: &PgPool) -> Result<Self> {
+    pub async fn create(user: UserRequest, db: &PgPool) -> Result<Self> {
         let _ = user
             .validate()
             .map_err(|e| ApiError::ValidationError(e.to_string()))?;
@@ -383,7 +391,7 @@ impl User {
             .hash_password_simple(user.password.as_bytes(), salt.as_str())?
             .hash
         {
-            let mut tx = pool.begin().await?;
+            let mut tx = db.begin().await?;
             let user = sqlx::query_as::<_, Self>(
                 "INSERT INTO users (email, hashword, salt, staking_quota, fee_bps) values (LOWER($1),$2,$3,$4,$5) RETURNING *",
             )
@@ -423,25 +431,23 @@ impl User {
         Err(ApiError::ValidationError("Invalid password.".to_string()))
     }
 
-    pub async fn login(login: UserLoginRequest, pool: &PgPool) -> Result<Self> {
-        let mut user = Self::find_by_email(&login.email, pool)
-            .await
-            .map_err(|_e| {
-                ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
-            })?;
+    pub async fn login(login: UserLoginRequest, db: &PgPool) -> Result<Self> {
+        let mut user = Self::find_by_email(&login.email, db).await.map_err(|_e| {
+            ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
+        })?;
         let _ = user.verify_password(&login.password)?;
 
         user.set_jwt()
     }
 
-    pub async fn refresh(req: UserRefreshRequest, pool: &PgPool) -> Result<User> {
-        let mut user = Self::find_by_refresh(&req.refresh, pool).await?;
+    pub async fn refresh(req: UserRefreshRequest, db: &PgPool) -> Result<User> {
+        let mut user = Self::find_by_refresh(&req.refresh, db).await?;
         user.set_jwt()
     }
 
     /// QR Code data for specific invoice
-    pub async fn get_qr_by_id(pool: &PgPool, user_id: Uuid) -> Result<String> {
-        let user_summary = Self::find_summary_by_user(pool, user_id).await?;
+    pub async fn get_qr_by_id(db: &PgPool, user_id: Uuid) -> Result<String> {
+        let user_summary = Self::find_summary_by_user(db, user_id).await?;
 
         let mut bal = user_summary.balance();
         if bal < 0 {
@@ -505,8 +511,8 @@ pub struct UserLoginRequest {
 }
 
 impl UserLoginRequest {
-    pub async fn is_valid(&self, pool: &PgPool) -> Result<bool> {
-        let user = User::find_by_email(&self.email, pool).await?;
+    pub async fn is_valid(&self, db: &PgPool) -> Result<bool> {
+        let user = User::find_by_email(&self.email, db).await?;
 
         Ok(user.verify_password(&self.password).is_ok())
     }

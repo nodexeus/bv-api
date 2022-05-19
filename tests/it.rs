@@ -2,7 +2,7 @@ use api::handlers::*;
 use api::models::*;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Extension, Router};
 use chrono::Utc;
 use serde::Deserialize;
@@ -14,11 +14,11 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn it_should_create_and_login_user() -> anyhow::Result<()> {
-    let db_pool = setup().await;
+    let db = setup().await;
     let app = Router::new()
         .route("/login", post(login))
         .route("/users", post(create_user))
-        .layer(Extension(Arc::new(db_pool)))
+        .layer(Extension(Arc::new(db)))
         .layer(TraceLayer::new_for_http());
 
     let req = Request::builder()
@@ -66,15 +66,15 @@ async fn it_should_create_and_login_user() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_add_host() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/login", post(login))
         .route("/hosts", post(create_host))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let admin_user = get_admin_user(&db_pool).await;
+    let admin_user = get_admin_user(&db).await;
 
     let req = Request::builder()
         .method("POST")
@@ -112,7 +112,7 @@ async fn it_should_add_host() -> anyhow::Result<()> {
     assert!(host.validators.is_some());
     assert_eq!(host.validators.unwrap().len(), 2);
 
-    let res = Host::delete(host.id, &db_pool).await;
+    let res = Host::delete(host.id, &db).await;
     assert_eq!(1, res.unwrap());
 
     Ok(())
@@ -120,15 +120,15 @@ async fn it_should_add_host() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_add_host_from_provision() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/login", post(login))
         .route("/hosts", post(create_host))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let admin_user = get_admin_user(&db_pool).await;
+    let admin_user = get_admin_user(&db).await;
 
     let org_id = Uuid::new_v4();
     let cpu_count = 64;
@@ -183,7 +183,7 @@ async fn it_should_add_host_from_provision() -> anyhow::Result<()> {
     assert_eq!(host.validators.unwrap().len(), 0);
 
     // Delete new host from table
-    let res = Host::delete(host.id, &db_pool).await;
+    let res = Host::delete(host.id, &db).await;
     assert_eq!(1, res.unwrap());
 
     Ok(())
@@ -191,15 +191,15 @@ async fn it_should_add_host_from_provision() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_get_host() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/hosts/:id", get(get_host))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let host = get_test_host(&db_pool).await;
-    let admin_user = get_admin_user(&db_pool).await;
+    let host = get_test_host(&db).await;
+    let admin_user = get_admin_user(&db).await;
 
     let req = Request::builder()
         .method("GET")
@@ -225,18 +225,18 @@ async fn it_should_get_host() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_get_host_by_token() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/hosts", get(list_hosts))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let host = Host::find_by_token("123", &db_pool)
+    let host = Host::find_by_token("123", &db)
         .await
         .expect("Could not read test host from db.");
 
-    let admin_user = get_admin_user(&db_pool).await;
+    let admin_user = get_admin_user(&db).await;
 
     let req = Request::builder()
         .method("GET")
@@ -262,14 +262,14 @@ async fn it_should_get_host_by_token() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_update_validator_status() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/validators/:id/status", put(update_validator_status))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let host = get_test_host(&db_pool).await;
+    let host = get_test_host(&db).await;
 
     let path = format!(
         "/validators/{}/status",
@@ -301,14 +301,14 @@ async fn it_should_update_validator_status() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_update_validator_penalty() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/validators/:id/penalty", put(update_validator_penalty))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let host = get_test_host(&db_pool).await;
+    let host = get_test_host(&db).await;
     let service_token = std::env::var("API_SERVICE_SECRET").expect("Missing API_SERVICE_SECRET");
 
     let path = format!(
@@ -345,14 +345,14 @@ async fn it_should_update_validator_penalty() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_update_validator_identity() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/validators/:id/identity", put(update_validator_identity))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let host = get_test_host(&db_pool).await;
+    let host = get_test_host(&db).await;
     let validators = host.validators.expect("missing validators");
     let validator = &validators.first().expect("missing validator");
 
@@ -384,14 +384,14 @@ async fn it_should_update_validator_identity() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_create_command() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/hosts/:id/commands", post(create_command))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let host = get_test_host(&db_pool).await;
+    let host = get_test_host(&db).await;
     let path = format!("/hosts/{}/commands", host.id);
 
     let req = Request::builder()
@@ -415,17 +415,17 @@ async fn it_should_create_command() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_create_host_provision_and_claim() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/host_provisions", post(create_host_provision))
-        .layer(Extension(db_pool_cloned.clone()))
+        .layer(Extension(db_cloned.clone()))
         .layer(TraceLayer::new_for_http());
 
-    // let host = get_test_host(&db_pool).await;
+    // let host = get_test_host(&db).await;
     // let path = format!("/hosts/{}/commands", host.id);
-    let user = get_admin_user(&db_pool).await;
-    let org = Org::find_all_by_user(&user.id, &db_pool)
+    let user = get_admin_user(&db).await;
+    let org = Org::find_all_by_user(&user.id, &db)
         .await?
         .first()
         .expect("Org to be found for user.")
@@ -455,7 +455,7 @@ async fn it_should_create_host_provision_and_claim() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/host_provisions/:id/hosts", post(claim_host_provision))
-        .layer(Extension(db_pool_cloned.clone()))
+        .layer(Extension(db_cloned.clone()))
         .layer(TraceLayer::new_for_http());
 
     let path = format!("/host_provisions/{}/hosts", &host_provision.id);
@@ -496,12 +496,185 @@ async fn it_should_create_host_provision_and_claim() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn it_should_crud_broadcast_filters() -> anyhow::Result<()> {
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
+    let app = Router::new()
+        .route("/broadcast_filters", post(create_broadcast_filter))
+        .layer(Extension(db_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    let user = get_admin_user(&db).await;
+    let org = Org::find_all_by_user(&user.id, &db)
+        .await?
+        .first()
+        .expect("Org to be found for user.")
+        .to_owned();
+    let blockchain = get_blockchain(&db).await;
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/broadcast_filters")
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(
+            &BroadcastFilterRequest {
+                org_id: org.id,
+                blockchain_id: blockchain.id,
+                name: "My filter".into(),
+                addresses: Some("1234".into()),
+                callback_url: "https://api.example/com/helium".into(),
+                auth_token: "1234".into(),
+                txn_types: "payment_v1, payment_v2".into(),
+                is_active: true,
+            },
+        )?))?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(resp.into_body()).await?;
+    let mut filter: BroadcastFilter = serde_json::from_slice(&body)?;
+
+    assert_eq!(filter.org_id, org.id);
+
+    let app = Router::new()
+        .route(
+            "/orgs/:id/broadcast_filters",
+            get(list_org_broadcast_filters),
+        )
+        .layer(Extension(db_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    let path = format!("/orgs/{}/broadcast_filters", &org.id);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri(&path)
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::empty())?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(resp.into_body()).await?;
+    let filters: Vec<BroadcastFilter> = serde_json::from_slice(&body)?;
+    assert_eq!(filters.len(), 1);
+
+    // GET
+    let app = Router::new()
+        .route("/broadcast_filters/:id", get(get_broadcast_filter))
+        .layer(Extension(db_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    let path = format!("/broadcast_filters/{}", &filter.id);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri(&path)
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::empty())?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "Failed to get broadcast filter."
+    );
+
+    // UPDATE
+    let app = Router::new()
+        .route("/broadcast_filters/:id", put(update_broadcast_filter))
+        .layer(Extension(db_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    let path = format!("/broadcast_filters/{}", &filter.id);
+
+    filter.name = "My New Name".into();
+
+    let req = Request::builder()
+        .method("PUT")
+        .uri(&path)
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&filter)?))?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "Failed to UPDATE broadcast filter."
+    );
+
+    let body = hyper::body::to_bytes(resp.into_body()).await?;
+    let filter: BroadcastFilter = serde_json::from_slice(&body)?;
+
+    assert_eq!(filter.name, "My New Name");
+
+    // DELETE
+    let app = Router::new()
+        .route("/broadcast_filters/:id", delete(delete_broadcast_filter))
+        .layer(Extension(db_cloned.clone()))
+        .layer(TraceLayer::new_for_http());
+
+    let path = format!("/broadcast_filters/{}", &filter.id);
+
+    let req = Request::builder()
+        .method("DELETE")
+        .uri(&path)
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                user.token.clone().unwrap_or_else(|| "".to_string())
+            ),
+        )
+        .header("Content-Type", "application/json")
+        .body(Body::empty())?;
+
+    let resp = app.oneshot(req).await?;
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "Failed to DELETE broadcast filter."
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn it_should_stake_one_validator() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/users/:user_id/validators", post(stake_validator))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
     let login_req = UserLoginRequest {
@@ -509,7 +682,7 @@ async fn it_should_stake_one_validator() -> anyhow::Result<()> {
         password: "abc12345".into(),
     };
 
-    let user = User::login(login_req, &db_pool)
+    let user = User::login(login_req, &db)
         .await
         .expect("could not login test user");
 
@@ -545,15 +718,15 @@ async fn it_should_stake_one_validator() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_migrate_one_validator() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/validators/:id/migrate", post(migrate_validator))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let admin = get_admin_user(&db_pool).await;
-    let host = get_test_host(&db_pool).await;
+    let admin = get_admin_user(&db).await;
+    let host = get_test_host(&db).await;
     let validators = host.validators.expect("host to have validators");
     let validator = &validators.first().expect("validators to have at least one");
 
@@ -576,7 +749,7 @@ async fn it_should_migrate_one_validator() -> anyhow::Result<()> {
 
     let body = hyper::body::to_bytes(resp.into_body()).await?;
     let new_validator: Validator = serde_json::from_slice(&body)?;
-    let new_host = Host::find_by_token("1234", &db_pool)
+    let new_host = Host::find_by_token("1234", &db)
         .await
         .expect("host to be returned.");
 
@@ -590,7 +763,7 @@ async fn it_should_migrate_one_validator() -> anyhow::Result<()> {
     assert_eq!(new_validator.stake_status, validator.stake_status);
     assert_eq!(new_validator.status, ValidatorStatus::Migrating);
 
-    let old_validator = Validator::find_by_id(validator.id, &db_pool)
+    let old_validator = Validator::find_by_id(validator.id, &db)
         .await
         .expect("the old validator to be returned");
     assert_eq!(old_validator.status, ValidatorStatus::Stopped);
@@ -601,10 +774,10 @@ async fn it_should_migrate_one_validator() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_put_block_height_as_service() -> anyhow::Result<()> {
-    let db_pool = setup().await;
+    let db = setup().await;
     let app = Router::new()
         .route("/block_info", put(update_block_info))
-        .layer(Extension(Arc::new(db_pool)))
+        .layer(Extension(Arc::new(db)))
         .layer(TraceLayer::new_for_http());
 
     let service_token = std::env::var("API_SERVICE_SECRET").expect("Missing API_SERVICE_SECRET");
@@ -628,10 +801,10 @@ async fn it_should_put_block_height_as_service() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_list_validators_staking_as_service() -> anyhow::Result<()> {
-    let db_pool = setup().await;
+    let db = setup().await;
     let app = Router::new()
         .route("/validators/staking", get(list_validators_staking))
-        .layer(Extension(Arc::new(db_pool)))
+        .layer(Extension(Arc::new(db)))
         .layer(TraceLayer::new_for_http());
 
     let service_token = std::env::var("API_SERVICE_SECRET").expect("Missing API_SERVICE_SECRET");
@@ -650,10 +823,10 @@ async fn it_should_list_validators_staking_as_service() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_list_blockchains() -> anyhow::Result<()> {
-    let db_pool = setup().await;
+    let db = setup().await;
     let app = Router::new()
         .route("/blockchains", get(list_blockchains))
-        .layer(Extension(Arc::new(db_pool)))
+        .layer(Extension(Arc::new(db)))
         .layer(TraceLayer::new_for_http());
 
     let req = Request::builder()
@@ -669,12 +842,12 @@ async fn it_should_list_blockchains() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_list_user_orgs() -> anyhow::Result<()> {
-    let db_pool = setup().await;
-    let user = get_admin_user(&db_pool).await;
+    let db = setup().await;
+    let user = get_admin_user(&db).await;
 
     let app = Router::new()
         .route("/users/:id/orgs", get(list_user_orgs))
-        .layer(Extension(Arc::new(db_pool)))
+        .layer(Extension(Arc::new(db)))
         .layer(TraceLayer::new_for_http());
 
     let path = format!("/users/{}/orgs", user.id);
@@ -699,17 +872,17 @@ async fn it_should_list_user_orgs() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_list_validators_that_need_attention() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route(
             "/validators/needs_attention",
             get(list_validators_attention),
         )
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let admin_user = get_admin_user(&db_pool).await;
+    let admin_user = get_admin_user(&db).await;
 
     let req = Request::builder()
         .method("GET")
@@ -731,24 +904,24 @@ async fn it_should_list_validators_that_need_attention() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_get_qr_code() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/qr/:user_id", get(get_qr))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
-    let u = User::find_by_email("test@here.com", &db_pool)
+    let u = User::find_by_email("test@here.com", &db)
         .await
         .expect("Could not fetch test user.");
 
-    let us = User::find_summary_by_user(&db_pool, u.id)
+    let us = User::find_summary_by_user(&db, u.id)
         .await
         .expect("fetch user summary");
 
     assert_eq!(us.balance(), 1000000000);
 
-    let _inv = Invoice::find_all_by_user(&db_pool, &u.id)
+    let _inv = Invoice::find_all_by_user(&db, &u.id)
         .await
         .expect("it to get bill")
         .first()
@@ -770,12 +943,12 @@ async fn it_should_get_qr_code() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_create_rewards() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/rewards", post(create_rewards))
         .route("/users/:user_id/rewards/summary", get(get_reward_summary))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
     let login_req = UserLoginRequest {
@@ -783,11 +956,11 @@ async fn it_should_create_rewards() -> anyhow::Result<()> {
         password: "abc12345".into(),
     };
 
-    let user = User::login(login_req, &db_pool)
+    let user = User::login(login_req, &db)
         .await
         .expect("could not login test user");
 
-    let validator = Validator::find_all(&db_pool)
+    let validator = Validator::find_all(&db)
         .await
         .expect("could not get list of validators")
         .first()
@@ -868,11 +1041,11 @@ async fn it_should_create_rewards() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_create_payments() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/payments", post(create_payments))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
     let login_req = UserLoginRequest {
@@ -880,7 +1053,7 @@ async fn it_should_create_payments() -> anyhow::Result<()> {
         password: "abc12345".into(),
     };
 
-    let user = User::login(login_req, &db_pool)
+    let user = User::login(login_req, &db)
         .await
         .expect("could not login test user");
 
@@ -912,11 +1085,11 @@ async fn it_should_create_payments() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn it_should_list_invoices() -> anyhow::Result<()> {
-    let db_pool = Arc::new(setup().await);
-    let db_pool_cloned = Arc::clone(&db_pool);
+    let db = Arc::new(setup().await);
+    let db_cloned = Arc::clone(&db);
     let app = Router::new()
         .route("/users/:user_id/invoices", get(list_invoices))
-        .layer(Extension(db_pool_cloned))
+        .layer(Extension(db_cloned))
         .layer(TraceLayer::new_for_http());
 
     let login_req = UserLoginRequest {
@@ -924,7 +1097,7 @@ async fn it_should_list_invoices() -> anyhow::Result<()> {
         password: "abc12345".into(),
     };
 
-    let user = User::login(login_req, &db_pool)
+    let user = User::login(login_req, &db)
         .await
         .expect("could not login test user");
 
@@ -1020,6 +1193,10 @@ async fn reset_db(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("Error inserting blockchains");
+    sqlx::query("DELETE FROM broadcast_filters")
+        .execute(pool)
+        .await
+        .expect("Error deleting broadcast_filters");
 
     let user = UserRequest {
         email: "test@here.com".into(),
@@ -1142,16 +1319,26 @@ async fn reset_db(pool: &PgPool) {
     }
 }
 
-async fn get_test_host(db_pool: &PgPool) -> Host {
-    Host::find_by_token("123", db_pool)
+async fn get_test_host(db: &PgPool) -> Host {
+    Host::find_by_token("123", db)
         .await
         .expect("Could not read test host from db.")
 }
 
-async fn get_admin_user(db_pool: &PgPool) -> User {
-    User::find_by_email("admin@here.com", db_pool)
+async fn get_admin_user(db: &PgPool) -> User {
+    User::find_by_email("admin@here.com", db)
         .await
         .expect("Could not get admin test user from db.")
         .set_jwt()
         .expect("Could not set JWT.")
+}
+
+async fn get_blockchain(db: &PgPool) -> Blockchain {
+    let chains = Blockchain::find_all(db)
+        .await
+        .expect("To have at least one blockcahin");
+    chains
+        .first()
+        .expect("To have a test blockchain")
+        .to_owned()
 }

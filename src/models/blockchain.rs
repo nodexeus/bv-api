@@ -33,11 +33,11 @@ pub struct Blockchain {
 }
 
 impl Blockchain {
-    pub async fn find_all(pool: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM blockchains WHERE status <> 'deleted' order by lower(name)",
         )
-        .fetch_all(pool)
+        .fetch_all(db)
         .await
         .map_err(ApiError::from)
     }
