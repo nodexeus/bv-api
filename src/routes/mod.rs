@@ -12,11 +12,11 @@ pub fn api_router() -> Router {
         .route("/block_height", get(get_block_height))
         .route("/block_info", get(get_block_info))
         .route("/block_info", put(update_block_info))
-        .route("/users/:id/orgs", get(list_user_orgs))
         .route("/users", post(create_user))
         .route("/users/summary", get(users_summary))
-        .route("/users/:user_id/summary", get(user_summary))
-        .route("/users/:user_id/payments", get(user_payments))
+        .route("/users/:id/orgs", get(list_user_orgs))
+        .route("/users/:id/summary", get(user_summary))
+        .route("/users/:id/payments", get(user_payments))
         .route("/hosts", get(list_hosts))
         .route("/hosts/token/:token", get(get_host_by_token))
         .route("/hosts/:id", get(get_host))
@@ -40,14 +40,14 @@ pub fn api_router() -> Router {
             get(validator_inventory_count),
         )
         .route(
-            "/users/:user_id/validators/staking/export",
+            "/users/:id/validators/staking/export",
             get(users_staking_export),
         )
-        .route("/users/:user_id/validators", get(list_validators_by_user))
-        .route("/users/:user_id/invoices", get(list_invoices))
+        .route("/users/:id/validators", get(list_validators_by_user))
+        .route("/users/:id/invoices", get(list_invoices))
         .route("/payments_due", get(list_payments_due))
         .route("/pay_adresses", get(list_pay_addresses))
-        .route("/users/:user_id/validators", post(stake_validator))
+        .route("/users/:id/validators", post(stake_validator))
         .route("/validators/:id", get(get_validator))
         .route("/validators/:id/status", put(update_validator_status))
         .route(
@@ -60,7 +60,7 @@ pub fn api_router() -> Router {
         )
         .route("/validators/:id/penalty", put(update_validator_penalty))
         .route("/validators/:id/identity", put(update_validator_identity))
-        .route("/users/:user_id/rewards/summary", get(get_reward_summary))
+        .route("/users/:id/rewards/summary", get(get_reward_summary))
         .route("/rewards", post(create_rewards))
         .route("/payments", post(create_payments))
         .route("/commands/:id", get(get_command))
@@ -69,7 +69,7 @@ pub fn api_router() -> Router {
         .route("/hosts/:id/commands", post(create_command))
         .route("/commands/:id/response", put(update_command_response))
         .route("/command/:id", delete(delete_command))
-        .route("/qr/:user_id", get(get_qr))
+        .route("/qr/:id", get(get_qr))
         .route("/groups/nodes", get(list_node_groups))
         .route("/groups/nodes/:id", get(get_node_group))
         .route("/nodes/:id", get(get_node))
