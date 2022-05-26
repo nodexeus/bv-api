@@ -20,6 +20,8 @@ pub struct Org {
     pub is_personal: bool,
     #[sqlx(default)]
     pub role: Option<OrgRole>,
+    #[sqlx(default)]
+    pub member_count: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -30,7 +32,8 @@ impl Org {
             r##"
             SELECT 
                 orgs.*,
-                orgs_users.role
+                orgs_users.role,
+                (SELECT count(*) from orgs_users where orgs_users.org_id = orgs.id) as member_count
             FROM 
                 orgs 
             INNER JOIN 
