@@ -1,3 +1,5 @@
+DELETE FROM broadcast_filters;
+
 ALTER TABLE broadcast_filters DROP COLUMN IF EXISTS addresses;
 ALTER TABLE broadcast_filters DROP COLUMN IF EXISTS txn_types;
 
