@@ -1,8 +1,10 @@
 use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::types::Json;
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
+use validator::Validate;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct BroadcastFilter {
@@ -10,10 +12,10 @@ pub struct BroadcastFilter {
     pub blockchain_id: Uuid,
     pub org_id: Uuid,
     pub name: String,
-    pub addresses: Option<String>,
+    pub addresses: Option<Json<Vec<String>>>,
     pub callback_url: String,
     pub auth_token: String,
-    pub txn_types: String,
+    pub txn_types: Json<Vec<String>>,
     pub is_active: bool,
     pub last_processed_height: Option<i64>,
     pub created_at: DateTime<Utc>,
@@ -38,6 +40,9 @@ impl BroadcastFilter {
     }
 
     pub async fn create(req: &BroadcastFilterRequest, db: &PgPool) -> Result<Self> {
+        let _ = req
+            .validate()
+            .map_err(|e| ApiError::ValidationError(e.to_string()))?;
         sqlx::query_as::<_, Self>(
             r##"
             INSERT INTO broadcast_filters
@@ -49,10 +54,10 @@ impl BroadcastFilter {
         .bind(&req.blockchain_id)
         .bind(&req.org_id)
         .bind(&req.name)
-        .bind(&req.addresses)
+        .bind(&req.addresses.as_ref().map(Json))
         .bind(&req.callback_url)
         .bind(&req.auth_token)
-        .bind(&req.txn_types)
+        .bind(&Json(&req.txn_types))
         .bind(&req.is_active)
         .fetch_one(db)
         .await
@@ -60,6 +65,9 @@ impl BroadcastFilter {
     }
 
     pub async fn update(id: &Uuid, req: &BroadcastFilterRequest, db: &PgPool) -> Result<Self> {
+        let _ = req
+            .validate()
+            .map_err(|e| ApiError::ValidationError(e.to_string()))?;
         sqlx::query_as::<_, Self>(
             r##"
             UPDATE broadcast_filters
@@ -71,10 +79,10 @@ impl BroadcastFilter {
         .bind(&req.blockchain_id)
         .bind(&req.org_id)
         .bind(&req.name)
-        .bind(&req.addresses)
+        .bind(&req.addresses.as_ref().map(Json))
         .bind(&req.callback_url)
         .bind(&req.auth_token)
-        .bind(&req.txn_types)
+        .bind(&Json(&req.txn_types))
         .bind(&req.is_active)
         .bind(&id)
         .fetch_one(db)
@@ -92,15 +100,16 @@ impl BroadcastFilter {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct BroadcastFilterRequest {
     pub blockchain_id: Uuid,
     pub org_id: Uuid,
     pub name: String,
-    pub addresses: Option<String>,
+    #[validate(required)]
+    pub addresses: Option<Vec<String>>,
     pub callback_url: String,
     pub auth_token: String,
-    pub txn_types: String,
+    pub txn_types: Vec<String>,
     pub is_active: bool,
 }
 
