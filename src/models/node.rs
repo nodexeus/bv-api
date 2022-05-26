@@ -97,7 +97,7 @@ impl Node {
                     groups, 
                     version, 
                     ip_addr, 
-                    chain_type, 
+                    blockchain_id, 
                     node_type, 
                     address, 
                     wallet_address, 
@@ -113,7 +113,7 @@ impl Node {
         .bind(&req.groups)
         .bind(&req.version)
         .bind(&req.ip_addr)
-        .bind(&req.chain_type)
+        .bind(&req.blockchain_id)
         .bind(&req.node_type)
         .bind(&req.address)
         .bind(&req.wallet_address)
@@ -164,7 +164,7 @@ pub struct NodeCreateRequest {
     groups: Option<String>,
     version: Option<String>,
     ip_addr: Option<String>,
-    chain_type: String,
+    blockchain_id: Uuid,
     node_type: NodeType,
     address: Option<String>,
     wallet_address: Option<String>,
