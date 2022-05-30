@@ -666,7 +666,7 @@ pub async fn list_blockchains(Extension(db): Extension<DbPool>) -> ApiResult<imp
     Ok((StatusCode::OK, Json(blockchains)))
 }
 
-pub async fn create_organization(
+pub async fn create_org(
     Extension(db): Extension<DbPool>,
     Json(req): Json<OrgCreateRequest>,
     auth: Authentication,

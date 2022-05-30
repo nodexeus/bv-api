@@ -94,10 +94,7 @@ impl Org {
     pub async fn create(req: &OrgCreateRequest, user_id: &Uuid, db: &PgPool) -> Result<Org> {
         let mut tx = db.begin().await?;
         let org = sqlx::query_as::<_, Org>(
-            r##"INSERT INTO orgs (
-                    name,
-                    is_personal
-                ) values ($1,true) RETURNING *"##,
+            "INSERT INTO orgs (name,is_personal) values ($1,true) RETURNING *",
         )
         .bind(&req.name)
         .fetch_one(&mut tx)
@@ -112,7 +109,7 @@ impl Org {
             .map_err(ApiError::from)?;
         tx.commit().await?;
 
-        Self::find_by_user(&org.id, &user_id, db).await
+        Self::find_by_user(&org.id, user_id, db).await
     }
 }
 
