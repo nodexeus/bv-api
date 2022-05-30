@@ -78,16 +78,22 @@ impl Org {
 
     /// Checks if the user is a member
     pub async fn is_member(user_id: &Uuid, org_id: &Uuid, db: &PgPool) -> Result<bool> {
-        let org_member = sqlx::query_as::<_, OrgUser>(
+        let _ = Self::find_org_user(user_id, org_id, db).await?;
+        Ok(true)
+    }
+
+    /// Returns the user role in the organization
+    pub async fn find_org_user(user_id: &Uuid, org_id: &Uuid, db: &PgPool) -> Result<OrgUser> {
+        let org_user = sqlx::query_as::<_, OrgUser>(
             "SELECT * FROM orgs_users WHERE org_id = $1 AND user_id = $2",
         )
         .bind(&org_id)
         .bind(&user_id)
-        .fetch_optional(db)
+        .fetch_one(db)
         .await
         .map_err(ApiError::from)?;
 
-        Ok(org_member.is_some())
+        Ok(org_user)
     }
 
     /// Creates a new organization
@@ -112,6 +118,21 @@ impl Org {
         org.role = Some(OrgRole::Owner);
         org.member_count = Some(1);
         Ok(org)
+    }
+
+    /// Deletes the given organization
+    pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
+        let mut tx = db.begin().await?;
+        let deleted_orgs = sqlx::query("DELETE FROM orgs WHERE id = $1")
+            .bind(id)
+            .execute(&mut tx)
+            .await?;
+        let deleted_user_orgs = sqlx::query("DELETE FROM orgs_users WHERE org_id = $1")
+            .bind(id)
+            .execute(&mut tx)
+            .await?;
+        tx.commit().await?;
+        Ok(deleted_orgs.rows_affected() + deleted_user_orgs.rows_affected())
     }
 }
 

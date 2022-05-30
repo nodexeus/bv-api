@@ -685,3 +685,19 @@ pub async fn get_org(
     let org = Org::find_by_user(&id, &user_id, db.as_ref()).await?;
     Ok((StatusCode::OK, Json(org)))
 }
+
+pub async fn delete_org(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let user_id = auth.get_user(db.as_ref()).await?.id;
+    if Org::find_org_user(&user_id, &id, db.as_ref()).await?.role == OrgRole::Member {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+    let result = Org::delete(id, db.as_ref()).await?;
+    Ok((
+        StatusCode::OK,
+        Json(format!("Successfully deleted {} record(s).", result)),
+    ))
+}
