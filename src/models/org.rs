@@ -94,7 +94,7 @@ impl Org {
     pub async fn create(req: &OrgCreateRequest, user_id: &Uuid, db: &PgPool) -> Result<Org> {
         let mut tx = db.begin().await?;
         let org = sqlx::query_as::<_, Org>(
-            "INSERT INTO orgs (name,is_personal) values ($1,true) RETURNING *",
+            "INSERT INTO orgs (name,is_personal) values ($1,false) RETURNING *",
         )
         .bind(&req.name)
         .fetch_one(&mut tx)
