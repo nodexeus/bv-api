@@ -665,3 +665,13 @@ pub async fn list_blockchains(Extension(db): Extension<DbPool>) -> ApiResult<imp
     let blockchains = Blockchain::find_all(db.as_ref()).await?;
     Ok((StatusCode::OK, Json(blockchains)))
 }
+
+pub async fn create_organization(
+    Extension(db): Extension<DbPool>,
+    Json(req): Json<OrgCreateRequest>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let user_id = auth.get_user(db.as_ref()).await?.id;
+    let org = Org::create(&req, &user_id, db.as_ref()).await?;
+    Ok((StatusCode::OK, Json(org)))
+}

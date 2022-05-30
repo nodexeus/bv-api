@@ -27,7 +27,7 @@ pub struct Org {
 }
 
 impl Org {
-    pub async fn find_all_by_user(user_id: &Uuid, db: &PgPool) -> Result<Vec<Org>> {
+    pub async fn find_by_user(org_id: &Uuid, user_id: &Uuid, db: &PgPool) -> Result<Org> {
         sqlx::query_as::<_, Self>(
             r##"
             SELECT 
@@ -41,6 +41,30 @@ impl Org {
             ON 
                 orgs.id = orgs_users.org_id 
             WHERE 
+                orgs_users.user_id = $1 AND orgs.id = $2
+            "##,
+        )
+        .bind(&user_id)
+        .bind(&org_id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
+    }
+
+    pub async fn find_all_by_user(user_id: &Uuid, db: &PgPool) -> Result<Vec<Org>> {
+        sqlx::query_as::<_, Self>(
+            r##"
+            SELECT
+                orgs.*,
+                orgs_users.role,
+                (SELECT count(*) from orgs_users where orgs_users.org_id = orgs.id) as member_count
+            FROM
+                orgs
+            INNER JOIN
+                orgs_users
+            ON
+                orgs.id = orgs_users.org_id
+            WHERE
                 orgs_users.user_id = $1
             ORDER BY
                 lower(orgs.name)
@@ -65,6 +89,36 @@ impl Org {
 
         Ok(org_member.is_some())
     }
+
+    /// Creates a new organization
+    pub async fn create(req: &OrgCreateRequest, user_id: &Uuid, db: &PgPool) -> Result<Org> {
+        let mut tx = db.begin().await?;
+        let org = sqlx::query_as::<_, Org>(
+            r##"INSERT INTO orgs (
+                    name,
+                    is_personal
+                ) values ($1,true) RETURNING *"##,
+        )
+        .bind(&req.name)
+        .fetch_one(&mut tx)
+        .await
+        .map_err(ApiError::from)?;
+
+        sqlx::query("INSERT INTO orgs_users (org_id, user_id, role) values($1, $2, 'owner')")
+            .bind(org.id)
+            .bind(user_id)
+            .execute(&mut tx)
+            .await
+            .map_err(ApiError::from)?;
+        tx.commit().await?;
+
+        Self::find_by_user(&org.id, &user_id, db).await
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct OrgCreateRequest {
+    pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
