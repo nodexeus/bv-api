@@ -97,7 +97,7 @@ impl Org {
     }
 
     /// Creates a new organization
-    pub async fn create(req: &OrgCreateRequest, user_id: &Uuid, db: &PgPool) -> Result<Org> {
+    pub async fn create(req: &OrgRequest, user_id: &Uuid, db: &PgPool) -> Result<Org> {
         let mut tx = db.begin().await?;
         let mut org = sqlx::query_as::<_, Org>(
             "INSERT INTO orgs (name,is_personal) values ($1,false) RETURNING *",
@@ -120,6 +120,18 @@ impl Org {
         Ok(org)
     }
 
+    /// Updates an organization
+    pub async fn update(id: Uuid, req: OrgRequest, user_id: &Uuid, db: &PgPool) -> Result<Self> {
+        let org = sqlx::query_as::<_, Org>("UPDATE orgs SET name = $1 WHERE id = $2 RETURNING *")
+            .bind(&req.name)
+            .bind(id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)?;
+
+        Self::find_by_user(&org.id, user_id, db).await
+    }
+
     /// Deletes the given organization
     pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
         let mut tx = db.begin().await?;
@@ -137,7 +149,7 @@ impl Org {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct OrgCreateRequest {
+pub struct OrgRequest {
     pub name: String,
 }
 

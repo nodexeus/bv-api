@@ -87,4 +87,5 @@ pub fn api_router() -> Router {
         .route("/orgs", post(create_org))
         .route("/orgs/:id", get(get_org))
         .route("/orgs/:id", delete(delete_org))
+        .route("/orgs/:id", put(update_org))
 }

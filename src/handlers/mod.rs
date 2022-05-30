@@ -668,7 +668,7 @@ pub async fn list_blockchains(Extension(db): Extension<DbPool>) -> ApiResult<imp
 
 pub async fn create_org(
     Extension(db): Extension<DbPool>,
-    Json(req): Json<OrgCreateRequest>,
+    Json(req): Json<OrgRequest>,
     auth: Authentication,
 ) -> ApiResult<impl IntoResponse> {
     let user_id = auth.get_user(db.as_ref()).await?.id;
@@ -700,4 +700,18 @@ pub async fn delete_org(
         StatusCode::OK,
         Json(format!("Successfully deleted {} record(s).", result)),
     ))
+}
+
+pub async fn update_org(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<OrgRequest>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let user_id = auth.get_user(db.as_ref()).await?.id;
+    if Org::find_org_user(&user_id, &id, db.as_ref()).await?.role == OrgRole::Member {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+    let org = Org::update(id, req, &user_id, db.as_ref()).await?;
+    Ok((StatusCode::OK, Json(org)))
 }
