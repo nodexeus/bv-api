@@ -93,7 +93,7 @@ impl Org {
     /// Creates a new organization
     pub async fn create(req: &OrgCreateRequest, user_id: &Uuid, db: &PgPool) -> Result<Org> {
         let mut tx = db.begin().await?;
-        let org = sqlx::query_as::<_, Org>(
+        let mut org = sqlx::query_as::<_, Org>(
             "INSERT INTO orgs (name,is_personal) values ($1,false) RETURNING *",
         )
         .bind(&req.name)
@@ -109,7 +109,9 @@ impl Org {
             .map_err(ApiError::from)?;
         tx.commit().await?;
 
-        Self::find_by_user(&org.id, user_id, db).await
+        org.role = Some(OrgRole::Owner);
+        org.member_count = Some(1);
+        Ok(org)
     }
 }
 
