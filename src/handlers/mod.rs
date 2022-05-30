@@ -675,3 +675,13 @@ pub async fn create_org(
     let org = Org::create(&req, &user_id, db.as_ref()).await?;
     Ok((StatusCode::OK, Json(org)))
 }
+
+pub async fn get_org(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let user_id = auth.get_user(db.as_ref()).await?.id;
+    let org = Org::find_by_user(&id, &user_id, db.as_ref()).await?;
+    Ok((StatusCode::OK, Json(org)))
+}
