@@ -88,4 +88,5 @@ pub fn api_router() -> Router {
         .route("/orgs/:id", get(get_org))
         .route("/orgs/:id", delete(delete_org))
         .route("/orgs/:id", put(update_org))
+        .route("/orgs/:id/members", get(get_org_members))
 }

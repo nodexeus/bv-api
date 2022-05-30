@@ -715,3 +715,14 @@ pub async fn update_org(
     let org = Org::update(id, req, &user_id, db.as_ref()).await?;
     Ok((StatusCode::OK, Json(org)))
 }
+
+pub async fn get_org_members(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let user_id = auth.get_user(db.as_ref()).await?.id;
+    let _ = Org::find_org_user(&user_id, &id, db.as_ref()).await?;
+    let org = Org::find_all_members(&id, db.as_ref()).await?;
+    Ok((StatusCode::OK, Json(org)))
+}

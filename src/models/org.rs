@@ -76,6 +76,15 @@ impl Org {
         .map_err(ApiError::from)
     }
 
+    /// Returns the users of an organization
+    pub async fn find_all_members(org_id: &Uuid, db: &PgPool) -> Result<Vec<OrgUser>> {
+        sqlx::query_as::<_, OrgUser>("SELECT * FROM orgs_users WHERE org_id = $1")
+            .bind(&org_id)
+            .fetch_all(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
     /// Checks if the user is a member
     pub async fn is_member(user_id: &Uuid, org_id: &Uuid, db: &PgPool) -> Result<bool> {
         let _ = Self::find_org_user(user_id, org_id, db).await?;
