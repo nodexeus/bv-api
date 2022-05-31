@@ -13,7 +13,7 @@ pub enum OrgRole {
     Member,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq)]
 pub struct Org {
     pub id: Uuid,
     pub name: String,
