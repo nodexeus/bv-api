@@ -84,4 +84,9 @@ pub fn api_router() -> Router {
         )
         .route("/broadcast_filters/:id", put(update_broadcast_filter))
         .route("/broadcast_filters/:id", delete(delete_broadcast_filter))
+        .route("/orgs", post(create_org))
+        .route("/orgs/:id", get(get_org))
+        .route("/orgs/:id", delete(delete_org))
+        .route("/orgs/:id", put(update_org))
+        .route("/orgs/:id/members", get(get_org_members))
 }

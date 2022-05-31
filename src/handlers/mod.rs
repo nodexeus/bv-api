@@ -665,3 +665,64 @@ pub async fn list_blockchains(Extension(db): Extension<DbPool>) -> ApiResult<imp
     let blockchains = Blockchain::find_all(db.as_ref()).await?;
     Ok((StatusCode::OK, Json(blockchains)))
 }
+
+pub async fn create_org(
+    Extension(db): Extension<DbPool>,
+    Json(req): Json<OrgRequest>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let user_id = auth.get_user(db.as_ref()).await?.id;
+    let org = Org::create(&req, &user_id, db.as_ref()).await?;
+    Ok((StatusCode::OK, Json(org)))
+}
+
+pub async fn get_org(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let user_id = auth.get_user(db.as_ref()).await?.id;
+    let org = Org::find_by_user(&id, &user_id, db.as_ref()).await?;
+    Ok((StatusCode::OK, Json(org)))
+}
+
+pub async fn delete_org(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let user_id = auth.get_user(db.as_ref()).await?.id;
+    if Org::find_org_user(&user_id, &id, db.as_ref()).await?.role == OrgRole::Member {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+    let result = Org::delete(id, db.as_ref()).await?;
+    Ok((
+        StatusCode::OK,
+        Json(format!("Successfully deleted {} record(s).", result)),
+    ))
+}
+
+pub async fn update_org(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<OrgRequest>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let user_id = auth.get_user(db.as_ref()).await?.id;
+    if Org::find_org_user(&user_id, &id, db.as_ref()).await?.role == OrgRole::Member {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
+    let org = Org::update(id, req, &user_id, db.as_ref()).await?;
+    Ok((StatusCode::OK, Json(org)))
+}
+
+pub async fn get_org_members(
+    Extension(db): Extension<DbPool>,
+    Path(id): Path<Uuid>,
+    auth: Authentication,
+) -> ApiResult<impl IntoResponse> {
+    let user_id = auth.get_user(db.as_ref()).await?.id;
+    let _ = Org::find_org_user(&user_id, &id, db.as_ref()).await?;
+    let org = Org::find_all_members(&id, db.as_ref()).await?;
+    Ok((StatusCode::OK, Json(org)))
+}
