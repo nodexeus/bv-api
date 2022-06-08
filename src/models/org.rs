@@ -143,17 +143,12 @@ impl Org {
 
     /// Deletes the given organization
     pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
-        let mut tx = db.begin().await?;
-        let deleted_orgs = sqlx::query("DELETE FROM orgs WHERE id = $1")
+        let deleted_orgs = sqlx::query("DELETE FROM orgs WHERE id = $1 AND is_personal = false")
             .bind(id)
-            .execute(&mut tx)
+            .execute(db)
             .await?;
-        let deleted_user_orgs = sqlx::query("DELETE FROM orgs_users WHERE org_id = $1")
-            .bind(id)
-            .execute(&mut tx)
-            .await?;
-        tx.commit().await?;
-        Ok(deleted_orgs.rows_affected() + deleted_user_orgs.rows_affected())
+
+        Ok(deleted_orgs.rows_affected())
     }
 }
 
