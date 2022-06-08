@@ -107,21 +107,25 @@ impl Org {
 
     /// Creates a new organization
     pub async fn create(req: &OrgRequest, user_id: &Uuid, db: &PgPool) -> Result<Org> {
+        let org_id = uuid::Uuid::new_v4();
         let mut tx = db.begin().await?;
         let mut org = sqlx::query_as::<_, Org>(
-            "INSERT INTO orgs (name,is_personal) values ($1,false) RETURNING *",
+            "INSERT INTO orgs (id,name,is_personal) values ($1,$2,false) RETURNING *",
         )
+        .bind(&org_id)
         .bind(&req.name)
         .fetch_one(&mut tx)
         .await
         .map_err(ApiError::from)?;
 
-        sqlx::query("INSERT INTO orgs_users (org_id, user_id, role) values($1, $2, 'owner')")
-            .bind(org.id)
-            .bind(user_id)
-            .execute(&mut tx)
-            .await
-            .map_err(ApiError::from)?;
+        let _org_user = sqlx::query(
+            "INSERT INTO orgs_users (org_id, user_id, role) values($1, $2, 'owner') RETURNING *",
+        )
+        .bind(&org_id)
+        .bind(user_id)
+        .fetch_one(&mut tx)
+        .await
+        .map_err(ApiError::from)?;
         tx.commit().await?;
 
         org.role = Some(OrgRole::Owner);
