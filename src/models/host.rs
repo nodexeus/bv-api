@@ -1,4 +1,4 @@
-use super::{Validator, ValidatorRequest};
+use super::{Node, Validator, ValidatorRequest};
 use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -32,6 +32,7 @@ pub struct Host {
     pub token: String,
     pub status: ConnectionStatus, //TODO: change to is_online:bool
     pub validators: Option<Vec<Validator>>,
+    pub nodes: Option<Vec<Node>>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -77,6 +78,7 @@ impl From<PgRow> for Host {
                 .try_get("status")
                 .expect("Couldn't try_get status for host."),
             validators: None,
+            nodes: None,
             created_at: row
                 .try_get("created_at")
                 .expect("Couldn't try_get created_at for host."),
@@ -115,6 +117,7 @@ impl Host {
 
         // Add Validators list
         host.validators = Some(Validator::find_all_by_host(host.id, db).await?);
+        host.nodes = Some(Node::find_all_by_host(host.id, db).await?);
 
         Ok(host)
     }

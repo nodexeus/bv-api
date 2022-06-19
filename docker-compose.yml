@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+    database:
+        image: 'postgres:latest'
+        ports:
+            - 5432:5432
+            
+        environment:
+            POSTGRES_USER: blockvisor
+            POSTGRES_PASSWORD: password
+            POSTGRES_DB: blockvisor_db 

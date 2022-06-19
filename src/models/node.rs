@@ -57,7 +57,7 @@ pub enum NodeStatus {
     Validating,
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Clone, Debug, Serialize, Deserialize, FromRow)]
 pub struct Node {
     id: Uuid,
     org_id: Uuid,
@@ -153,6 +153,14 @@ impl Node {
         .fetch_one(db)
         .await
         .map_err(ApiError::from)
+    }
+
+    pub async fn find_all_by_host(host_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM nodes WHERE host_id = $1 order by name DESC")
+            .bind(host_id)
+            .fetch_all(db)
+            .await
+            .map_err(ApiError::from)
     }
 }
 
