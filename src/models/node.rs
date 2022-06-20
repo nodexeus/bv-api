@@ -57,7 +57,7 @@ pub enum NodeStatus {
     Validating,
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Clone, Debug, Serialize, Deserialize, FromRow)]
 pub struct Node {
     id: Uuid,
     org_id: Uuid,
@@ -154,24 +154,38 @@ impl Node {
         .await
         .map_err(ApiError::from)
     }
+
+    pub async fn find_all_by_host(host_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM nodes WHERE host_id = $1 order by name DESC")
+            .bind(host_id)
+            .fetch_all(db)
+            .await
+            .map_err(ApiError::from)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NodeProvision {
+    pub blockchain_id: Uuid,
+    pub node_type: NodeType,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeCreateRequest {
-    org_id: Uuid,
-    host_id: Uuid,
-    name: Option<String>,
-    groups: Option<String>,
-    version: Option<String>,
-    ip_addr: Option<String>,
-    blockchain_id: Uuid,
-    node_type: NodeType,
-    address: Option<String>,
-    wallet_address: Option<String>,
-    block_height: Option<i64>,
-    node_data: Option<serde_json::Value>,
-    status: NodeStatus,
-    is_online: bool,
+    pub org_id: Uuid,
+    pub host_id: Uuid,
+    pub name: Option<String>,
+    pub groups: Option<String>,
+    pub version: Option<String>,
+    pub ip_addr: Option<String>,
+    pub blockchain_id: Uuid,
+    pub node_type: NodeType,
+    pub address: Option<String>,
+    pub wallet_address: Option<String>,
+    pub block_height: Option<i64>,
+    pub node_data: Option<serde_json::Value>,
+    pub status: NodeStatus,
+    pub is_online: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,4 +1,4 @@
-use super::{Validator, ValidatorRequest};
+use super::{Node, NodeCreateRequest, NodeProvision, NodeStatus, Validator, ValidatorRequest};
 use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -32,6 +32,7 @@ pub struct Host {
     pub token: String,
     pub status: ConnectionStatus, //TODO: change to is_online:bool
     pub validators: Option<Vec<Validator>>,
+    pub nodes: Option<Vec<Node>>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -77,6 +78,7 @@ impl From<PgRow> for Host {
                 .try_get("status")
                 .expect("Couldn't try_get status for host."),
             validators: None,
+            nodes: None,
             created_at: row
                 .try_get("created_at")
                 .expect("Couldn't try_get created_at for host."),
@@ -115,6 +117,7 @@ impl Host {
 
         // Add Validators list
         host.validators = Some(Validator::find_all_by_host(host.id, db).await?);
+        host.nodes = Some(Node::find_all_by_host(host.id, db).await?);
 
         Ok(host)
     }
@@ -290,6 +293,7 @@ pub struct HostStatusRequest {
 pub struct HostProvision {
     pub id: String,
     pub org_id: Uuid,
+    pub nodes: Option<String>,
     pub created_at: DateTime<Utc>,
     pub claimed_at: Option<DateTime<Utc>>,
     #[sqlx(default)]
@@ -299,11 +303,15 @@ pub struct HostProvision {
 
 impl HostProvision {
     pub async fn create(req: HostProvisionRequest, db: &PgPool) -> Result<HostProvision> {
+        let nodes_str = serde_json::to_string(&req.nodes)
+            .map_err(|_| ApiError::from(anyhow::anyhow!("Couldn't parse nodes")))?;
+
         let mut host_provision = sqlx::query_as::<_, HostProvision>(
-            "INSERT INTO host_provisions (id, org_id) values ($1, $2) RETURNING *",
+            "INSERT INTO host_provisions (id, org_id, nodes) values ($1, $2, $3) RETURNING *",
         )
         .bind(Self::generate_token())
         .bind(req.org_id)
+        .bind(nodes_str)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)?;
@@ -339,14 +347,46 @@ impl HostProvision {
         req.org_id = Some(host_provision.org_id);
         req.val_ip_addrs = None;
 
+        let node_provisions: Option<Vec<NodeProvision>> =
+            serde_json::from_str(&host_provision.nodes.unwrap_or_default()).map_err(|_| {
+                ApiError::UnexpectedError(anyhow::anyhow!("Couldn't parse nodes data"))
+            })?;
+
         //TODO: transaction this
-        let host = Host::create(req.into(), db).await?;
+        let mut host = Host::create(req.into(), db).await?;
 
         sqlx::query("UPDATE host_provisions set claimed_at = now(), host_id = $1 where id = $2")
             .bind(host.id)
             .bind(host_provision.id)
             .execute(db)
             .await?;
+
+        let mut host_nodes = vec![];
+
+        if let Some(nodes) = node_provisions {
+            for node in nodes {
+                let n = NodeCreateRequest {
+                    org_id: host_provision.org_id,
+                    host_id: host.id,
+                    //TODO: Clean this up
+                    name: Some("Helium - Validator".into()),
+                    groups: None,
+                    version: None,
+                    ip_addr: None,
+                    blockchain_id: node.blockchain_id,
+                    node_type: node.node_type,
+                    address: None,
+                    wallet_address: None,
+                    block_height: None,
+                    node_data: None,
+                    status: NodeStatus::Creating,
+                    is_online: false,
+                };
+                host_nodes.push(Node::create(&n, db).await?);
+            }
+        };
+
+        host.nodes = Some(host_nodes);
 
         Ok(host)
     }
@@ -371,4 +411,5 @@ impl HostProvision {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostProvisionRequest {
     pub org_id: Uuid,
+    pub nodes: Option<Vec<NodeProvision>>,
 }

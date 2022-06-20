@@ -431,6 +431,12 @@ async fn it_should_create_host_provision_and_claim() -> anyhow::Result<()> {
         .expect("Org to be found for user.")
         .to_owned();
 
+    let blockchain = get_blockchain(&db).await;
+    let nodes = vec![NodeProvision {
+        blockchain_id: blockchain.id,
+        node_type: NodeType::Validator,
+    }];
+
     let req = Request::builder()
         .method("POST")
         .uri("/host_provisions")
@@ -444,6 +450,7 @@ async fn it_should_create_host_provision_and_claim() -> anyhow::Result<()> {
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_string(&HostProvisionRequest {
             org_id: org.id,
+            nodes: Some(nodes),
         })?))?;
 
     let resp = app.oneshot(req).await?;
