@@ -366,8 +366,8 @@ impl HostProvision {
         if let Some(nodes) = node_provisions {
             for node in nodes {
                 let n = NodeCreateRequest {
-                    org_id: host_provision.org_id.clone(),
-                    host_id: host.id.clone(),
+                    org_id: host_provision.org_id,
+                    host_id: host.id,
                     //TODO: Clean this up
                     name: Some("Helium - Validator".into()),
                     groups: None,
