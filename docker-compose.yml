@@ -4,7 +4,7 @@ services:
     database:
         image: 'postgres:latest'
         ports:
-            - 5432:5432
+            - 25432:5432
             
         environment:
             POSTGRES_USER: blockvisor
