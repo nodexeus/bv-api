@@ -369,7 +369,7 @@ impl HostProvision {
                     org_id: host_provision.org_id,
                     host_id: host.id,
                     //TODO: Clean this up
-                    name: Some("Helium - Validator".into()),
+                    name: Some(petname::petname(3, "-")),
                     groups: None,
                     version: None,
                     ip_addr: None,
