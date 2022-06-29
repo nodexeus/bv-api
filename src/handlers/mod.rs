@@ -290,7 +290,7 @@ pub async fn delete_host(
     //TODO: Major security issue here and with all host checks
     // since we opening up hosts to self service we need to validate
     // host token can delete only itself.
-    if !auth.is_admin() || !auth.is_host() {
+    if !auth.is_admin() && !auth.is_host() {
         return Err(ApiError::InsufficientPermissionsError);
     }
 
