@@ -287,7 +287,12 @@ pub async fn delete_host(
     Path(id): Path<Uuid>,
     auth: Authentication,
 ) -> ApiResult<impl IntoResponse> {
-    let _ = auth.try_admin()?;
+    //TODO: Major security issue here and with all host checks
+    // since we opening up hosts to self service we need to validate
+    // host token can delete only itself.
+    if !auth.is_admin() || !auth.is_host() {
+        return Err(ApiError::InsufficientPermissionsError);
+    }
 
     let rows = Host::delete(id, &db).await?;
     Ok((
