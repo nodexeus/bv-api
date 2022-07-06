@@ -16,6 +16,10 @@ jobs:
       - name: Build container image
         run: docker build -t registry.digitalocean.com/stakejoy/stakejoy-api:latest .
 
+      - name: Build migrations container image
+        run: docker build -t registry.digitalocean.com/stakejoy/stakejoy-api-migrations:latest .
+        working-directory: ./migrations
+
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
         with:
@@ -26,6 +30,9 @@ jobs:
 
       - name: Push image to DigitalOcean Container Registry
         run: docker push registry.digitalocean.com/stakejoy/stakejoy-api:latest
+
+      - name: Push migrations image to DigitalOcean Container Registry
+        run: docker push registry.digitalocean.com/stakejoy/stakejoy-api-migrations:latest
 
       - name: Deploy
         run: doctl apps create-deployment ${{ secrets.APP_ID_PROD }} --wait
