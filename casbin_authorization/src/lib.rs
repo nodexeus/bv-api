@@ -1,6 +1,8 @@
+extern crate core;
+
 pub mod auth;
-pub mod middleware;
 pub mod jwt_token;
+pub mod middleware;
 
 pub use jwt_token::*;
 

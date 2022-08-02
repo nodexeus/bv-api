@@ -97,10 +97,10 @@ impl Identifier for JwtToken {
     }
 }
 
-impl<B> TryFrom<HttpRequest<B>> for JwtToken {
+impl<B> TryFrom<&HttpRequest<B>> for JwtToken {
     type Error = TokenError;
 
-    fn try_from(request: HttpRequest<B>) -> Result<Self, Self::Error> {
+    fn try_from(request: &HttpRequest<B>) -> Result<Self, Self::Error> {
         let token = request
             .headers()
             .get(AUTHORIZATION)
