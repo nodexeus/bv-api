@@ -1,2 +1,4 @@
 /target
+/casbin_authorization/target
 .env
+/.idea

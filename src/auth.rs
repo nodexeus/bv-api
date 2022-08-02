@@ -10,7 +10,7 @@ use uuid::Uuid;
 const JWT_SECRET: &str = "?G'A$jNW<$6x(PdFP?4VdRvmotIV^^";
 
 pub struct AuthData {
-    pub user_id: uuid::Uuid,
+    pub user_id: Uuid,
     pub user_role: String,
 }
 
@@ -59,12 +59,9 @@ pub fn create_jwt_with_duration(data: &AuthData, duration: chrono::Duration) -> 
 }
 
 pub fn validate_jwt(jwt: &str) -> Result<JwtValidationStatus> {
-    let validation = Validation {
-        leeway: 60,
-        validate_exp: false,
-        algorithms: vec![Algorithm::HS512],
-        ..Default::default()
-    };
+    let mut validation = Validation::new(Algorithm::HS512);
+
+    validation.validate_exp = true;
 
     let result = match decode::<Claims>(
         jwt,
