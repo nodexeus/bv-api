@@ -4,13 +4,15 @@
 
 use crate::new_auth::auth::{Authorization, AuthorizationData, AuthorizationState};
 use crate::new_auth::JwtToken;
-use axum::http::Request as HttpRequest;
+use axum::http::{Request as HttpRequest, StatusCode};
+use axum::response::Response as HttpResponse;
 use std::convert::TryFrom;
 use std::task::{Context, Poll};
 // use tonic::Request as GrpcRequest;
+use crate::errors::{ApiError, Result as ApiResult};
+use crate::models::Token;
 use crate::server::DbPool;
 use tower::{Layer, Service};
-use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AuthorizationService<S> {
@@ -23,14 +25,42 @@ impl<S> AuthorizationService<S> {
         Self { inner, enforcer }
     }
 
-    fn get_authorizable<T>(&self, _id: Uuid, _db: DbPool) {
-        unimplemented!()
+    fn get_authorizable(&self, token_str: String, db: DbPool) -> ApiResult<String> {
+        let future = Token::find_by_token(token_str, &db);
+        let result = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(future);
+
+        match result {
+            Ok(token) => Ok(token.role.to_string()),
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn forbidden_response(&self) -> HttpResponse<()> {
+        HttpResponse::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(())
+            .unwrap()
+    }
+
+    async fn unauthorized_response(&self) -> HttpResponse<()> {
+        HttpResponse::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body(())
+            .unwrap()
     }
 }
 
-impl<S, B> Service<HttpRequest<B>> for AuthorizationService<S>
+impl<S, ReqBody, ResBody> Service<HttpRequest<ReqBody>> for AuthorizationService<S>
 where
-    S: Service<HttpRequest<B>> + Clone + Send,
+    S: Service<HttpRequest<ReqBody>, Response = HttpResponse<ResBody>>,
+    <S as Service<axum::http::Request<ReqBody>>>::Error: Into<ApiError>,
+    // Service<HttpRequest<ReqBody>> + Clone + Send,
+    // Response = HttpResponse<ResBody>>,
+    //<S as Service<axum::http::Request<ReqBody>>>::Error: Into<ApiError>,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -40,29 +70,34 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: HttpRequest<B>) -> Self::Future {
+    fn call(&mut self, req: HttpRequest<ReqBody>) -> Self::Future {
         match JwtToken::try_from(&req) {
-            Ok(_token) => {
+            Ok(token) => {
+                let db = req
+                    .extensions()
+                    .get::<DbPool>()
+                    .unwrap_or_else(|| panic!("DB extension missing"));
+                let role = self
+                    .get_authorizable(token.encode().unwrap(), db.clone())
+                    .unwrap_or_else(|_| "".into());
                 let auth_data = AuthorizationData {
-                    subject: "".to_string(),
+                    subject: role,
                     object: req.uri().path().to_string(),
                     action: req.method().to_string(),
                 };
-
-                // TODO: Get authorizable
 
                 match self.enforcer.try_authorized(auth_data) {
                     Ok(result) => {
                         // Evaluate authorization result
                         match result {
                             AuthorizationState::Authorized => self.inner.call(req),
-                            AuthorizationState::Denied => panic!("Return unauthorized here"),
+                            AuthorizationState::Denied => self.unauthorized_response(),
                         }
                     }
-                    Err(_e) => panic!("Return unauthorized here"),
+                    Err(_e) => self.unauthorized_response(),
                 }
             }
-            Err(_e) => panic!("Return FORBIDDEN here"),
+            Err(_e) => self.forbidden_response(),
         }
     }
 }
