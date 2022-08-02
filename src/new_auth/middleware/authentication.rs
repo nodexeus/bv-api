@@ -1,4 +1,4 @@
-use crate::{JwtToken, TokenError, TokenResult};
+use crate::new_auth::{JwtToken, TokenError, TokenResult};
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request as HttpRequest;
 use tonic::Request as GrpcRequest;

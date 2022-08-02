@@ -1,7 +1,7 @@
+use api::new_auth::middleware::authentication::*;
+use api::new_auth::{Identifier, JwtToken, TokenHolderType};
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request as HttpRequest;
-use casbin_authorization::middleware::authentication::*;
-use casbin_authorization::{Identifier, JwtToken, TokenHolderType};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use test_macros::*;

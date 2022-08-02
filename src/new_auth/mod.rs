@@ -1,5 +1,3 @@
-extern crate core;
-
 pub mod auth;
 pub mod jwt_token;
 pub mod middleware;

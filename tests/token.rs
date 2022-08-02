@@ -1,7 +1,8 @@
+use api::new_auth::jwt_token::*;
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request;
-use casbin_authorization::*;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use std::convert::TryFrom;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use test_macros::*;
@@ -79,7 +80,8 @@ fn should_panic_on_decode_expired_token() {
         &DecodingKey::from_secret(secret.as_bytes()),
         &validation,
     ) {
-        Err(e) => assert_eq!(*e.kind(), jsonwebtoken::errors::ErrorKind::ExpiredSignature),
+        Err(e) => assert_eq!(format!("{}", e), "ExpiredSignature"),
+        // assert_eq!(e.into_kind().type_name(), jsonwebtoken::errors::ErrorKind::ExpiredSignature),
         _ => panic!("it worked, but it shouldn't"),
     }
 }
@@ -94,7 +96,7 @@ fn should_panic_with_invalid_token() {
         .header(AUTHORIZATION, "some-token")
         .body(())
         .unwrap();
-    let _ = JwtToken::try_from(request).unwrap();
+    let _ = JwtToken::try_from(&request).unwrap();
 }
 
 #[before(call = "setup")]
@@ -107,7 +109,7 @@ fn should_not_work_with_empty_token() {
         .body(())
         .unwrap();
 
-    if JwtToken::try_from(request).is_ok() {
+    if JwtToken::try_from(&request).is_ok() {
         panic!("It works, but it shouldn't")
     }
 }
@@ -124,7 +126,7 @@ fn should_get_valid_token() -> anyhow::Result<()> {
         .uri("/")
         .method("GET")
         .body(())?;
-    let token = JwtToken::try_from(request).unwrap();
+    let token = JwtToken::try_from(&request).unwrap();
 
     assert_eq!(token.get_id(), id);
 

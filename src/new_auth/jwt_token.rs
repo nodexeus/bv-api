@@ -5,6 +5,7 @@ use jsonwebtoken::{
     Validation,
 };
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::env;
 use std::env::VarError;
 use thiserror::Error;

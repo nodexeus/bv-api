@@ -1,19 +1,14 @@
 //! # Authorization layer
 //!
-//! ## Example
-//!
-//! ```rust
-//! Router::new()
-//!         .route("/", get(foo))
-//!         .layer(AuthorizationLayer::new());
-//! ```
 //!
 
-use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
-use crate::JwtToken;
+use crate::new_auth::auth::{Authorization, AuthorizationData, AuthorizationState};
+use crate::new_auth::JwtToken;
 use axum::http::Request as HttpRequest;
+use std::convert::TryFrom;
 use std::task::{Context, Poll};
 // use tonic::Request as GrpcRequest;
+use crate::server::DbPool;
 use tower::{Layer, Service};
 use uuid::Uuid;
 
@@ -47,7 +42,7 @@ where
 
     fn call(&mut self, req: HttpRequest<B>) -> Self::Future {
         match JwtToken::try_from(&req) {
-            Ok(token) => {
+            Ok(_token) => {
                 let auth_data = AuthorizationData {
                     subject: "".to_string(),
                     object: req.uri().path().to_string(),
