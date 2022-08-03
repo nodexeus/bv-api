@@ -1,4 +1,4 @@
-use api::new_auth::jwt_token::*;
+use api::auth::jwt_token::*;
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};

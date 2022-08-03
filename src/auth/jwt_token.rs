@@ -51,6 +51,10 @@ impl JwtToken {
         }
     }
 
+    pub fn token_holder(&self) -> &TokenHolderType {
+        &self.holder_type
+    }
+
     /// Decode JWT token string and create a JwtToken instance out of it
     pub fn decode(encoded: &str) -> TokenResult<JwtToken> {
         let secret = Self::get_secret()?;

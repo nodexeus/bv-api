@@ -2,10 +2,9 @@
 //!
 //!
 
-use crate::errors::Result as ApiResult;
+use crate::auth::auth::{Authorization, AuthorizationData, AuthorizationState};
+use crate::auth::JwtToken;
 use crate::models::Token;
-use crate::new_auth::auth::{Authorization, AuthorizationData, AuthorizationState};
-use crate::new_auth::JwtToken;
 use crate::server::DbPool;
 use axum::body::{boxed, Body, BoxBody};
 use axum::http::Request as HttpRequest;
@@ -27,20 +26,6 @@ fn unauthenticated_response() -> HttpResponse<BoxBody> {
         .status(StatusCode::FORBIDDEN)
         .body(boxed(Body::empty()))
         .unwrap()
-}
-
-fn get_authorizable(token_str: String, db: DbPool) -> ApiResult<String> {
-    let future = Token::find_by_token(token_str, &db);
-    let result = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(future);
-
-    match result {
-        Ok(token) => Ok(token.role.to_string()),
-        Err(e) => Err(e),
-    }
 }
 
 #[derive(Clone)]
@@ -73,10 +58,11 @@ where
                         .extensions()
                         .get::<DbPool>()
                         .unwrap_or_else(|| panic!("DB extension missing"));
-                    let role = get_authorizable(token.encode().unwrap(), db.clone())
-                        .unwrap_or_else(|_| "".into());
+                    let db_token = Token::find_by_token(token.encode().unwrap(), &db)
+                        .await
+                        .unwrap();
                     let auth_data = AuthorizationData {
-                        subject: role,
+                        subject: db_token.role.to_string(),
                         object: request.uri().path().to_string(),
                         action: request.method().to_string(),
                     };
@@ -85,7 +71,11 @@ where
                         Ok(result) => {
                             // Evaluate authorization result
                             match result {
-                                AuthorizationState::Authorized => Ok(request),
+                                AuthorizationState::Authorized => {
+                                    request.extensions_mut().insert(db_token);
+
+                                    Ok(request)
+                                }
                                 AuthorizationState::Denied => Err(unauthorized_response()),
                             }
                         }

@@ -1,5 +1,5 @@
-use api::new_auth::middleware::authentication::*;
-use api::new_auth::{Identifier, JwtToken, TokenHolderType};
+use api::auth::middleware::authentication::*;
+use api::auth::{Identifier, JwtToken, TokenHolderType};
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request as HttpRequest;
 use std::env;

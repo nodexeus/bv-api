@@ -1,5 +1,6 @@
 use crate::errors::ApiError;
 use crate::errors::Result;
+use crate::models::{Host, Node, User, Validator};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
@@ -43,5 +44,31 @@ impl Token {
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
+    }
+
+    pub async fn get_user_for_token(token_str: String, db: &PgPool) -> Result<User> {
+        sqlx::query_as::<_, User>(
+            "select u.* from tokens t right join users u on t.user_id = u.id where t.token = $1",
+        )
+        .bind(token_str)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
+    }
+
+    pub async fn get_host_for_token(token_str: String, db: &PgPool) -> Result<Host> {
+        let mut host = sqlx::query(
+            "select h.* from tokens t right join hosts u on t.host_id = h.id where t.token = $1",
+        )
+        .bind(token_str)
+        .map(Host::from)
+        .fetch_one(db)
+        .await?;
+
+        // Add Validators list
+        host.validators = Some(Validator::find_all_by_host(host.id, db).await?);
+        host.nodes = Some(Node::find_all_by_host(host.id, db).await?);
+
+        Ok(host)
     }
 }

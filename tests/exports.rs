@@ -1,5 +1,5 @@
+use api::auth::*;
 use api::is_owned_by;
-use api::new_auth::*;
 
 struct Resource;
 struct Owner;

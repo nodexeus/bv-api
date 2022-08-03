@@ -2,6 +2,9 @@ pub mod auth;
 pub mod jwt_token;
 pub mod middleware;
 
+use crate::errors::Result as ApiResult;
+use sqlx::PgPool;
+use uuid::Uuid;
 pub use jwt_token::*;
 
 #[macro_export]
@@ -40,4 +43,11 @@ pub trait Owned<T, D> {
     async fn is_owned_by(&self, resource: T, db: D) -> OwnershipState
     where
         D: 'static;
+}
+
+#[axum::async_trait]
+pub trait FindableById: Send + Sync + 'static {
+    async fn find_by_id(id: Uuid, db: &PgPool) -> ApiResult<Self>
+        where
+            Self: Sized;
 }

@@ -1,5 +1,8 @@
-use super::{Host, Org, StakeStatus, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
-use crate::auth;
+//! TODO: @tstaetter For now I've removed all JWT token related stuff, that needs to be reimplemented
+//!         using the new token respecting possible new workflows (eg magic link) TBD
+
+use super::{Org, StakeStatus, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
+use crate::auth::FindableById;
 use crate::errors::{ApiError, Result};
 use anyhow::anyhow;
 use argon2::{
@@ -8,7 +11,6 @@ use argon2::{
 };
 use chrono::{DateTime, Utc};
 use rand_core::OsRng;
-use sendgrid::v3::*;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
 use std::fmt;
@@ -43,108 +45,6 @@ impl FromStr for UserRole {
             "admin" => Ok(Self::Admin),
             "host" => Ok(Self::Host),
             _ => Ok(Self::User),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct UserAuthInfo {
-    pub id: Uuid,
-    pub role: UserRole,
-}
-
-pub type AuthToken = String;
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum Authentication {
-    User(UserAuthInfo),
-    Host(AuthToken),
-    Service(AuthToken),
-}
-
-impl Authentication {
-    pub fn is_user(&self) -> bool {
-        matches!(self, Self::User(_))
-    }
-
-    pub fn is_host(&self) -> bool {
-        matches!(self, Self::Host(_))
-    }
-
-    pub fn is_admin(&self) -> bool {
-        matches!(self, Self::User(u) if u.role == UserRole::Admin)
-    }
-
-    pub fn is_service(&self) -> bool {
-        matches!(self, Self::Service(_))
-    }
-
-    /// Returns an error if not an admin
-    pub fn try_admin(&self) -> Result<bool> {
-        if self.is_admin() {
-            Ok(true)
-        } else {
-            Err(ApiError::InsufficientPermissionsError)
-        }
-    }
-
-    /// Returns an error if not an host
-    pub fn try_host(&self) -> Result<bool> {
-        if self.is_host() {
-            Ok(true)
-        } else {
-            Err(ApiError::InsufficientPermissionsError)
-        }
-    }
-
-    /// Returns an error if not an admin
-    pub fn try_service(&self) -> Result<bool> {
-        if self.is_service() {
-            Ok(true)
-        } else {
-            Err(ApiError::InsufficientPermissionsError)
-        }
-    }
-
-    /// Returns an error if user doesn't have access
-    pub fn try_user_access(&self, user_id: Uuid) -> Result<bool> {
-        match self {
-            Self::User(u) if u.id == user_id => Ok(true),
-            _ => Err(ApiError::InsufficientPermissionsError),
-        }
-    }
-
-    /// Returns an error if user doesn't have access
-    pub async fn try_host_access(&self, host_id: Uuid, db: &PgPool) -> Result<bool> {
-        if self.is_host() {
-            let host = self.get_host(db).await?;
-            if host.id == host_id {
-                return Ok(true);
-            }
-        }
-
-        Err(ApiError::InsufficientPermissionsError)
-    }
-
-    /// Returns an error if user doesn't have access to Org
-    pub async fn try_org_access(&self, org_id: &Uuid, db: &PgPool) -> Result<bool> {
-        match self {
-            Self::User(auth) if Org::is_member(&auth.id, org_id, db).await? => Ok(true),
-            _ => Err(ApiError::InsufficientPermissionsError),
-        }
-    }
-
-    pub async fn get_user(&self, db: &PgPool) -> Result<User> {
-        match self {
-            Self::User(u) => User::find_by_id(u.id, db).await,
-            _ => Err(anyhow!("Authentication is not a user.").into()),
-        }
-    }
-
-    pub async fn get_host(&self, db: &PgPool) -> Result<Host> {
-        match self {
-            Self::Host(token) => Host::find_by_token(token, db).await,
-            _ => Err(anyhow!("Authentication is not a host.").into()),
         }
     }
 }
@@ -191,65 +91,14 @@ impl User {
         )))
     }
 
-    pub fn set_jwt(&mut self) -> Result<Self> {
-        let auth_data = auth::AuthData {
-            user_id: self.id,
-            user_role: self.role.to_string(),
-        };
-
-        self.token = Some(auth::create_jwt(&auth_data)?);
-        Ok(self.to_owned())
+    pub async fn reset_password(_db: &PgPool, _req: &PwdResetInfo) -> Result<User> {
+        // TODO: use new auth
+        unimplemented!()
     }
 
-    pub async fn reset_password(db: &PgPool, req: &PwdResetInfo) -> Result<User> {
-        let _ = req
-            .validate()
-            .map_err(|e| ApiError::ValidationError(e.to_string()))?;
-
-        match auth::validate_jwt(&req.token)? {
-            auth::JwtValidationStatus::Valid(auth_data) => {
-                let user = User::find_by_id(auth_data.user_id, db).await?;
-                return user.update_password(&req.password, db).await;
-            }
-            _ => Err(ApiError::InsufficientPermissionsError),
-        }
-    }
-
-    pub async fn email_reset_password(db: &PgPool, req: PasswordResetRequest) -> Result<()> {
-        let user = User::find_by_email(&req.email, db).await?;
-
-        let auth_data = auth::AuthData {
-            user_id: user.id,
-            user_role: user.role.to_string(),
-        };
-
-        let token = auth::create_temp_jwt(&auth_data)?;
-
-        let p = Personalization::new(Email::new(&user.email));
-
-        let subject = "Reset Password".to_string();
-        let body = format!(
-            r##"
-            <h1>Password Reset</h1>
-            <p>You have requested to reset your StakeJoy password. 
-            Please visit <a href="https://console.stakejoy.com/reset?t={token}">
-            https://console.stakejoy.com/reset?t={token}</a>.</p><br /><br /><p>Thank You!</p>"##
-        );
-
-        let sender = Sender::new(dotenv::var("SENDGRID_API_KEY").map_err(|_| {
-            ApiError::UnexpectedError(anyhow!("Could not find SENDGRID_API_KEY in env."))
-        })?);
-        let m = Message::new(Email::new("StakeJoy <hello@stakejoy.com>"))
-            .set_subject(&subject)
-            .add_content(Content::new().set_content_type("text/html").set_value(body))
-            .add_personalization(p);
-
-        sender
-            .send(&m)
-            .await
-            .map_err(|_| ApiError::UnexpectedError(anyhow!("Could not send email")))?;
-
-        Ok(())
+    pub async fn email_reset_password(_db: &PgPool, _req: PasswordResetRequest) -> Result<()> {
+        // TODO: use new auth
+        unimplemented!()
     }
 
     pub async fn can_stake(&self, db: &PgPool, count: i64) -> Result<bool> {
@@ -350,14 +199,6 @@ impl User {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE id = $1 limit 1")
-            .bind(id)
-            .fetch_one(db)
-            .await
-            .map_err(ApiError::from)
-    }
-
     pub async fn update_password(&self, password: &str, db: &PgPool) -> Result<Self> {
         let argon2 = Argon2::default();
         let salt = SaltString::generate(&mut OsRng);
@@ -373,8 +214,7 @@ impl User {
             .bind(self.id)
             .fetch_one(db)
             .await
-            .map_err(ApiError::from)?
-            .set_jwt();
+            .map_err(ApiError::from);
         }
 
         Err(ApiError::ValidationError("Invalid password.".to_string()))
@@ -402,8 +242,7 @@ impl User {
             .bind(FEE_BPS_DEFAULT)
             .fetch_one(&mut tx)
             .await
-            .map_err(ApiError::from)?
-            .set_jwt();
+            .map_err(ApiError::from);
 
             if let Ok(u) = &user {
                 let org = sqlx::query_as::<_, Org>(
@@ -432,17 +271,18 @@ impl User {
     }
 
     pub async fn login(login: UserLoginRequest, db: &PgPool) -> Result<Self> {
-        let mut user = Self::find_by_email(&login.email, db).await.map_err(|_e| {
+        let user = Self::find_by_email(&login.email, db).await.map_err(|_e| {
             ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
         })?;
-        let _ = user.verify_password(&login.password)?;
 
-        user.set_jwt()
+        match user.verify_password(&login.password) {
+            Ok(_) => Ok(user),
+            Err(e) => Err(e),
+        }
     }
 
     pub async fn refresh(req: UserRefreshRequest, db: &PgPool) -> Result<User> {
-        let mut user = Self::find_by_refresh(&req.refresh, db).await?;
-        user.set_jwt()
+        Self::find_by_refresh(&req.refresh, db).await
     }
 
     /// QR Code data for specific invoice
@@ -464,6 +304,17 @@ impl User {
         }
 
         Err(ApiError::UnexpectedError(anyhow!("No Balance")))
+    }
+}
+
+#[axum::async_trait]
+impl FindableById for User {
+    async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE id = $1 limit 1")
+            .bind(id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
     }
 }
 

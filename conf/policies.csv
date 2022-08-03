@@ -1,0 +1,2 @@
+p, host, host_commands, read_all
+p, host, host_status, update
