@@ -7,23 +7,25 @@ use crate::models::Token;
 use crate::new_auth::auth::{Authorization, AuthorizationData, AuthorizationState};
 use crate::new_auth::JwtToken;
 use crate::server::DbPool;
+use axum::body::{boxed, Body, BoxBody};
+use axum::http::Request as HttpRequest;
+use axum::http::Response as HttpResponse;
 use futures_util::future::BoxFuture;
 use http::StatusCode;
-use hyper::{Body, Request, Response};
 use std::convert::TryFrom;
 use tower_http::auth::AsyncAuthorizeRequest;
 
-fn unauthorized_response() -> Response<Body> {
-    Response::builder()
+fn unauthorized_response() -> HttpResponse<BoxBody> {
+    HttpResponse::builder()
         .status(StatusCode::UNAUTHORIZED)
-        .body(Body::empty())
+        .body(boxed(Body::empty()))
         .unwrap()
 }
 
-fn unauthenticated_response() -> Response<Body> {
-    Response::builder()
+fn unauthenticated_response() -> HttpResponse<BoxBody> {
+    HttpResponse::builder()
         .status(StatusCode::FORBIDDEN)
-        .body(Body::empty())
+        .body(boxed(Body::empty()))
         .unwrap()
 }
 
@@ -57,11 +59,11 @@ where
     B: Send + Sync + 'static,
 {
     type RequestBody = B;
-    type ResponseBody = Body;
-    type Future = BoxFuture<'static, Result<Request<B>, Response<Self::ResponseBody>>>;
+    type ResponseBody = BoxBody;
+    type Future = BoxFuture<'static, Result<HttpRequest<B>, HttpResponse<Self::ResponseBody>>>;
 
     #[allow(unused_mut)]
-    fn authorize(&mut self, mut request: Request<B>) -> Self::Future {
+    fn authorize(&mut self, mut request: HttpRequest<B>) -> Self::Future {
         let enforcer = self.enforcer.clone();
 
         Box::pin(async move {
