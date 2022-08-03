@@ -1,6 +1,8 @@
 use crate::auth;
 use crate::errors::ApiError;
 use crate::models::*;
+use crate::new_auth::auth::Authorization;
+use crate::new_auth::middleware::authorization::AuthorizationService;
 use crate::routes::api_router;
 use anyhow::anyhow;
 use axum::async_trait;
@@ -11,6 +13,7 @@ use std::borrow::Cow;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -83,6 +86,8 @@ pub async fn start() -> anyhow::Result<()> {
         .parse()
         .unwrap();
 
+    let enforcer = Authorization::new().await.unwrap();
+    let auth_service = AuthorizationService::new(enforcer);
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let bind_ip = std::env::var("BIND_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
     let addr = format!("{}:{}", bind_ip, port);
@@ -105,7 +110,8 @@ pub async fn start() -> anyhow::Result<()> {
         )
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
-        .layer(Extension(Arc::new(db)));
+        .layer(Extension(Arc::new(db)))
+        .layer(AsyncRequireAuthorizationLayer::new(auth_service));
 
     Ok(axum::Server::bind(&addr.parse()?)
         .serve(app.into_make_service())
