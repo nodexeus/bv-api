@@ -2,8 +2,8 @@
 //!
 //!
 
-use crate::auth::auth::{Authorization, AuthorizationData, AuthorizationState};
 use crate::auth::JwtToken;
+use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
 use crate::models::Token;
 use crate::server::DbPool;
 use axum::body::{boxed, Body, BoxBody};

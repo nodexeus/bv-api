@@ -1,5 +1,5 @@
-use crate::auth::auth::Authorization;
 use crate::auth::middleware::authorization::AuthorizationService;
+use crate::auth::Authorization;
 use crate::routes::api_router;
 use axum::extract::Extension;
 use sqlx::postgres::{PgPool, PgPoolOptions};
