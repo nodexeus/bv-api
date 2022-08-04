@@ -10,6 +10,7 @@ p, master_admin, payments_due, GET
 p, master_admin, pay_adresses, GET
 p, master_admin, rewards, POST
 p, master_admin, payments, POST
+p, master_admin, /hosts/:id/commands/pending, GET
 
 g, admin, master_admin
 g, guest, outbound

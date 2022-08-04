@@ -92,6 +92,7 @@ pub enum AuthorizationError {
 }
 
 /// Holds all data needed for authorization
+#[derive(Debug, Clone)]
 pub struct AuthorizationData {
     pub(crate) subject: String,
     pub(crate) object: String,

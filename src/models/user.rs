@@ -188,6 +188,13 @@ impl User {
     }
 
     pub async fn find_by_email(email: &str, db: &PgPool) -> Result<Self> {
+        /*
+        sqlx::query_as::<_, Self>(
+            r#"SELECT u.*, t.token, t.role FROM users u
+                        RIGHT JOIN tokens t on u.id = t.user_id
+                    WHERE LOWER(email) = LOWER($1)"#,
+        )
+         */
         sqlx::query_as::<_, Self>("SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1")
             .bind(email)
             .fetch_one(db)

@@ -58,19 +58,12 @@ impl Token {
         }
     }
 
-    pub async fn refresh(token_id: Uuid, db: &PgPool) -> Result<Self> {
-        // 1. Delete old token
+    pub async fn refresh(token_str: String, db: &PgPool) -> Result<Self> {
         // 1. Get the old token
-        // let old_token = sqlx::query_as::<_, Self>("DELETE FROM tokens WHERE id = $1 RETURNING *")
-        let old_token = sqlx::query_as::<_, Self>("SELECT * FROM tokens WHERE id = $1")
-            .bind(token_id)
+        let old_token = sqlx::query_as::<_, Self>("SELECT * FROM tokens WHERE token = $1")
+            .bind(token_str)
             .fetch_one(db)
             .await?;
-
-        dbg!("old token str");
-        dbg!(&old_token.token);
-        dbg!("old token expiration");
-        dbg!(&old_token.expires_at);
 
         match old_token.host_id {
             Some(host_id) => {
@@ -131,11 +124,6 @@ impl Token {
             TokenHolderType::User => "user_id",
             TokenHolderType::Host => "host_id",
         };
-
-        dbg!("new token str");
-        dbg!(&token_str);
-        dbg!("new token expiration");
-        dbg!(&expiration);
 
         let mut tx = db.begin().await?;
         let token = sqlx::query_as::<_, Self>(&*format!(

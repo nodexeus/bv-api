@@ -1,13 +1,14 @@
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request as HttpRequest;
+use base64::decode as base64_decode;
 use jsonwebtoken::{
     decode, encode, errors::Error as JwtError, Algorithm, DecodingKey, EncodingKey, Header,
     Validation,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use std::env;
 use std::env::VarError;
+use std::{env, str};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -111,7 +112,14 @@ impl<B> TryFrom<&HttpRequest<B>> for JwtToken {
             .headers()
             .get(AUTHORIZATION)
             .and_then(|hv| hv.to_str().ok())
+            .and_then(|hv| {
+                let words = hv.split("Bearer").collect::<Vec<&str>>();
+
+                words.get(1).map(|w| w.trim())
+            })
             .unwrap_or("");
+        let clear_token = base64_decode(token).unwrap();
+        let token = str::from_utf8(&clear_token).unwrap();
 
         JwtToken::decode(token)
     }

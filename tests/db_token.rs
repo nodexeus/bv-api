@@ -36,7 +36,7 @@ async fn can_refresh_host_token() {
     // sleep 1 sec so the expiration REALLY changes
     sleep(Duration::from_secs(1));
 
-    match Token::refresh(token.id, &db).await {
+    match Token::refresh(token.token, &db).await {
         Ok(_) => println!("All good"),
         Err(e) => panic!("error at refresh: {}", e),
     }
@@ -70,7 +70,7 @@ async fn can_refresh_user_token() {
     // sleep 1 sec so the expiration REALLY changes
     sleep(Duration::from_secs(1));
 
-    match Token::refresh(token.id, &db).await {
+    match Token::refresh(token.token, &db).await {
         Ok(_) => println!("All good"),
         Err(e) => panic!("error at refresh: {}", e),
     }

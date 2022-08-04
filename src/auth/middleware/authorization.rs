@@ -77,6 +77,8 @@ where
                         action: request.method().to_string(),
                     };
 
+                    tracing::debug!("using auth data: {:?}", auth_data);
+
                     match enforcer.try_authorized(auth_data) {
                         Ok(result) => {
                             // Evaluate authorization result

@@ -66,6 +66,7 @@ dependencies = [
  "anyhow",
  "argon2",
  "axum",
+ "base64 0.13.0",
  "casbin",
  "chrono",
  "dotenv",
