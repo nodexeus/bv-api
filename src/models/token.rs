@@ -1,11 +1,11 @@
 use crate::auth::{JwtToken, TokenHolderType, TokenIdentifyable};
 use crate::errors::ApiError;
 use crate::errors::Result;
-use crate::models::{Host, HostSelectiveUpdate, Node, User, UserSelectiveUpdate, Validator};
+use crate::models::{Host, Node, User, Validator};
 use anyhow::anyhow;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{Acquire, FromRow, PgPool};
+use sqlx::{FromRow, PgPool};
 use std::env;
 use std::ops::Add;
 use uuid::Uuid;
@@ -58,15 +58,19 @@ impl Token {
         }
     }
 
-    pub async fn refresh(token_str: String, db: &PgPool) -> Result<Self> {
-        let mut tx = db.begin().await?;
+    pub async fn refresh(token_id: Uuid, db: &PgPool) -> Result<Self> {
         // 1. Delete old token
-        let old_token = sqlx::query_as::<_, Self>("DELETE FROM tokens WHERE token = $1")
-            .bind(token_str)
-            .fetch_one(&mut tx)
+        // 1. Get the old token
+        // let old_token = sqlx::query_as::<_, Self>("DELETE FROM tokens WHERE id = $1 RETURNING *")
+        let old_token = sqlx::query_as::<_, Self>("SELECT * FROM tokens WHERE id = $1")
+            .bind(token_id)
+            .fetch_one(db)
             .await?;
 
-        tx.commit().await?;
+        dbg!("old token str");
+        dbg!(&old_token.token);
+        dbg!("old token expiration");
+        dbg!(&old_token.expires_at);
 
         match old_token.host_id {
             Some(host_id) => {
@@ -74,14 +78,14 @@ impl Token {
                 let new_token =
                     Token::create(host_id, old_token.role, db, TokenHolderType::Host).await?;
 
-                // Update host with new token
-                let fields = HostSelectiveUpdate {
-                    token_id: Some(new_token.id),
-                    ..Default::default()
-                };
-
-                return match Host::update_all(host_id, fields, db).await {
-                    Ok(_) => Ok(new_token),
+                return match Host::set_token(new_token.id, host_id, db).await {
+                    Ok(_host) => {
+                        // delete old token
+                        match Token::delete(old_token.id, db).await {
+                            Ok(new_token) => Ok(new_token),
+                            Err(e) => Err(e),
+                        }
+                    }
                     Err(e) => Err(e),
                 };
             }
@@ -94,14 +98,14 @@ impl Token {
                 let new_token =
                     Token::create(user_id, old_token.role, db, TokenHolderType::User).await?;
 
-                // Update user with new token
-                let fields = UserSelectiveUpdate {
-                    token_id: Some(new_token.id),
-                    ..Default::default()
-                };
-
-                return match User::update_all(user_id, fields, db).await {
-                    Ok(_) => Ok(new_token),
+                return match User::set_token(new_token.id, user_id, db).await {
+                    Ok(_user) => {
+                        // delete old token
+                        match Token::delete(old_token.id, db).await {
+                            Ok(new_token) => Ok(new_token),
+                            Err(e) => Err(e),
+                        }
+                    }
                     Err(e) => Err(e),
                 };
             }
@@ -115,25 +119,31 @@ impl Token {
 
     /// TODO: refactor me
     pub async fn create(
-        id: Uuid,
+        resource_id: Uuid,
         role: TokenRole,
         db: &PgPool,
         holder_type: TokenHolderType,
     ) -> Result<Self> {
         let expiration = Self::get_expiration(Self::get_expiration_period(holder_type));
-        let jwt_token = JwtToken::new(id, expiration.timestamp(), holder_type);
+        let jwt_token = JwtToken::new(resource_id, expiration.timestamp(), holder_type);
+        let token_str = jwt_token.encode().unwrap();
         let id_field = match holder_type {
             TokenHolderType::User => "user_id",
             TokenHolderType::Host => "host_id",
         };
 
+        dbg!("new token str");
+        dbg!(&token_str);
+        dbg!("new token expiration");
+        dbg!(&expiration);
+
         let mut tx = db.begin().await?;
         let token = sqlx::query_as::<_, Self>(&*format!(
-            "INSERT INTO TOKENS (token, {}, expires_at, role) VALUES ($1, $2, $3, $4) RETURNING *",
+            "INSERT INTO tokens (token, {}, expires_at, role) VALUES ($1, $2, $3, $4) RETURNING *",
             id_field
         ))
-        .bind(jwt_token.encode().unwrap())
-        .bind(id)
+        .bind(token_str)
+        .bind(resource_id)
         .bind(expiration)
         .bind(role)
         .fetch_one(&mut tx)
@@ -144,28 +154,14 @@ impl Token {
         tx.commit().await?;
 
         match holder_type {
-            TokenHolderType::User => {
-                let fields = UserSelectiveUpdate {
-                    token_id: Some(token.id),
-                    ..Default::default()
-                };
-
-                match User::update_all(id, fields, db).await {
-                    Ok(_) => Ok(token),
-                    Err(e) => Err(e),
-                }
-            }
-            TokenHolderType::Host => {
-                let fields = HostSelectiveUpdate {
-                    token_id: Some(token.id),
-                    ..Default::default()
-                };
-
-                match Host::update_all(id, fields, db).await {
-                    Ok(_) => Ok(token),
-                    Err(e) => Err(e),
-                }
-            }
+            TokenHolderType::User => match User::set_token(token.id, resource_id, db).await {
+                Ok(_user) => Ok(token),
+                Err(e) => Err(e),
+            },
+            TokenHolderType::Host => match Host::set_token(token.id, resource_id, db).await {
+                Ok(_host) => Ok(token),
+                Err(e) => Err(e),
+            },
         }
     }
 

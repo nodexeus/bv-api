@@ -4,8 +4,8 @@ CREATE TYPE enum_token_role AS ENUM ('user', 'admin', 'service', 'guest');
 CREATE TABLE IF NOT EXISTS tokens (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     token TEXT NOT NULL UNIQUE,
-    host_id UUID NULL UNIQUE,
-    user_id UUID NULL UNIQUE,
+    host_id UUID NULL,
+    user_id UUID NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE DEFAULT now() + interval '1 day' NOT NULL,
     role enum_token_role not null,
@@ -23,5 +23,8 @@ ALTER TABLE hosts
 
 ALTER TABLE users
     DROP COLUMN IF EXISTS token,
+    DROP COLUMN IF EXISTS role,
     ADD COLUMN token_id UUID,
     ADD CONSTRAINT fk_user_token FOREIGN KEY (token_id) REFERENCES tokens (id) ON DELETE CASCADE;
+
+DROP TYPE IF EXISTS enum_user_role;

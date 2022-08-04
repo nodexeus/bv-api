@@ -51,7 +51,6 @@ impl FromStr for UserRole {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct PwdResetInfo {
-    pub token: String,
     #[validate(length(min = 8), must_match = "password_confirm")]
     pub password: String,
     pub password_confirm: String,
@@ -63,13 +62,10 @@ pub struct User {
     pub email: String,
     #[serde(skip_serializing)]
     pub hashword: String,
-    pub role: UserRole,
     #[serde(skip_serializing)]
     pub salt: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refresh: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub token: Option<String>,
     pub fee_bps: i64,
     pub staking_quota: i64,
     pub created_at: DateTime<Utc>,
@@ -229,8 +225,7 @@ impl User {
     }
 
     pub async fn create(user: UserRequest, db: &PgPool) -> Result<Self> {
-        let _ = user
-            .validate()
+        user.validate()
             .map_err(|e| ApiError::ValidationError(e.to_string()))?;
 
         let argon2 = Argon2::default();

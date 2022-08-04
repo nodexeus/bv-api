@@ -4,6 +4,8 @@ use crate::setup::get_admin_user;
 use api::auth::{JwtToken, TokenHolderType, TokenIdentifyable};
 use api::models::{Host, Token, TokenRole, User};
 use setup::{get_test_host, setup};
+use std::thread::sleep;
+use std::time::Duration;
 use test_macros::*;
 
 #[before(call = "setup")]
@@ -31,7 +33,10 @@ async fn can_refresh_host_token() {
         .await
         .unwrap();
 
-    match Token::refresh(token.token, &db).await {
+    // sleep 1 sec so the expiration REALLY changes
+    sleep(Duration::from_secs(1));
+
+    match Token::refresh(token.id, &db).await {
         Ok(_) => println!("All good"),
         Err(e) => panic!("error at refresh: {}", e),
     }
@@ -62,7 +67,10 @@ async fn can_refresh_user_token() {
         .await
         .unwrap();
 
-    match Token::refresh(token.token, &db).await {
+    // sleep 1 sec so the expiration REALLY changes
+    sleep(Duration::from_secs(1));
+
+    match Token::refresh(token.id, &db).await {
         Ok(_) => println!("All good"),
         Err(e) => panic!("error at refresh: {}", e),
     }

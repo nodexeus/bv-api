@@ -116,11 +116,6 @@ pub async fn reset_db(pool: &PgPool) {
         .await
         .expect("Could not create test user in db.");
 
-    sqlx::query("UPDATE users set role = 'admin' where email = 'admin@here.com'")
-        .execute(pool)
-        .await
-        .expect("could not set admin to admin test user in sql");
-
     let host = HostRequest {
         org_id: None,
         name: "Host-1".into(),
@@ -208,6 +203,7 @@ pub async fn get_admin_user(db: &PgPool) -> User {
         .expect("Could not get admin test user from db.")
 }
 
+#[allow(dead_code)]
 pub async fn get_blockchain(db: &PgPool) -> Blockchain {
     let chains = Blockchain::find_all(db)
         .await
