@@ -6,7 +6,6 @@ pub fn api_router() -> Router {
     Router::new()
         .route("/reset", post(reset_pwd))
         .route("/reset", put(update_pwd))
-        .route("/login", post(login))
         .route("/refresh", post(refresh))
         .route("/whoami", get(whoami))
         .route("/block_height", get(get_block_height))
@@ -89,4 +88,8 @@ pub fn api_router() -> Router {
         .route("/orgs/:id", delete(delete_org))
         .route("/orgs/:id", put(update_org))
         .route("/orgs/:id/members", get(get_org_members))
+}
+
+pub fn unauthenticated_routes() -> Router {
+    Router::new().route("/login", post(login))
 }

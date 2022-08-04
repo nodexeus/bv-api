@@ -1,6 +1,6 @@
 use crate::auth::middleware::authorization::AuthorizationService;
 use crate::auth::Authorization;
-use crate::routes::api_router;
+use crate::routes::{api_router, unauthenticated_routes};
 use axum::extract::Extension;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::sync::Arc;
@@ -40,16 +40,19 @@ pub async fn start() -> anyhow::Result<()> {
         .expect("Could not create db connection pool.");
 
     let app = api_router()
+        .layer(AsyncRequireAuthorizationLayer::new(auth_service))
+        // Unauthenticated routes
+        .nest("/", unauthenticated_routes())
+        // Common layers need to be added first to make it available to ALL routes
         .layer(
             CorsLayer::new()
                 .allow_headers(Any)
                 .allow_methods(Any)
                 .allow_origin(Any),
         )
-        .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
         .layer(Extension(Arc::new(db)))
-        .layer(AsyncRequireAuthorizationLayer::new(auth_service));
+        .layer(TraceLayer::new_for_http());
 
     Ok(axum::Server::bind(&addr.parse()?)
         .serve(app.into_make_service())

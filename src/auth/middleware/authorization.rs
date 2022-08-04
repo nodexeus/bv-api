@@ -16,14 +16,14 @@ use tower_http::auth::AsyncAuthorizeRequest;
 
 fn unauthorized_response() -> HttpResponse<BoxBody> {
     HttpResponse::builder()
-        .status(StatusCode::UNAUTHORIZED)
+        .status(StatusCode::FORBIDDEN)
         .body(boxed(Body::empty()))
         .unwrap()
 }
 
 fn unauthenticated_response() -> HttpResponse<BoxBody> {
     HttpResponse::builder()
-        .status(StatusCode::FORBIDDEN)
+        .status(StatusCode::UNAUTHORIZED)
         .body(boxed(Body::empty()))
         .unwrap()
 }

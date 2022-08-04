@@ -1,7 +1,8 @@
 use api::auth::middleware::authorization::AuthorizationService;
 use api::auth::Authorization;
-use api::routes::api_router;
+use api::routes::{api_router, unauthenticated_routes};
 use axum::http::{Request, StatusCode};
+use axum::routing::get;
 use hyper::Body;
 use tower::ServiceExt;
 use tower_http::auth::AsyncRequireAuthorizationLayer;
@@ -10,88 +11,120 @@ use tower_http::trace::TraceLayer;
 fn possible_routes() -> Vec<(&'static str, &'static str, StatusCode)> {
     vec![
         // Non nested routes
-        ("/foo_bar", "GET", StatusCode::FORBIDDEN),
-        ("/reset", "POST", StatusCode::FORBIDDEN),
-        ("/reset", "PUT", StatusCode::FORBIDDEN),
-        ("/login", "POST", StatusCode::FORBIDDEN),
-        ("/refresh", "POST", StatusCode::FORBIDDEN),
-        ("/whoami", "GET", StatusCode::FORBIDDEN),
-        ("/block_height", "GET", StatusCode::FORBIDDEN),
-        ("/block_info", "GET", StatusCode::FORBIDDEN),
-        ("/block_info", "PUT", StatusCode::FORBIDDEN),
-        ("/payments_due", "GET", StatusCode::FORBIDDEN),
-        ("/pay_adresses", "GET", StatusCode::FORBIDDEN),
-        ("/rewards", "POST", StatusCode::FORBIDDEN),
-        ("/payments", "POST", StatusCode::FORBIDDEN),
-        ("/qr/id", "GET", StatusCode::FORBIDDEN),
-        ("/blockchains", "GET", StatusCode::FORBIDDEN),
+        ("/foo_bar", "GET", StatusCode::OK),
+        ("/reset", "POST", StatusCode::UNAUTHORIZED),
+        ("/reset", "PUT", StatusCode::UNAUTHORIZED),
+        ("/login", "POST", StatusCode::INTERNAL_SERVER_ERROR),
+        ("/refresh", "POST", StatusCode::UNAUTHORIZED),
+        ("/whoami", "GET", StatusCode::UNAUTHORIZED),
+        ("/block_height", "GET", StatusCode::UNAUTHORIZED),
+        ("/block_info", "GET", StatusCode::UNAUTHORIZED),
+        ("/block_info", "PUT", StatusCode::UNAUTHORIZED),
+        ("/payments_due", "GET", StatusCode::UNAUTHORIZED),
+        ("/pay_adresses", "GET", StatusCode::UNAUTHORIZED),
+        ("/rewards", "POST", StatusCode::UNAUTHORIZED),
+        ("/payments", "POST", StatusCode::UNAUTHORIZED),
+        ("/qr/id", "GET", StatusCode::UNAUTHORIZED),
+        ("/blockchains", "GET", StatusCode::UNAUTHORIZED),
         // Group routes
-        ("/groups/nodes", "GET", StatusCode::FORBIDDEN),
-        ("/groups/nodes/id", "GET", StatusCode::FORBIDDEN),
+        ("/groups/nodes", "GET", StatusCode::UNAUTHORIZED),
+        ("/groups/nodes/id", "GET", StatusCode::UNAUTHORIZED),
         // Node routes
-        ("/nodes", "POST", StatusCode::FORBIDDEN),
-        ("/nodes/id", "GET", StatusCode::FORBIDDEN),
-        ("/nodes/id/info", "PUT", StatusCode::FORBIDDEN),
+        ("/nodes", "POST", StatusCode::UNAUTHORIZED),
+        ("/nodes/id", "GET", StatusCode::UNAUTHORIZED),
+        ("/nodes/id/info", "PUT", StatusCode::UNAUTHORIZED),
         // Command routes
-        ("/commands/id", "GET", StatusCode::FORBIDDEN),
-        ("/commands/id", "DELETE", StatusCode::FORBIDDEN),
-        ("/commands/id/response", "PUT", StatusCode::FORBIDDEN),
+        ("/commands/id", "GET", StatusCode::UNAUTHORIZED),
+        ("/commands/id", "DELETE", StatusCode::UNAUTHORIZED),
+        ("/commands/id/response", "PUT", StatusCode::UNAUTHORIZED),
         // Validator routes
-        ("/validators", "GET", StatusCode::FORBIDDEN),
-        ("/validators/id", "GET", StatusCode::FORBIDDEN),
-        ("/validators/id/migrate", "POST", StatusCode::FORBIDDEN),
-        ("/validators/id/status", "PUT", StatusCode::FORBIDDEN),
-        ("/validators/id/stake_status", "PUT", StatusCode::FORBIDDEN),
-        ("/validators/id/owner_address", "PUT", StatusCode::FORBIDDEN),
-        ("/validators/id/penalty", "PUT", StatusCode::FORBIDDEN),
-        ("/validators/id/identity", "PUT", StatusCode::FORBIDDEN),
-        ("/validators/staking", "GET", StatusCode::FORBIDDEN),
-        ("/validators/consensus", "GET", StatusCode::FORBIDDEN),
-        ("/validators/needs_attention", "GET", StatusCode::FORBIDDEN),
-        ("/validators/inventory/count", "GET", StatusCode::FORBIDDEN),
+        ("/validators", "GET", StatusCode::UNAUTHORIZED),
+        ("/validators/id", "GET", StatusCode::UNAUTHORIZED),
+        ("/validators/id/migrate", "POST", StatusCode::UNAUTHORIZED),
+        ("/validators/id/status", "PUT", StatusCode::UNAUTHORIZED),
+        (
+            "/validators/id/stake_status",
+            "PUT",
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            "/validators/id/owner_address",
+            "PUT",
+            StatusCode::UNAUTHORIZED,
+        ),
+        ("/validators/id/penalty", "PUT", StatusCode::UNAUTHORIZED),
+        ("/validators/id/identity", "PUT", StatusCode::UNAUTHORIZED),
+        ("/validators/staking", "GET", StatusCode::UNAUTHORIZED),
+        ("/validators/consensus", "GET", StatusCode::UNAUTHORIZED),
+        (
+            "/validators/needs_attention",
+            "GET",
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            "/validators/inventory/count",
+            "GET",
+            StatusCode::UNAUTHORIZED,
+        ),
         // Broadcast filter routes
-        ("/broadcast_filters", "POST", StatusCode::FORBIDDEN),
-        ("/broadcast_filters/id", "GET", StatusCode::FORBIDDEN),
-        ("/broadcast_filters/id", "PUT", StatusCode::FORBIDDEN),
-        ("/broadcast_filters/id", "DELETE", StatusCode::FORBIDDEN),
+        ("/broadcast_filters", "POST", StatusCode::UNAUTHORIZED),
+        ("/broadcast_filters/id", "GET", StatusCode::UNAUTHORIZED),
+        ("/broadcast_filters/id", "PUT", StatusCode::UNAUTHORIZED),
+        ("/broadcast_filters/id", "DELETE", StatusCode::UNAUTHORIZED),
         // Organization routes
-        ("/orgs", "POST", StatusCode::FORBIDDEN),
-        ("/orgs/id", "GET", StatusCode::FORBIDDEN),
-        ("/orgs/id", "DELETE", StatusCode::FORBIDDEN),
-        ("/orgs/id", "PUT", StatusCode::FORBIDDEN),
-        ("/orgs/id/members", "GET", StatusCode::FORBIDDEN),
-        ("/orgs/id/broadcast_filters", "GET", StatusCode::FORBIDDEN),
+        ("/orgs", "POST", StatusCode::UNAUTHORIZED),
+        ("/orgs/id", "GET", StatusCode::UNAUTHORIZED),
+        ("/orgs/id", "DELETE", StatusCode::UNAUTHORIZED),
+        ("/orgs/id", "PUT", StatusCode::UNAUTHORIZED),
+        ("/orgs/id/members", "GET", StatusCode::UNAUTHORIZED),
+        (
+            "/orgs/id/broadcast_filters",
+            "GET",
+            StatusCode::UNAUTHORIZED,
+        ),
         // User routes
-        ("/users", "POST", StatusCode::FORBIDDEN),
-        ("/users/id/orgs", "GET", StatusCode::FORBIDDEN),
-        ("/users/id/summary", "GET", StatusCode::FORBIDDEN),
-        ("/users/id/payments", "GET", StatusCode::FORBIDDEN),
-        ("/users/id/rewards/summary", "GET", StatusCode::FORBIDDEN),
-        ("/users/id/validators", "GET", StatusCode::FORBIDDEN),
-        ("/users/id/validators", "POST", StatusCode::FORBIDDEN),
+        ("/users", "POST", StatusCode::UNAUTHORIZED),
+        ("/users/id/orgs", "GET", StatusCode::UNAUTHORIZED),
+        ("/users/id/summary", "GET", StatusCode::UNAUTHORIZED),
+        ("/users/id/payments", "GET", StatusCode::UNAUTHORIZED),
+        ("/users/id/rewards/summary", "GET", StatusCode::UNAUTHORIZED),
+        ("/users/id/validators", "GET", StatusCode::UNAUTHORIZED),
+        ("/users/id/validators", "POST", StatusCode::UNAUTHORIZED),
         (
             "/users/id/validators/staking/export",
             "GET",
-            StatusCode::FORBIDDEN,
+            StatusCode::UNAUTHORIZED,
         ),
-        ("/users/id/invoices", "GET", StatusCode::FORBIDDEN),
-        ("/users/summary", "GET", StatusCode::FORBIDDEN),
+        ("/users/id/invoices", "GET", StatusCode::UNAUTHORIZED),
+        ("/users/summary", "GET", StatusCode::UNAUTHORIZED),
         // Host routes
-        ("/hosts", "POST", StatusCode::FORBIDDEN),
-        ("/hosts", "GET", StatusCode::FORBIDDEN),
-        ("/hosts/id", "GET", StatusCode::FORBIDDEN),
-        ("/hosts/id", "PUT", StatusCode::FORBIDDEN),
-        ("/hosts/id", "DELETE", StatusCode::FORBIDDEN),
-        ("/hosts/id/status", "PUT", StatusCode::FORBIDDEN),
-        ("/hosts/id/commands", "POST", StatusCode::FORBIDDEN),
-        ("/hosts/id/commands", "GET", StatusCode::FORBIDDEN),
-        ("/hosts/id/commands/pending", "GET", StatusCode::FORBIDDEN),
-        ("/hosts/token/:token", "GET", StatusCode::FORBIDDEN),
+        ("/hosts", "POST", StatusCode::UNAUTHORIZED),
+        ("/hosts", "GET", StatusCode::UNAUTHORIZED),
+        ("/hosts/id", "GET", StatusCode::UNAUTHORIZED),
+        ("/hosts/id", "PUT", StatusCode::UNAUTHORIZED),
+        ("/hosts/id", "DELETE", StatusCode::UNAUTHORIZED),
+        ("/hosts/id/status", "PUT", StatusCode::UNAUTHORIZED),
+        ("/hosts/id/commands", "POST", StatusCode::UNAUTHORIZED),
+        ("/hosts/id/commands", "GET", StatusCode::UNAUTHORIZED),
+        (
+            "/hosts/id/commands/pending",
+            "GET",
+            StatusCode::UNAUTHORIZED,
+        ),
+        ("/hosts/token/:token", "GET", StatusCode::UNAUTHORIZED),
         // Host provisions routes
-        ("/host_provisions", "POST", StatusCode::FORBIDDEN),
-        ("/host_provisions/id", "GET", StatusCode::FORBIDDEN),
-        ("/host_provisions/id/hosts", "POST", StatusCode::FORBIDDEN),
+        ("/host_provisions", "POST", StatusCode::UNAUTHORIZED),
+        ("/host_provisions/id", "GET", StatusCode::UNAUTHORIZED),
+        (
+            "/host_provisions/id/hosts",
+            "POST",
+            StatusCode::UNAUTHORIZED,
+        ),
     ]
+}
+
+async fn foo_bar() -> &'static str {
+    "WORKS!"
 }
 
 #[tokio::test]
@@ -103,7 +136,10 @@ async fn test_possible_routes() -> anyhow::Result<()> {
     let auth_service = AuthorizationService::new(enforcer);
     let app = api_router()
         .layer(TraceLayer::new_for_http())
-        .layer(AsyncRequireAuthorizationLayer::new(auth_service));
+        .layer(AsyncRequireAuthorizationLayer::new(auth_service))
+        .route("/foo_bar", get(foo_bar))
+        .nest("/", unauthenticated_routes());
+
     let mut cnt = 1;
 
     for item in routes {
