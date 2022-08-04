@@ -11,6 +11,7 @@ use axum::http::Request as HttpRequest;
 use axum::http::Response as HttpResponse;
 use futures_util::future::BoxFuture;
 use http::StatusCode;
+use regex::Regex;
 use std::convert::TryFrom;
 use tower_http::auth::AsyncAuthorizeRequest;
 
@@ -26,6 +27,15 @@ fn unauthenticated_response() -> HttpResponse<BoxBody> {
         .status(StatusCode::UNAUTHORIZED)
         .body(boxed(Body::empty()))
         .unwrap()
+}
+
+fn mask_uuid(input: &str) -> String {
+    let regex = Regex::new(
+        r#"[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}"#,
+    )
+    .unwrap();
+
+    regex.replacen(input, 0, ":id").to_string()
 }
 
 #[derive(Clone)]
@@ -58,12 +68,12 @@ where
                         .extensions()
                         .get::<DbPool>()
                         .unwrap_or_else(|| panic!("DB extension missing"));
-                    let db_token = Token::find_by_token(token.encode().unwrap(), &db)
+                    let db_token = Token::find_by_token(token.encode().unwrap(), db)
                         .await
                         .unwrap();
                     let auth_data = AuthorizationData {
                         subject: db_token.role.to_string(),
-                        object: request.uri().path().to_string(),
+                        object: mask_uuid(request.uri().path()),
                         action: request.method().to_string(),
                     };
 
@@ -195,3 +205,24 @@ impl<S> Layer<S> for AuthorizationLayer {
     }
 }
  */
+
+#[cfg(test)]
+mod tests {
+    use super::mask_uuid;
+
+    #[test]
+    fn should_mask_single_uuids() {
+        let uri = "/hosts/a5233b2d-c22b-4dd7-8c8b-48abc8556327/commands/pending";
+        let masked = mask_uuid(uri);
+
+        assert_eq!("/hosts/:id/commands/pending", masked);
+    }
+
+    #[test]
+    fn should_mask_all_uuids() {
+        let uri = "/hosts/a5233b2d-c22b-4dd7-8c8b-48abc8556327/commands/58c3f661-9fae-49cf-8851-4bb3b46a6699/pending";
+        let masked = mask_uuid(uri);
+
+        assert_eq!("/hosts/:id/commands/:id/pending", masked);
+    }
+}
