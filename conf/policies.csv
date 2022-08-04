@@ -1,2 +1,17 @@
-p, host, host_commands, read_all
-p, host, host_status, update
+# /reset
+p, master_admin, reset, PUT
+p, master_admin, reset, POST
+
+p, master_admin, whoami, GET
+p, master_admin, block_height, GET
+p, master_admin, block_info, GET
+p, master_admin, block_info, PUT
+p, master_admin, payments_due, GET
+p, master_admin, pay_adresses, GET
+p, master_admin, rewards, POST
+p, master_admin, payments, POST
+
+g, admin, master_admin
+g, guest, outbound
+g, service, host_service
+g, user, http_user

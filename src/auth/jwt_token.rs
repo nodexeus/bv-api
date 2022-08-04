@@ -105,6 +105,7 @@ impl Identifier for JwtToken {
 impl<B> TryFrom<&HttpRequest<B>> for JwtToken {
     type Error = TokenError;
 
+    /// TODO: token must be base64 encoded, decode before using it
     fn try_from(request: &HttpRequest<B>) -> Result<Self, Self::Error> {
         let token = request
             .headers()

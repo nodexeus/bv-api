@@ -53,7 +53,7 @@ fn should_decode_valid_token() -> anyhow::Result<()> {
     validation.validate_exp = true;
 
     match jsonwebtoken::decode::<JwtToken>(
-        &token_str.as_str(),
+        token_str.as_str(),
         &DecodingKey::from_secret(secret.as_bytes()),
         &validation,
     ) {
@@ -76,7 +76,7 @@ fn should_panic_on_decode_expired_token() {
     validation.validate_exp = true;
 
     match jsonwebtoken::decode::<JwtToken>(
-        &token_str.as_str(),
+        token_str.as_str(),
         &DecodingKey::from_secret(secret.as_bytes()),
         &validation,
     ) {
