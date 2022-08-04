@@ -29,7 +29,7 @@ pub enum TokenError {
     EnvVar(#[from] VarError),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum TokenHolderType {
     Host,
     User,
@@ -38,12 +38,12 @@ pub enum TokenHolderType {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct JwtToken {
     id: Uuid,
-    exp: usize,
+    exp: i64,
     holder_type: TokenHolderType,
 }
 
 impl JwtToken {
-    pub fn new(id: Uuid, exp: usize, holder_type: TokenHolderType) -> Self {
+    pub fn new(id: Uuid, exp: i64, holder_type: TokenHolderType) -> Self {
         Self {
             id,
             exp,
@@ -51,8 +51,8 @@ impl JwtToken {
         }
     }
 
-    pub fn token_holder(&self) -> &TokenHolderType {
-        &self.holder_type
+    pub fn token_holder(self) -> TokenHolderType {
+        self.holder_type
     }
 
     /// Decode JWT token string and create a JwtToken instance out of it

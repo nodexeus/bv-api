@@ -1,10 +1,11 @@
-use crate::auth::{JwtToken, TokenHolderType};
+use crate::auth::{JwtToken, TokenHolderType, TokenIdentifyable};
 use crate::errors::ApiError;
 use crate::errors::Result;
-use crate::models::{Host, Node, User, Validator};
+use crate::models::{Host, HostSelectiveUpdate, Node, User, UserSelectiveUpdate, Validator};
+use anyhow::anyhow;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::{Acquire, FromRow, PgPool};
 use std::env;
 use std::ops::Add;
 use uuid::Uuid;
@@ -32,6 +33,7 @@ impl ToString for TokenRole {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Token {
+    pub id: Uuid,
     pub token: String,
     pub host_id: Option<Uuid>,
     pub user_id: Option<Uuid>,
@@ -41,52 +43,130 @@ pub struct Token {
 }
 
 impl Token {
-    pub async fn refresh(jwt_token: JwtToken, db: &PgPool) -> Result<Self> {
-        // delete and get old one
-        match sqlx::query_as::<_, Self>("delete from tokens where token = $1 returning *")
-            .bind(jwt_token.encode().unwrap())
-            .fetch_one(db)
+    pub async fn delete(id: Uuid, db: &PgPool) -> Result<Self> {
+        let mut tx = db.begin().await?;
+
+        let token = sqlx::query_as::<_, Self>("DELETE FROM tokens WHERE id = $1 RETURNING *")
+            .bind(id)
+            .fetch_one(&mut tx)
             .await
-        {
-            // return new one
-            Ok(old_token) => {
-                // create new token
-                Self::create_token(
-                    old_token.user_id.unwrap(),
-                    old_token.role,
-                    db,
-                    jwt_token.token_holder(),
-                )
-                .await
-            }
-            Err(e) => Err(ApiError::NotFoundError(e)),
+            .map_err(ApiError::from)?;
+
+        match tx.commit().await {
+            Ok(_) => Ok(token),
+            Err(e) => Err(e.into()),
         }
     }
 
-    pub async fn create_token(
+    pub async fn refresh(token_str: String, db: &PgPool) -> Result<Self> {
+        let mut tx = db.begin().await?;
+        // 1. Delete old token
+        let old_token = sqlx::query_as::<_, Self>("DELETE FROM tokens WHERE token = $1")
+            .bind(token_str)
+            .fetch_one(&mut tx)
+            .await?;
+
+        tx.commit().await?;
+
+        match old_token.host_id {
+            Some(host_id) => {
+                // Create new token
+                let new_token =
+                    Token::create(host_id, old_token.role, db, TokenHolderType::Host).await?;
+
+                // Update host with new token
+                let fields = HostSelectiveUpdate {
+                    token_id: Some(new_token.id),
+                    ..Default::default()
+                };
+
+                return match Host::update_all(host_id, fields, db).await {
+                    Ok(_) => Ok(new_token),
+                    Err(e) => Err(e),
+                };
+            }
+            None => tracing::debug!("old token has no host ID"),
+        }
+
+        match old_token.user_id {
+            Some(user_id) => {
+                // Create new token
+                let new_token =
+                    Token::create(user_id, old_token.role, db, TokenHolderType::User).await?;
+
+                // Update user with new token
+                let fields = UserSelectiveUpdate {
+                    token_id: Some(new_token.id),
+                    ..Default::default()
+                };
+
+                return match User::update_all(user_id, fields, db).await {
+                    Ok(_) => Ok(new_token),
+                    Err(e) => Err(e),
+                };
+            }
+            None => tracing::debug!("old token has no user ID"),
+        }
+
+        Err(ApiError::UnexpectedError(anyhow!(
+            "Neither host nor user ID set on token, can't refresh"
+        )))
+    }
+
+    /// TODO: refactor me
+    pub async fn create(
         id: Uuid,
         role: TokenRole,
         db: &PgPool,
-        holder_type: &TokenHolderType,
+        holder_type: TokenHolderType,
     ) -> Result<Self> {
-        let expiration = Self::get_expiration(Self::get_expiration_period());
-        let jwt_token = JwtToken::new(id, expiration.timestamp() as usize, TokenHolderType::Host);
+        let expiration = Self::get_expiration(Self::get_expiration_period(holder_type));
+        let jwt_token = JwtToken::new(id, expiration.timestamp(), holder_type);
         let id_field = match holder_type {
             TokenHolderType::User => "user_id",
             TokenHolderType::Host => "host_id",
         };
 
-        sqlx::query_as::<_, Self>(&*format!(
-            "insert into tokens (token, {}, expires_at, role) values ($1, $2, $3, $4)",
+        let mut tx = db.begin().await?;
+        let token = sqlx::query_as::<_, Self>(&*format!(
+            "INSERT INTO TOKENS (token, {}, expires_at, role) VALUES ($1, $2, $3, $4) RETURNING *",
             id_field
         ))
         .bind(jwt_token.encode().unwrap())
         .bind(id)
         .bind(expiration)
         .bind(role)
-        .fetch_one(db)
+        .fetch_one(&mut tx)
         .await
         .map_err(ApiError::from)
+        .unwrap();
+
+        tx.commit().await?;
+
+        match holder_type {
+            TokenHolderType::User => {
+                let fields = UserSelectiveUpdate {
+                    token_id: Some(token.id),
+                    ..Default::default()
+                };
+
+                match User::update_all(id, fields, db).await {
+                    Ok(_) => Ok(token),
+                    Err(e) => Err(e),
+                }
+            }
+            TokenHolderType::Host => {
+                let fields = HostSelectiveUpdate {
+                    token_id: Some(token.id),
+                    ..Default::default()
+                };
+
+                match Host::update_all(id, fields, db).await {
+                    Ok(_) => Ok(token),
+                    Err(e) => Err(e),
+                }
+            }
+        }
     }
 
     pub async fn find_by_token(token_str: String, db: &PgPool) -> Result<Self> {
@@ -129,10 +209,12 @@ impl Token {
         start.add(Duration::days(duration_days))
     }
 
-    fn get_expiration_period() -> i64 {
-        env::var("TOKEN_EXPIRATION_DAYS")
-            .unwrap_or("1".into())
-            .parse()
-            .unwrap()
+    fn get_expiration_period(holder_type: TokenHolderType) -> i64 {
+        let name = match holder_type {
+            TokenHolderType::User => "TOKEN_EXPIRATION_DAYS_USER",
+            TokenHolderType::Host => "TOKEN_EXPIRATION_DAYS_HOST",
+        };
+
+        env::var(name).unwrap_or("1".into()).parse().unwrap()
     }
 }

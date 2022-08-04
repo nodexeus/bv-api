@@ -1,5 +1,5 @@
 use super::{Node, NodeCreateRequest, NodeProvision, NodeStatus, Validator, ValidatorRequest};
-use crate::auth::FindableById;
+use crate::auth::{FindableById, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -94,7 +94,7 @@ impl Host {
 
     pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
         let mut tx = db.begin().await?;
-        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, status, org_id, cpu_count, mem_size, disk_size, os, os_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *")
+        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, status, org_id, cpu_count, mem_size, disk_size, os, os_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *")
         .bind(req.name)
         .bind(req.version)
         .bind(req.location)
@@ -131,6 +131,7 @@ impl Host {
         Ok(host)
     }
 
+    #[deprecated(since = "0.2.0", note = "deprecated in favor of 'update_all'")]
     pub async fn update(id: Uuid, host: HostRequest, db: &PgPool) -> Result<Self> {
         let mut tx = db.begin().await.unwrap();
         let host = sqlx::query(
@@ -155,6 +156,48 @@ impl Host {
         .await?;
 
         tx.commit().await.unwrap();
+        Ok(host)
+    }
+
+    pub async fn update_all(id: Uuid, fields: HostSelectiveUpdate, db: &PgPool) -> Result<Self> {
+        let mut tx = db.begin().await.unwrap();
+        let host = sqlx::query(
+            r#"UPDATE hosts SET 
+                    org_id = COALESCE($1, org_id),
+                    name = COALESCE($2, name),
+                    version = COALESCE($3, version),
+                    location = COALESCE($4, location),
+                    cpu_count = COALESCE($5, cpu_count),
+                    mem_size = COALESCE($6, mem_size),
+                    disk_size = COALESCE($7, disk_size),
+                    os = COALESCE($8, os),
+                    os_version = COALESCE($9, os_version),
+                    ip_addr = COALESCE($10, ip_addr),
+                    val_ip_addrs = COALESCE($11, val_ip_addrs),
+                    status = COALESCE($12, status),
+                    token_id = COALESCE($13, token_id)
+                WHERE id = $14 RETURNING *"#,
+        )
+        .bind(fields.org_id)
+        .bind(fields.name)
+        .bind(fields.version)
+        .bind(fields.location)
+        .bind(fields.cpu_count)
+        .bind(fields.mem_size)
+        .bind(fields.disk_size)
+        .bind(fields.os)
+        .bind(fields.os_version)
+        .bind(fields.ip_addr)
+        .bind(fields.val_ip_addrs)
+        .bind(fields.status)
+        .bind(fields.token_id)
+        .bind(id)
+        .map(Self::from)
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await.unwrap();
+
         Ok(host)
     }
 
@@ -208,6 +251,22 @@ impl FindableById for Host {
     }
 }
 
+#[axum::async_trait]
+impl TokenIdentifyable for Host {
+    async fn set_token(token_id: Uuid, host_id: Uuid, db: &PgPool) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let fields = HostSelectiveUpdate {
+            token_id: Some(token_id),
+            status: Some(ConnectionStatus::Online),
+            ..Default::default()
+        };
+
+        Host::update_all(host_id, fields, db).await
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostRequest {
     pub org_id: Option<Uuid>,
@@ -222,6 +281,23 @@ pub struct HostRequest {
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
     pub status: ConnectionStatus,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct HostSelectiveUpdate {
+    pub org_id: Option<Uuid>,
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub location: Option<String>,
+    pub cpu_count: Option<i64>,
+    pub mem_size: Option<i64>,
+    pub disk_size: Option<i64>,
+    pub os: Option<String>,
+    pub os_version: Option<String>,
+    pub ip_addr: Option<String>,
+    pub val_ip_addrs: Option<String>,
+    pub status: Option<ConnectionStatus>,
+    pub token_id: Option<Uuid>,
 }
 
 impl From<HostCreateRequest> for HostRequest {

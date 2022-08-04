@@ -2,7 +2,7 @@
 //!         using the new token respecting possible new workflows (eg magic link) TBD
 
 use super::{Org, StakeStatus, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
-use crate::auth::FindableById;
+use crate::auth::{FindableById, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
 use anyhow::anyhow;
 use argon2::{
@@ -73,6 +73,14 @@ pub struct User {
     pub fee_bps: i64,
     pub staking_quota: i64,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UserSelectiveUpdate {
+    pub email: Option<String>,
+    pub fee_bps: Option<i64>,
+    pub staking_quota: Option<i64>,
+    pub token_id: Option<Uuid>,
 }
 
 impl User {
@@ -305,6 +313,29 @@ impl User {
 
         Err(ApiError::UnexpectedError(anyhow!("No Balance")))
     }
+
+    pub async fn update_all(id: Uuid, fields: UserSelectiveUpdate, db: &PgPool) -> Result<Self> {
+        let mut tx = db.begin().await.unwrap();
+        let user = sqlx::query_as::<_, User>(
+            r#"UPDATE users SET 
+                    email = COALESCE($1, email),
+                    fee_bps = COALESCE($2, fee_bps),
+                    staking_quota = COALESCE($3, staking_quota),
+                    token_id = COALESCE($4, token_id)
+                WHERE id = $5 RETURNING *"#,
+        )
+        .bind(fields.email)
+        .bind(fields.fee_bps)
+        .bind(fields.staking_quota)
+        .bind(fields.token_id)
+        .bind(id)
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await.unwrap();
+
+        Ok(user)
+    }
 }
 
 #[axum::async_trait]
@@ -315,6 +346,21 @@ impl FindableById for User {
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
+    }
+}
+
+#[axum::async_trait]
+impl TokenIdentifyable for User {
+    async fn set_token(token_id: Uuid, user_id: Uuid, db: &PgPool) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let fields = UserSelectiveUpdate {
+            token_id: Some(token_id),
+            ..Default::default()
+        };
+
+        User::update_all(user_id, fields, db).await
     }
 }
 

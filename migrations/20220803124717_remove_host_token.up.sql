@@ -1,1 +1,0 @@
-alter table hosts drop column token;

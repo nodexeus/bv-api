@@ -1,1 +1,0 @@
-alter table hosts add column token text not null unique default '';

@@ -57,6 +57,13 @@ pub trait FindableById: Send + Sync + 'static {
         Self: Sized;
 }
 
+#[axum::async_trait]
+pub trait TokenIdentifyable: Send + Sync + 'static {
+    async fn set_token(token_id: Uuid, resource_id: Uuid, db: &PgPool) -> ApiResult<Self>
+    where
+        Self: Sized;
+}
+
 pub type AuthorizationResult = std::result::Result<AuthorizationState, AuthorizationError>;
 pub type InitResult = std::result::Result<Authorization, AuthorizationError>;
 
