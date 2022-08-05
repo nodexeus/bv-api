@@ -2037,6 +2037,7 @@ dependencies = [
 [[package]]
 name = "test_macros"
 version = "0.1.0"
+source = "git+https://github.com/blockjoy/test-macros/#9a2b9801ec4ddd083364f2fac314f301c0a89932"
 dependencies = [
  "proc-macro2",
  "quote",
