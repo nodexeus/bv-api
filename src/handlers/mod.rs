@@ -1,4 +1,4 @@
-use crate::auth::FindableById;
+use crate::auth::{FindableById, TokenIdentifyable};
 use crate::errors;
 use crate::errors::ApiError;
 use crate::models::*;
@@ -46,7 +46,16 @@ pub async fn login(
     Json(login): Json<UserLoginRequest>,
 ) -> ApiResult<impl IntoResponse> {
     let user = User::login(login, db.as_ref()).await?;
-    Ok((StatusCode::OK, Json(user)))
+    let token = user.get_token(db.as_ref()).await?;
+    let login = UserLogin {
+        id: user.id,
+        email: user.email,
+        fee_bps: user.fee_bps,
+        staking_quota: user.staking_quota,
+        token: token.to_base64(),
+    };
+
+    Ok((StatusCode::OK, Json(login)))
 }
 
 pub async fn refresh(
@@ -227,9 +236,9 @@ pub async fn create_host(
 pub async fn update_host(
     Extension(db): Extension<DbPool>,
     Path(id): Path<Uuid>,
-    Json(host): Json<HostRequest>,
+    Json(host): Json<HostSelectiveUpdate>,
 ) -> ApiResult<impl IntoResponse> {
-    let host = Host::update(id, host, &db).await?;
+    let host = Host::update_all(id, host, &db).await?;
     Ok((StatusCode::OK, Json(host)))
 }
 

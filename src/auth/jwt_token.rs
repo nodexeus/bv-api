@@ -64,7 +64,7 @@ impl JwtToken {
         validation.validate_exp = true;
 
         match decode::<JwtToken>(
-            &encoded,
+            encoded,
             &DecodingKey::from_secret(secret.as_bytes()),
             &validation,
         ) {

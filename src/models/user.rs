@@ -2,8 +2,9 @@
 //!         using the new token respecting possible new workflows (eg magic link) TBD
 
 use super::{Org, StakeStatus, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
-use crate::auth::{FindableById, TokenIdentifyable};
+use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
+use crate::models::{Token, TokenRole};
 use anyhow::anyhow;
 use argon2::{
     password_hash::{PasswordHasher, SaltString},
@@ -13,41 +14,8 @@ use chrono::{DateTime, Utc};
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
-use std::fmt;
-use std::str::FromStr;
 use uuid::Uuid;
 use validator::Validate;
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
-#[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "enum_user_role", rename_all = "snake_case")]
-pub enum UserRole {
-    User,
-    Host,
-    Admin,
-}
-
-impl fmt::Display for UserRole {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Admin => write!(f, "admin"),
-            Self::Host => write!(f, "host"),
-            Self::User => write!(f, "user"),
-        }
-    }
-}
-
-impl FromStr for UserRole {
-    type Err = ApiError;
-
-    fn from_str(s: &str) -> Result<Self> {
-        match s {
-            "admin" => Ok(Self::Admin),
-            "host" => Ok(Self::Host),
-            _ => Ok(Self::User),
-        }
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct PwdResetInfo {
@@ -77,6 +45,15 @@ pub struct UserSelectiveUpdate {
     pub fee_bps: Option<i64>,
     pub staking_quota: Option<i64>,
     pub token_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserLogin {
+    pub(crate) id: Uuid,
+    pub(crate) email: String,
+    pub(crate) fee_bps: i64,
+    pub(crate) staking_quota: i64,
+    pub(crate) token: String,
 }
 
 impl User {
@@ -188,18 +165,22 @@ impl User {
     }
 
     pub async fn find_by_email(email: &str, db: &PgPool) -> Result<Self> {
-        /*
         sqlx::query_as::<_, Self>(
             r#"SELECT u.*, t.token, t.role FROM users u
                         RIGHT JOIN tokens t on u.id = t.user_id
                     WHERE LOWER(email) = LOWER($1)"#,
         )
-         */
+        .bind(email)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
+        /*
         sqlx::query_as::<_, Self>("SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1")
             .bind(email)
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
+         */
     }
 
     pub async fn find_by_refresh(refresh: &str, db: &PgPool) -> Result<Self> {
@@ -242,7 +223,7 @@ impl User {
             .hash
         {
             let mut tx = db.begin().await?;
-            let user = sqlx::query_as::<_, Self>(
+            let result = match sqlx::query_as::<_, Self>(
                 "INSERT INTO users (email, hashword, salt, staking_quota, fee_bps) values (LOWER($1),$2,$3,$4,$5) RETURNING *",
             )
             .bind(user.email)
@@ -252,29 +233,41 @@ impl User {
             .bind(FEE_BPS_DEFAULT)
             .fetch_one(&mut tx)
             .await
-            .map_err(ApiError::from);
+            .map_err(ApiError::from)
+            {
+                Ok(user) => {
+                    let org = sqlx::query_as::<_, Org>(
+                        "INSERT INTO orgs (name, is_personal) values (LOWER($1), true) RETURNING *",
+                    )
+                        .bind(&user.email)
+                        .fetch_one(&mut tx)
+                        .await
+                        .map_err(ApiError::from)?;
 
-            if let Ok(u) = &user {
-                let org = sqlx::query_as::<_, Org>(
-                    "INSERT INTO orgs (name, is_personal) values (LOWER($1), true) RETURNING *",
-                )
-                .bind(&u.email)
-                .fetch_one(&mut tx)
-                .await
-                .map_err(ApiError::from)?;
+                    sqlx::query(
+                        "INSERT INTO orgs_users (org_id, user_id, role) values($1, $2, 'owner')",
+                    )
+                        .bind(org.id)
+                        .bind(user.id)
+                        .execute(&mut tx)
+                        .await
+                        .map_err(ApiError::from)?;
 
-                sqlx::query(
-                    "INSERT INTO orgs_users (org_id, user_id, role) values($1, $2, 'owner')",
-                )
-                .bind(org.id)
-                .bind(u.id)
-                .execute(&mut tx)
-                .await
-                .map_err(ApiError::from)?;
-            }
+                    Ok(user)
+                },
+                Err(e) => Err(e),
+            };
+
             tx.commit().await?;
 
-            return user;
+            return match result {
+                Ok(user) => {
+                    Token::create_for::<User>(&user, TokenRole::User, db).await?;
+
+                    Ok(user)
+                }
+                Err(e) => Err(e),
+            };
         }
 
         Err(ApiError::ValidationError("Invalid password.".to_string()))
@@ -363,6 +356,21 @@ impl TokenIdentifyable for User {
         };
 
         User::update_all(user_id, fields, db).await
+    }
+
+    fn get_holder_type() -> TokenHolderType {
+        TokenHolderType::User
+    }
+
+    fn get_id(&self) -> Uuid {
+        self.id
+    }
+
+    async fn get_token(&self, db: &PgPool) -> Result<Token>
+    where
+        Self: Sized,
+    {
+        Token::get::<User>(self.id, db).await
     }
 }
 

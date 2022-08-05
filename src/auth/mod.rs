@@ -4,6 +4,7 @@ pub mod middleware;
 pub use jwt_token::*;
 
 use crate::errors::Result as ApiResult;
+use crate::models::Token;
 use casbin::prelude::*;
 use sqlx::PgPool;
 use std::env;
@@ -60,6 +61,14 @@ pub trait FindableById: Send + Sync + 'static {
 #[axum::async_trait]
 pub trait TokenIdentifyable: Send + Sync + 'static {
     async fn set_token(token_id: Uuid, resource_id: Uuid, db: &PgPool) -> ApiResult<Self>
+    where
+        Self: Sized;
+
+    fn get_holder_type() -> TokenHolderType;
+
+    fn get_id(&self) -> Uuid;
+
+    async fn get_token(&self, db: &PgPool) -> ApiResult<Token>
     where
         Self: Sized;
 }

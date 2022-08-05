@@ -1,6 +1,7 @@
 use super::{Node, NodeCreateRequest, NodeProvision, NodeStatus, Validator, ValidatorRequest};
-use crate::auth::{FindableById, TokenIdentifyable};
+use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
+use crate::models::{Token, TokenRole};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -128,6 +129,8 @@ impl Host {
 
         tx.commit().await?;
 
+        Token::create_for::<Host>(&host, TokenRole::Service, db).await?;
+
         Ok(host)
     }
 
@@ -218,13 +221,19 @@ impl Host {
 
     pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
         let mut tx = db.begin().await?;
+        // TODO: cascading delete doesn't seem to work, so i'm manually deleting the token
+        let token_deleted = sqlx::query("delete from tokens where host_id = $1")
+            .bind(id)
+            .execute(&mut tx)
+            .await?;
+        // ////
         let deleted = sqlx::query("DELETE FROM hosts WHERE id = $1")
             .bind(id)
             .execute(&mut tx)
             .await?;
 
         tx.commit().await?;
-        Ok(deleted.rows_affected())
+        Ok(deleted.rows_affected() + token_deleted.rows_affected())
     }
 
     pub fn validator_ips(&self) -> Vec<String> {
@@ -264,6 +273,21 @@ impl TokenIdentifyable for Host {
         };
 
         Host::update_all(host_id, fields, db).await
+    }
+
+    fn get_holder_type() -> TokenHolderType {
+        TokenHolderType::Host
+    }
+
+    fn get_id(&self) -> Uuid {
+        self.id
+    }
+
+    async fn get_token(&self, db: &PgPool) -> Result<Token>
+    where
+        Self: Sized,
+    {
+        Token::get::<Host>(self.id, db).await
     }
 }
 

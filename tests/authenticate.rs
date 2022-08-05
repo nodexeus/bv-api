@@ -9,7 +9,7 @@ use tonic::Request as GrpcRequest;
 use uuid::Uuid;
 
 struct TestData {
-    pub(crate) now: u64,
+    pub(crate) now: i64,
 }
 
 struct GrpcInner(pub bool);
@@ -23,7 +23,7 @@ fn setup() -> TestData {
         now: start
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
-            .as_secs(),
+            .as_secs() as i64,
     }
 }
 
@@ -31,7 +31,7 @@ fn setup() -> TestData {
 #[test]
 fn should_get_valid_token_from_http_request() {
     let id = Uuid::new_v4();
-    let exp = (_before_values.now as usize) + 60;
+    let exp = _before_values.now + 60;
     let token = JwtToken::new(id, exp, TokenHolderType::User);
     let encoded = format!("Bearer {}", token.encode().unwrap());
     let request = HttpRequest::builder()
@@ -49,7 +49,7 @@ fn should_get_valid_token_from_http_request() {
 #[test]
 fn should_not_get_valid_token_from_http_request() {
     let id = Uuid::new_v4();
-    let exp = (_before_values.now as usize) + 60;
+    let exp = _before_values.now + 60;
     let token = JwtToken::new(id, exp, TokenHolderType::User);
     let encoded = token.encode().unwrap();
     let request = HttpRequest::builder()
@@ -68,7 +68,7 @@ fn should_not_get_valid_token_from_http_request() {
 #[test]
 fn should_get_valid_token_from_grpc_request() {
     let id = Uuid::new_v4();
-    let exp = (_before_values.now as usize) + 60;
+    let exp = _before_values.now + 60;
     let token = JwtToken::new(id, exp, TokenHolderType::User);
     let encoded = format!("Bearer {}", token.encode().unwrap());
     let mut request = GrpcRequest::new(GrpcInner(true));
@@ -86,7 +86,7 @@ fn should_get_valid_token_from_grpc_request() {
 #[test]
 fn should_not_get_valid_token_from_grpc_request() {
     let id = Uuid::new_v4();
-    let exp = (_before_values.now as usize) + 60;
+    let exp = _before_values.now + 60;
     let token = JwtToken::new(id, exp, TokenHolderType::User);
     let encoded = token.encode().unwrap();
     let mut request = GrpcRequest::new(GrpcInner(true));

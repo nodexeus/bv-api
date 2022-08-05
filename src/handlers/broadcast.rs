@@ -50,7 +50,7 @@ pub async fn delete_broadcast_filter(
     Extension(db): Extension<DbPool>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<impl IntoResponse> {
-    let _ = BroadcastFilter::delete(&id, db.as_ref()).await?;
+    BroadcastFilter::delete(&id, db.as_ref()).await?;
 
     Ok(StatusCode::OK)
 }

@@ -40,8 +40,7 @@ impl BroadcastFilter {
     }
 
     pub async fn create(req: &BroadcastFilterRequest, db: &PgPool) -> Result<Self> {
-        let _ = req
-            .validate()
+        req.validate()
             .map_err(|e| ApiError::ValidationError(e.to_string()))?;
         sqlx::query_as::<_, Self>(
             r##"
@@ -65,8 +64,7 @@ impl BroadcastFilter {
     }
 
     pub async fn update(id: &Uuid, req: &BroadcastFilterRequest, db: &PgPool) -> Result<Self> {
-        let _ = req
-            .validate()
+        req.validate()
             .map_err(|e| ApiError::ValidationError(e.to_string()))?;
         sqlx::query_as::<_, Self>(
             r##"

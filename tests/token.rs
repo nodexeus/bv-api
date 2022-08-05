@@ -9,7 +9,7 @@ use test_macros::*;
 use uuid::Uuid;
 
 struct TestData {
-    pub(crate) now: u64,
+    pub(crate) now: i64,
 }
 
 fn setup() -> TestData {
@@ -21,7 +21,7 @@ fn setup() -> TestData {
         now: start
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
-            .as_secs(),
+            .as_secs() as i64,
     }
 }
 
@@ -46,7 +46,7 @@ fn should_encode_token() -> anyhow::Result<()> {
 fn should_decode_valid_token() -> anyhow::Result<()> {
     let id = Uuid::new_v4();
     let secret = env::var("JWT_SECRET").expect("Secret not available in env");
-    let token = JwtToken::new(id, _before_values.now as usize, TokenHolderType::User);
+    let token = JwtToken::new(id, _before_values.now, TokenHolderType::User);
     let token_str = token.encode().unwrap();
     let mut validation = Validation::new(Algorithm::HS512);
 
@@ -118,11 +118,11 @@ fn should_not_work_with_empty_token() {
 #[test]
 fn should_get_valid_token() -> anyhow::Result<()> {
     let id = Uuid::new_v4();
-    let exp = (_before_values.now as usize) + 60 * 60 * 24;
+    let exp = _before_values.now + 60 * 60 * 24;
     let token = JwtToken::new(id, exp, TokenHolderType::User);
-    let encoded = token.encode().unwrap();
+    let encoded = base64::encode(token.encode().unwrap());
     let request = Request::builder()
-        .header(AUTHORIZATION, encoded)
+        .header(AUTHORIZATION, format!("Bearer {}", encoded))
         .uri("/")
         .method("GET")
         .body(())?;

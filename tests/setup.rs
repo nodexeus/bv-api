@@ -190,7 +190,7 @@ pub async fn reset_db(pool: &PgPool) {
 }
 
 pub async fn get_test_host(db: &PgPool) -> Host {
-    sqlx::query("select * from hosts where name = 'Host-1'")
+    sqlx::query("select h.*, t.token, t.role from hosts h right join tokens t on h.id = t.host_id where name = 'Host-1'")
         .map(Host::from)
         .fetch_one(db)
         .await

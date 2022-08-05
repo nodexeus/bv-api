@@ -3,6 +3,7 @@ use crate::errors::ApiError;
 use crate::errors::Result;
 use crate::models::{Host, Node, User, Validator};
 use anyhow::anyhow;
+use base64::encode as base64_encode;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
@@ -10,11 +11,12 @@ use std::env;
 use std::ops::Add;
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_token_role", rename_all = "snake_case")]
 pub enum TokenRole {
     Admin,
+    #[default]
     Guest,
     Service,
     User,
@@ -42,7 +44,30 @@ pub struct Token {
     pub role: TokenRole,
 }
 
+impl ToString for Token {
+    fn to_string(&self) -> String {
+        self.token.clone()
+    }
+}
+
 impl Token {
+    pub fn to_base64(&self) -> String {
+        base64_encode(&self.token)
+    }
+
+    pub async fn get<T: TokenIdentifyable>(resource_id: Uuid, db: &PgPool) -> Result<Self> {
+        let id_field = match T::get_holder_type() {
+            TokenHolderType::User => "user_id",
+            TokenHolderType::Host => "host_id",
+        };
+
+        sqlx::query_as::<_, Self>(&*format!("select * from tokens where {} = $1", id_field))
+            .bind(resource_id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
     pub async fn delete(id: Uuid, db: &PgPool) -> Result<Self> {
         let mut tx = db.begin().await?;
 
@@ -110,6 +135,19 @@ impl Token {
         )))
     }
 
+    pub async fn create_for<T: TokenIdentifyable>(
+        resource: &T,
+        role: TokenRole,
+        db: &PgPool,
+    ) -> Result<Self> {
+        let token = Token::create(resource.get_id(), role, db, T::get_holder_type()).await?;
+
+        match T::set_token(token.id, resource.get_id(), db).await {
+            Ok(_) => Ok(token),
+            Err(e) => Err(e),
+        }
+    }
+
     /// TODO: refactor me
     pub async fn create(
         resource_id: Uuid,
@@ -173,7 +211,7 @@ impl Token {
 
     pub async fn get_host_for_token(token_str: String, db: &PgPool) -> Result<Host> {
         let mut host = sqlx::query(
-            "select h.* from tokens t right join hosts u on t.host_id = h.id where t.token = $1",
+            "select h.* from tokens t right join hosts h on t.host_id = h.id where t.token = $1",
         )
         .bind(token_str)
         .map(Host::from)
@@ -199,6 +237,9 @@ impl Token {
             TokenHolderType::Host => "TOKEN_EXPIRATION_DAYS_HOST",
         };
 
-        env::var(name).unwrap_or("1".into()).parse().unwrap()
+        env::var(name)
+            .unwrap_or_else(|_| "1".into())
+            .parse()
+            .unwrap()
     }
 }

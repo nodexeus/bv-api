@@ -1,9 +1,8 @@
 mod setup;
 
 use crate::setup::get_test_host;
-use api::auth::TokenHolderType;
+use api::auth::TokenIdentifyable;
 use api::handlers::list_pending_commands;
-use api::models::{Token, TokenRole};
 use axum::routing::get;
 use axum::{Extension, Router};
 use base64::encode;
@@ -21,10 +20,8 @@ async fn should_respond_ok() {
     let db = _before_values.await;
     let user = get_admin_user(&db).await;
     let host = get_test_host(&db).await;
-    let token = Token::create(user.id, TokenRole::Admin, &db, TokenHolderType::User)
-        .await
-        .unwrap();
-    let auth_header = encode(token.token);
+    let token = user.get_token(&db).await.unwrap();
+    let auth_header = format!("Bearer {}", encode(token.token));
     let uri = format!("/hosts/{}/commands/pending", host.id);
 
     let app = Router::new()
