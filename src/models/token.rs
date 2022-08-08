@@ -11,12 +11,11 @@ use std::env;
 use std::ops::Add;
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_token_role", rename_all = "snake_case")]
 pub enum TokenRole {
     Admin,
-    #[default]
     Guest,
     Service,
     User,
