@@ -7,7 +7,7 @@ use jsonwebtoken::{
 };
 use serde::{Deserialize, Serialize};
 use std::env::VarError;
-use std::str::Utf8Error;
+use std::str::{FromStr, Utf8Error};
 use std::{env, str};
 use thiserror::Error;
 use uuid::Uuid;
@@ -62,23 +62,6 @@ impl JwtToken {
         self.holder_type
     }
 
-    /// Decode JWT token string and create a JwtToken instance out of it
-    pub fn decode(encoded: &str) -> TokenResult<JwtToken> {
-        let secret = Self::get_secret()?;
-        let mut validation = Validation::new(Algorithm::HS512);
-
-        validation.validate_exp = true;
-
-        match decode::<JwtToken>(
-            encoded,
-            &DecodingKey::from_secret(secret.as_bytes()),
-            &validation,
-        ) {
-            Ok(token) => Ok(token.claims),
-            Err(e) => Err(TokenError::EnDeCoding(e)),
-        }
-    }
-
     /// Encode this instance to a JWT token string
     pub fn encode(&self) -> TokenResult<String> {
         let secret = Self::get_secret()?;
@@ -105,7 +88,7 @@ impl JwtToken {
         let clear_token = base64_decode(token)?;
         let token = str::from_utf8(&clear_token)?;
 
-        JwtToken::decode(token)
+        JwtToken::from_str(token)
     }
 
     /// Get JWT_SECRET from env vars
@@ -117,6 +100,26 @@ impl JwtToken {
                 Ok(secret)
             }
             Err(e) => Err(TokenError::EnvVar(e)),
+        }
+    }
+}
+
+impl FromStr for JwtToken {
+    type Err = TokenError;
+
+    fn from_str(encoded: &str) -> Result<Self, Self::Err> {
+        let secret = Self::get_secret()?;
+        let mut validation = Validation::new(Algorithm::HS512);
+
+        validation.validate_exp = true;
+
+        match decode::<JwtToken>(
+            encoded,
+            &DecodingKey::from_secret(secret.as_bytes()),
+            &validation,
+        ) {
+            Ok(token) => Ok(token.claims),
+            Err(e) => Err(TokenError::EnDeCoding(e)),
         }
     }
 }

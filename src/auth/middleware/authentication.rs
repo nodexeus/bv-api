@@ -3,6 +3,7 @@
 use crate::auth::{JwtToken, TokenError, TokenResult};
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request as HttpRequest;
+use std::str::FromStr;
 use tonic::Request as GrpcRequest;
 
 pub type AuthenticationResult = TokenResult<JwtToken>;
@@ -21,7 +22,7 @@ pub fn get_token_from_http_request<B>(request: &HttpRequest<B>) -> Authenticatio
         .and_then(|hv| hv.to_str().ok())
         .and_then(extract_token_str)
     {
-        Some(token_str) => JwtToken::decode(token_str),
+        Some(token_str) => JwtToken::from_str(token_str),
         None => Err(TokenError::Empty),
     }
 }
@@ -33,7 +34,7 @@ pub fn get_token_from_grpc_request<B>(request: &GrpcRequest<B>) -> Authenticatio
         .and_then(|mv| mv.to_str().ok())
         .and_then(extract_token_str)
     {
-        Some(token_str) => JwtToken::decode(token_str),
+        Some(token_str) => JwtToken::from_str(token_str),
         None => Err(TokenError::Empty),
     }
 }

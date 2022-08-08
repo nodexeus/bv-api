@@ -3,6 +3,7 @@ use axum::http::header::AUTHORIZATION;
 use axum::http::Request;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use std::env;
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use test_macros::*;
 use uuid::Uuid;
@@ -146,7 +147,7 @@ fn should_panic_encode_without_secret_in_envs() {
 
 #[test]
 fn should_not_decode_without_secret_in_envs() {
-    if JwtToken::decode("asf.asdfasdfasdfasdfsadfasdfasdf.asdfasfasdf").is_ok() {
+    if JwtToken::from_str("asf.asdfasdfasdfasdfsadfasdfasdf.asdfasfasdf").is_ok() {
         panic!("It works, but it shouldn't")
     }
 }
@@ -168,7 +169,7 @@ fn should_panic_on_encode_with_empty_secret_in_envs() {
 fn should_panic_on_decode_with_empty_secret_in_envs() {
     env::set_var("JWT_SECRET", "");
 
-    if JwtToken::decode("asf.asdfasdfasdfasdfsadfasdfasdf.asdfasfasdf").is_ok() {
+    if JwtToken::from_str("asf.asdfasdfasdfasdfsadfasdfasdf.asdfasfasdf").is_ok() {
         panic!("It works, but it shouldn't")
     }
 }
