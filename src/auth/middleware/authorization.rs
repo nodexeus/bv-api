@@ -12,7 +12,6 @@ use axum::http::Response as HttpResponse;
 use futures_util::future::BoxFuture;
 use http::StatusCode;
 use regex::Regex;
-use std::convert::TryFrom;
 use tower_http::auth::AsyncAuthorizeRequest;
 
 fn unauthorized_response() -> HttpResponse<BoxBody> {
@@ -62,7 +61,7 @@ where
         let enforcer = self.enforcer.clone();
 
         Box::pin(async move {
-            match JwtToken::try_from(&request) {
+            match JwtToken::new_for_request(&request) {
                 Ok(token) => {
                     let db = request
                         .extensions()

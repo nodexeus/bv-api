@@ -1,13 +1,13 @@
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request as HttpRequest;
-use base64::decode as base64_decode;
+use base64::{decode as base64_decode, DecodeError};
 use jsonwebtoken::{
     decode, encode, errors::Error as JwtError, Algorithm, DecodingKey, EncodingKey, Header,
     Validation,
 };
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
 use std::env::VarError;
+use std::str::Utf8Error;
 use std::{env, str};
 use thiserror::Error;
 use uuid::Uuid;
@@ -28,6 +28,10 @@ pub enum TokenError {
     EnDeCoding(#[from] JwtError),
     #[error("Env var not defined: {0:?}")]
     EnvVar(#[from] VarError),
+    #[error("UTF-8 error: {0:?}")]
+    Utf8(#[from] Utf8Error),
+    #[error("JWT decoding error: {0:?}")]
+    JwtDecoding(#[from] DecodeError),
 }
 
 /// Type of user holding the token, i.e. gets authenticated
@@ -86,6 +90,24 @@ impl JwtToken {
         }
     }
 
+    /// Create new JWT token from given request
+    pub fn new_for_request<B>(request: &HttpRequest<B>) -> TokenResult<Self> {
+        let token = request
+            .headers()
+            .get(AUTHORIZATION)
+            .and_then(|hv| hv.to_str().ok())
+            .and_then(|hv| {
+                let words = hv.split("Bearer").collect::<Vec<&str>>();
+
+                words.get(1).map(|w| w.trim())
+            })
+            .unwrap_or("");
+        let clear_token = base64_decode(token)?;
+        let token = str::from_utf8(&clear_token)?;
+
+        JwtToken::decode(token)
+    }
+
     /// Get JWT_SECRET from env vars
     fn get_secret() -> TokenResult<String> {
         match env::var("JWT_SECRET") {
@@ -102,26 +124,5 @@ impl JwtToken {
 impl Identifier for JwtToken {
     fn get_id(&self) -> Uuid {
         self.id
-    }
-}
-
-impl<B> TryFrom<&HttpRequest<B>> for JwtToken {
-    type Error = TokenError;
-
-    fn try_from(request: &HttpRequest<B>) -> Result<Self, Self::Error> {
-        let token = request
-            .headers()
-            .get(AUTHORIZATION)
-            .and_then(|hv| hv.to_str().ok())
-            .and_then(|hv| {
-                let words = hv.split("Bearer").collect::<Vec<&str>>();
-
-                words.get(1).map(|w| w.trim())
-            })
-            .unwrap_or("");
-        let clear_token = base64_decode(token).unwrap();
-        let token = str::from_utf8(&clear_token).unwrap();
-
-        JwtToken::decode(token)
     }
 }

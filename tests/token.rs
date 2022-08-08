@@ -2,7 +2,6 @@ use api::auth::jwt_token::*;
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
-use std::convert::TryFrom;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use test_macros::*;
@@ -96,7 +95,7 @@ fn should_panic_with_invalid_token() {
         .header(AUTHORIZATION, "some-token")
         .body(())
         .unwrap();
-    let _ = JwtToken::try_from(&request).unwrap();
+    let _ = JwtToken::new_for_request(&request).unwrap();
 }
 
 #[before(call = "setup")]
@@ -109,7 +108,7 @@ fn should_not_work_with_empty_token() {
         .body(())
         .unwrap();
 
-    if JwtToken::try_from(&request).is_ok() {
+    if JwtToken::new_for_request(&request).is_ok() {
         panic!("It works, but it shouldn't")
     }
 }
@@ -126,7 +125,7 @@ fn should_get_valid_token() -> anyhow::Result<()> {
         .uri("/")
         .method("GET")
         .body(())?;
-    let token = JwtToken::try_from(&request).unwrap();
+    let token = JwtToken::new_for_request(&request).unwrap();
 
     assert_eq!(token.get_id(), id);
 
