@@ -75,7 +75,7 @@ pub async fn whoami(
             let user = Token::get_user_for_token(token.token, &db).await.unwrap();
             return Ok((StatusCode::OK, Json(json!(user))));
         }
-        _ => tracing::debug!("No user assigned for token {}", token.token),
+        _ => tracing::debug!("No user assigned for token"),
     }
 
     match token.host_id {
@@ -83,7 +83,7 @@ pub async fn whoami(
             let host = Token::get_host_for_token(token.token, &db).await.unwrap();
             return Ok((StatusCode::OK, Json(json!(host))));
         }
-        _ => tracing::debug!("No host assigned for token {}", token.token),
+        _ => tracing::debug!("No host assigned for token"),
     }
 
     Ok((
