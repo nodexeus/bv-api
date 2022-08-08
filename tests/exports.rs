@@ -8,29 +8,29 @@ struct Repo;
 
 #[tonic::async_trait]
 impl Owned<Owner, ()> for Resource {
-    async fn is_owned_by(&self, _resource: Owner, _db: ()) -> OwnershipState {
-        OwnershipState::Owned
+    async fn is_owned_by(&self, _resource: Owner, _db: ()) -> bool {
+        true
     }
 }
 
 #[tonic::async_trait]
 impl Owned<Owner, Repo> for Resource {
-    async fn is_owned_by(&self, _resource: Owner, _db: Repo) -> OwnershipState {
-        OwnershipState::Owned
+    async fn is_owned_by(&self, _resource: Owner, _db: Repo) -> bool {
+        true
     }
 }
 
 #[tonic::async_trait]
 impl Owned<NoOwner, ()> for Resource {
-    async fn is_owned_by(&self, _resource: NoOwner, _db: ()) -> OwnershipState {
-        OwnershipState::NotOwned
+    async fn is_owned_by(&self, _resource: NoOwner, _db: ()) -> bool {
+        false
     }
 }
 
 #[tonic::async_trait]
 impl Owned<NoOwner, Repo> for Resource {
-    async fn is_owned_by(&self, _resource: NoOwner, _db: Repo) -> OwnershipState {
-        OwnershipState::NotOwned
+    async fn is_owned_by(&self, _resource: NoOwner, _db: Repo) -> bool {
+        false
     }
 }
 
