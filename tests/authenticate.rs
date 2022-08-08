@@ -59,9 +59,7 @@ fn should_not_get_valid_token_from_http_request() {
         .body(())
         .unwrap();
 
-    if get_token_from_http_request(&request).is_ok() {
-        panic!("It works, but it shouldn't")
-    }
+    assert!(get_token_from_http_request(&request).is_err());
 }
 
 #[before(call = "setup")]
@@ -95,7 +93,5 @@ fn should_not_get_valid_token_from_grpc_request() {
         .metadata_mut()
         .insert("authorization", encoded.parse().unwrap());
 
-    if get_token_from_grpc_request(&request).is_ok() {
-        panic!("It works, but it shouldn't")
-    }
+    assert!(get_token_from_grpc_request(&request).is_err());
 }
