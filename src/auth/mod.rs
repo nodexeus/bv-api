@@ -6,6 +6,7 @@ pub use jwt_token::*;
 use crate::errors::Result as ApiResult;
 use crate::models::Token;
 use casbin::prelude::*;
+use casbin::Adapter;
 use sqlx::PgPool;
 use std::env;
 use std::env::VarError;
@@ -118,6 +119,41 @@ impl AuthorizationData {
     }
 }
 
+/// Helper type providing path that can be converted into casbin adapter
+pub struct Policies {
+    path: String,
+}
+
+impl Policies {
+    pub fn new(path: String) -> Self {
+        Self { path }
+    }
+}
+
+pub struct Model {
+    path: String,
+}
+
+impl Model {
+    pub fn new(path: String) -> Self {
+        Self { path }
+    }
+}
+
+#[tonic::async_trait]
+impl TryIntoAdapter for Policies {
+    async fn try_into_adapter(self) -> Result<Box<dyn Adapter>> {
+        Ok(Box::new(FileAdapter::new(self.path)))
+    }
+}
+
+#[tonic::async_trait]
+impl TryIntoModel for Model {
+    async fn try_into_model(self) -> Result<Box<dyn casbin::Model>> {
+        Ok(Box::new(DefaultModel::from_file(self.path).await?))
+    }
+}
+
 /// Convert auth data into 3-tuple needed by Enforcer::enforce
 impl From<AuthorizationData> for (String, String, String) {
     fn from(auth_data: AuthorizationData) -> Self {
@@ -143,12 +179,7 @@ impl Authorization {
         let model = env::var("CASBIN_MODEL").expect("Couldn't load auth model");
         let policies = env::var("CASBIN_POLICIES").expect("Couldn't load auth policies");
 
-        match Enforcer::new(
-            Authorization::string_to_static_str(model),
-            Authorization::string_to_static_str(policies),
-        )
-        .await
-        {
+        match Enforcer::new(Model::new(model), Policies::new(policies)).await {
             Ok(enforcer) => Ok(Self {
                 enforcer: Arc::new(RwLock::new(enforcer)),
             }),
@@ -177,10 +208,5 @@ impl Authorization {
             },
             Err(_) => Err(AuthorizationError::LockedError),
         }
-    }
-
-    /// Helper for converting a String to &'static str
-    fn string_to_static_str(s: String) -> &'static str {
-        Box::leak(s.into_boxed_str())
     }
 }
