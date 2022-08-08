@@ -109,9 +109,7 @@ fn should_not_work_with_empty_token() {
         .body(())
         .unwrap();
 
-    if JwtToken::new_for_request(&request).is_ok() {
-        panic!("It works, but it shouldn't")
-    }
+    assert!(JwtToken::new_for_request(&request).is_err());
 }
 
 #[before(call = "setup")]
@@ -137,19 +135,16 @@ fn should_get_valid_token() -> anyhow::Result<()> {
 fn should_panic_encode_without_secret_in_envs() {
     env::remove_var("JWT_SECRET");
 
-    if JwtToken::new(Uuid::new_v4(), 12312123, TokenHolderType::User)
-        .encode()
-        .is_ok()
-    {
-        panic!("It works, but it shouldn't")
-    }
+    assert!(
+        JwtToken::new(Uuid::new_v4(), 12312123, TokenHolderType::User)
+            .encode()
+            .is_err()
+    );
 }
 
 #[test]
 fn should_not_decode_without_secret_in_envs() {
-    if JwtToken::from_str("asf.asdfasdfasdfasdfsadfasdfasdf.asdfasfasdf").is_ok() {
-        panic!("It works, but it shouldn't")
-    }
+    assert!(JwtToken::from_str("asf.asdfasdfasdfasdfsadfasdfasdf.asdfasfasdf").is_err());
 }
 
 #[test]
@@ -159,9 +154,7 @@ fn should_panic_on_encode_with_empty_secret_in_envs() {
 
     let token = JwtToken::new(Uuid::new_v4(), 12312123, TokenHolderType::User);
 
-    if token.encode().is_ok() {
-        panic!("It works, but it shouldn't")
-    }
+    assert!(token.encode().is_err());
 }
 
 #[test]
@@ -169,7 +162,5 @@ fn should_panic_on_encode_with_empty_secret_in_envs() {
 fn should_panic_on_decode_with_empty_secret_in_envs() {
     env::set_var("JWT_SECRET", "");
 
-    if JwtToken::from_str("asf.asdfasdfasdfasdfsadfasdfasdf.asdfasfasdf").is_ok() {
-        panic!("It works, but it shouldn't")
-    }
+    assert!(JwtToken::from_str("asf.asdfasdfasdfasdfsadfasdfasdf.asdfasfasdf").is_err());
 }
