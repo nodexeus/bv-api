@@ -90,16 +90,6 @@ pub async fn whoami(
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(json!("No resource assigned to token")),
     ))
-
-    /*
-    if auth.is_user() {
-        let user = auth.get_user(db.as_ref()).await?;
-        Ok((StatusCode::OK, Json(json!(user))))
-    } else {
-        let host = auth.get_host(db.as_ref()).await?;
-        Ok((StatusCode::OK, Json(json!(host))))
-    }
-     */
 }
 
 pub async fn get_block_height(Extension(db): Extension<DbPool>) -> ApiResult<impl IntoResponse> {
@@ -359,18 +349,6 @@ pub async fn list_validators_by_user(
     let mut validators = Validator::find_all_by_user(user_id, db.as_ref()).await?;
     validators.iter_mut().for_each(|v| v.swarm_key = None);
     Ok((StatusCode::OK, Json(validators)))
-    /*
-    if auth.is_admin() || auth.try_user_access(user_id)? {
-        let mut validators = Validator::find_all_by_user(user_id, db.as_ref()).await?;
-        if auth.is_user() {
-            //users should get swarmkey
-            validators.iter_mut().for_each(|v| v.swarm_key = None);
-        }
-        Ok((StatusCode::OK, Json(validators)))
-    } else {
-        Err(ApiError::InsufficientPermissionsError)
-    }
-     */
 }
 
 pub async fn list_invoices(

@@ -30,12 +30,14 @@ pub enum TokenError {
     EnvVar(#[from] VarError),
 }
 
+/// Type of user holding the token, i.e. gets authenticated
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum TokenHolderType {
     Host,
     User,
 }
 
+/// The claims of the token to be stored (encrypted) on the client side
 #[derive(Debug, Deserialize, Serialize)]
 pub struct JwtToken {
     id: Uuid,
@@ -106,7 +108,6 @@ impl Identifier for JwtToken {
 impl<B> TryFrom<&HttpRequest<B>> for JwtToken {
     type Error = TokenError;
 
-    /// TODO: token must be base64 encoded, decode before using it
     fn try_from(request: &HttpRequest<B>) -> Result<Self, Self::Error> {
         let token = request
             .headers()
