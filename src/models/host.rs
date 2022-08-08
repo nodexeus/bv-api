@@ -1,5 +1,7 @@
 use super::{Node, NodeCreateRequest, NodeProvision, NodeStatus, Validator, ValidatorRequest};
+use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
+use crate::models::{Token, TokenRole};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -29,7 +31,6 @@ pub struct Host {
     pub location: Option<String>,
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
-    pub token: String,
     pub status: ConnectionStatus, //TODO: change to is_online:bool
     pub validators: Option<Vec<Validator>>,
     pub nodes: Option<Vec<Node>>,
@@ -71,9 +72,6 @@ impl From<PgRow> for Host {
             val_ip_addrs: row
                 .try_get("val_ip_addrs")
                 .expect("Couldn't try_get val_ip_addrs for host."),
-            token: row
-                .try_get("token")
-                .expect("Couldn't try_get token for host."),
             status: row
                 .try_get("status")
                 .expect("Couldn't try_get status for host."),
@@ -95,42 +93,14 @@ impl Host {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
-        let mut host = sqlx::query("SELECT * FROM hosts WHERE id = $1")
-            .bind(id)
-            .map(Self::from)
-            .fetch_one(db)
-            .await?;
-
-        // Add Validators list
-        host.validators = Some(Validator::find_all_by_host(host.id, db).await?);
-
-        Ok(host)
-    }
-
-    pub async fn find_by_token(token: &str, db: &PgPool) -> Result<Self> {
-        let mut host = sqlx::query("SELECT * FROM hosts WHERE token = $1")
-            .bind(token)
-            .map(Self::from)
-            .fetch_one(db)
-            .await?;
-
-        // Add Validators list
-        host.validators = Some(Validator::find_all_by_host(host.id, db).await?);
-        host.nodes = Some(Node::find_all_by_host(host.id, db).await?);
-
-        Ok(host)
-    }
-
     pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
         let mut tx = db.begin().await?;
-        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, token, status, org_id, cpu_count, mem_size, disk_size, os, os_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *")
+        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, status, org_id, cpu_count, mem_size, disk_size, os, os_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *")
         .bind(req.name)
         .bind(req.version)
         .bind(req.location)
         .bind(req.ip_addr)
         .bind(req.val_ip_addrs)
-        .bind(req.token)
         .bind(req.status)
         .bind(req.org_id)
         .bind(req.cpu_count)
@@ -159,19 +129,21 @@ impl Host {
 
         tx.commit().await?;
 
+        Token::create_for::<Host>(&host, TokenRole::Service, db).await?;
+
         Ok(host)
     }
 
+    #[deprecated(since = "0.2.0", note = "deprecated in favor of 'update_all'")]
     pub async fn update(id: Uuid, host: HostRequest, db: &PgPool) -> Result<Self> {
         let mut tx = db.begin().await.unwrap();
         let host = sqlx::query(
-            r#"UPDATE hosts SET name = $1, version = $2, location = $3, ip_addr = $4, token = $5, status = $6, org_id = $7, cpu_count = $8, mem_size = $9, disk_size = $10, os = $11, os_version = $12 WHERE id = $13 RETURNING *"#
+            r#"UPDATE hosts SET name = $1, version = $2, location = $3, ip_addr = $4, status = $6, org_id = $7, cpu_count = $8, mem_size = $9, disk_size = $10, os = $11, os_version = $12 WHERE id = $13 RETURNING *"#
         )
         .bind(host.name)
         .bind(host.version)
         .bind(host.location)
         .bind(host.ip_addr)
-        .bind(host.token)
         .bind(host.status)
         .bind(host.org_id)
         .bind(host.cpu_count)
@@ -187,6 +159,48 @@ impl Host {
         .await?;
 
         tx.commit().await.unwrap();
+        Ok(host)
+    }
+
+    pub async fn update_all(id: Uuid, fields: HostSelectiveUpdate, db: &PgPool) -> Result<Self> {
+        let mut tx = db.begin().await.unwrap();
+        let host = sqlx::query(
+            r#"UPDATE hosts SET 
+                    org_id = COALESCE($1, org_id),
+                    name = COALESCE($2, name),
+                    version = COALESCE($3, version),
+                    location = COALESCE($4, location),
+                    cpu_count = COALESCE($5, cpu_count),
+                    mem_size = COALESCE($6, mem_size),
+                    disk_size = COALESCE($7, disk_size),
+                    os = COALESCE($8, os),
+                    os_version = COALESCE($9, os_version),
+                    ip_addr = COALESCE($10, ip_addr),
+                    val_ip_addrs = COALESCE($11, val_ip_addrs),
+                    status = COALESCE($12, status),
+                    token_id = COALESCE($13, token_id)
+                WHERE id = $14 RETURNING *"#,
+        )
+        .bind(fields.org_id)
+        .bind(fields.name)
+        .bind(fields.version)
+        .bind(fields.location)
+        .bind(fields.cpu_count)
+        .bind(fields.mem_size)
+        .bind(fields.disk_size)
+        .bind(fields.os)
+        .bind(fields.os_version)
+        .bind(fields.ip_addr)
+        .bind(fields.val_ip_addrs)
+        .bind(fields.status)
+        .bind(fields.token_id)
+        .bind(id)
+        .map(Self::from)
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await.unwrap();
+
         Ok(host)
     }
 
@@ -207,20 +221,19 @@ impl Host {
 
     pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
         let mut tx = db.begin().await?;
+        // TODO: cascading delete doesn't seem to work, so i'm manually deleting the token
+        let token_deleted = sqlx::query("delete from tokens where host_id = $1")
+            .bind(id)
+            .execute(&mut tx)
+            .await?;
+        // ////
         let deleted = sqlx::query("DELETE FROM hosts WHERE id = $1")
             .bind(id)
             .execute(&mut tx)
             .await?;
 
         tx.commit().await?;
-        Ok(deleted.rows_affected())
-    }
-
-    pub fn new_token() -> String {
-        Uuid::new_v4()
-            .to_simple()
-            .encode_lower(&mut Uuid::encode_buffer())
-            .to_string()
+        Ok(deleted.rows_affected() + token_deleted.rows_affected())
     }
 
     pub fn validator_ips(&self) -> Vec<String> {
@@ -228,6 +241,53 @@ impl Host {
             Some(s) => s.split(',').map(|ip| ip.trim().to_string()).collect(),
             None => vec![],
         }
+    }
+}
+
+#[axum::async_trait]
+impl FindableById for Host {
+    async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
+        let mut host = sqlx::query("SELECT * FROM hosts WHERE id = $1")
+            .bind(id)
+            .map(Self::from)
+            .fetch_one(db)
+            .await?;
+
+        // Add Validators list
+        host.validators = Some(Validator::find_all_by_host(host.id, db).await?);
+
+        Ok(host)
+    }
+}
+
+#[axum::async_trait]
+impl TokenIdentifyable for Host {
+    async fn set_token(token_id: Uuid, host_id: Uuid, db: &PgPool) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let fields = HostSelectiveUpdate {
+            token_id: Some(token_id),
+            status: Some(ConnectionStatus::Online),
+            ..Default::default()
+        };
+
+        Host::update_all(host_id, fields, db).await
+    }
+
+    fn get_holder_type() -> TokenHolderType {
+        TokenHolderType::Host
+    }
+
+    fn get_id(&self) -> Uuid {
+        self.id
+    }
+
+    async fn get_token(&self, db: &PgPool) -> Result<Token>
+    where
+        Self: Sized,
+    {
+        Token::get::<Host>(self.id, db).await
     }
 }
 
@@ -244,8 +304,24 @@ pub struct HostRequest {
     pub os_version: Option<String>,
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
-    pub token: String, //TODO: Protect this
     pub status: ConnectionStatus,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct HostSelectiveUpdate {
+    pub org_id: Option<Uuid>,
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub location: Option<String>,
+    pub cpu_count: Option<i64>,
+    pub mem_size: Option<i64>,
+    pub disk_size: Option<i64>,
+    pub os: Option<String>,
+    pub os_version: Option<String>,
+    pub ip_addr: Option<String>,
+    pub val_ip_addrs: Option<String>,
+    pub status: Option<ConnectionStatus>,
+    pub token_id: Option<Uuid>,
 }
 
 impl From<HostCreateRequest> for HostRequest {
@@ -262,7 +338,6 @@ impl From<HostCreateRequest> for HostRequest {
             os_version: host.os_version,
             ip_addr: host.ip_addr,
             val_ip_addrs: host.val_ip_addrs,
-            token: Host::new_token(),
             status: ConnectionStatus::Offline,
         }
     }

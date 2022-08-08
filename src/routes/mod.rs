@@ -6,7 +6,6 @@ pub fn api_router() -> Router {
     Router::new()
         .route("/reset", post(reset_pwd))
         .route("/reset", put(update_pwd))
-        .route("/login", post(login))
         .route("/refresh", post(refresh))
         .route("/whoami", get(whoami))
         .route("/block_height", get(get_block_height))
@@ -25,7 +24,6 @@ pub fn api_router() -> Router {
         .route("/hosts/:id/status", put(update_host_status))
         .route("/hosts/:id", delete(delete_host))
         .route("/host_provisions", post(create_host_provision))
-        .route("/host_provisions/:id/hosts", post(claim_host_provision))
         .route("/host_provisions/:id", get(get_host_provision))
         .route("/validators/:id/migrate", post(migrate_validator))
         .route("/validators", get(list_validators))
@@ -89,4 +87,10 @@ pub fn api_router() -> Router {
         .route("/orgs/:id", delete(delete_org))
         .route("/orgs/:id", put(update_org))
         .route("/orgs/:id/members", get(get_org_members))
+}
+
+pub fn unauthenticated_routes() -> Router {
+    Router::new()
+        .route("/login", post(login))
+        .route("/host_provisions/:id/hosts", post(claim_host_provision))
 }

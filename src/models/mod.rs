@@ -20,6 +20,8 @@ mod org;
 pub use org::*;
 mod user;
 pub use user::*;
+mod token;
+pub use token::*;
 
 pub const STAKE_QUOTA_DEFAULT: i64 = 5;
 pub const FEE_BPS_DEFAULT: i64 = 300;
