@@ -18,5 +18,6 @@ FROM alpine:latest
 RUN apk add libgcc
 
 COPY --from=build /usr/src/api/target/release/api /usr/bin/api
+COPY --from=build /usr/src/api/conf /etc/api/conf
 
 CMD ["api"]
