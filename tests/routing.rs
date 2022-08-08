@@ -118,7 +118,7 @@ fn possible_routes() -> Vec<(&'static str, &'static str, StatusCode)> {
         (
             "/host_provisions/id/hosts",
             "POST",
-            StatusCode::UNAUTHORIZED,
+            StatusCode::INTERNAL_SERVER_ERROR,
         ),
     ]
 }
