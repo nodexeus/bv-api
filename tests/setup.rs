@@ -1,4 +1,7 @@
-use api::models::*;
+use api::models::validator::{StakeStatus, Validator, ValidatorStatus, ValidatorStatusRequest};
+use api::models::Blockchain;
+use api::models::{ConnectionStatus, Host, HostRequest};
+use api::models::{User, UserRequest};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 

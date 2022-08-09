@@ -6,8 +6,9 @@ mod setup;
 use setup::{get_admin_user, get_blockchain, get_test_host, setup};
 
 use api::auth::TokenIdentifyable;
-use api::handlers::*;
+use api::http::handlers::*;
 use api::models::*;
+use api::models::validator::*;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::{delete, get, post, put};

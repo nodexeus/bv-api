@@ -1,10 +1,12 @@
 //! TODO: @tstaetter For now I've removed all JWT token related stuff, that needs to be reimplemented
 //!         using the new token respecting possible new workflows (eg magic link) TBD
 
-use super::{Org, StakeStatus, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
 use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
-use crate::models::{Token, TokenRole};
+use crate::models::{
+    org::Org, token::Token, token::TokenRole, validator::StakeStatus, FEE_BPS_DEFAULT,
+    STAKE_QUOTA_DEFAULT,
+};
 use anyhow::anyhow;
 use argon2::{
     password_hash::{PasswordHasher, SaltString},

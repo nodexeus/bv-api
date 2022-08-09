@@ -1,4 +1,4 @@
-use super::{HostCmd, Validator};
+use crate::models::{command::HostCmd, validator::Validator};
 use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

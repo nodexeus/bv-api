@@ -1,6 +1,6 @@
 use api::auth::middleware::authorization::AuthorizationService;
 use api::auth::Authorization;
-use api::routes::{api_router, unauthenticated_routes};
+use api::http::routes::{api_router, unauthenticated_routes};
 use axum::http::{Request, StatusCode};
 use axum::routing::get;
 use hyper::Body;
