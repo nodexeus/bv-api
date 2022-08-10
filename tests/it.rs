@@ -335,7 +335,7 @@ async fn it_should_update_validator_penalty() -> anyhow::Result<()> {
         .layer(TraceLayer::new_for_http());
 
     let host = get_test_host(&db).await;
-    let service_token = std::env::var("API_SERVICE_SECRET").expect("Missing API_SERVICE_SECRET");
+    let service_token = std::env::var("JWT_SECRET").expect("Missing API_SERVICE_SECRET");
 
     let path = format!(
         "/validators/{}/penalty",
@@ -795,7 +795,7 @@ async fn it_should_put_block_height_as_service() -> anyhow::Result<()> {
         .layer(Extension(Arc::new(db)))
         .layer(TraceLayer::new_for_http());
 
-    let service_token = std::env::var("API_SERVICE_SECRET").expect("Missing API_SERVICE_SECRET");
+    let service_token = std::env::var("JWT_SECRET").expect("Missing API_SERVICE_SECRET");
     let ir = InfoRequest {
         block_height: 100,
         oracle_price: 10,
@@ -823,7 +823,7 @@ async fn it_should_list_validators_staking_as_service() -> anyhow::Result<()> {
         .layer(Extension(Arc::new(db)))
         .layer(TraceLayer::new_for_http());
 
-    let service_token = std::env::var("API_SERVICE_SECRET").expect("Missing API_SERVICE_SECRET");
+    let service_token = std::env::var("JWT_SECRET").expect("Missing API_SERVICE_SECRET");
 
     let req = Request::builder()
         .method("GET")
@@ -1018,7 +1018,7 @@ async fn it_should_create_rewards() -> anyhow::Result<()> {
         },
     ];
 
-    let service_token = std::env::var("API_SERVICE_SECRET").expect("Missing API_SERVICE_SECRET");
+    let service_token = std::env::var("JWT_SECRET").expect("Missing API_SERVICE_SECRET");
 
     let req = Request::builder()
         .method("POST")
@@ -1084,7 +1084,7 @@ async fn it_should_create_payments() -> anyhow::Result<()> {
         created_at: None,
     }];
 
-    let service_token = std::env::var("API_SERVICE_SECRET").expect("Missing API_SERVICE_SECRET");
+    let service_token = std::env::var("JWT_SECRET").expect("Missing API_SERVICE_SECRET");
 
     let req = Request::builder()
         .method("POST")
