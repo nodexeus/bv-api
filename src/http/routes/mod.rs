@@ -8,7 +8,6 @@ mod orgs;
 mod users;
 mod validators;
 
-use crate::http::handlers::claim_host_provision;
 use crate::http::handlers::*;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
@@ -17,7 +16,6 @@ pub fn api_router() -> Router {
     Router::new()
         .route("/reset", post(reset_pwd))
         .route("/reset", put(update_pwd))
-        .route("/login", post(login))
         .route("/refresh", post(refresh))
         .route("/whoami", get(whoami))
         .route("/block_height", get(get_block_height))
