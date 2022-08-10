@@ -8,11 +8,6 @@ on:
 
 env:
   SQLX_OFFLINE: true
-  CASBIN_MODEL: ./conf/model.conf
-  CASBIN_POLICIES: ./conf/policies.csv
-  BIDI_BUFFER_SIZE: 128
-  TOKEN_EXPIRATION_DAYS_USER: 1
-  TOKEN_EXPIRATION_DAYS_HOST: 365
 
 jobs:
   test:
@@ -49,6 +44,12 @@ jobs:
           cargo install sqlx-cli --features postgres
       - name: Migrate
         uses: actions-rs/cargo@v1
+        env:
+          CASBIN_MODEL: ./conf/model.conf
+          CASBIN_POLICIES: ./conf/policies.csv
+          BIDI_BUFFER_SIZE: 128
+          TOKEN_EXPIRATION_DAYS_USER: 1
+          TOKEN_EXPIRATION_DAYS_HOST: 365
         with:
           command: sqlx
           args: migrate run
