@@ -36,6 +36,7 @@ jobs:
       BIDI_BUFFER_SIZE: 128
       TOKEN_EXPIRATION_DAYS_USER: 1
       TOKEN_EXPIRATION_DAYS_HOST: 365
+      JWT_SECRET: 1245456
 
     steps:
       - uses: actions/checkout@v2
