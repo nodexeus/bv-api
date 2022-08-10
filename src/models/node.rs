@@ -1,5 +1,5 @@
-use crate::models::{command::HostCmd, validator::Validator};
 use crate::errors::{ApiError, Result};
+use crate::models::{command::HostCmd, validator::Validator};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
