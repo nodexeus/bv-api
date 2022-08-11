@@ -6,27 +6,46 @@ use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 
+/// NodeChainStatus reflects blockjoy.api.v1.NodeType.Type in node_types.proto
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_node_type", rename_all = "snake_case")]
 pub enum NodeType {
+    Undefined,
     Api,
     Etl,
+    Miner,
     Node,
     Oracle,
     Relay,
     Validator,
 }
 
+/// NodeChainStatus reflects blockjoy.api.v1.NodeType.SyncStatus in node_types.proto
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "enum_node_status", rename_all = "snake_case")]
-pub enum NodeStatus {
-    Available,
+#[sqlx(type_name = "enum_node_sync_status", rename_all = "snake_case")]
+pub enum NodeSyncStatus {
+    Unknown,
+    Syncing,
+    Synced,
+}
+
+/// NodeChainStatus reflects blockjoy.api.v1.NodeType.ChainStatus in node_types.proto
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "enum_node_chain_status", rename_all = "snake_case")]
+pub enum NodeChainStatus {
+    Unknown,
+    // Staking states
+    Follower,
+    Staked,
+    Staking,
+    Validating,
+    Consensus,
+    // General chain states
     Broadcasting,
     Cancelled,
-    Consensus,
-    Creating,
     Delegating,
     Delinquent,
     Disabled,
@@ -35,26 +54,12 @@ pub enum NodeStatus {
     Elected,
     Exporting,
     Ingesting,
-    Installing,
-    Migrating,
     Mining,
     Minting,
     Processing,
     Relaying,
     Removed,
     Removing,
-    Running,
-    Snapshoting,
-    Staked,
-    Staking,
-    Started,
-    Starting,
-    Stopped,
-    Stopping,
-    Synced,
-    Syncing,
-    Upgrading,
-    Validating,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, FromRow)]
@@ -74,8 +79,8 @@ pub struct Node {
     node_data: Option<serde_json::Value>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    status: NodeStatus,
-    is_online: bool,
+    sync_status: NodeSyncStatus,
+    chain_status: NodeChainStatus,
 }
 
 impl Node {
@@ -90,7 +95,7 @@ impl Node {
     pub async fn create(req: &NodeCreateRequest, db: &PgPool) -> Result<Node> {
         let mut tx = db.begin().await?;
         let node = sqlx::query_as::<_, Node>(
-            r##"INSERT INTO nodes (
+            r#"INSERT INTO nodes (
                     org_id, 
                     host_id,
                     name, 
@@ -103,9 +108,9 @@ impl Node {
                     wallet_address, 
                     block_height, 
                     node_data,
-                    status,
-                    is_online
-                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *"##,
+                    chain_status,
+                    sync_status
+                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *"#,
         )
         .bind(&req.org_id)
         .bind(&req.host_id)
@@ -119,8 +124,8 @@ impl Node {
         .bind(&req.wallet_address)
         .bind(&req.block_height)
         .bind(&req.node_data)
-        .bind(&req.status)
-        .bind(&req.is_online)
+        .bind(&req.chain_status)
+        .bind(&req.sync_status)
         .fetch_one(&mut tx)
         .await
         .map_err(ApiError::from)?;
@@ -142,13 +147,22 @@ impl Node {
     }
 
     pub async fn update_info(id: &Uuid, info: &NodeInfo, db: &PgPool) -> Result<Node> {
-        sqlx::query_as::<_, Node>("UPDATE nodes SET version=$1, ip_addr=$2, block_height=$3, node_data=$4, status=$5, is_online-$6 WHERE id=$7 RETURNING *")
+        sqlx::query_as::<_, Node>(
+            r#"UPDATE nodes SET 
+                    version = COALESCE($1, version),
+                    ip_addr = COALESCE($2, ip_addr),
+                    block_height = COALESCE($3, block_height),
+                    node_data = COALESCE($4, node_data),
+                    chain_status = COALESCE($5, chain_status),
+                    sync_status = COALESCE($6, sync_status)
+                WHERE id = $7 RETURNING *"#,
+        )
         .bind(&info.version)
         .bind(&info.ip_addr)
         .bind(&info.block_height)
         .bind(&info.node_data)
-        .bind(&info.status)
-        .bind(&info.is_online)
+        .bind(&info.chain_status)
+        .bind(&info.sync_status)
         .bind(&id)
         .fetch_one(db)
         .await
@@ -184,8 +198,8 @@ pub struct NodeCreateRequest {
     pub wallet_address: Option<String>,
     pub block_height: Option<i64>,
     pub node_data: Option<serde_json::Value>,
-    pub status: NodeStatus,
-    pub is_online: bool,
+    pub chain_status: NodeChainStatus,
+    pub sync_status: NodeSyncStatus,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -194,8 +208,8 @@ pub struct NodeInfo {
     ip_addr: Option<String>,
     block_height: Option<i64>,
     node_data: Option<serde_json::Value>,
-    status: NodeStatus,
-    is_online: bool,
+    chain_status: Option<NodeChainStatus>,
+    sync_status: Option<NodeSyncStatus>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]

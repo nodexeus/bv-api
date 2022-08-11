@@ -3,7 +3,6 @@ use crate::auth::Authorization;
 use crate::http::routes::{api_router, unauthenticated_routes};
 use crate::server::DbPool;
 use axum::{Extension, Router};
-use std::sync::Arc;
 use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
@@ -28,6 +27,6 @@ pub async fn server(db: DbPool) -> Router {
                 .allow_origin(Any),
         )
         .layer(CompressionLayer::new())
-        .layer(Extension(Arc::new(db)))
+        .layer(Extension(db))
         .layer(TraceLayer::new_for_http())
 }

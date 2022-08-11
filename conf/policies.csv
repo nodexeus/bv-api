@@ -11,6 +11,11 @@ p, master_admin, pay_adresses, GET
 p, master_admin, rewards, POST
 p, master_admin, payments, POST
 p, master_admin, /hosts/:id/commands/pending, GET
+p, master_admin, /orgs, POST
+p, master_admin, /orgs/:id, GET
+p, master_admin, /orgs/:id, PUT
+p, master_admin, /orgs/:id, DELETE
+p, master_admin, /orgs/:id/members, GET
 
 g, admin, master_admin
 g, guest, outbound

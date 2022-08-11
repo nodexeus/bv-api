@@ -1,5 +1,8 @@
-DROP TYPE IF EXISTS enum_token_role;
-CREATE TYPE enum_token_role AS ENUM ('user', 'admin', 'service', 'guest');
+DO $$ BEGIN
+    CREATE TYPE enum_token_role AS ENUM ('user', 'admin', 'service', 'guest');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 CREATE TABLE IF NOT EXISTS tokens (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -18,13 +21,27 @@ CREATE INDEX IF NOT EXISTS idx_token_strs on tokens(token);
 
 ALTER TABLE hosts
     DROP COLUMN IF EXISTS token,
-    ADD COLUMN token_id UUID,
-    ADD CONSTRAINT fk_host_token FOREIGN KEY (token_id) REFERENCES tokens (id) ON DELETE CASCADE;
+    ADD COLUMN IF NOT EXISTS token_id UUID;
+    -- ADD CONSTRAINT fk_host_token FOREIGN KEY (token_id) REFERENCES tokens (id) ON DELETE CASCADE;
+
+DO $$ BEGIN
+    ALTER TABLE hosts
+        ADD CONSTRAINT fk_host_token FOREIGN KEY (token_id) REFERENCES tokens (id) ON DELETE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 ALTER TABLE users
     DROP COLUMN IF EXISTS token,
     DROP COLUMN IF EXISTS role,
-    ADD COLUMN token_id UUID,
-    ADD CONSTRAINT fk_user_token FOREIGN KEY (token_id) REFERENCES tokens (id) ON DELETE CASCADE;
+    ADD COLUMN IF NOT EXISTS token_id UUID;
+    -- ADD CONSTRAINT fk_user_token FOREIGN KEY (token_id) REFERENCES tokens (id) ON DELETE CASCADE;
+
+DO $$ BEGIN
+    ALTER TABLE users
+        ADD CONSTRAINT fk_user_token FOREIGN KEY (token_id) REFERENCES tokens (id) ON DELETE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 DROP TYPE IF EXISTS enum_user_role;

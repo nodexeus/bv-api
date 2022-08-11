@@ -1,6 +1,6 @@
 use super::{
-    node::Node, node::NodeCreateRequest, node::NodeProvision, node::NodeStatus, token::Token,
-    token::TokenRole, validator::Validator, validator::ValidatorRequest,
+    validator::Validator, validator::ValidatorRequest, Node, NodeChainStatus, NodeCreateRequest,
+    NodeProvision, NodeSyncStatus, Token, TokenRole,
 };
 use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
@@ -456,8 +456,8 @@ impl HostProvision {
                     wallet_address: None,
                     block_height: None,
                     node_data: None,
-                    status: NodeStatus::Creating,
-                    is_online: false,
+                    chain_status: NodeChainStatus::Unknown,
+                    sync_status: NodeSyncStatus::Unknown,
                 };
                 host_nodes.push(Node::create(&n, db).await?);
             }

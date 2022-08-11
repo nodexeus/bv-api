@@ -16,7 +16,7 @@ pub async fn create_user(
     Extension(db): Extension<DbPool>,
     Json(user): Json<UserRequest>,
 ) -> ApiResult<impl IntoResponse> {
-    let user = User::create(user, db.as_ref()).await?;
+    let user = User::create(user, db.as_ref(), None).await?;
     Ok((StatusCode::OK, Json(user)))
 }
 
