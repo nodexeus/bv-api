@@ -4,6 +4,7 @@ use super::{
 };
 use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
+use crate::models::ContainerStatus;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -458,6 +459,8 @@ impl HostProvision {
                     node_data: None,
                     chain_status: NodeChainStatus::Unknown,
                     sync_status: NodeSyncStatus::Unknown,
+                    staking_status: None,
+                    container_status: ContainerStatus::Installing,
                 };
                 host_nodes.push(Node::create(&n, db).await?);
             }

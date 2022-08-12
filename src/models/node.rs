@@ -6,7 +6,7 @@ use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 
-/// NodeChainStatus reflects blockjoy.api.v1.NodeType.Type in node_types.proto
+/// NodeType reflects blockjoy.api.v1.node.NodeType in node.proto
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_node_type", rename_all = "snake_case")]
@@ -21,7 +21,26 @@ pub enum NodeType {
     Validator,
 }
 
-/// NodeChainStatus reflects blockjoy.api.v1.NodeType.SyncStatus in node_types.proto
+/// ContainerStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "enum_container_status", rename_all = "snake_case")]
+pub enum ContainerStatus {
+    Unknown,
+    Creating,
+    Running,
+    Starting,
+    Stopping,
+    Stopped,
+    Upgrading,
+    Upgraded,
+    Deleting,
+    Deleted,
+    Installing,
+    Snapshotting,
+}
+
+/// NodeSyncStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_node_sync_status", rename_all = "snake_case")]
@@ -31,7 +50,21 @@ pub enum NodeSyncStatus {
     Synced,
 }
 
-/// NodeChainStatus reflects blockjoy.api.v1.NodeType.ChainStatus in node_types.proto
+/// NodeStakingStatus reflects blockjoy.api.v1.node.NodeInfo.StakingStatus in node.proto
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "enum_node_staking_status", rename_all = "snake_case")]
+pub enum NodeStakingStatus {
+    Unknown,
+    Follower,
+    Staked,
+    Staking,
+    Validating,
+    Consensus,
+    Unstaked,
+}
+
+/// NodeChainStatus reflects blockjoy.api.v1.node.NodeInfo.ApplicationStatus in node.proto
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_node_chain_status", rename_all = "snake_case")]
@@ -81,6 +114,8 @@ pub struct Node {
     updated_at: DateTime<Utc>,
     sync_status: NodeSyncStatus,
     chain_status: NodeChainStatus,
+    staking_status: NodeStakingStatus,
+    container_status: ContainerStatus,
 }
 
 impl Node {
@@ -200,6 +235,8 @@ pub struct NodeCreateRequest {
     pub node_data: Option<serde_json::Value>,
     pub chain_status: NodeChainStatus,
     pub sync_status: NodeSyncStatus,
+    pub staking_status: Option<NodeStakingStatus>,
+    pub container_status: ContainerStatus,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -210,6 +247,8 @@ pub struct NodeInfo {
     node_data: Option<serde_json::Value>,
     chain_status: Option<NodeChainStatus>,
     sync_status: Option<NodeSyncStatus>,
+    staking_status: Option<NodeStakingStatus>,
+    container_status: Option<ContainerStatus>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
