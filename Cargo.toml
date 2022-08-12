@@ -26,6 +26,9 @@ hyper = "0.14.20"
 jsonwebtoken = "7.2.0"
 log = "0.4.14"
 petname = "1.1.0"
+pin-project = "1.0.11"
+prost = "0.10.4"
+prost-types = "0.10.1"
 qrcode-generator = "4.1.1"
 rand_core = {version = "0.6", features = ["std"]}
 random-string = "1.0.0"
@@ -36,6 +39,7 @@ serde_json = "1.0.81"
 sqlx = {version = "0.5", features = ["postgres", "runtime-tokio-rustls", "migrate", "chrono", "uuid", "json"]}
 thiserror = "1.0.24"
 tokio = {version = "1.2.0", default-features = false, features = ["io-util", "sync", "macros"]}
+tokio-stream = { version = "0.1.9", features = ["net"] }
 tonic = "0.8.0"
 tower = { version = "0.4", features = ["tokio", "tracing", "util"] }
 tower-http = {version = "0.3.2", features = ["cors", "trace", "compression-gzip", "auth"]}

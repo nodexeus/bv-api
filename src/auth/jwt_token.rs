@@ -10,6 +10,7 @@ use std::env::VarError;
 use std::str::{FromStr, Utf8Error};
 use std::{env, str};
 use thiserror::Error;
+use tonic::Request as GrpcRequest;
 use uuid::Uuid;
 
 pub type TokenResult<T> = Result<T, TokenError>;
@@ -74,6 +75,7 @@ impl JwtToken {
     }
 
     /// Create new JWT token from given request
+    /// TODO: refactor me
     pub fn new_for_request<B>(request: &HttpRequest<B>) -> TokenResult<Self> {
         let token = request
             .headers()
@@ -81,6 +83,25 @@ impl JwtToken {
             .and_then(|hv| hv.to_str().ok())
             .and_then(|hv| {
                 let words = hv.split("Bearer").collect::<Vec<&str>>();
+
+                words.get(1).map(|w| w.trim())
+            })
+            .unwrap_or("");
+        let clear_token = base64_decode(token)?;
+        let token = str::from_utf8(&clear_token)?;
+
+        JwtToken::from_str(token)
+    }
+
+    /// Create new JWT token from given gRPC request
+    /// TODO: refactor me
+    pub fn new_for_grpc_request<B>(request: &GrpcRequest<B>) -> TokenResult<Self> {
+        let token = request
+            .metadata()
+            .get("authorization")
+            .and_then(|mv| mv.to_str().ok())
+            .and_then(|mv| {
+                let words = mv.split("Bearer").collect::<Vec<&str>>();
 
                 words.get(1).map(|w| w.trim())
             })

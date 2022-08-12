@@ -2,7 +2,7 @@ use super::{
     validator::Validator, validator::ValidatorRequest, Node, NodeChainStatus, NodeCreateRequest,
     NodeProvision, NodeSyncStatus, Token, TokenRole,
 };
-use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
+use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
 use crate::models::ContainerStatus;
 use chrono::{DateTime, Utc};
@@ -291,6 +291,13 @@ impl TokenIdentifyable for Host {
         Self: Sized,
     {
         Token::get::<Host>(self.id, db).await
+    }
+}
+
+#[axum::async_trait]
+impl Owned<Host, ()> for Host {
+    async fn is_owned_by(&self, resource: Host, _db: ()) -> bool {
+        self.id == resource.id
     }
 }
 

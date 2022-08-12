@@ -1,0 +1,197 @@
+pub mod from {
+    use crate::errors::ApiError;
+    use crate::grpc::blockjoy::{
+        command, node_command, Command as GrpcCommand, CommandMeta, NodeCommand, NodeDelete,
+        NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
+    };
+    use crate::grpc::helpers::pb_current_timestamp;
+    use crate::models::{Command as DbCommand, HostCmd};
+    use anyhow::anyhow;
+    use std::str::FromStr;
+    use tonic::{Code, Status};
+    use uuid::Uuid;
+
+    impl FromStr for GrpcUuid {
+        type Err = ApiError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            // Assuming 's' is some UUID
+            match Uuid::parse_str(s) {
+                Ok(_) => Ok(Self { value: s.into() }),
+                Err(e) => Err(ApiError::UnexpectedError(anyhow!(e))),
+            }
+        }
+    }
+
+    impl From<DbCommand> for GrpcCommand {
+        fn from(db_cmd: DbCommand) -> Self {
+            let mut node_cmd = NodeCommand::from(db_cmd.cmd);
+
+            // TODO: what should happen, if there's no UUID in the sub_cmd?
+            node_cmd.id = Some(db_cmd.sub_cmd.unwrap().parse::<GrpcUuid>().unwrap());
+
+            Self {
+                r#type: Some(command::Type::Node(node_cmd)),
+            }
+        }
+    }
+
+    impl From<HostCmd> for NodeCommand {
+        fn from(host_cmd: HostCmd) -> Self {
+            let meta = Some(CommandMeta {
+                // TODO: Use api command ID
+                api_command_id: Some(GrpcUuid::from(Uuid::new_v4())),
+                created_at: Some(pb_current_timestamp()),
+            });
+            let mut node_cmd = NodeCommand {
+                id: None,
+                command: None,
+                meta,
+            };
+
+            match host_cmd {
+                HostCmd::RestartNode => {
+                    node_cmd.command = Some(node_command::Command::Restart(NodeRestart::default()))
+                }
+                HostCmd::KillNode => {
+                    tracing::debug!("Using NodeStop for KillNode");
+                    node_cmd.command = Some(node_command::Command::Stop(NodeStop::default()))
+                }
+                HostCmd::ShutdownNode => {
+                    node_cmd.command = Some(node_command::Command::Stop(NodeStop::default()))
+                }
+                HostCmd::UpdateNode => {
+                    tracing::debug!("Using NodeUpgrade for UpdateNode");
+                    unimplemented!();
+                    /*
+                    // TODO: add image
+                    Self {
+                        r#type: Some(command::Type::Node(NodeUpgrade {})),
+                    }
+                     */
+                }
+                HostCmd::MigrateNode => {
+                    tracing::debug!("Using NodeGenericCommand for MigrateNode");
+                    unimplemented!();
+                    /*
+                    node_cmd.command = Some(node_command::Command::Generic(NodeGenericCommand::default()))
+                     */
+                }
+                HostCmd::GetNodeVersion => {
+                    tracing::debug!("Using NodeInfoGet for GetNodeVersion");
+                    node_cmd.command = Some(node_command::Command::InfoGet(NodeInfoGet::default()))
+                }
+                // The following should be HostCommands
+                HostCmd::CreateNode => {
+                    unimplemented!();
+                }
+                HostCmd::DeleteNode => {
+                    node_cmd.command = Some(node_command::Command::Delete(NodeDelete::default()))
+                }
+                HostCmd::GetBVSVersion => unimplemented!(),
+                HostCmd::UpdateBVS => unimplemented!(),
+                HostCmd::RestartBVS => unimplemented!(),
+                HostCmd::RemoveBVS => unimplemented!(),
+                // TODO: Missing
+                // NodeStart, NodeUpgrade
+            }
+
+            node_cmd
+        }
+    }
+
+    impl From<GrpcUuid> for Uuid {
+        fn from(id: GrpcUuid) -> Self {
+            Uuid::parse_str(id.value.as_str()).unwrap()
+        }
+    }
+
+    impl From<Uuid> for GrpcUuid {
+        fn from(id: Uuid) -> Self {
+            Self {
+                value: id.to_string(),
+            }
+        }
+    }
+
+    impl From<Option<String>> for GrpcUuid {
+        fn from(id: Option<String>) -> Self {
+            Self { value: id.unwrap() }
+        }
+    }
+
+    impl From<ApiError> for Status {
+        fn from(e: ApiError) -> Self {
+            let msg = format!("{:?}", e);
+
+            match e {
+                ApiError::ValidationError(_) => Status::invalid_argument(msg),
+                ApiError::NotFoundError(_) => Status::not_found(msg),
+                ApiError::DuplicateResource => Status::invalid_argument(msg),
+                ApiError::InvalidAuthentication(_) => Status::unauthenticated(msg),
+                ApiError::InsufficientPermissionsError => Status::permission_denied(msg),
+                _ => Status::internal(msg),
+            }
+        }
+    }
+
+    impl From<Status> for ApiError {
+        fn from(status: Status) -> Self {
+            let e = anyhow!(format!("{:?}", status));
+
+            match status.code() {
+                Code::Unauthenticated => ApiError::InvalidAuthentication(e),
+                Code::PermissionDenied => ApiError::InsufficientPermissionsError,
+                _ => ApiError::UnexpectedError(e),
+            }
+        }
+    }
+}
+
+pub mod into {
+    use crate::grpc::blockjoy::{HostInfo, HostInfoUpdateRequest, Uuid as GrpcUuid};
+    use crate::models::HostSelectiveUpdate;
+    use tonic::Request;
+
+    impl ToString for GrpcUuid {
+        fn to_string(&self) -> String {
+            self.value.clone()
+        }
+    }
+
+    pub trait IntoData<R, T> {
+        fn into_data(self) -> T;
+    }
+
+    impl IntoData<Request<HostInfoUpdateRequest>, (GrpcUuid, HostInfo)>
+        for Request<HostInfoUpdateRequest>
+    {
+        fn into_data(self) -> (GrpcUuid, HostInfo) {
+            let inner = self.into_inner();
+            let id = inner.request_id.unwrap();
+            let info = inner.info.unwrap();
+
+            (id, info)
+        }
+    }
+
+    impl Into<HostSelectiveUpdate> for HostInfo {
+        fn into(self) -> HostSelectiveUpdate {
+            HostSelectiveUpdate {
+                org_id: None,
+                name: self.name,
+                version: self.version,
+                location: self.location,
+                cpu_count: self.cpu_count,
+                mem_size: self.mem_size,
+                disk_size: self.disk_size,
+                os: self.os,
+                os_version: self.os_version,
+                ip_addr: self.ip,
+                val_ip_addrs: None,
+                status: None,
+                token_id: None,
+            }
+        }
+    }
+}
