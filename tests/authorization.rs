@@ -2,7 +2,7 @@ mod setup;
 
 use crate::setup::get_test_host;
 use api::auth::TokenIdentifyable;
-use api::handlers::list_pending_commands;
+use api::http::handlers::list_pending_commands;
 use axum::routing::get;
 use axum::{Extension, Router};
 use base64::encode;

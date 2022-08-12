@@ -1,7 +1,7 @@
 use crate::auth::{JwtToken, TokenHolderType, TokenIdentifyable};
 use crate::errors::ApiError;
 use crate::errors::Result;
-use crate::models::{Host, Node, User, Validator};
+use crate::models::{host::Host, node::Node, user::User, validator::Validator};
 use anyhow::anyhow;
 use base64::encode as base64_encode;
 use chrono::{DateTime, Duration, Utc};

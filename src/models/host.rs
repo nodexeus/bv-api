@@ -1,7 +1,9 @@
-use super::{Node, NodeCreateRequest, NodeProvision, NodeStatus, Validator, ValidatorRequest};
+use super::{
+    node::Node, node::NodeCreateRequest, node::NodeProvision, node::NodeStatus, token::Token,
+    token::TokenRole, validator::Validator, validator::ValidatorRequest,
+};
 use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
-use crate::models::{Token, TokenRole};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;

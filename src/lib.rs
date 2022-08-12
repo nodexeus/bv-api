@@ -1,6 +1,5 @@
 pub mod auth;
 pub mod errors;
-pub mod handlers;
+pub mod http;
 pub mod models;
-pub mod routes;
 pub mod server;
