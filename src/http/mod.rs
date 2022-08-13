@@ -2,6 +2,7 @@ use crate::auth::middleware::authorization::AuthorizationService;
 use crate::auth::Authorization;
 use crate::http::routes::{api_router, unauthenticated_routes};
 use crate::server::DbPool;
+use axum::routing::IntoMakeService;
 use axum::{Extension, Router};
 use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::compression::CompressionLayer;
@@ -11,7 +12,7 @@ use tower_http::trace::TraceLayer;
 pub mod handlers;
 pub mod routes;
 
-pub async fn server(db: DbPool) -> Router {
+pub async fn server(db: DbPool) -> IntoMakeService<Router> {
     let enforcer = Authorization::new().await.unwrap();
     let auth_service = AuthorizationService::new(enforcer);
 
@@ -29,4 +30,5 @@ pub async fn server(db: DbPool) -> Router {
         .layer(CompressionLayer::new())
         .layer(Extension(db))
         .layer(TraceLayer::new_for_http())
+        .into_make_service()
 }

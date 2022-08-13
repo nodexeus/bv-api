@@ -4,6 +4,7 @@ use super::{
 };
 use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
+use crate::grpc::blockjoy::HostInfo;
 use crate::models::ContainerStatus;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -353,6 +354,46 @@ impl From<HostCreateRequest> for HostRequest {
     }
 }
 
+impl From<HostInfo> for HostSelectiveUpdate {
+    fn from(info: HostInfo) -> Self {
+        Self {
+            org_id: None,
+            name: info.name,
+            version: info.version,
+            location: info.location,
+            cpu_count: info.cpu_count,
+            mem_size: info.mem_size,
+            disk_size: info.disk_size,
+            os: info.os,
+            os_version: info.os_version,
+            ip_addr: info.ip,
+            val_ip_addrs: None,
+            status: None,
+            token_id: None,
+        }
+    }
+}
+
+impl From<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest {
+    fn from(request: crate::grpc::blockjoy::ProvisionHostRequest) -> Self {
+        let host_info = request.info.unwrap();
+
+        Self {
+            org_id: None,
+            name: host_info.name.unwrap(),
+            version: host_info.version,
+            location: host_info.location,
+            cpu_count: host_info.cpu_count,
+            mem_size: host_info.mem_size,
+            disk_size: host_info.disk_size,
+            os: host_info.os,
+            os_version: host_info.os_version,
+            ip_addr: host_info.ip.unwrap(),
+            val_ip_addrs: Some(request.validator_ips.join(",")),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostCreateRequest {
     pub org_id: Option<Uuid>,
@@ -416,6 +457,17 @@ impl HostProvision {
         host_provision.set_install_cmd();
 
         Ok(host_provision)
+    }
+
+    /// Wrapper for HostProvision::claim, taking ProvisionHostRequest received via gRPC instead of HostCreateRequest
+    pub async fn claim_by_grpc_provision(
+        otp: &str,
+        request: crate::grpc::blockjoy::ProvisionHostRequest,
+        db: &PgPool,
+    ) -> Result<Host> {
+        let request = HostCreateRequest::from(request);
+
+        HostProvision::claim(otp, request, db).await
     }
 
     pub async fn claim(

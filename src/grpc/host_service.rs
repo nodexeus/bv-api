@@ -5,7 +5,7 @@ use crate::grpc::blockjoy::{
     Uuid as GrpcUuid,
 };
 use crate::grpc::convert::into::IntoData;
-use crate::models::{Host, HostProvision};
+use crate::models::{Host, HostProvision, HostSelectiveUpdate, Token};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -27,6 +27,7 @@ impl Hosts for HostsServiceImpl {
         &self,
         request: Request<ProvisionHostRequest>,
     ) -> Result<Response<ProvisionHostResponse>, Status> {
+        let db_token = request.extensions().get::<Token>().unwrap().token.clone();
         let inner = request.into_inner();
         let otp = &inner.otp.clone();
         let request_id = inner.request_id.clone();
@@ -36,7 +37,7 @@ impl Hosts for HostsServiceImpl {
             Ok(host) => {
                 let result = ProvisionHostResponse {
                     host_id: Some(GrpcUuid::from(host.id)),
-                    token: host.token,
+                    token: db_token,
                     messages: vec!["All good".into()],
                     origin_request_id: request_id,
                 };
@@ -58,7 +59,7 @@ impl Hosts for HostsServiceImpl {
         let request_host_id = Uuid::from(info.id.clone().unwrap());
         let host = Host::find_by_id(request_host_id, &self.db).await?;
 
-        match Host::update_all(host.id, info.into(), &self.db).await {
+        match Host::update_all(host.id, HostSelectiveUpdate::from(info), &self.db).await {
             Ok(_host) => {
                 let result = HostInfoUpdateResponse {
                     messages: vec![],

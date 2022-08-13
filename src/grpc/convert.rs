@@ -175,22 +175,19 @@ pub mod into {
         }
     }
 
-    impl Into<HostSelectiveUpdate> for HostInfo {
-        fn into(self) -> HostSelectiveUpdate {
-            HostSelectiveUpdate {
-                org_id: None,
-                name: self.name,
-                version: self.version,
-                location: self.location,
-                cpu_count: self.cpu_count,
-                mem_size: self.mem_size,
-                disk_size: self.disk_size,
-                os: self.os,
-                os_version: self.os_version,
-                ip_addr: self.ip,
-                val_ip_addrs: None,
-                status: None,
-                token_id: None,
+    impl From<HostSelectiveUpdate> for HostInfo {
+        fn from(update: HostSelectiveUpdate) -> HostInfo {
+            HostInfo {
+                id: None,
+                name: update.name,
+                version: update.version,
+                location: update.location,
+                cpu_count: update.cpu_count,
+                mem_size: update.mem_size,
+                disk_size: update.disk_size,
+                os: update.os,
+                os_version: update.os_version,
+                ip: None,
             }
         }
     }
