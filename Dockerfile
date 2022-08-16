@@ -8,6 +8,7 @@ WORKDIR /usr/src/api
 
 COPY . .
 
+ENV PATH="${PATH}:/usr/include"
 ENV RUSTFLAGS -Ctarget-feature=-crt-static
 RUN cargo build --release
 RUN strip target/release/api
