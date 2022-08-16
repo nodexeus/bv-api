@@ -2,7 +2,11 @@
 FROM rust:alpine as build
 
 # We are indirectly depending on libbrotli.
-RUN apk update && apk add libc-dev && apk add protoc
+RUN apk update && apk add libc-dev
+RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v3.21.5/$PROTOC_ZIP \
+    && unzip -o $PROTOC_ZIP -d /usr/local bin/protoc \
+    && unzip -o $PROTOC_ZIP -d /usr/local 'include/*' \
+    && rm -f $PROTOC_ZIP
 
 WORKDIR /usr/src/api
 
