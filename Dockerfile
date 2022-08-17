@@ -8,9 +8,7 @@ WORKDIR /usr/src/api
 
 COPY . .
 
-ENV PATH="${PATH}:/usr/include:/usr/include/google:/usr/include/google/protobuf"
 ENV RUSTFLAGS -Ctarget-feature=-crt-static
-RUN alias protoc=/usr/bin/protoc
 RUN cargo build --release
 RUN strip target/release/api
 
