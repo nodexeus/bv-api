@@ -10,13 +10,14 @@ COPY . .
 
 ENV PATH="${PATH}:/usr/include:/usr/include/google:/usr/include/google/protobuf"
 ENV RUSTFLAGS -Ctarget-feature=-crt-static
+RUN alias protoc=/usr/bin/protoc
 RUN cargo build --release
 RUN strip target/release/api
 
 # Slim output image not containing any build tools / artefacts
 FROM alpine:latest
 
-RUN apk add libgcc && apk add protobuf && apk add protobuf-dev && apk add protoc
+RUN apk add libgcc
 
 COPY --from=build /usr/src/api/target/release/api /usr/bin/api
 COPY --from=build /usr/src/api/conf /etc/api/conf
