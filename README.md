@@ -40,5 +40,5 @@ cargo test -- --test-threads=1
 git rm -r proto
 git commit -m "fix: delete old protos"
 git push origin <branch>
-git subtree add --prefix proto https://github.com/blockjoy/api-proto <version tag> --squash
+git subtree [add|pull] --prefix proto https://github.com/blockjoy/api-proto <version tag> --squash
 ```
