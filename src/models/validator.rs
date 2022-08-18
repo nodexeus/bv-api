@@ -8,7 +8,7 @@ use sqlx::{FromRow, PgPool};
 use std::convert::From;
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_validator_status", rename_all = "snake_case")]
 pub enum ValidatorStatus {
@@ -21,7 +21,7 @@ pub enum ValidatorStatus {
     Stopped,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_stake_status", rename_all = "snake_case")]
 pub enum StakeStatus {

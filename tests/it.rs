@@ -1,6 +1,3 @@
-//! test marked with "UnsyncBoxBody" use an unsynced body, therefore the request fails
-//! TB resolved in branch "refactor/routes-handlers-models"
-
 mod setup;
 
 use setup::{get_admin_user, get_blockchain, get_test_host, setup};
@@ -1136,32 +1133,23 @@ async fn it_should_list_invoices() -> anyhow::Result<()> {
 }
 
 #[before(call = "setup")]
-// #[tokio::test]
-/// TODO: UnsyncBoxBody
+#[tokio::test]
 async fn it_should_crud_org() -> anyhow::Result<()> {
     let db = Arc::new(_before_values.await);
-    let db_cloned = Arc::clone(&db);
-    let app = Router::new()
-        .route("/orgs", post(create_org))
-        .layer(Extension(db_cloned.clone()))
-        .layer(TraceLayer::new_for_http());
-
+    let app = api::http::server(db.clone()).await;
     let user = get_admin_user(&db).await;
+    let token = user.get_token(&db).await?.to_base64();
 
     let req = Request::builder()
         .method("POST")
         .uri("/orgs")
-        .header(
-            "Authorization",
-            format!("Bearer {}", user.get_token(&db).await.unwrap().to_base64()),
-        )
+        .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_string(&OrgRequest {
             name: String::from("test_org"),
         })?))?;
 
-    let resp = app.oneshot(req).await?;
-    dbg!(&resp);
+    let resp = app.clone().oneshot(req).await?;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body = hyper::body::to_bytes(resp.into_body()).await?;
@@ -1171,36 +1159,21 @@ async fn it_should_crud_org() -> anyhow::Result<()> {
     assert_eq!(org.role, Some(OrgRole::Owner));
     assert_eq!(org.member_count, Some(1));
 
-    // GET
-    let app = Router::new()
-        .route("/orgs/:id", get(get_org))
-        .layer(Extension(db_cloned.clone()))
-        .layer(TraceLayer::new_for_http());
-
     let path = format!("/orgs/{}", &org.id);
 
     let req = Request::builder()
         .method("GET")
         .uri(&path)
-        .header(
-            "Authorization",
-            format!("Bearer {}", user.get_token(&db).await.unwrap().to_base64()),
-        )
+        .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(Body::empty())?;
 
-    let resp = app.oneshot(req).await?;
+    let resp = app.clone().oneshot(req).await?;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body = hyper::body::to_bytes(resp.into_body()).await?;
     let returned_org: Org = serde_json::from_slice(&body)?;
     assert_eq!(org, returned_org);
-
-    // UPDATE
-    let app = Router::new()
-        .route("/orgs/:id", put(update_org))
-        .layer(Extension(db_cloned.clone()))
-        .layer(TraceLayer::new_for_http());
 
     let path = format!("/orgs/{}", &org.id);
     let new_name = String::from("test_org_new");
@@ -1208,16 +1181,13 @@ async fn it_should_crud_org() -> anyhow::Result<()> {
     let req = Request::builder()
         .method("PUT")
         .uri(&path)
-        .header(
-            "Authorization",
-            format!("Bearer {}", user.get_token(&db).await.unwrap().to_base64()),
-        )
+        .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_string(&OrgRequest {
             name: new_name.clone(),
         })?))?;
 
-    let resp = app.oneshot(req).await?;
+    let resp = app.clone().oneshot(req).await?;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body = hyper::body::to_bytes(resp.into_body()).await?;
@@ -1225,25 +1195,16 @@ async fn it_should_crud_org() -> anyhow::Result<()> {
 
     assert_eq!(org.name, new_name);
 
-    // GET (members)
-    let app = Router::new()
-        .route("/orgs/:id/members", get(get_org_members))
-        .layer(Extension(db_cloned.clone()))
-        .layer(TraceLayer::new_for_http());
-
     let path = format!("/orgs/{}/members", &org.id);
 
     let req = Request::builder()
         .method("GET")
         .uri(&path)
-        .header(
-            "Authorization",
-            format!("Bearer {}", user.get_token(&db).await.unwrap().to_base64()),
-        )
+        .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(Body::empty())?;
 
-    let resp = app.oneshot(req).await?;
+    let resp = app.clone().oneshot(req).await?;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body = hyper::body::to_bytes(resp.into_body()).await?;
@@ -1253,21 +1214,12 @@ async fn it_should_crud_org() -> anyhow::Result<()> {
     assert_eq!(members[0].org_id, org.id);
     assert_eq!(members[0].role, OrgRole::Owner);
 
-    // DELETE
-    let app = Router::new()
-        .route("/orgs/:id", delete(delete_org))
-        .layer(Extension(db_cloned.clone()))
-        .layer(TraceLayer::new_for_http());
-
     let path = format!("/orgs/{}", &org.id);
 
     let req = Request::builder()
         .method("DELETE")
         .uri(&path)
-        .header(
-            "Authorization",
-            format!("Bearer {}", user.get_token(&db).await.unwrap().to_base64()),
-        )
+        .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(Body::empty())?;
 

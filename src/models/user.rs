@@ -214,7 +214,7 @@ impl User {
         Err(ApiError::ValidationError("Invalid password.".to_string()))
     }
 
-    pub async fn create(user: UserRequest, db: &PgPool) -> Result<Self> {
+    pub async fn create(user: UserRequest, db: &PgPool, role: Option<TokenRole>) -> Result<Self> {
         user.validate()
             .map_err(|e| ApiError::ValidationError(e.to_string()))?;
 
@@ -264,7 +264,11 @@ impl User {
 
             return match result {
                 Ok(user) => {
-                    Token::create_for::<User>(&user, TokenRole::User, db).await?;
+                    if let Some(role) = role {
+                        Token::create_for::<User>(&user, role, db).await?;
+                    } else {
+                        Token::create_for::<User>(&user, TokenRole::User, db).await?;
+                    }
 
                     Ok(user)
                 }

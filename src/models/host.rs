@@ -1,9 +1,10 @@
 use super::{
-    node::Node, node::NodeCreateRequest, node::NodeProvision, node::NodeStatus, token::Token,
-    token::TokenRole, validator::Validator, validator::ValidatorRequest,
+    validator::Validator, validator::ValidatorRequest, Node, NodeChainStatus, NodeCreateRequest,
+    NodeProvision, NodeSyncStatus, Token, TokenRole,
 };
 use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
+use crate::models::ContainerStatus;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -11,7 +12,7 @@ use sqlx::{FromRow, PgPool, Row};
 use std::convert::From;
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_conn_status", rename_all = "snake_case")]
 pub enum ConnectionStatus {
@@ -456,8 +457,10 @@ impl HostProvision {
                     wallet_address: None,
                     block_height: None,
                     node_data: None,
-                    status: NodeStatus::Creating,
-                    is_online: false,
+                    chain_status: NodeChainStatus::Unknown,
+                    sync_status: NodeSyncStatus::Unknown,
+                    staking_status: None,
+                    container_status: ContainerStatus::Installing,
                 };
                 host_nodes.push(Node::create(&n, db).await?);
             }

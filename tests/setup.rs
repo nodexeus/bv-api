@@ -1,5 +1,5 @@
 use api::models::validator::{StakeStatus, Validator, ValidatorStatus, ValidatorStatusRequest};
-use api::models::Blockchain;
+use api::models::{Blockchain, TokenRole};
 use api::models::{ConnectionStatus, Host, HostRequest};
 use api::models::{User, UserRequest};
 use sqlx::postgres::PgPoolOptions;
@@ -92,7 +92,7 @@ pub async fn reset_db(pool: &PgPool) {
         password_confirm: "abc12345".into(),
     };
 
-    let user = User::create(user, pool)
+    let user = User::create(user, pool, None)
         .await
         .expect("Could not create test user in db.");
 
@@ -115,7 +115,7 @@ pub async fn reset_db(pool: &PgPool) {
         password_confirm: "abc12345".into(),
     };
 
-    User::create(user, pool)
+    User::create(user, pool, Some(TokenRole::Admin))
         .await
         .expect("Could not create test user in db.");
 
