@@ -2,6 +2,7 @@ mod convert;
 mod helpers;
 mod host_service;
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 pub mod blockjoy {
     tonic::include_proto!("blockjoy.api.v1");
 }

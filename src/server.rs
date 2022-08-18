@@ -34,7 +34,7 @@ pub async fn start() -> anyhow::Result<()> {
             .expect("Could not create db connection pool."),
     );
 
-    let rest = http_server(db.clone()).await;
+    let rest = http_server(db.clone()).await.into_make_service();
     let grpc = grpc_server(db).await;
     let hybrid = hybrid_server(rest, grpc);
 
