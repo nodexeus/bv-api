@@ -7,7 +7,7 @@ use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 
 /// NodeType reflects blockjoy.api.v1.node.NodeType in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_node_type", rename_all = "snake_case")]
 pub enum NodeType {
@@ -22,7 +22,7 @@ pub enum NodeType {
 }
 
 /// ContainerStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_container_status", rename_all = "snake_case")]
 pub enum ContainerStatus {
@@ -41,7 +41,7 @@ pub enum ContainerStatus {
 }
 
 /// NodeSyncStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_node_sync_status", rename_all = "snake_case")]
 pub enum NodeSyncStatus {
@@ -51,7 +51,7 @@ pub enum NodeSyncStatus {
 }
 
 /// NodeStakingStatus reflects blockjoy.api.v1.node.NodeInfo.StakingStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_node_staking_status", rename_all = "snake_case")]
 pub enum NodeStakingStatus {
@@ -65,7 +65,7 @@ pub enum NodeStakingStatus {
 }
 
 /// NodeChainStatus reflects blockjoy.api.v1.node.NodeInfo.ApplicationStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_node_chain_status", rename_all = "snake_case")]
 pub enum NodeChainStatus {

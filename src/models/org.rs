@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_org_role", rename_all = "snake_case")]
 pub enum OrgRole {
@@ -13,7 +13,7 @@ pub enum OrgRole {
     Member,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq)]
 pub struct Org {
     pub id: Uuid,
     pub name: String,
@@ -107,7 +107,7 @@ impl Org {
 
     /// Creates a new organization
     pub async fn create(req: &OrgRequest, user_id: &Uuid, db: &PgPool) -> Result<Org> {
-        let org_id = uuid::Uuid::new_v4();
+        let org_id = Uuid::new_v4();
         let mut tx = db.begin().await?;
         let mut org = sqlx::query_as::<_, Org>(
             "INSERT INTO orgs (id,name,is_personal) values ($1,$2,false) RETURNING *",
