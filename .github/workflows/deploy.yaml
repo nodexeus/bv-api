@@ -26,5 +26,5 @@ jobs:
       - name: Push image to DigitalOcean Container Registry
         run: docker push registry.digitalocean.com/stakejoy/blockvisor-api:latest
 
-      - name: Deploy
-        run: doctl apps create-deployment ${{ secrets.APP_ID_DEV }} --wait
+      # - name: Deploy
+      #   run: doctl apps create-deployment ${{ secrets.APP_ID_DEV }} --wait
