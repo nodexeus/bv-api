@@ -1,0 +1,30 @@
+name: Deploy DEV DO
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build, push, and deploy
+    runs-on: self-hosted
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v2
+
+      - name: Build container image
+        run: docker build -t registry.digitalocean.com/stakejoy/blockvisor-api:latest .
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Log in to DigitalOcean Container Registry with short-lived credentials
+        run: doctl registry login --expiry-seconds 1200
+
+      - name: Push image to DigitalOcean Container Registry
+        run: docker push registry.digitalocean.com/stakejoy/blockvisor-api:latest
+
+      - name: Deploy
+        run: doctl apps create-deployment ${{ secrets.APP_ID_DEV }} --wait
