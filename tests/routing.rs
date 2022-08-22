@@ -1,20 +1,21 @@
-use api::auth::middleware::authorization::AuthorizationService;
-use api::auth::Authorization;
-use api::http::routes::{api_router, unauthenticated_routes};
+#[allow(dead_code)]
+mod setup;
+
+use setup::setup;
+use std::sync::Arc;
+
 use axum::http::{Request, StatusCode};
-use axum::routing::get;
 use hyper::Body;
+use test_macros::before;
 use tower::ServiceExt;
-use tower_http::auth::AsyncRequireAuthorizationLayer;
-use tower_http::trace::TraceLayer;
 
 fn possible_routes() -> Vec<(&'static str, &'static str, StatusCode)> {
     vec![
         // Non nested routes
-        ("/foo_bar", "GET", StatusCode::OK),
         ("/reset", "POST", StatusCode::UNAUTHORIZED),
         ("/reset", "PUT", StatusCode::UNAUTHORIZED),
         ("/login", "POST", StatusCode::INTERNAL_SERVER_ERROR),
+        ("/health", "GET", StatusCode::OK),
         ("/refresh", "POST", StatusCode::UNAUTHORIZED),
         ("/whoami", "GET", StatusCode::UNAUTHORIZED),
         ("/block_height", "GET", StatusCode::UNAUTHORIZED),
@@ -123,22 +124,14 @@ fn possible_routes() -> Vec<(&'static str, &'static str, StatusCode)> {
     ]
 }
 
-async fn foo_bar() -> &'static str {
-    "WORKS!"
-}
-
+#[before(call = "setup")]
 #[tokio::test]
 async fn test_possible_routes() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
 
+    let db = Arc::new(_before_values.await);
     let routes = possible_routes();
-    let enforcer = Authorization::new().await.unwrap();
-    let auth_service = AuthorizationService::new(enforcer);
-    let app = api_router()
-        .layer(TraceLayer::new_for_http())
-        .layer(AsyncRequireAuthorizationLayer::new(auth_service))
-        .route("/foo_bar", get(foo_bar))
-        .nest("/", unauthenticated_routes());
+    let app = api::http::server(db).await;
 
     let mut cnt = 1;
 

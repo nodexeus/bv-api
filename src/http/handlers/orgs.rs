@@ -1,3 +1,5 @@
+//! TODO: DELETE ME after moving necessary to gRPC
+
 use crate::errors::{ApiError, Result as ApiResult};
 use crate::models::{Org, OrgRequest, OrgRole, Token};
 use crate::server::DbPool;

@@ -1,3 +1,5 @@
+//! TODO: DELETE ME after moving necessary to gRPC
+
 use crate::errors::Result as ApiResult;
 use crate::models::validator::{
     StakeStatus, Validator, ValidatorDetail, ValidatorIdentityRequest, ValidatorPenaltyRequest,
