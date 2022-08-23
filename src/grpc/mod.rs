@@ -1,3 +1,4 @@
+pub mod command_flow;
 pub mod convert;
 pub mod helpers;
 pub mod host_service;
@@ -9,6 +10,8 @@ pub mod blockjoy {
 
 use crate::auth::middleware::AuthorizationService;
 use crate::auth::{unauthenticated_paths::UnauthenticatedPaths, Authorization};
+use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
+use crate::grpc::command_flow::CommandFlowServerImpl;
 use crate::server::DbPool;
 use axum::Extension;
 use blockjoy::hosts_server::HostsServer;
@@ -44,6 +47,7 @@ pub async fn server(
     let enforcer = Authorization::new().await.unwrap();
     let auth_service = AuthorizationService::new(enforcer);
     let h_service = HostsServer::new(HostsServiceImpl::new(db.clone()));
+    let c_service = CommandFlowServer::new(CommandFlowServerImpl::new(db.clone()));
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
         .layer(Extension(db.clone()))
@@ -51,5 +55,8 @@ pub async fn server(
         .layer(AsyncRequireAuthorizationLayer::new(auth_service))
         .into_inner();
 
-    Server::builder().layer(middleware).add_service(h_service)
+    Server::builder()
+        .layer(middleware)
+        .add_service(h_service)
+        .add_service(c_service)
 }

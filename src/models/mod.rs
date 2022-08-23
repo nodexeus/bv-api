@@ -14,6 +14,8 @@ mod user;
 // name ambiguities with another crate
 pub mod validator;
 
+use crate::errors::Result as ApiResult;
+use crate::server::DbPool;
 pub use blockchain::*;
 pub use broadcast::*;
 pub use command::*;
@@ -29,3 +31,8 @@ pub use user::*;
 
 pub const STAKE_QUOTA_DEFAULT: i64 = 5;
 pub const FEE_BPS_DEFAULT: i64 = 300;
+
+#[tonic::async_trait]
+pub trait UpdateInfo<T, R> {
+    async fn update_info(info: T, db: DbPool) -> ApiResult<R>;
+}
