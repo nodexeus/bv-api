@@ -50,6 +50,7 @@ validator = {version = "0.13.0", features = ["derive"]}
 
 [dev-dependencies]
 hyper = {version = "0.14.18", features = ["full"]}
+tempfile = "3.3.0"
 test_macros = {git = "https://github.com/blockjoy/test-macros/"}
 
 [build-dependencies]

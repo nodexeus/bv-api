@@ -2,6 +2,7 @@
 //!
 //!
 
+use crate::auth::unauthenticated_paths::UnauthenticatedPaths;
 use crate::auth::JwtToken;
 use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
 use crate::models::Token;
@@ -29,6 +30,12 @@ impl AuthorizationService {
     pub fn new(enforcer: Authorization) -> Self {
         Self { enforcer }
     }
+
+    pub fn is_unauthenticated_request<B>(&self, request: &Request<B>) -> bool {
+        let unauth_paths = request.extensions().get::<UnauthenticatedPaths>().unwrap();
+
+        unauth_paths.is_unauthenticated(request.uri().path())
+    }
 }
 
 impl<B> AsyncAuthorizeRequest<B> for AuthorizationService
@@ -41,6 +48,11 @@ where
 
     #[allow(unused_mut)]
     fn authorize(&mut self, mut request: Request<B>) -> Self::Future {
+        if self.is_unauthenticated_request(&request) {
+            tracing::debug!("Request is unauthenticated: {}", request.uri().path());
+            return Box::pin(async move { Ok(request) });
+        }
+
         let enforcer = self.enforcer.clone();
 
         Box::pin(async move {
@@ -58,6 +70,8 @@ where
                         object: request.uri().path().to_string(),
                         action: request.method().to_string(),
                     };
+
+                    println!("Using auth data: {:?}", auth_data);
 
                     match enforcer.try_authorized(auth_data) {
                         Ok(result) => {

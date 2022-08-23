@@ -1,5 +1,6 @@
 pub mod jwt_token;
 pub mod middleware;
+pub mod unauthenticated_paths;
 
 pub use jwt_token::*;
 

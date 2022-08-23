@@ -35,7 +35,7 @@ pub async fn start() -> anyhow::Result<()> {
     );
 
     let rest = http_server(db.clone()).await.into_make_service();
-    let grpc = grpc_server(db).await;
+    let grpc = grpc_server(db).await.into_service();
     let hybrid = hybrid_server(rest, grpc);
 
     Ok(axum::Server::bind(&addr.parse()?).serve(hybrid).await?)

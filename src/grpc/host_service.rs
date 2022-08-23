@@ -1,4 +1,4 @@
-use crate::auth::FindableById;
+use crate::auth::{FindableById, TokenIdentifyable};
 use crate::grpc::blockjoy::hosts_server::Hosts;
 use crate::grpc::blockjoy::{
     HostInfoUpdateRequest, HostInfoUpdateResponse, ProvisionHostRequest, ProvisionHostResponse,
@@ -10,7 +10,6 @@ use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-#[allow(dead_code)]
 pub struct HostsServiceImpl {
     db: DbPool,
 }
@@ -27,7 +26,6 @@ impl Hosts for HostsServiceImpl {
         &self,
         request: Request<ProvisionHostRequest>,
     ) -> Result<Response<ProvisionHostResponse>, Status> {
-        let db_token = request.extensions().get::<Token>().unwrap().token.clone();
         let inner = request.into_inner();
         let otp = &inner.otp.clone();
         let request_id = inner.request_id.clone();
@@ -35,6 +33,7 @@ impl Hosts for HostsServiceImpl {
 
         match host_provision {
             Ok(host) => {
+                let db_token = host.get_token(&self.db).await.unwrap().token;
                 let result = ProvisionHostResponse {
                     host_id: Some(GrpcUuid::from(host.id)),
                     token: db_token,
@@ -53,8 +52,12 @@ impl Hosts for HostsServiceImpl {
 
     async fn info_update(
         &self,
-        request: Request<HostInfoUpdateRequest>,
+        mut request: Request<HostInfoUpdateRequest>,
     ) -> Result<Response<HostInfoUpdateResponse>, Status> {
+        let db_token = request.extensions_mut().get::<Token>().unwrap();
+
+        println!("Got token: {:?}", db_token);
+
         let (request_id, info) = request.into_data();
         let request_host_id = Uuid::from(info.id.clone().unwrap());
         let host = Host::find_by_id(request_host_id, &self.db).await?;
