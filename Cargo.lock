@@ -83,7 +83,6 @@ dependencies = [
  "qrcode-generator",
  "rand_core",
  "random-string",
- "regex",
  "sendgrid",
  "serde",
  "serde_json",
