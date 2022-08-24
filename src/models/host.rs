@@ -5,7 +5,8 @@ use super::{
 use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
-use crate::models::ContainerStatus;
+use crate::models::{ContainerStatus, UpdateInfo};
+use crate::server::DbPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -89,6 +90,22 @@ impl From<PgRow> for Host {
 }
 
 impl Host {
+    pub async fn toggle_online(id: Uuid, is_online: bool, db: &PgPool) -> Result<()> {
+        let status = if is_online {
+            ConnectionStatus::Online
+        } else {
+            ConnectionStatus::Offline
+        };
+
+        sqlx::query("UPDATE hosts set status = $1 where id = $2")
+            .bind(status)
+            .bind(id)
+            .fetch_one(db)
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query("SELECT * FROM hosts order by lower(name)")
             .map(Self::from)
@@ -299,6 +316,46 @@ impl TokenIdentifyable for Host {
 impl Owned<Host, ()> for Host {
     async fn is_owned_by(&self, resource: Host, _db: ()) -> bool {
         self.id == resource.id
+    }
+}
+
+#[tonic::async_trait]
+impl UpdateInfo<HostInfo, Host> for Host {
+    async fn update_info(info: HostInfo, db: DbPool) -> Result<Host> {
+        let id = Uuid::from(info.id.unwrap());
+        let mut tx = db.begin().await?;
+        let host = sqlx::query(
+            r##"UPDATE hosts SET
+                         name = COALESCE($1, name),
+                         version = COALESCE($2, version),
+                         location = COALESCE($3, location),
+                         cpu_count = COALESCE($4, cpu_count),
+                         mem_size = COALESCE($5, mem_size),
+                         disk_size = COALESCE($6, disk_size),
+                         os = COALESCE($7, os),
+                         os_version = COALESCE($8, os_version),
+                         ip_addr = COALESCE($9, ip_addr),
+                WHERE id = $10
+                RETURNING *
+            "##,
+        )
+        .bind(info.name)
+        .bind(info.version)
+        .bind(info.location)
+        .bind(info.cpu_count)
+        .bind(info.mem_size)
+        .bind(info.disk_size)
+        .bind(info.os)
+        .bind(info.os_version)
+        .bind(info.ip)
+        .bind(id)
+        .map(Self::from)
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(host)
     }
 }
 

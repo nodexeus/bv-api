@@ -224,16 +224,19 @@ impl UpdateInfo<GrpcNodeInfo, Node> for Node {
             r##"UPDATE nodes SET
                          name = COALESCE($1, name),
                          ip_addr = COALESCE($2, ip_addr),
-                         -- vm_status
-                         status = COALESCE($3, status),
-                         block_height = COALESCE($4, block_height)
-                WHERE id = $5
+                         chain_status = COALESCE($3, chain_status),
+                         sync_status = COALESCE($4, sync_status),
+                         staking_status = COALESCE($5, staking_status),
+                         block_height = COALESCE($6, block_height)
+                WHERE id = $7
                 RETURNING *
             "##,
         )
         .bind(info.name)
         .bind(info.ip)
-        .bind(info.node_type.as_ref().unwrap().chain_status)
+        .bind(info.app_status.as_ref().unwrap())
+        .bind(info.sync_status.as_ref().unwrap())
+        .bind(info.staking_status.as_ref().unwrap())
         .bind(info.block_height)
         .bind(id)
         .fetch_one(&mut tx)
