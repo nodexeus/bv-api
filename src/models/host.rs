@@ -2,9 +2,11 @@ use super::{
     validator::Validator, validator::ValidatorRequest, Node, NodeChainStatus, NodeCreateRequest,
     NodeProvision, NodeSyncStatus, Token, TokenRole,
 };
-use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
+use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
-use crate::models::ContainerStatus;
+use crate::grpc::blockjoy::HostInfo;
+use crate::models::{ContainerStatus, UpdateInfo};
+use crate::server::DbPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -88,6 +90,22 @@ impl From<PgRow> for Host {
 }
 
 impl Host {
+    pub async fn toggle_online(id: Uuid, is_online: bool, db: &PgPool) -> Result<()> {
+        let status = if is_online {
+            ConnectionStatus::Online
+        } else {
+            ConnectionStatus::Offline
+        };
+
+        sqlx::query("UPDATE hosts set status = $1 where id = $2")
+            .bind(status)
+            .bind(id)
+            .fetch_one(db)
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query("SELECT * FROM hosts order by lower(name)")
             .map(Self::from)
@@ -294,6 +312,53 @@ impl TokenIdentifyable for Host {
     }
 }
 
+#[axum::async_trait]
+impl Owned<Host, ()> for Host {
+    async fn is_owned_by(&self, resource: Host, _db: ()) -> bool {
+        self.id == resource.id
+    }
+}
+
+#[tonic::async_trait]
+impl UpdateInfo<HostInfo, Host> for Host {
+    async fn update_info(info: HostInfo, db: DbPool) -> Result<Host> {
+        let id = Uuid::from(info.id.unwrap());
+        let mut tx = db.begin().await?;
+        let host = sqlx::query(
+            r##"UPDATE hosts SET
+                         name = COALESCE($1, name),
+                         version = COALESCE($2, version),
+                         location = COALESCE($3, location),
+                         cpu_count = COALESCE($4, cpu_count),
+                         mem_size = COALESCE($5, mem_size),
+                         disk_size = COALESCE($6, disk_size),
+                         os = COALESCE($7, os),
+                         os_version = COALESCE($8, os_version),
+                         ip_addr = COALESCE($9, ip_addr),
+                WHERE id = $10
+                RETURNING *
+            "##,
+        )
+        .bind(info.name)
+        .bind(info.version)
+        .bind(info.location)
+        .bind(info.cpu_count)
+        .bind(info.mem_size)
+        .bind(info.disk_size)
+        .bind(info.os)
+        .bind(info.os_version)
+        .bind(info.ip)
+        .bind(id)
+        .map(Self::from)
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(host)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostRequest {
     pub org_id: Option<Uuid>,
@@ -342,6 +407,46 @@ impl From<HostCreateRequest> for HostRequest {
             ip_addr: host.ip_addr,
             val_ip_addrs: host.val_ip_addrs,
             status: ConnectionStatus::Offline,
+        }
+    }
+}
+
+impl From<HostInfo> for HostSelectiveUpdate {
+    fn from(info: HostInfo) -> Self {
+        Self {
+            org_id: None,
+            name: info.name,
+            version: info.version,
+            location: info.location,
+            cpu_count: info.cpu_count,
+            mem_size: info.mem_size,
+            disk_size: info.disk_size,
+            os: info.os,
+            os_version: info.os_version,
+            ip_addr: info.ip,
+            val_ip_addrs: None,
+            status: None,
+            token_id: None,
+        }
+    }
+}
+
+impl From<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest {
+    fn from(request: crate::grpc::blockjoy::ProvisionHostRequest) -> Self {
+        let host_info = request.info.unwrap();
+
+        Self {
+            org_id: None,
+            name: host_info.name.unwrap(),
+            version: host_info.version,
+            location: host_info.location,
+            cpu_count: host_info.cpu_count,
+            mem_size: host_info.mem_size,
+            disk_size: host_info.disk_size,
+            os: host_info.os,
+            os_version: host_info.os_version,
+            ip_addr: host_info.ip.unwrap(),
+            val_ip_addrs: Some(request.validator_ips.join(",")),
         }
     }
 }
@@ -409,6 +514,17 @@ impl HostProvision {
         host_provision.set_install_cmd();
 
         Ok(host_provision)
+    }
+
+    /// Wrapper for HostProvision::claim, taking ProvisionHostRequest received via gRPC instead of HostCreateRequest
+    pub async fn claim_by_grpc_provision(
+        otp: &str,
+        request: crate::grpc::blockjoy::ProvisionHostRequest,
+        db: &PgPool,
+    ) -> Result<Host> {
+        let request = HostCreateRequest::from(request);
+
+        HostProvision::claim(otp, request, db).await
     }
 
     pub async fn claim(

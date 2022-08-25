@@ -1,4 +1,6 @@
-use crate::http::server;
+use crate::grpc::server as grpc_server;
+use crate::http::server as http_server;
+use crate::hybrid_server::hybrid as hybrid_server;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::sync::Arc;
 use std::time::Duration;
@@ -32,9 +34,9 @@ pub async fn start() -> anyhow::Result<()> {
             .expect("Could not create db connection pool."),
     );
 
-    let app = server(db).await;
+    let rest = http_server(db.clone()).await.into_make_service();
+    let grpc = grpc_server(db).await.into_service();
+    let hybrid = hybrid_server(rest, grpc);
 
-    Ok(axum::Server::bind(&addr.parse()?)
-        .serve(app.into_make_service())
-        .await?)
+    Ok(axum::Server::bind(&addr.parse()?).serve(hybrid).await?)
 }

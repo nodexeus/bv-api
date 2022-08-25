@@ -1,3 +1,5 @@
+//! TODO: DELETE ME after moving necessary to gRPC
+
 use crate::auth::FindableById;
 use crate::errors::Result as ApiResult;
 use crate::http::handlers::QueryParams;

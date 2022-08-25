@@ -1,4 +1,7 @@
 use crate::errors::{ApiError, Result};
+use crate::grpc::blockjoy::CommandInfo;
+use crate::models::UpdateInfo;
+use crate::server::DbPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
@@ -95,6 +98,31 @@ impl Command {
 
         tx.commit().await?;
         Ok(deleted.rows_affected())
+    }
+}
+
+#[tonic::async_trait]
+impl UpdateInfo<CommandInfo, Command> for Command {
+    async fn update_info(info: CommandInfo, db: DbPool) -> Result<Command> {
+        let id = Uuid::from(info.id.unwrap());
+        let mut tx = db.begin().await?;
+        let cmd = sqlx::query_as::<_, Command>(
+            r##"UPDATE hosts SET
+                         response = COALESCE($1, response),
+                         exit_status = COALESCE($2, exit_status),
+                WHERE id = $2
+                RETURNING *
+            "##,
+        )
+        .bind(info.response)
+        .bind(info.exit_code)
+        .bind(id)
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(cmd)
     }
 }
 

@@ -1,46 +1,24 @@
-use crate::auth::TokenIdentifyable;
-use crate::errors;
-use crate::errors::ApiError;
 use crate::server::DbPool;
-use axum::body::{Body, Bytes};
-use axum::extract::{Extension, Json, Path};
+use axum::extract::{Extension, Json};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
-use errors::Result as ApiResult;
-use qrcode_generator;
-use qrcode_generator::QrCodeEcc;
-use serde::Deserialize;
-use serde_json::json;
-use uuid::Uuid;
+use axum::response::IntoResponse;
 
-mod broadcast;
-mod commands;
-mod groups;
-mod host_provisions;
-mod hosts;
-mod nodes;
-mod orgs;
-mod users;
-mod validators;
-
-pub use broadcast::*;
-pub use commands::*;
-pub use groups::*;
-pub use host_provisions::*;
-pub use hosts::*;
-pub use nodes::*;
-pub use orgs::*;
-pub use users::*;
-pub use validators::*;
-
-use crate::models::*;
-pub use broadcast::*;
-
-#[derive(Deserialize)]
-pub struct QueryParams {
-    token: Option<String>,
+/// Health handler used indicating system status
+/// Returns empty message (assuming all is working properly).
+/// DB extension is passed in to check DB status
+pub async fn health(Extension(db): Extension<DbPool>) -> impl IntoResponse {
+    if db.is_closed() {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json("DB connection is closed"),
+        )
+    } else {
+        (StatusCode::OK, Json(""))
+    }
 }
 
+/* TODO: DELETE ME after moving necessary to gRPC */
+/*
 pub async fn reset_pwd(
     Extension(db): Extension<DbPool>,
     Json(req): Json<PasswordResetRequest>,
@@ -182,3 +160,5 @@ pub async fn list_blockchains(Extension(db): Extension<DbPool>) -> ApiResult<imp
     let blockchains = Blockchain::find_all(db.as_ref()).await?;
     Ok((StatusCode::OK, Json(blockchains)))
 }
+*/
+/*************/

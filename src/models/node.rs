@@ -1,5 +1,7 @@
 use crate::errors::{ApiError, Result};
-use crate::models::{command::HostCmd, validator::Validator};
+use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
+use crate::models::{command::HostCmd, validator::Validator, UpdateInfo};
+use crate::server::DbPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -210,6 +212,39 @@ impl Node {
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
+    }
+}
+
+#[tonic::async_trait]
+impl UpdateInfo<GrpcNodeInfo, Node> for Node {
+    async fn update_info(info: GrpcNodeInfo, db: DbPool) -> Result<Node> {
+        let id = Uuid::from(info.id.unwrap());
+        let mut tx = db.begin().await?;
+        let node = sqlx::query_as::<_, Node>(
+            r##"UPDATE nodes SET
+                         name = COALESCE($1, name),
+                         ip_addr = COALESCE($2, ip_addr),
+                         chain_status = COALESCE($3, chain_status),
+                         sync_status = COALESCE($4, sync_status),
+                         staking_status = COALESCE($5, staking_status),
+                         block_height = COALESCE($6, block_height)
+                WHERE id = $7
+                RETURNING *
+            "##,
+        )
+        .bind(info.name)
+        .bind(info.ip)
+        .bind(info.app_status.as_ref().unwrap())
+        .bind(info.sync_status.as_ref().unwrap())
+        .bind(info.staking_status.as_ref().unwrap())
+        .bind(info.block_height)
+        .bind(id)
+        .fetch_one(&mut tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(node)
     }
 }
 
