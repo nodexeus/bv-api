@@ -252,7 +252,7 @@ mod tests {
     use tokio_stream::wrappers::UnixListenerStream;
     use tokio_stream::{Stream, StreamExt};
     use tonic::transport::{Channel, Endpoint};
-    use tonic::{IntoStreamingRequest, Request, Status};
+    use tonic::{IntoStreamingRequest, Request};
     use tower::service_fn;
     use uuid::Uuid;
 
@@ -356,9 +356,7 @@ mod tests {
                         println!("\treceived message: `{:?}`", received);
                     }
                 }
-                Err(e) => {
-                    println!("got some status");
-                    let s = Status::from(e);
+                Err(s) => {
                     dbg!(&s);
                     assert_eq!(tonic::Code::Unauthenticated, s.code());
                 }
@@ -422,9 +420,7 @@ mod tests {
                         println!("\treceived message: `{:?}`", received);
                     }
                 }
-                Err(e) => {
-                    let s = Status::from(e);
-                    dbg!(&s);
+                Err(s) => {
                     assert_eq!(tonic::Code::Unauthenticated, s.code());
                 }
             }
