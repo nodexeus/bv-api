@@ -234,8 +234,7 @@ impl CommandFlow for CommandFlowServerImpl {
 
 #[cfg(test)]
 mod tests {
-    use crate::models::{Command, Host, HostCmd};
-    use crate::server::DbPool;
+    use crate::models::{Host, HostCmd};
     use http::Uri;
     use sqlx::postgres::PgPoolOptions;
     use sqlx::PgPool;
