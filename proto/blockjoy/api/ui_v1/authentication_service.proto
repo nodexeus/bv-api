@@ -21,6 +21,7 @@ message RefreshTokenRequest {
 
 message RefreshTokenResponse {
   ResponseMeta meta = 1;
+  ApiToken token = 2;
 }
 
 /* Retrieve and refresh API token */
