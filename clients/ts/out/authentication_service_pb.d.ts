@@ -83,6 +83,11 @@ export class RefreshTokenResponse extends jspb.Message {
   hasMeta(): boolean;
   clearMeta(): RefreshTokenResponse;
 
+  getToken(): common_pb.ApiToken | undefined;
+  setToken(value?: common_pb.ApiToken): RefreshTokenResponse;
+  hasToken(): boolean;
+  clearToken(): RefreshTokenResponse;
+
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): RefreshTokenResponse.AsObject;
   static toObject(includeInstance: boolean, msg: RefreshTokenResponse): RefreshTokenResponse.AsObject;
@@ -94,6 +99,7 @@ export class RefreshTokenResponse extends jspb.Message {
 export namespace RefreshTokenResponse {
   export type AsObject = {
     meta?: common_pb.ResponseMeta.AsObject,
+    token?: common_pb.ApiToken.AsObject,
   }
 }
 

@@ -701,7 +701,8 @@ proto.blockjoy.api.ui_v1.RefreshTokenResponse.prototype.toObject = function(opt_
  */
 proto.blockjoy.api.ui_v1.RefreshTokenResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    meta: (f = msg.getMeta()) && common_pb.ResponseMeta.toObject(includeInstance, f)
+    meta: (f = msg.getMeta()) && common_pb.ResponseMeta.toObject(includeInstance, f),
+    token: (f = msg.getToken()) && common_pb.ApiToken.toObject(includeInstance, f)
   };
 
   if (includeInstance) {
@@ -743,6 +744,11 @@ proto.blockjoy.api.ui_v1.RefreshTokenResponse.deserializeBinaryFromReader = func
       reader.readMessage(value,common_pb.ResponseMeta.deserializeBinaryFromReader);
       msg.setMeta(value);
       break;
+    case 2:
+      var value = new common_pb.ApiToken;
+      reader.readMessage(value,common_pb.ApiToken.deserializeBinaryFromReader);
+      msg.setToken(value);
+      break;
     default:
       reader.skipField();
       break;
@@ -778,6 +784,14 @@ proto.blockjoy.api.ui_v1.RefreshTokenResponse.serializeBinaryToWriter = function
       1,
       f,
       common_pb.ResponseMeta.serializeBinaryToWriter
+    );
+  }
+  f = message.getToken();
+  if (f != null) {
+    writer.writeMessage(
+      2,
+      f,
+      common_pb.ApiToken.serializeBinaryToWriter
     );
   }
 };
@@ -817,6 +831,43 @@ proto.blockjoy.api.ui_v1.RefreshTokenResponse.prototype.clearMeta = function() {
  */
 proto.blockjoy.api.ui_v1.RefreshTokenResponse.prototype.hasMeta = function() {
   return jspb.Message.getField(this, 1) != null;
+};
+
+
+/**
+ * optional ApiToken token = 2;
+ * @return {?proto.blockjoy.api.ui_v1.ApiToken}
+ */
+proto.blockjoy.api.ui_v1.RefreshTokenResponse.prototype.getToken = function() {
+  return /** @type{?proto.blockjoy.api.ui_v1.ApiToken} */ (
+    jspb.Message.getWrapperField(this, common_pb.ApiToken, 2));
+};
+
+
+/**
+ * @param {?proto.blockjoy.api.ui_v1.ApiToken|undefined} value
+ * @return {!proto.blockjoy.api.ui_v1.RefreshTokenResponse} returns this
+*/
+proto.blockjoy.api.ui_v1.RefreshTokenResponse.prototype.setToken = function(value) {
+  return jspb.Message.setWrapperField(this, 2, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.blockjoy.api.ui_v1.RefreshTokenResponse} returns this
+ */
+proto.blockjoy.api.ui_v1.RefreshTokenResponse.prototype.clearToken = function() {
+  return this.setToken(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.blockjoy.api.ui_v1.RefreshTokenResponse.prototype.hasToken = function() {
+  return jspb.Message.getField(this, 2) != null;
 };
 
 

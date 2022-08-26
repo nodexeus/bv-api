@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 import common_pb2 as common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1c\x61uthentication_service.proto\x12\x12\x62lockjoy.api.ui_v1\x1a\x0c\x63ommon.proto\"b\n\x10LoginUserRequest\x12-\n\x04meta\x18\x01 \x01(\x0b\x32\x1f.blockjoy.api.ui_v1.RequestMeta\x12\r\n\x05\x65mail\x18\x02 \x01(\t\x12\x10\n\x08password\x18\x03 \x01(\t\"p\n\x11LoginUserResponse\x12.\n\x04meta\x18\x01 \x01(\x0b\x32 .blockjoy.api.ui_v1.ResponseMeta\x12+\n\x05token\x18\x02 \x01(\x0b\x32\x1c.blockjoy.api.ui_v1.ApiToken\"D\n\x13RefreshTokenRequest\x12-\n\x04meta\x18\x01 \x01(\x0b\x32\x1f.blockjoy.api.ui_v1.RequestMeta\"F\n\x14RefreshTokenResponse\x12.\n\x04meta\x18\x01 \x01(\x0b\x32 .blockjoy.api.ui_v1.ResponseMeta2\xcf\x01\n\x15\x41uthenticationService\x12V\n\x05Login\x12$.blockjoy.api.ui_v1.LoginUserRequest\x1a%.blockjoy.api.ui_v1.LoginUserResponse\"\x00\x12^\n\x07Refresh\x12\'.blockjoy.api.ui_v1.RefreshTokenRequest\x1a(.blockjoy.api.ui_v1.RefreshTokenResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1c\x61uthentication_service.proto\x12\x12\x62lockjoy.api.ui_v1\x1a\x0c\x63ommon.proto\"b\n\x10LoginUserRequest\x12-\n\x04meta\x18\x01 \x01(\x0b\x32\x1f.blockjoy.api.ui_v1.RequestMeta\x12\r\n\x05\x65mail\x18\x02 \x01(\t\x12\x10\n\x08password\x18\x03 \x01(\t\"p\n\x11LoginUserResponse\x12.\n\x04meta\x18\x01 \x01(\x0b\x32 .blockjoy.api.ui_v1.ResponseMeta\x12+\n\x05token\x18\x02 \x01(\x0b\x32\x1c.blockjoy.api.ui_v1.ApiToken\"D\n\x13RefreshTokenRequest\x12-\n\x04meta\x18\x01 \x01(\x0b\x32\x1f.blockjoy.api.ui_v1.RequestMeta\"s\n\x14RefreshTokenResponse\x12.\n\x04meta\x18\x01 \x01(\x0b\x32 .blockjoy.api.ui_v1.ResponseMeta\x12+\n\x05token\x18\x02 \x01(\x0b\x32\x1c.blockjoy.api.ui_v1.ApiToken2\xcf\x01\n\x15\x41uthenticationService\x12V\n\x05Login\x12$.blockjoy.api.ui_v1.LoginUserRequest\x1a%.blockjoy.api.ui_v1.LoginUserResponse\"\x00\x12^\n\x07Refresh\x12\'.blockjoy.api.ui_v1.RefreshTokenRequest\x1a(.blockjoy.api.ui_v1.RefreshTokenResponse\"\x00\x62\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'authentication_service_pb2', globals())
@@ -28,7 +28,7 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _REFRESHTOKENREQUEST._serialized_start=280
   _REFRESHTOKENREQUEST._serialized_end=348
   _REFRESHTOKENRESPONSE._serialized_start=350
-  _REFRESHTOKENRESPONSE._serialized_end=420
-  _AUTHENTICATIONSERVICE._serialized_start=423
-  _AUTHENTICATIONSERVICE._serialized_end=630
+  _REFRESHTOKENRESPONSE._serialized_end=465
+  _AUTHENTICATIONSERVICE._serialized_start=468
+  _AUTHENTICATIONSERVICE._serialized_end=675
 # @@protoc_insertion_point(module_scope)

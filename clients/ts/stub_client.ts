@@ -50,6 +50,8 @@ import {
 } from "./out/user_service_pb";
 import {GetUpdatesResponse} from "./out/update_service_pb";
 
+export type StatusResponse = { code: string, message: string, metadata: { headers: {} }, source: string };
+
 export class GrpcClient {
     private authentication: AuthenticationServiceClient;
     private billing: BillingServiceClient;
@@ -161,12 +163,29 @@ export class GrpcClient {
 
     /* Authentication service */
 
-    login(): LoginUserResponse {
-        let response = new LoginUserResponse();
-        response.setMeta(this.getDummyMeta());
-        response.setToken(this.getApiToken());
+    login(email: string, pwd: string): LoginUserResponse | StatusResponse {
+        console.debug(`Using "${email}" => "${pwd}" for login`);
 
-        return response
+        if(email === "user@test.com") {
+            let response = new LoginUserResponse();
+            response.setMeta(this.getDummyMeta());
+            response.setToken(this.getApiToken());
+
+            return response
+        } else {
+            return {
+                code: "Unauthenticated",
+                message: "invalid authentication credentials\n\n",
+                metadata: {
+                    headers: {
+                        "content-type": "application/grpc",
+                        "date": "Fri, 26 Aug 2022 17:55:33 GMT",
+                        "content-length": "0"
+                    }
+                },
+                source: "None"
+            }
+        }
     }
 
     refresh(): RefreshTokenResponse {

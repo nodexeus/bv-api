@@ -21,6 +21,7 @@ Google::Protobuf::DescriptorPool.generated_pool.build do
     end
     add_message "blockjoy.api.ui_v1.RefreshTokenResponse" do
       optional :meta, :message, 1, "blockjoy.api.ui_v1.ResponseMeta"
+      optional :token, :message, 2, "blockjoy.api.ui_v1.ApiToken"
     end
   end
 end

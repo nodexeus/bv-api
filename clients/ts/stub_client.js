@@ -109,11 +109,28 @@ var GrpcClient = /** @class */ (function () {
         return timestamp;
     };
     /* Authentication service */
-    GrpcClient.prototype.login = function () {
-        var response = new authentication_service_pb_1.LoginUserResponse();
-        response.setMeta(this.getDummyMeta());
-        response.setToken(this.getApiToken());
-        return response;
+    GrpcClient.prototype.login = function (email, pwd) {
+        console.debug("Using \"".concat(email, "\" => \"").concat(pwd, "\" for login"));
+        if (email === "user@test.com") {
+            var response = new authentication_service_pb_1.LoginUserResponse();
+            response.setMeta(this.getDummyMeta());
+            response.setToken(this.getApiToken());
+            return response;
+        }
+        else {
+            return {
+                code: "Unauthenticated",
+                message: "invalid authentication credentials\n\n",
+                metadata: {
+                    headers: {
+                        "content-type": "application/grpc",
+                        "date": "Fri, 26 Aug 2022 17:55:33 GMT",
+                        "content-length": "0"
+                    }
+                },
+                source: "None"
+            };
+        }
     };
     GrpcClient.prototype.refresh = function () {
         var response = new authentication_service_pb_1.RefreshTokenResponse();
