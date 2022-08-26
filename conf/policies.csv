@@ -17,6 +17,7 @@ p, master_admin, /orgs/:id, PUT
 p, master_admin, /orgs/:id, DELETE
 p, master_admin, /orgs/:id/members, GET
 p, master_admin, /blockjoy.api.v1.Hosts/InfoUpdate, POST
+p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/Refresh, POST
 
 g, admin, master_admin
 g, guest, outbound

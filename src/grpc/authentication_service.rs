@@ -5,7 +5,7 @@ use crate::grpc::blockjoy_ui::{
     RefreshTokenResponse,
 };
 use crate::grpc::helpers::success_response_meta;
-use crate::models::User;
+use crate::models::{Token, User};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 
@@ -45,8 +45,27 @@ impl AuthenticationService for AuthenticationServiceImpl {
 
     async fn refresh(
         &self,
-        _request: Request<RefreshTokenRequest>,
+        request: Request<RefreshTokenRequest>,
     ) -> Result<Response<RefreshTokenResponse>, Status> {
-        Err(Status::unimplemented(""))
+        let db_token = request.extensions().get::<Token>().unwrap().token.clone();
+        let inner = request.into_inner();
+        let old_token = inner.meta.clone().unwrap().token.unwrap().value;
+        let request_id = inner.meta.unwrap().id;
+
+        if db_token == old_token {
+            let new_token = ApiToken {
+                value: Token::refresh(db_token, &self.db).await?.token,
+            };
+
+            let meta = success_response_meta(i32::from(response_meta::Status::Success), request_id);
+            let response = RefreshTokenResponse {
+                meta: Some(meta),
+                token: Some(new_token),
+            };
+
+            Ok(Response::new(response))
+        } else {
+            Err(Status::permission_denied("Not allowed to modify token"))
+        }
     }
 }

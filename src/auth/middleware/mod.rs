@@ -14,12 +14,12 @@ use tonic::body::BoxBody;
 use tonic::Status;
 use tower_http::auth::AsyncAuthorizeRequest;
 
-fn unauthorized_response() -> Response<BoxBody> {
-    Status::permission_denied("").to_http()
+fn unauthorized_response(msg: &str) -> Response<BoxBody> {
+    Status::permission_denied(msg).to_http()
 }
 
-fn unauthenticated_response() -> Response<BoxBody> {
-    Status::unauthenticated("").to_http()
+fn unauthenticated_response(msg: &str) -> Response<BoxBody> {
+    Status::unauthenticated(msg).to_http()
 }
 
 #[derive(Clone)]
@@ -83,13 +83,15 @@ where
 
                                     Ok(request)
                                 }
-                                AuthorizationState::Denied => Err(unauthorized_response()),
+                                AuthorizationState::Denied => {
+                                    Err(unauthorized_response("Insufficient privileges"))
+                                }
                             }
                         }
-                        Err(_e) => Err(unauthorized_response()),
+                        Err(e) => Err(unauthorized_response(e.to_string().as_str())),
                     }
                 }
-                Err(_e) => Err(unauthenticated_response()),
+                Err(_e) => Err(unauthenticated_response("Missing valid token")),
             }
         })
     }

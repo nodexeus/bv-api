@@ -1,8 +1,12 @@
 #[allow(dead_code)]
 mod setup;
 
+use crate::setup::get_admin_user;
+use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
-use api::grpc::blockjoy_ui::{LoginUserRequest, RequestMeta, Uuid as GrpcUuid};
+use api::grpc::blockjoy_ui::{
+    ApiToken, LoginUserRequest, RefreshTokenRequest, RequestMeta, Uuid as GrpcUuid,
+};
 use setup::{server_and_client_stub, setup};
 use std::sync::Arc;
 use test_macros::*;
@@ -12,7 +16,7 @@ use uuid::Uuid;
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_ok_with_valid_credentials() {
+async fn responds_ok_with_valid_credentials_for_login() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
@@ -31,7 +35,7 @@ async fn responds_ok_with_valid_credentials() {
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_error_with_invalid_credentials() {
+async fn responds_error_with_invalid_credentials_for_login() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
@@ -46,4 +50,31 @@ async fn responds_error_with_invalid_credentials() {
     };
 
     assert_grpc_request! { login, Request::new(inner), tonic::Code::Unauthenticated, db, AuthenticationServiceClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_ok_with_valid_credentials_for_refresh() {
+    let db = Arc::new(_before_values.await);
+    let user = get_admin_user(&db).await;
+    let token = user.get_token(&db).await.unwrap();
+    let request_meta = RequestMeta {
+        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        token: Some(ApiToken {
+            value: token.token.clone(),
+        }),
+        fields: vec![],
+        limit: None,
+    };
+    let inner = RefreshTokenRequest {
+        meta: Some(request_meta),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+    );
+
+    assert_grpc_request! { refresh, request, tonic::Code::Ok, db, AuthenticationServiceClient<Channel> };
 }
