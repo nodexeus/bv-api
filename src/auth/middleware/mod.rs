@@ -9,6 +9,7 @@ use crate::models::Token;
 use crate::server::DbPool;
 use futures_util::future::BoxFuture;
 use hyper::{Request, Response};
+use std::fmt::Debug;
 use tonic::body::BoxBody;
 use tonic::Status;
 use tower_http::auth::AsyncAuthorizeRequest;
@@ -40,7 +41,7 @@ impl AuthorizationService {
 
 impl<B> AsyncAuthorizeRequest<B> for AuthorizationService
 where
-    B: Send + Sync + 'static,
+    B: Send + Sync + Debug + 'static,
 {
     type RequestBody = B;
     type ResponseBody = BoxBody;

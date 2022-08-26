@@ -357,7 +357,6 @@ mod tests {
                     }
                 }
                 Err(s) => {
-                    dbg!(&s);
                     assert_eq!(tonic::Code::Unauthenticated, s.code());
                 }
             }
