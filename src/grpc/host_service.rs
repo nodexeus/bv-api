@@ -5,7 +5,7 @@ use crate::grpc::blockjoy::{
     Uuid as GrpcUuid,
 };
 use crate::grpc::convert::into::IntoData;
-use crate::models::{Host, HostProvision, HostSelectiveUpdate, Token};
+use crate::models::{Host, HostProvision, HostSelectiveUpdate};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -52,12 +52,8 @@ impl Hosts for HostsServiceImpl {
 
     async fn info_update(
         &self,
-        mut request: Request<HostInfoUpdateRequest>,
+        request: Request<HostInfoUpdateRequest>,
     ) -> Result<Response<HostInfoUpdateResponse>, Status> {
-        let db_token = request.extensions_mut().get::<Token>().unwrap();
-
-        println!("Got token: {:?}", db_token);
-
         let (request_id, info) = request.into_data();
         let request_host_id = Uuid::from(info.id.clone().unwrap());
         let host = Host::find_by_id(request_host_id, &self.db).await?;
