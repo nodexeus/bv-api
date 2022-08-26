@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package blockjoy.api.ui_v1;
+
+import "common.proto";
+
+message DashboardKpiRequest {
+  RequestMeta meta = 1;
+}
+
+message DashboardKpiResponse {
+  ResponseMeta meta = 1;
+  repeated KPI values = 2;
+}
+
+/* Get dashboard KPIs */
+service DashboardService {
+  /* Get dashboard KPIs for nodes/hosts etc. */
+  rpc KPIs(DashboardKpiRequest) returns (DashboardKpiResponse) {}
+}
