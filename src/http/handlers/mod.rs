@@ -38,14 +38,6 @@ pub async fn update_pwd(
     Ok((StatusCode::OK, Json(user)))
 }
 
-pub async fn refresh(
-    Extension(db): Extension<DbPool>,
-    Json(req): Json<UserRefreshRequest>,
-) -> ApiResult<impl IntoResponse> {
-    let user = User::refresh(req, db.as_ref()).await?;
-    Ok((StatusCode::OK, Json(user)))
-}
-
 pub async fn whoami(
     Extension(db): Extension<DbPool>,
     Extension(token): Extension<Token>,
