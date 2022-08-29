@@ -91,40 +91,30 @@ impl Token {
 
         match old_token.host_id {
             Some(host_id) => {
-                // Create new token
-                let new_token =
-                    Token::create(host_id, old_token.role, db, TokenHolderType::Host).await?;
+                Host::delete_token(host_id, db).await?;
 
-                return match Host::set_token(new_token.id, host_id, db).await {
-                    Ok(_host) => {
-                        // delete old token
-                        match Token::delete(old_token.id, db).await {
-                            Ok(new_token) => Ok(new_token),
-                            Err(e) => Err(e),
-                        }
-                    }
-                    Err(e) => Err(e),
-                };
+                return Self::delete_and_refresh::<Host>(
+                    db,
+                    &old_token,
+                    host_id,
+                    TokenHolderType::Host,
+                )
+                .await;
             }
             None => tracing::debug!("old token has no host ID"),
         }
 
         match old_token.user_id {
             Some(user_id) => {
-                // Create new token
-                let new_token =
-                    Token::create(user_id, old_token.role, db, TokenHolderType::User).await?;
+                User::delete_token(user_id, db).await?;
 
-                return match User::set_token(new_token.id, user_id, db).await {
-                    Ok(_user) => {
-                        // delete old token
-                        match Token::delete(old_token.id, db).await {
-                            Ok(new_token) => Ok(new_token),
-                            Err(e) => Err(e),
-                        }
-                    }
-                    Err(e) => Err(e),
-                };
+                return Self::delete_and_refresh::<User>(
+                    db,
+                    &old_token,
+                    user_id,
+                    TokenHolderType::User,
+                )
+                .await;
             }
             None => tracing::debug!("old token has no user ID"),
         }
@@ -132,6 +122,25 @@ impl Token {
         Err(ApiError::UnexpectedError(anyhow!(
             "Neither host nor user ID set on token, can't refresh"
         )))
+    }
+
+    async fn delete_and_refresh<T: TokenIdentifyable>(
+        db: &PgPool,
+        old_token: &Token,
+        resource_id: Uuid,
+        holder_type: TokenHolderType,
+    ) -> Result<Self> {
+        match Token::delete(old_token.id, db).await {
+            Ok(_t) => {
+                let new_token = Token::create(resource_id, old_token.role, db, holder_type).await?;
+
+                match T::set_token(new_token.id, resource_id, db).await {
+                    Ok(_user) => Ok(new_token),
+                    Err(e) => Err(e),
+                }
+            }
+            Err(e) => Err(e),
+        }
     }
 
     pub async fn create_for<T: TokenIdentifyable>(

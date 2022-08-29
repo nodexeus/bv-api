@@ -82,7 +82,7 @@ async fn responds_ok_with_valid_credentials_for_refresh() {
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_authenticated_with_invalid_credentials_for_refresh() {
+async fn responds_unauthenticated_with_invalid_credentials_for_refresh() {
     let db = Arc::new(_before_values.await);
     let user = get_admin_user(&db).await;
     let invalid_token = base64_encode("asdf.asdfasdfasdfasdfasdf.asfasdfasdfasdfaf");

@@ -373,6 +373,18 @@ impl TokenIdentifyable for User {
         self.id
     }
 
+    async fn delete_token(user_id: Uuid, db: &PgPool) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let fields = UserSelectiveUpdate {
+            token_id: None,
+            ..Default::default()
+        };
+
+        User::update_all(user_id, fields, db).await
+    }
+
     async fn get_token(&self, db: &PgPool) -> Result<Token>
     where
         Self: Sized,

@@ -304,6 +304,18 @@ impl TokenIdentifyable for Host {
         self.id
     }
 
+    async fn delete_token(host_id: Uuid, db: &PgPool) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let fields = HostSelectiveUpdate {
+            token_id: None,
+            ..Default::default()
+        };
+
+        Host::update_all(host_id, fields, db).await
+    }
+
     async fn get_token(&self, db: &PgPool) -> Result<Token>
     where
         Self: Sized,

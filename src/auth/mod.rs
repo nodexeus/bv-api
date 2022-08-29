@@ -57,6 +57,10 @@ pub trait TokenIdentifyable: Send + Sync + 'static {
 
     fn get_id(&self) -> Uuid;
 
+    async fn delete_token(resource_id: Uuid, db: &PgPool) -> ApiResult<Self>
+    where
+        Self: Sized;
+
     async fn get_token(&self, db: &PgPool) -> ApiResult<Token>
     where
         Self: Sized;

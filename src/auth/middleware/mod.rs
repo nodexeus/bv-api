@@ -72,8 +72,6 @@ where
                         action: request.method().to_string(),
                     };
 
-                    println!("Using auth data: {:?}", auth_data);
-
                     match enforcer.try_authorized(auth_data) {
                         Ok(result) => {
                             // Evaluate authorization result
