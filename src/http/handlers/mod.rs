@@ -38,31 +38,6 @@ pub async fn update_pwd(
     Ok((StatusCode::OK, Json(user)))
 }
 
-pub async fn login(
-    Extension(db): Extension<DbPool>,
-    Json(login): Json<UserLoginRequest>,
-) -> ApiResult<impl IntoResponse> {
-    let user = User::login(login, db.as_ref()).await?;
-    let token = user.get_token(db.as_ref()).await?;
-    let login = UserLogin {
-        id: user.id,
-        email: user.email,
-        fee_bps: user.fee_bps,
-        staking_quota: user.staking_quota,
-        token: token.to_base64(),
-    };
-
-    Ok((StatusCode::OK, Json(login)))
-}
-
-pub async fn refresh(
-    Extension(db): Extension<DbPool>,
-    Json(req): Json<UserRefreshRequest>,
-) -> ApiResult<impl IntoResponse> {
-    let user = User::refresh(req, db.as_ref()).await?;
-    Ok((StatusCode::OK, Json(user)))
-}
-
 pub async fn whoami(
     Extension(db): Extension<DbPool>,
     Extension(token): Extension<Token>,

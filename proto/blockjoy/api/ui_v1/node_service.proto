@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package blockjoy.api.ui_v1;
+
+import "common.proto";
+
+message CreateNodeRequest {
+  RequestMeta meta = 1;
+  Node node = 2;
+}
+
+message CreateNodeResponse {
+  ResponseMeta meta = 1;
+}
+
+message GetNodeRequest {
+  RequestMeta meta = 1;
+  optional Uuid id = 2;
+  optional Uuid org_id = 3;
+}
+
+message GetNodeResponse {
+  ResponseMeta meta = 1;
+  repeated Node nodes = 2;
+}
+
+message UpdateNodeRequest {
+  RequestMeta meta = 1;
+  Node node = 2;
+}
+
+message UpdateNodeResponse {
+  ResponseMeta meta = 1;
+}
+
+service NodeService {
+  /* Get blockchain node(s) */
+  rpc Get(GetNodeRequest) returns (GetNodeResponse) {}
+  /* Create a single blockchain node */
+  rpc Create(CreateNodeRequest) returns (CreateNodeResponse) {}
+  /* Update a single blockchain node */
+  rpc Update(UpdateNodeRequest) returns (UpdateNodeResponse) {}
+}

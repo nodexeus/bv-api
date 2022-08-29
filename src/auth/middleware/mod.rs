@@ -9,16 +9,17 @@ use crate::models::Token;
 use crate::server::DbPool;
 use futures_util::future::BoxFuture;
 use hyper::{Request, Response};
+use std::fmt::Debug;
 use tonic::body::BoxBody;
 use tonic::Status;
 use tower_http::auth::AsyncAuthorizeRequest;
 
-fn unauthorized_response() -> Response<BoxBody> {
-    Status::permission_denied("").to_http()
+fn unauthorized_response(msg: &str) -> Response<BoxBody> {
+    Status::permission_denied(msg).to_http()
 }
 
-fn unauthenticated_response() -> Response<BoxBody> {
-    Status::unauthenticated("").to_http()
+fn unauthenticated_response(msg: &str) -> Response<BoxBody> {
+    Status::unauthenticated(msg).to_http()
 }
 
 #[derive(Clone)]
@@ -40,7 +41,7 @@ impl AuthorizationService {
 
 impl<B> AsyncAuthorizeRequest<B> for AuthorizationService
 where
-    B: Send + Sync + 'static,
+    B: Send + Sync + Debug + 'static,
 {
     type RequestBody = B;
     type ResponseBody = BoxBody;
@@ -71,8 +72,6 @@ where
                         action: request.method().to_string(),
                     };
 
-                    println!("Using auth data: {:?}", auth_data);
-
                     match enforcer.try_authorized(auth_data) {
                         Ok(result) => {
                             // Evaluate authorization result
@@ -82,13 +81,15 @@ where
 
                                     Ok(request)
                                 }
-                                AuthorizationState::Denied => Err(unauthorized_response()),
+                                AuthorizationState::Denied => {
+                                    Err(unauthorized_response("Insufficient privileges"))
+                                }
                             }
                         }
-                        Err(_e) => Err(unauthorized_response()),
+                        Err(e) => Err(unauthorized_response(e.to_string().as_str())),
                     }
                 }
-                Err(_e) => Err(unauthenticated_response()),
+                Err(_e) => Err(unauthenticated_response("Missing valid token")),
             }
         })
     }

@@ -5,104 +5,12 @@ use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy;
 use api::grpc::blockjoy::{hosts_client::HostsClient, HostInfoUpdateRequest, ProvisionHostRequest};
 use api::models::{Host, HostProvision, HostProvisionRequest, HostSelectiveUpdate};
-use setup::{get_test_host, setup};
-use sqlx::PgPool;
-use std::convert::TryFrom;
-use std::future::Future;
+use setup::{get_test_host, server_and_client_stub, setup};
 use std::sync::Arc;
-use tempfile::NamedTempFile;
 use test_macros::*;
-use tokio::net::{UnixListener, UnixStream};
-use tokio_stream::wrappers::UnixListenerStream;
-use tonic::transport::{Channel, Endpoint, Uri};
+use tonic::transport::Channel;
 use tonic::{Request, Status};
-use tower::service_fn;
 use uuid::Uuid;
-
-async fn server_and_client_stub(
-    db: Arc<PgPool>,
-) -> (impl Future<Output = ()>, HostsClient<Channel>) {
-    let socket = NamedTempFile::new().unwrap();
-    let socket = Arc::new(socket.into_temp_path());
-    std::fs::remove_file(&*socket).unwrap();
-
-    let uds = UnixListener::bind(&*socket).unwrap();
-    let stream = UnixListenerStream::new(uds);
-    let serve_future = async {
-        let result = api::grpc::server(db)
-            .await
-            .serve_with_incoming(stream)
-            .await;
-
-        assert!(result.is_ok());
-    };
-
-    let socket = Arc::clone(&socket);
-    // Connect to the server over a Unix socket
-    // The URL will be ignored.
-    let channel = Endpoint::try_from("http://any.url")
-        .unwrap()
-        .connect_with_connector(service_fn(move |_: Uri| {
-            let socket = Arc::clone(&socket);
-            async move { UnixStream::connect(&*socket).await }
-        }))
-        .await
-        .unwrap();
-
-    let client = HostsClient::new(channel);
-
-    (serve_future, client)
-}
-
-macro_rules! assert_grpc_request {
-    ($r:expr, $s:expr, $db: expr) => {{
-        // db must be defined in the calling fn
-        let (serve_future, mut client) = server_and_client_stub($db).await;
-
-        let request_future = async {
-            match client.info_update($r).await {
-                Ok(response) => {
-                    let inner = response.into_inner();
-                    println!("response OK: {:?}", inner);
-                }
-                Err(e) => {
-                    let s = Status::from(e);
-                    assert_eq!($s, s.code());
-                }
-            }
-        };
-
-        // Wait for completion, when the client request future completes
-        tokio::select! {
-        _ = serve_future => panic!("server returned first"),
-        _ = request_future => (),
-        }
-    }};
-
-    ($m:tt, $r:expr, $s:expr, $db: expr) => {{
-        // db must be defined in the calling fn
-        let (serve_future, mut client) = server_and_client_stub($db).await;
-
-        let request_future = async {
-            match client.$m($r).await {
-                Ok(response) => {
-                    let inner = response.into_inner();
-                    println!("response OK: {:?}", inner);
-                }
-                Err(e) => {
-                    let s = Status::from(e);
-                    assert_eq!($s, s.code());
-                }
-            }
-        };
-
-        // Wait for completion, when the client request future completes
-        tokio::select! {
-            _ = serve_future => panic!("server returned first"),
-            _ = request_future => (),
-        }
-    }};
-}
 
 #[before(call = "setup")]
 #[tokio::test]
@@ -133,7 +41,7 @@ async fn responds_unauthenticated_without_valid_token_for_info_update() {
         .metadata_mut()
         .insert("authorization", "".parse().unwrap());
 
-    assert_grpc_request! { request, tonic::Code::Unauthenticated, db };
+    assert_grpc_request! { info_update, request, tonic::Code::Unauthenticated, db, HostsClient<Channel> };
 }
 
 #[before(call = "setup")]
@@ -161,7 +69,7 @@ async fn responds_unauthenticated_without_token_for_info_update() {
         info: Some(host_info),
     };
 
-    assert_grpc_request! { Request::new(inner), tonic::Code::Unauthenticated, db };
+    assert_grpc_request! { info_update, Request::new(inner), tonic::Code::Unauthenticated, db, HostsClient<Channel> };
 }
 
 #[before(call = "setup")]
@@ -193,7 +101,7 @@ async fn responds_unauthenticated_with_token_for_info_update() {
         .metadata_mut()
         .insert("authorization", "923783".parse().unwrap());
 
-    assert_grpc_request! { request, tonic::Code::Unauthenticated, db };
+    assert_grpc_request! { info_update, request, tonic::Code::Unauthenticated, db, HostsClient<Channel> };
 }
 
 #[before(call = "setup")]
@@ -229,7 +137,7 @@ async fn responds_permission_denied_with_token_ownership_for_info_update() {
             .unwrap(),
     );
 
-    assert_grpc_request! { request, tonic::Code::PermissionDenied, db };
+    assert_grpc_request! { info_update, request, tonic::Code::PermissionDenied, db, HostsClient<Channel> };
 }
 
 #[before(call = "setup")]
@@ -260,7 +168,7 @@ async fn responds_not_found_for_provision() {
     };
     let request = Request::new(inner);
 
-    assert_grpc_request! { provision, request, tonic::Code::NotFound, db };
+    assert_grpc_request! { provision, request, tonic::Code::NotFound, db, HostsClient<Channel> };
 }
 
 #[before(call = "setup")]
@@ -304,7 +212,7 @@ async fn responds_ok_for_provision() {
     };
     let request = Request::new(inner);
 
-    assert_grpc_request! { provision, request, tonic::Code::Ok, db };
+    assert_grpc_request! { provision, request, tonic::Code::Ok, db, HostsClient<Channel> };
 }
 
 #[before(call = "setup")]
@@ -338,7 +246,7 @@ async fn responds_ok_for_info_update() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
-    assert_grpc_request! { request, tonic::Code::Ok, db };
+    assert_grpc_request! { info_update, request, tonic::Code::Ok, db, HostsClient<Channel> };
 }
 
 #[before(call = "setup")]

@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package blockjoy.api.ui_v1;
+
+import "common.proto";
+
+message LoginUserRequest {
+  RequestMeta meta = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message LoginUserResponse {
+  ResponseMeta meta = 1;
+  ApiToken token = 2;
+}
+
+message RefreshTokenRequest {
+  RequestMeta meta = 1;
+}
+
+message RefreshTokenResponse {
+  ResponseMeta meta = 1;
+  ApiToken token = 2;
+}
+
+/* Retrieve and refresh API token */
+service AuthenticationService {
+  /* Login user, i.e. retrieve token */
+  rpc Login(LoginUserRequest) returns (LoginUserResponse) {}
+  /*
+   * Refresh API token. TODO: Do we really need that?
+  */
+  rpc Refresh(RefreshTokenRequest) returns (RefreshTokenResponse) {}
+}

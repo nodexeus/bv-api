@@ -3,6 +3,7 @@
 
 use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable};
 use crate::errors::{ApiError, Result};
+use crate::grpc::blockjoy_ui::LoginUserRequest;
 use crate::models::{
     org::Org, token::Token, token::TokenRole, validator::StakeStatus, FEE_BPS_DEFAULT,
     STAKE_QUOTA_DEFAULT,
@@ -279,7 +280,7 @@ impl User {
         Err(ApiError::ValidationError("Invalid password.".to_string()))
     }
 
-    pub async fn login(login: UserLoginRequest, db: &PgPool) -> Result<Self> {
+    pub async fn login(login: LoginUserRequest, db: &PgPool) -> Result<Self> {
         let user = Self::find_by_email(&login.email, db).await.map_err(|_e| {
             ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
         })?;
@@ -372,6 +373,18 @@ impl TokenIdentifyable for User {
         self.id
     }
 
+    async fn delete_token(user_id: Uuid, db: &PgPool) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let fields = UserSelectiveUpdate {
+            token_id: None,
+            ..Default::default()
+        };
+
+        User::update_all(user_id, fields, db).await
+    }
+
     async fn get_token(&self, db: &PgPool) -> Result<Token>
     where
         Self: Sized,
@@ -413,22 +426,6 @@ pub struct UserRequest {
 pub struct PasswordResetRequest {
     #[validate(email)]
     pub email: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct UserLoginRequest {
-    #[validate(email)]
-    pub email: String,
-    #[validate(length(min = 8))]
-    pub password: String,
-}
-
-impl UserLoginRequest {
-    pub async fn is_valid(&self, db: &PgPool) -> Result<bool> {
-        let user = User::find_by_email(&self.email, db).await?;
-
-        Ok(user.verify_password(&self.password).is_ok())
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

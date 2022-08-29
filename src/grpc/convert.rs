@@ -4,6 +4,7 @@ pub mod from {
         command, node_command, Command as GrpcCommand, CommandMeta, NodeCommand, NodeDelete,
         NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
     };
+    use crate::grpc::blockjoy_ui::Uuid as GrpcUiUuid;
     use crate::grpc::helpers::pb_current_timestamp;
     use crate::models::{Command as DbCommand, HostCmd};
     use anyhow::anyhow;
@@ -103,6 +104,14 @@ pub mod from {
     impl From<GrpcUuid> for Uuid {
         fn from(id: GrpcUuid) -> Self {
             Uuid::parse_str(id.value.as_str()).unwrap()
+        }
+    }
+
+    impl From<Uuid> for GrpcUiUuid {
+        fn from(id: Uuid) -> Self {
+            Self {
+                value: id.to_string(),
+            }
         }
     }
 

@@ -9,7 +9,7 @@ impl UnauthenticatedPaths {
     }
 
     pub fn is_unauthenticated(&self, url: &str) -> bool {
-        self.urls.binary_search(&url).is_ok()
+        self.urls.contains(&url)
     }
 }
 
