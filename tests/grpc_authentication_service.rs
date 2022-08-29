@@ -7,6 +7,7 @@ use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationService
 use api::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, RefreshTokenRequest, RequestMeta, Uuid as GrpcUuid,
 };
+use base64::encode as base64_encode;
 use setup::{server_and_client_stub, setup};
 use std::sync::Arc;
 use test_macros::*;
@@ -77,4 +78,32 @@ async fn responds_ok_with_valid_credentials_for_refresh() {
     );
 
     assert_grpc_request! { refresh, request, tonic::Code::Ok, db, AuthenticationServiceClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_authenticated_with_invalid_credentials_for_refresh() {
+    let db = Arc::new(_before_values.await);
+    let user = get_admin_user(&db).await;
+    let invalid_token = base64_encode("asdf.asdfasdfasdfasdfasdf.asfasdfasdfasdfaf");
+    let token = user.get_token(&db).await.unwrap();
+    let request_meta = RequestMeta {
+        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        token: Some(ApiToken {
+            value: token.token.clone(),
+        }),
+        fields: vec![],
+        limit: None,
+    };
+    let inner = RefreshTokenRequest {
+        meta: Some(request_meta),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", invalid_token).parse().unwrap(),
+    );
+
+    assert_grpc_request! { refresh, request, tonic::Code::Unauthenticated, db, AuthenticationServiceClient<Channel> };
 }
