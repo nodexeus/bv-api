@@ -579,7 +579,9 @@ proto.blockjoy.api.ui_v1.CreateUserRequest.prototype.toObject = function(opt_inc
 proto.blockjoy.api.ui_v1.CreateUserRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
     meta: (f = msg.getMeta()) && common_pb.RequestMeta.toObject(includeInstance, f),
-    user: (f = msg.getUser()) && common_pb.User.toObject(includeInstance, f)
+    user: (f = msg.getUser()) && common_pb.User.toObject(includeInstance, f),
+    password: jspb.Message.getFieldWithDefault(msg, 3, ""),
+    passwordConfirmation: jspb.Message.getFieldWithDefault(msg, 4, "")
   };
 
   if (includeInstance) {
@@ -626,6 +628,14 @@ proto.blockjoy.api.ui_v1.CreateUserRequest.deserializeBinaryFromReader = functio
       reader.readMessage(value,common_pb.User.deserializeBinaryFromReader);
       msg.setUser(value);
       break;
+    case 3:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setPassword(value);
+      break;
+    case 4:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setPasswordConfirmation(value);
+      break;
     default:
       reader.skipField();
       break;
@@ -669,6 +679,20 @@ proto.blockjoy.api.ui_v1.CreateUserRequest.serializeBinaryToWriter = function(me
       2,
       f,
       common_pb.User.serializeBinaryToWriter
+    );
+  }
+  f = message.getPassword();
+  if (f.length > 0) {
+    writer.writeString(
+      3,
+      f
+    );
+  }
+  f = message.getPasswordConfirmation();
+  if (f.length > 0) {
+    writer.writeString(
+      4,
+      f
     );
   }
 };
@@ -745,6 +769,42 @@ proto.blockjoy.api.ui_v1.CreateUserRequest.prototype.clearUser = function() {
  */
 proto.blockjoy.api.ui_v1.CreateUserRequest.prototype.hasUser = function() {
   return jspb.Message.getField(this, 2) != null;
+};
+
+
+/**
+ * optional string password = 3;
+ * @return {string}
+ */
+proto.blockjoy.api.ui_v1.CreateUserRequest.prototype.getPassword = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 3, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.blockjoy.api.ui_v1.CreateUserRequest} returns this
+ */
+proto.blockjoy.api.ui_v1.CreateUserRequest.prototype.setPassword = function(value) {
+  return jspb.Message.setProto3StringField(this, 3, value);
+};
+
+
+/**
+ * optional string password_confirmation = 4;
+ * @return {string}
+ */
+proto.blockjoy.api.ui_v1.CreateUserRequest.prototype.getPasswordConfirmation = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 4, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.blockjoy.api.ui_v1.CreateUserRequest} returns this
+ */
+proto.blockjoy.api.ui_v1.CreateUserRequest.prototype.setPasswordConfirmation = function(value) {
+  return jspb.Message.setProto3StringField(this, 4, value);
 };
 
 

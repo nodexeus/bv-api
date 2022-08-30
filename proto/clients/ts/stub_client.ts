@@ -51,6 +51,13 @@ import {
 import {GetUpdatesResponse} from "./out/update_service_pb";
 
 export type StatusResponse = { code: string, message: string, metadata: { headers: {} }, source: string };
+export type UIUser = {
+    first_name: string,
+    last_name: string,
+    email: string,
+    password: string,
+    password_confirmation: string
+};
 
 export class GrpcClient {
     private authentication: AuthenticationServiceClient;
@@ -79,7 +86,7 @@ export class GrpcClient {
     /**
      * Initialize all gRPC clients
      */
-    private initClients(host: string) {
+    private async initClients(host: string) {
         this.authentication = new AuthenticationServiceClient(host, null, null);
         this.billing = new BillingServiceClient(host, null, null);
         this.dashboard = new DashboardServiceClient(host, null, null);
@@ -100,21 +107,25 @@ export class GrpcClient {
     }
 
     getDummyMeta(): ResponseMeta {
-        let uuid = new Uuid();
-        uuid.setValue(uuidv4());
-
         let meta = new ResponseMeta();
         meta.setStatus(ResponseMeta.Status.SUCCESS);
-        meta.setOriginRequestId(uuid);
+        meta.setOriginRequestId(this.getDummyUuid());
 
         return meta
     }
 
+    getDummyUuid(): Uuid {
+        let uuid = new Uuid();
+        uuid.setValue(uuidv4());
+
+        return uuid
+    }
+
     getDummyNode(): Node {
         let node = new Node();
-        node.setId(uuidv4());
-        node.setOrgId(uuidv4());
-        node.setBlockchainId(uuidv4());
+        node.setId(this.getDummyUuid());
+        node.setOrgId(this.getDummyUuid());
+        node.setBlockchainId(this.getDummyUuid());
         node.setName("lorem-node");
         node.setGroupsList(["group-one"]);
         node.setVersion("0.1.0");
@@ -133,8 +144,8 @@ export class GrpcClient {
 
     getDummyHost(): Host {
         let host = new Host();
-        host.setId(uuidv4());
-        host.setOrgId(uuidv4());
+        host.setId(this.getDummyUuid());
+        host.setOrgId(this.getDummyUuid());
         host.setName("lorem-ipsum");
         host.setVersion("0.1.0");
         host.setLocation("Djibouti");
@@ -163,7 +174,8 @@ export class GrpcClient {
 
     /* Authentication service */
 
-    login(email: string, pwd: string): LoginUserResponse | StatusResponse {
+    // @ts-ignore
+    async login(email: string, pwd: string): Promise<LoginUserResponse | StatusResponse> {
         console.debug(`Using "${email}" => "${pwd}" for login`);
 
         if(email === "user@test.com") {
@@ -188,7 +200,8 @@ export class GrpcClient {
         }
     }
 
-    refresh(): RefreshTokenResponse {
+    // @ts-ignore
+    async refresh(): Promise<RefreshTokenResponse> {
         let response = new RefreshTokenResponse();
         response.setMeta(this.getDummyMeta());
 
@@ -199,7 +212,7 @@ export class GrpcClient {
 
     createBill(): CreateBillResponse {
         let bill = new Bill();
-        bill.setId(uuidv4());
+        bill.setId("some-bill-id");
         bill.setPdfUrl("/some/url.pdf");
         bill.setCreatedAt(this.getDummyTimestamp());
         bill.setTaxNumber("tax-number");
@@ -217,7 +230,8 @@ export class GrpcClient {
 
     /* Dashboard service */
 
-    getDashboardKPIs(): DashboardKpiResponse {
+    // @ts-ignore
+    async getDashboardKPIs(): Promise<DashboardKpiResponse> {
         let kpi = new KPI();
         kpi.setName(Name.NODES);
         kpi.setValue(new google_protobuf_any_pb.Any());
@@ -231,7 +245,8 @@ export class GrpcClient {
 
     /* Host service */
 
-    getHosts(): GetHostsResponse {
+    // @ts-ignore
+    async getHosts(): Promise<GetHostsResponse> {
         let response = new GetHostsResponse();
         response.setMeta(this.getDummyMeta());
         response.addHosts(this.getDummyHost());
@@ -239,21 +254,24 @@ export class GrpcClient {
         return response
     }
 
-    createHost(): CreateHostResponse {
+    // @ts-ignore
+    async createHost(): Promise<CreateHostResponse> {
         let response = new CreateHostResponse();
         response.setMeta(this.getDummyMeta());
 
         return response
     }
 
-    updateHost(): UpdateHostResponse {
+    // @ts-ignore
+    async updateHost(): Promise<UpdateHostResponse> {
         let response = new UpdateHostResponse();
         response.setMeta(this.getDummyMeta());
 
         return response
     }
 
-    deleteHost(): DeleteHostResponse {
+    // @ts-ignore
+    async deleteHost(): Promise<DeleteHostResponse> {
         let response = new DeleteHostResponse();
         response.setMeta(this.getDummyMeta());
 
@@ -262,11 +280,12 @@ export class GrpcClient {
 
     /* Host provision service */
 
-    getHostProvision(): GetHostProvisionResponse {
+    // @ts-ignore
+    async getHostProvision(): Promise<GetHostProvisionResponse> {
         let provision = new HostProvision();
         provision.setId("abcdefgh");
-        provision.setOrgId(uuidv4());
-        provision.setHostId(uuidv4());
+        provision.setOrgId(this.getDummyUuid());
+        provision.setHostId(this.getDummyUuid());
         provision.setInstallCmd("install cmd");
         provision.setCreatedAt(this.getDummyTimestamp());
         provision.setClaimedAt(this.getDummyTimestamp());
@@ -278,7 +297,8 @@ export class GrpcClient {
         return response
     }
 
-    createHostProvision(): CreateHostProvisionResponse {
+    // @ts-ignore
+    async createHostProvision(): Promise<CreateHostProvisionResponse> {
         let response = new CreateHostProvisionResponse();
         response.setMeta(this.getDummyMeta());
 
@@ -287,7 +307,8 @@ export class GrpcClient {
 
     /* Node service */
 
-    getNode(): GetNodeResponse {
+    // @ts-ignore
+    async getNode(): Promise<GetNodeResponse> {
         let response = new GetNodeResponse();
         response.setMeta(this.getDummyMeta());
         response.setNodesList([this.getDummyNode()]);
@@ -295,14 +316,16 @@ export class GrpcClient {
         return response
     }
 
-    createNode(): CreateNodeResponse {
+    // @ts-ignore
+    async createNode(): Promise<CreateNodeResponse> {
         let response = new CreateNodeResponse();
         response.setMeta(this.getDummyMeta());
 
         return response
     }
 
-    updateNode(): UpdateNodeResponse {
+    // @ts-ignore
+    async updateNode(): Promise<UpdateNodeResponse> {
         let response = new UpdateNodeResponse();
         response.setMeta(this.getDummyMeta());
 
@@ -311,9 +334,10 @@ export class GrpcClient {
 
     /* Organization service */
 
-    getOrganizations(): GetOrganizationsResponse {
+    // @ts-ignore
+    async getOrganizations(): Promise<GetOrganizationsResponse> {
         let organization = new Organization();
-        organization.setId(uuidv4());
+        organization.setId(this.getDummyUuid());
         organization.setName("ThisGroup");
         organization.setPersonal(true);
         organization.setMemberCount(1);
@@ -327,21 +351,24 @@ export class GrpcClient {
         return response
     }
 
-    createOrganization(): CreateOrganizationResponse {
+    // @ts-ignore
+    async createOrganization(): Promise<CreateOrganizationResponse> {
         let response = new CreateOrganizationResponse();
         response.setMeta(this.getDummyMeta());
 
         return response
     }
 
-    updateOrganization(): UpdateOrganizationResponse {
+    // @ts-ignore
+    async updateOrganization(): Promise<UpdateOrganizationResponse> {
         let response = new UpdateOrganizationResponse();
         response.setMeta(this.getDummyMeta());
 
         return response
     }
 
-    deleteOrganization(): DeleteOrganizationResponse {
+    // @ts-ignore
+    async deleteOrganization(): Promise<DeleteOrganizationResponse> {
         let response = new DeleteOrganizationResponse();
         response.setMeta(this.getDummyMeta());
 
@@ -350,9 +377,10 @@ export class GrpcClient {
 
     /* User service */
 
-    getUser(): GetUserResponse {
+    // @ts-ignore
+    async getUser(): Promise<GetUserResponse> {
         let user = new User();
-        user.setId(uuidv4());
+        user.setId(this.getDummyUuid());
         user.setFirstName("max");
         user.setLastName("Mustermann");
         user.setEmail("max@mustermann.at");
@@ -366,21 +394,26 @@ export class GrpcClient {
         return response
     }
 
-    createUser(): CreateUserResponse {
+    // @ts-ignore
+    async createUser(user: UIUser): Promise<CreateUserResponse> {
+        console.log(`using user data: ${user}`);
+
         let response = new CreateUserResponse();
         response.setMeta(this.getDummyMeta());
 
         return response
     }
 
-    upsertConfiguration(): UpsertConfigurationResponse {
+    // @ts-ignore
+    async upsertConfiguration(): Promise<UpsertConfigurationResponse> {
         let response = new UpsertConfigurationResponse();
         response.setMeta(this.getDummyMeta());
 
         return response
     }
 
-    getConfiguration(): GetConfigurationResponse {
+    // @ts-ignore
+    async getConfiguration(): Promise<GetConfigurationResponse> {
         let response = new GetConfigurationResponse();
         response.setMeta(this.getDummyMeta());
 
@@ -389,7 +422,8 @@ export class GrpcClient {
 
     /* Update service */
 
-    getUpdates(): [GetUpdatesResponse] {
+    // @ts-ignore
+    async getUpdates(): Promise<[GetUpdatesResponse]> {
         let update = new InfoUpdate();
         update.setNode(this.getDummyNode());
 
