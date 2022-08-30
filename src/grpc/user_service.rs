@@ -1,5 +1,9 @@
 use crate::grpc::blockjoy_ui::user_service_server::UserService;
-use crate::grpc::blockjoy_ui::{response_meta, CreateUserRequest, CreateUserResponse, GetConfigurationRequest, GetConfigurationResponse, GetUserRequest, GetUserResponse, UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser, ResponseMeta};
+use crate::grpc::blockjoy_ui::{
+    response_meta, CreateUserRequest, CreateUserResponse, GetConfigurationRequest,
+    GetConfigurationResponse, GetUserRequest, GetUserResponse, ResponseMeta,
+    UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
+};
 use crate::grpc::helpers::success_response_meta;
 use crate::models::{Token, TokenRole, User, UserRequest};
 use crate::server::DbPool;
@@ -54,13 +58,13 @@ impl UserService for UserServiceImpl {
                     status: i32::from(response_meta::Status::Success),
                     origin_request_id: inner.meta.unwrap().id,
                     messages: vec![new_user.id.to_string()],
-                    pagination: None
+                    pagination: None,
                 };
                 let response = CreateUserResponse { meta: Some(meta) };
 
                 Ok(Response::new(response))
-            },
-            Err(e) => Err(Status::from(e))
+            }
+            Err(e) => Err(Status::from(e)),
         }
     }
 
