@@ -1,11 +1,7 @@
 use crate::grpc::blockjoy_ui::user_service_server::UserService;
-use crate::grpc::blockjoy_ui::{
-    response_meta, CreateUserRequest, CreateUserResponse, GetConfigurationRequest,
-    GetConfigurationResponse, GetUserRequest, GetUserResponse, UpsertConfigurationRequest,
-    UpsertConfigurationResponse, User as GrpcUser,
-};
+use crate::grpc::blockjoy_ui::{response_meta, CreateUserRequest, CreateUserResponse, GetConfigurationRequest, GetConfigurationResponse, GetUserRequest, GetUserResponse, UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser, ResponseMeta};
 use crate::grpc::helpers::success_response_meta;
-use crate::models::Token;
+use crate::models::{Token, TokenRole, User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 
@@ -42,9 +38,30 @@ impl UserService for UserServiceImpl {
 
     async fn create(
         &self,
-        _request: Request<CreateUserRequest>,
+        request: Request<CreateUserRequest>,
     ) -> Result<Response<CreateUserResponse>, Status> {
-        Err(Status::unimplemented(""))
+        let inner = request.into_inner();
+        let user = inner.user.unwrap();
+        let user_request = UserRequest {
+            email: user.email.unwrap(),
+            password: inner.password,
+            password_confirm: inner.password_confirmation,
+        };
+
+        match User::create(user_request, &self.db, Some(TokenRole::User)).await {
+            Ok(new_user) => {
+                let meta = ResponseMeta {
+                    status: i32::from(response_meta::Status::Success),
+                    origin_request_id: inner.meta.unwrap().id,
+                    messages: vec![new_user.id.to_string()],
+                    pagination: None
+                };
+                let response = CreateUserResponse { meta: Some(meta) };
+
+                Ok(Response::new(response))
+            },
+            Err(e) => Err(Status::from(e))
+        }
     }
 
     async fn upsert_configuration(
