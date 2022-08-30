@@ -17,6 +17,8 @@ Google::Protobuf::DescriptorPool.generated_pool.build do
     add_message "blockjoy.api.ui_v1.CreateUserRequest" do
       optional :meta, :message, 1, "blockjoy.api.ui_v1.RequestMeta"
       optional :user, :message, 2, "blockjoy.api.ui_v1.User"
+      optional :password, :string, 3
+      optional :password_confirmation, :string, 4
     end
     add_message "blockjoy.api.ui_v1.CreateUserResponse" do
       optional :meta, :message, 1, "blockjoy.api.ui_v1.ResponseMeta"

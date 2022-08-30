@@ -16,6 +16,8 @@ message GetUserResponse {
 message CreateUserRequest {
   RequestMeta meta = 1;
   User user = 2;
+  string password = 3;
+  string password_confirmation = 4;
 }
 
 message CreateUserResponse {

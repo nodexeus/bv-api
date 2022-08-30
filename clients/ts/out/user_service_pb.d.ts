@@ -60,6 +60,12 @@ export class CreateUserRequest extends jspb.Message {
   hasUser(): boolean;
   clearUser(): CreateUserRequest;
 
+  getPassword(): string;
+  setPassword(value: string): CreateUserRequest;
+
+  getPasswordConfirmation(): string;
+  setPasswordConfirmation(value: string): CreateUserRequest;
+
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): CreateUserRequest.AsObject;
   static toObject(includeInstance: boolean, msg: CreateUserRequest): CreateUserRequest.AsObject;
@@ -72,6 +78,8 @@ export namespace CreateUserRequest {
   export type AsObject = {
     meta?: common_pb.RequestMeta.AsObject,
     user?: common_pb.User.AsObject,
+    password: string,
+    passwordConfirmation: string,
   }
 }
 
