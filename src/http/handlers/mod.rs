@@ -38,32 +38,6 @@ pub async fn update_pwd(
     Ok((StatusCode::OK, Json(user)))
 }
 
-pub async fn whoami(
-    Extension(db): Extension<DbPool>,
-    Extension(token): Extension<Token>,
-) -> ApiResult<impl IntoResponse> {
-    match token.user_id {
-        Some(_) => {
-            let user = Token::get_user_for_token(token.token, &db).await.unwrap();
-            return Ok((StatusCode::OK, Json(json!(user))));
-        }
-        _ => tracing::debug!("No user assigned for token"),
-    }
-
-    match token.host_id {
-        Some(_) => {
-            let host = Token::get_host_for_token(token.token, &db).await.unwrap();
-            return Ok((StatusCode::OK, Json(json!(host))));
-        }
-        _ => tracing::debug!("No host assigned for token"),
-    }
-
-    Ok((
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(json!("No resource assigned to token")),
-    ))
-}
-
 pub async fn get_block_height(Extension(db): Extension<DbPool>) -> ApiResult<impl IntoResponse> {
     let info = Info::get_info(db.as_ref()).await?;
     Ok((StatusCode::OK, Json(info.block_height)))
