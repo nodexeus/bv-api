@@ -3,6 +3,7 @@ pub mod command_flow;
 pub mod convert;
 pub mod helpers;
 pub mod host_service;
+pub mod organization_service;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 pub mod blockjoy {
@@ -19,7 +20,9 @@ use crate::auth::{unauthenticated_paths::UnauthenticatedPaths, Authorization};
 use crate::grpc::authentication_service::AuthenticationServiceImpl;
 use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationServiceServer;
+use crate::grpc::blockjoy_ui::organization_service_server::OrganizationServiceServer;
 use crate::grpc::command_flow::CommandFlowServerImpl;
+use crate::grpc::organization_service::OrganizationServiceImpl;
 use crate::server::DbPool;
 use axum::Extension;
 use blockjoy::hosts_server::HostsServer;
@@ -61,6 +64,7 @@ pub async fn server(
     let c_service = CommandFlowServer::new(CommandFlowServerImpl::new(db.clone()));
     let ui_auth_service =
         AuthenticationServiceServer::new(AuthenticationServiceImpl::new(db.clone()));
+    let ui_org_service = OrganizationServiceServer::new(OrganizationServiceImpl::new(db.clone()));
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
         .layer(Extension(db.clone()))
@@ -73,4 +77,5 @@ pub async fn server(
         .add_service(h_service)
         .add_service(c_service)
         .add_service(ui_auth_service)
+        .add_service(ui_org_service)
 }
