@@ -2,12 +2,13 @@ use crate::grpc::blockjoy_ui::organization_service_server::OrganizationService;
 use crate::grpc::blockjoy_ui::{
     response_meta, CreateOrganizationRequest, CreateOrganizationResponse,
     DeleteOrganizationRequest, DeleteOrganizationResponse, GetOrganizationsRequest,
-    GetOrganizationsResponse, OrganizationMemberRequest, OrganizationMemberResponse, ResponseMeta,
-    UpdateOrganizationRequest, UpdateOrganizationResponse,
+    GetOrganizationsResponse, Organization, OrganizationMemberRequest, OrganizationMemberResponse,
+    ResponseMeta, UpdateOrganizationRequest, UpdateOrganizationResponse, User as GrpcUiUser,
 };
 use crate::models::{Org, OrgRequest, Token};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 pub struct OrganizationServiceImpl {
     db: DbPool,
@@ -23,9 +24,28 @@ impl OrganizationServiceImpl {
 impl OrganizationService for OrganizationServiceImpl {
     async fn get(
         &self,
-        _request: Request<GetOrganizationsRequest>,
+        request: Request<GetOrganizationsRequest>,
     ) -> Result<Response<GetOrganizationsResponse>, Status> {
-        Err(Status::unimplemented(""))
+        let db_token = request.extensions().get::<Token>().unwrap();
+        let user_id = db_token.user_id.unwrap();
+        let inner = request.into_inner();
+        let organizations: Vec<Organization> = Org::find_all_by_user(user_id, &self.db)
+            .await?
+            .iter()
+            .map(Organization::from)
+            .collect();
+        let response_meta = ResponseMeta {
+            status: i32::from(response_meta::Status::Success),
+            origin_request_id: inner.meta.unwrap().id,
+            messages: vec![],
+            pagination: None,
+        };
+        let inner = GetOrganizationsResponse {
+            meta: Some(response_meta),
+            organizations,
+        };
+
+        Ok(Response::new(inner))
     }
 
     async fn create(
@@ -38,38 +58,110 @@ impl OrganizationService for OrganizationServiceImpl {
         let org_request = OrgRequest {
             name: inner.organization.unwrap().name.unwrap(),
         };
-        let new_org = Org::create(&org_request, &user_id, &self.db).await?;
-        let response_meta = ResponseMeta {
-            status: i32::from(response_meta::Status::Success),
-            origin_request_id: inner.meta.unwrap().id,
-            messages: vec![new_org.id.to_string()],
-            pagination: None,
-        };
-        let inner = CreateOrganizationResponse {
-            meta: Some(response_meta),
-        };
 
-        Ok(Response::new(inner))
+        match Org::create(&org_request, &user_id, &self.db).await {
+            Ok(new_org) => {
+                let response_meta = ResponseMeta {
+                    status: i32::from(response_meta::Status::Success),
+                    origin_request_id: inner.meta.unwrap().id,
+                    messages: vec![new_org.id.to_string()],
+                    pagination: None,
+                };
+                let inner = CreateOrganizationResponse {
+                    meta: Some(response_meta),
+                };
+
+                Ok(Response::new(inner))
+            }
+            Err(e) => Err(Status::from(e)),
+        }
     }
 
     async fn update(
         &self,
-        _request: Request<UpdateOrganizationRequest>,
+        request: Request<UpdateOrganizationRequest>,
     ) -> Result<Response<UpdateOrganizationResponse>, Status> {
-        Err(Status::unimplemented(""))
+        let db_token = request.extensions().get::<Token>().unwrap();
+        let user_id = db_token.user_id.unwrap();
+        let inner = request.into_inner();
+        let org = inner.organization.unwrap();
+        let update = OrgRequest {
+            name: org.name.unwrap(),
+        };
+
+        match Org::update(Uuid::from(org.id.unwrap()), update, &user_id, &self.db).await {
+            Ok(_) => {
+                let response_meta = ResponseMeta {
+                    status: i32::from(response_meta::Status::Success),
+                    origin_request_id: inner.meta.unwrap().id,
+                    messages: vec![],
+                    pagination: None,
+                };
+                let inner = UpdateOrganizationResponse {
+                    meta: Some(response_meta),
+                };
+
+                Ok(Response::new(inner))
+            }
+            Err(e) => Err(Status::from(e)),
+        }
     }
 
     async fn delete(
         &self,
-        _request: Request<DeleteOrganizationRequest>,
+        request: Request<DeleteOrganizationRequest>,
     ) -> Result<Response<DeleteOrganizationResponse>, Status> {
-        Err(Status::unimplemented(""))
+        let db_token = request.extensions().get::<Token>().unwrap();
+        let user_id = db_token.user_id.unwrap();
+        let inner = request.into_inner();
+        let org_id = Uuid::from(inner.id.unwrap());
+
+        if Org::is_member(&user_id, &org_id, &self.db).await? {
+            match Org::delete(org_id, &self.db).await {
+                Ok(_) => {
+                    let response_meta = ResponseMeta {
+                        status: i32::from(response_meta::Status::Success),
+                        origin_request_id: inner.meta.unwrap().id,
+                        messages: vec![],
+                        pagination: None,
+                    };
+                    let inner = DeleteOrganizationResponse {
+                        meta: Some(response_meta),
+                    };
+
+                    Ok(Response::new(inner))
+                }
+                Err(e) => Err(Status::from(e)),
+            }
+        } else {
+            Err(Status::permission_denied(
+                "User is not member of given organization",
+            ))
+        }
     }
 
     async fn members(
         &self,
-        _request: Request<OrganizationMemberRequest>,
+        request: Request<OrganizationMemberRequest>,
     ) -> Result<Response<OrganizationMemberResponse>, Status> {
-        Err(Status::unimplemented(""))
+        let inner = request.into_inner();
+        let org_id = Uuid::from(inner.id.unwrap());
+        let users = Org::find_all_member_users(&org_id, &self.db)
+            .await?
+            .iter()
+            .map(GrpcUiUser::from)
+            .collect();
+        let response_meta = ResponseMeta {
+            status: i32::from(response_meta::Status::Success),
+            origin_request_id: inner.meta.unwrap().id,
+            messages: vec![],
+            pagination: None,
+        };
+        let inner = OrganizationMemberResponse {
+            meta: Some(response_meta),
+            users,
+        };
+
+        Ok(Response::new(inner))
     }
 }
