@@ -1,15 +1,13 @@
 pub mod from {
     use crate::errors::ApiError;
     use crate::grpc::blockjoy::{
-        command, node_command, Command as GrpcCommand, CommandMeta, NodeCommand, NodeDelete,
-        NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
+        command, node_command, Command as GrpcCommand, CommandMeta, HostInfo, NodeCommand,
+        NodeDelete, NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
     };
     use crate::grpc::blockjoy_ui::{Organization, User as GrpcUiUser, Uuid as GrpcUiUuid};
-    use crate::grpc::blockjoy_ui::{User as GrpcUser, Uuid as GrpcUiUuid};
     use crate::grpc::helpers::pb_current_timestamp;
     use crate::models::HostSelectiveUpdate;
     use crate::models::{Command as DbCommand, HostCmd, Org, User};
-    use crate::models::{Command as DbCommand, HostCmd, User};
     use anyhow::anyhow;
     use prost_types::Timestamp;
     use std::str::FromStr;
@@ -199,19 +197,17 @@ pub mod from {
         }
     }
 
-    impl From<User> for GrpcUser {
+    impl From<User> for GrpcUiUser {
         fn from(user: User) -> Self {
-            let timestamp = Timestamp {
-                seconds: user.created_at.timestamp(),
-                nanos: user.created_at.timestamp_nanos() as i32,
-            };
-
             Self {
                 id: Some(GrpcUiUuid::from(user.id)),
                 email: Some(user.email),
                 first_name: None,
                 last_name: None,
-                created_at: Some(timestamp),
+                created_at: Some(Timestamp {
+                    seconds: user.created_at.timestamp(),
+                    nanos: user.created_at.timestamp_nanos() as i32,
+                }),
                 updated_at: None,
             }
         }
@@ -266,23 +262,6 @@ pub mod into {
             let info = inner.info.unwrap();
 
             (id, info)
-        }
-    }
-
-    impl From<HostSelectiveUpdate> for HostInfo {
-        fn from(update: HostSelectiveUpdate) -> HostInfo {
-            HostInfo {
-                id: None,
-                name: update.name,
-                version: update.version,
-                location: update.location,
-                cpu_count: update.cpu_count,
-                mem_size: update.mem_size,
-                disk_size: update.disk_size,
-                os: update.os,
-                os_version: update.os_version,
-                ip: None,
-            }
         }
     }
 }
