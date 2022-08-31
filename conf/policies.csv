@@ -1,6 +1,8 @@
 p, master_admin, /blockjoy.api.v1.Hosts/InfoUpdate, POST
 p, master_admin, /blockjoy.api.v1.CommandFlow/Commands, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/Refresh, POST
+p, master_admin, /blockjoy.api.ui_v1.UserService/Get, POST
+p, master_admin, /blockjoy.api.ui_v1.UserService/Create, POST
 
 g, admin, master_admin
 g, guest, outbound
