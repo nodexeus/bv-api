@@ -40,6 +40,16 @@ message DeleteOrganizationResponse {
   ResponseMeta meta = 1;
 }
 
+message OrganizationMemberRequest {
+  RequestMeta meta = 1;
+  Uuid id = 2;
+}
+
+message OrganizationMemberResponse {
+  ResponseMeta meta = 1;
+  repeated User users = 2;
+}
+
 /* Manage organizations */
 service OrganizationService {
   /* Get all the organizations for a user. All users automatically get a private (internal) organization */
@@ -50,4 +60,6 @@ service OrganizationService {
   rpc Update(UpdateOrganizationRequest) returns (UpdateOrganizationResponse) {}
   /* Delete a single organization */
   rpc Delete(DeleteOrganizationRequest) returns (DeleteOrganizationResponse) {}
+  /* Retrieve organization members */
+  rpc Members(OrganizationMemberRequest) returns (OrganizationMemberResponse) {}
 }
