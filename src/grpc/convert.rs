@@ -181,27 +181,14 @@ pub mod from {
 
     impl From<Org> for Organization {
         fn from(org: Org) -> Self {
-            Self {
-                id: Some(GrpcUiUuid::from(org.id)),
-                name: Some(org.name.clone()),
-                personal: Some(org.is_personal),
-                member_count: org.member_count,
-                created_at: Some(Timestamp {
-                    seconds: org.created_at.timestamp(),
-                    nanos: org.created_at.timestamp_nanos() as i32,
-                }),
-                updated_at: Some(Timestamp {
-                    seconds: org.updated_at.timestamp(),
-                    nanos: org.updated_at.timestamp_nanos() as i32,
-                }),
-            }
+            Organization::from(&org)
         }
     }
 
     impl From<&Org> for Organization {
         fn from(org: &Org) -> Self {
             Self {
-                id: Some(GrpcUiUuid::from(org.id.clone())),
+                id: Some(GrpcUiUuid::from(org.id)),
                 name: Some(org.name.clone()),
                 personal: Some(org.is_personal),
                 member_count: org.member_count,
