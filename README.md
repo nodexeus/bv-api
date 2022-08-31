@@ -75,11 +75,3 @@ graph TD;
     Stopped --> Deleting --> Deleted;
     Stopped --> Snapshotting --> Starting;
 ```
-
-## Compile Rust code
-
-```bash
-$ cd compile
-$ rm -r target; cargo build
-$ find target/debug/build -name blockjoy.api.v1.rs -exec vi {} +
-```
