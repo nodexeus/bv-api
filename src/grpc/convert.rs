@@ -5,8 +5,11 @@ pub mod from {
         NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
     };
     use crate::grpc::blockjoy_ui::{Organization, User as GrpcUiUser, Uuid as GrpcUiUuid};
+    use crate::grpc::blockjoy_ui::{User as GrpcUser, Uuid as GrpcUiUuid};
     use crate::grpc::helpers::pb_current_timestamp;
+    use crate::models::HostSelectiveUpdate;
     use crate::models::{Command as DbCommand, HostCmd, Org, User};
+    use crate::models::{Command as DbCommand, HostCmd, User};
     use anyhow::anyhow;
     use prost_types::Timestamp;
     use std::str::FromStr;
@@ -21,6 +24,23 @@ pub mod from {
             match Uuid::parse_str(s) {
                 Ok(_) => Ok(Self { value: s.into() }),
                 Err(e) => Err(ApiError::UnexpectedError(anyhow!(e))),
+            }
+        }
+    }
+
+    impl From<HostSelectiveUpdate> for HostInfo {
+        fn from(update: HostSelectiveUpdate) -> HostInfo {
+            HostInfo {
+                id: None,
+                name: update.name,
+                version: update.version,
+                location: update.location,
+                cpu_count: update.cpu_count,
+                mem_size: update.mem_size,
+                disk_size: update.disk_size,
+                os: update.os,
+                os_version: update.os_version,
+                ip: None,
             }
         }
     }
@@ -179,6 +199,24 @@ pub mod from {
         }
     }
 
+    impl From<User> for GrpcUser {
+        fn from(user: User) -> Self {
+            let timestamp = Timestamp {
+                seconds: user.created_at.timestamp(),
+                nanos: user.created_at.timestamp_nanos() as i32,
+            };
+
+            Self {
+                id: Some(GrpcUiUuid::from(user.id)),
+                email: Some(user.email),
+                first_name: None,
+                last_name: None,
+                created_at: Some(timestamp),
+                updated_at: None,
+            }
+        }
+    }
+
     impl From<Org> for Organization {
         fn from(org: Org) -> Self {
             Organization::from(&org)
@@ -207,7 +245,6 @@ pub mod from {
 
 pub mod into {
     use crate::grpc::blockjoy::{HostInfo, HostInfoUpdateRequest, Uuid as GrpcUuid};
-    use crate::models::HostSelectiveUpdate;
     use tonic::Request;
 
     impl ToString for GrpcUuid {

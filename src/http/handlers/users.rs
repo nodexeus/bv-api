@@ -14,14 +14,6 @@ use http::StatusCode;
 use hyper::Body;
 use uuid::Uuid;
 
-pub async fn create_user(
-    Extension(db): Extension<DbPool>,
-    Json(user): Json<UserRequest>,
-) -> ApiResult<impl IntoResponse> {
-    let user = User::create(user, db.as_ref(), None).await?;
-    Ok((StatusCode::OK, Json(user)))
-}
-
 pub async fn users_summary(Extension(db): Extension<DbPool>) -> ApiResult<impl IntoResponse> {
     let users = User::find_all_summary(db.as_ref()).await?;
     Ok((StatusCode::OK, Json(users)))
