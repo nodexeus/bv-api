@@ -12,6 +12,8 @@ p, master_admin, /blockjoy.api.ui_v1.HostService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.HostService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.HostService/Update, POST
 p, master_admin, /blockjoy.api.ui_v1.HostService/Delete, POST
+p, master_admin, /blockjoy.api.ui_v1.HostProvisionService/Get, POST
+p, master_admin, /blockjoy.api.ui_v1.HostProvisionService/Create, POST
 
 g, admin, master_admin
 g, guest, outbound
