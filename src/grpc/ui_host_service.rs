@@ -6,7 +6,7 @@ use crate::grpc::blockjoy_ui::{
     UpdateHostResponse,
 };
 use crate::grpc::helpers::success_response_meta;
-use crate::models::{Host, Token};
+use crate::models::{Host, HostSelectiveUpdate, Token};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -78,9 +78,27 @@ impl HostService for HostServiceImpl {
 
     async fn update(
         &self,
-        _request: Request<UpdateHostRequest>,
+        request: Request<UpdateHostRequest>,
     ) -> Result<Response<UpdateHostResponse>, Status> {
-        Err(Status::unimplemented(""))
+        let inner = request.into_inner();
+        let host = inner.host.unwrap();
+        let host_id = host.id.clone().unwrap();
+        let fields: HostSelectiveUpdate = host.into();
+
+        match Host::update_all(Uuid::from(host_id), fields, &self.db).await {
+            Ok(_) => {
+                let response_meta = success_response_meta(
+                    response_meta::Status::Success as i32,
+                    inner.meta.unwrap().id,
+                );
+                let response = UpdateHostResponse {
+                    meta: Some(response_meta),
+                };
+
+                Ok(Response::new(response))
+            }
+            Err(e) => Err(Status::from(e)),
+        }
     }
 
     async fn delete(

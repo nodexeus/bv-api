@@ -29,8 +29,8 @@ pub mod from {
     }
 
     impl From<HostSelectiveUpdate> for HostInfo {
-        fn from(update: HostSelectiveUpdate) -> HostInfo {
-            HostInfo {
+        fn from(update: HostSelectiveUpdate) -> Self {
+            Self {
                 id: None,
                 name: update.name,
                 version: update.version,
@@ -41,6 +41,26 @@ pub mod from {
                 os: update.os,
                 os_version: update.os_version,
                 ip: None,
+            }
+        }
+    }
+
+    impl From<GrpcHost> for HostSelectiveUpdate {
+        fn from(host: GrpcHost) -> Self {
+            Self {
+                org_id: host.org_id.map(Uuid::from),
+                name: host.name.map(String::from),
+                version: host.version.map(String::from),
+                location: host.location.map(String::from),
+                cpu_count: host.cpu_count.map(i64::from),
+                mem_size: host.mem_size.map(i64::from),
+                disk_size: host.disk_size.map(i64::from),
+                os: host.os.map(String::from),
+                os_version: host.os_version.map(String::from),
+                ip_addr: host.ip.map(String::from),
+                val_ip_addrs: None,
+                status: None,
+                token_id: None,
             }
         }
     }
