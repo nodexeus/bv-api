@@ -4,7 +4,7 @@ mod setup;
 use crate::setup::{get_admin_user, get_test_host};
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
-use api::grpc::blockjoy_ui::{GetHostsRequest, RequestMeta, Uuid as GrpcUuid};
+use api::grpc::blockjoy_ui::{get_hosts_request, GetHostsRequest, RequestMeta, Uuid as GrpcUuid};
 use setup::{server_and_client_stub, setup};
 use std::sync::Arc;
 use test_macros::*;
@@ -26,9 +26,7 @@ async fn responds_not_found_without_any_for_get() {
     let token = user.get_token(&db).await.unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
-        id: None,
-        org_id: None,
-        token: None,
+        param: None,
     };
     let mut request = Request::new(inner);
 
@@ -55,9 +53,7 @@ async fn responds_ok_with_id_for_get() {
     let token = user.get_token(&db).await.unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
-        id: Some(host_id),
-        org_id: None,
-        token: None,
+        param: Some(get_hosts_request::Param::Id(host_id)),
     };
     let mut request = Request::new(inner);
 
@@ -87,13 +83,11 @@ async fn responds_ok_with_org_id_for_get() {
         return;
     }
 
-    let org_id = Some(GrpcUuid::from(host.org_id.unwrap()));
+    let org_id = GrpcUuid::from(host.org_id.unwrap());
     let token = user.get_token(&db).await.unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
-        id: None,
-        org_id,
-        token: None,
+        param: Some(get_hosts_request::Param::OrgId(org_id)),
     };
     let mut request = Request::new(inner);
 
@@ -121,9 +115,7 @@ async fn responds_ok_with_token_for_get() {
     let token = user.get_token(&db).await.unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
-        id: None,
-        org_id: None,
-        token: Some(host_token),
+        param: Some(get_hosts_request::Param::Token(host_token)),
     };
     let mut request = Request::new(inner);
 
