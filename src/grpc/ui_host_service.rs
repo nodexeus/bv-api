@@ -85,8 +85,24 @@ impl HostService for HostServiceImpl {
 
     async fn delete(
         &self,
-        _request: Request<DeleteHostRequest>,
+        request: Request<DeleteHostRequest>,
     ) -> Result<Response<DeleteHostResponse>, Status> {
-        Err(Status::unimplemented(""))
+        let inner = request.into_inner();
+        let host_id = inner.id.unwrap();
+
+        match Host::delete(Uuid::from(host_id), &self.db).await {
+            Ok(_) => {
+                let response_meta = success_response_meta(
+                    response_meta::Status::Success as i32,
+                    inner.meta.unwrap().id,
+                );
+                let response = DeleteHostResponse {
+                    meta: Some(response_meta),
+                };
+
+                Ok(Response::new(response))
+            }
+            Err(e) => Err(Status::from(e)),
+        }
     }
 }
