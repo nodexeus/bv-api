@@ -6,9 +6,12 @@ import "common.proto";
 
 message GetHostsRequest {
   RequestMeta meta = 1;
-  optional Uuid id = 2;
-  optional Uuid org_id = 3;
-  optional string token = 4;
+
+  oneof param {
+    Uuid id = 2;
+    Uuid org_id = 3;
+    string token = 4;
+  }
 }
 
 message GetHostsResponse {
