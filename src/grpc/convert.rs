@@ -8,7 +8,7 @@ pub mod from {
         Host as GrpcHost, Organization, User as GrpcUiUser, Uuid as GrpcUiUuid,
     };
     use crate::grpc::helpers::pb_current_timestamp;
-    use crate::models::{Command as DbCommand, HostCmd, Org, User};
+    use crate::models::{Command as DbCommand, ConnectionStatus, HostCmd, HostRequest, Org, User};
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
     use prost_types::Timestamp;
@@ -61,6 +61,25 @@ pub mod from {
                 val_ip_addrs: None,
                 status: None,
                 token_id: None,
+            }
+        }
+    }
+
+    impl From<GrpcHost> for HostRequest {
+        fn from(host: GrpcHost) -> Self {
+            Self {
+                org_id: host.org_id.map(Uuid::from),
+                name: host.name.map(String::from).unwrap(),
+                version: host.version.map(String::from),
+                location: host.location.map(String::from),
+                cpu_count: host.cpu_count.map(i64::from),
+                mem_size: host.mem_size.map(i64::from),
+                disk_size: host.disk_size.map(i64::from),
+                os: host.os.map(String::from),
+                os_version: host.os_version.map(String::from),
+                ip_addr: host.ip.map(String::from).unwrap(),
+                val_ip_addrs: None,
+                status: ConnectionStatus::Online,
             }
         }
     }

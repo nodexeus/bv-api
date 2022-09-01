@@ -5,8 +5,8 @@ use crate::setup::{get_admin_user, get_test_host};
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
 use api::grpc::blockjoy_ui::{
-    get_hosts_request, DeleteHostRequest, GetHostsRequest, Host as GrpcHost, RequestMeta,
-    UpdateHostRequest, Uuid as GrpcUuid,
+    get_hosts_request, CreateHostRequest, DeleteHostRequest, GetHostsRequest, Host as GrpcHost,
+    RequestMeta, UpdateHostRequest, Uuid as GrpcUuid,
 };
 use setup::{server_and_client_stub, setup};
 use std::sync::Arc;
@@ -182,4 +182,35 @@ async fn responds_ok_with_host_for_update() {
     );
 
     assert_grpc_request! { update, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_ok_with_host_for_create() {
+    let db = Arc::new(_before_values.await);
+    let request_meta = RequestMeta {
+        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        token: None,
+        fields: vec![],
+        limit: None,
+    };
+    let host = GrpcHost {
+        name: Some("burli-bua".to_string()),
+        ip: Some("127.0.0.1".to_string()),
+        ..Default::default()
+    };
+    let user = get_admin_user(&db.clone()).await;
+    let token = user.get_token(&db).await.unwrap();
+    let inner = CreateHostRequest {
+        meta: Some(request_meta),
+        host: Some(host),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+    );
+
+    assert_grpc_request! { create, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
 }
