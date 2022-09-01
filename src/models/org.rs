@@ -1,4 +1,5 @@
 use crate::errors::{ApiError, Result};
+use crate::models::User;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
@@ -51,7 +52,7 @@ impl Org {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_user(user_id: &Uuid, db: &PgPool) -> Result<Vec<Org>> {
+    pub async fn find_all_by_user(user_id: Uuid, db: &PgPool) -> Result<Vec<Org>> {
         sqlx::query_as::<_, Self>(
             r##"
             SELECT
@@ -70,7 +71,7 @@ impl Org {
                 lower(orgs.name)
             "##,
         )
-        .bind(&user_id)
+        .bind(user_id)
         .fetch_all(db)
         .await
         .map_err(ApiError::from)
@@ -83,6 +84,21 @@ impl Org {
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
+    }
+
+    /// Returns the users of an organization
+    pub async fn find_all_member_users(org_id: &Uuid, db: &PgPool) -> Result<Vec<User>> {
+        sqlx::query_as::<_, User>(
+            r#"SELECT users.*
+                        FROM users
+                            RIGHT JOIN orgs_users ou
+                                ON users.id = ou.user_id
+                        WHERE ou.org_id = $1"#,
+        )
+        .bind(&org_id)
+        .fetch_all(db)
+        .await
+        .map_err(ApiError::from)
     }
 
     /// Checks if the user is a member

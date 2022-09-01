@@ -3,6 +3,11 @@ p, master_admin, /blockjoy.api.v1.CommandFlow/Commands, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/Refresh, POST
 p, master_admin, /blockjoy.api.ui_v1.UserService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.UserService/Create, POST
+p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Create, POST
+p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Get, POST
+p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Update, POST
+p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Delete, POST
+p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Members, POST
 
 g, admin, master_admin
 g, guest, outbound
