@@ -3,7 +3,9 @@ mod setup;
 
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy;
-use api::grpc::blockjoy::{hosts_client::HostsClient, HostInfoUpdateRequest, ProvisionHostRequest};
+use api::grpc::blockjoy::{
+    hosts_client::HostsClient, DeleteHostRequest, HostInfoUpdateRequest, ProvisionHostRequest,
+};
 use api::models::{Host, HostProvision, HostProvisionRequest, HostSelectiveUpdate};
 use setup::{get_test_host, server_and_client_stub, setup};
 use std::sync::Arc;
@@ -247,6 +249,28 @@ async fn responds_ok_for_info_update() {
     );
 
     assert_grpc_request! { info_update, request, tonic::Code::Ok, db, HostsClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_ok_for_delete() {
+    let db = Arc::new(_before_values.await);
+    let hosts = Host::find_all(&db).await.unwrap();
+    let host = hosts.first().unwrap();
+    let token = host.get_token(&db).await.unwrap();
+    let b_uuid = blockjoy::Uuid::from(host.id);
+    let inner = DeleteHostRequest {
+        request_id: Some(blockjoy::Uuid::from(Uuid::new_v4())),
+        host_id: Some(b_uuid),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+    );
+
+    assert_grpc_request! { delete, request, tonic::Code::Ok, db, HostsClient<Channel> };
 }
 
 #[before(call = "setup")]
