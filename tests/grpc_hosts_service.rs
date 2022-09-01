@@ -275,6 +275,29 @@ async fn responds_ok_for_delete() {
 
 #[before(call = "setup")]
 #[tokio::test]
+async fn responds_permission_denied_for_delete() {
+    let db = Arc::new(_before_values.await);
+    let hosts = Host::find_all(&db).await.unwrap();
+    let host = hosts.first().unwrap();
+    let request_host = hosts.last().unwrap();
+    let token = request_host.get_token(&db).await.unwrap();
+    let b_uuid = blockjoy::Uuid::from(host.id);
+    let inner = DeleteHostRequest {
+        request_id: Some(blockjoy::Uuid::from(Uuid::new_v4())),
+        host_id: Some(b_uuid),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+    );
+
+    assert_grpc_request! { delete, request, tonic::Code::PermissionDenied, db, HostsClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
 async fn can_update_host_info() {
     let db = Arc::new(_before_values.await);
     let host = get_test_host(&db).await;
