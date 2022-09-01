@@ -4,9 +4,10 @@ use crate::grpc::blockjoy_ui::{
     GetHostProvisionRequest, GetHostProvisionResponse, HostProvision as GrpcHostProvision,
 };
 use crate::grpc::helpers::success_response_meta;
-use crate::models::HostProvision;
+use crate::models::{HostProvision, HostProvisionRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 pub struct HostProvisionServiceImpl {
     db: DbPool,
@@ -45,8 +46,28 @@ impl HostProvisionService for HostProvisionServiceImpl {
 
     async fn create(
         &self,
-        _request: Request<CreateHostProvisionRequest>,
+        request: Request<CreateHostProvisionRequest>,
     ) -> Result<Response<CreateHostProvisionResponse>, Status> {
-        todo!()
+        let inner = request.into_inner();
+        let provision = inner.host_provision.unwrap();
+        let req = HostProvisionRequest {
+            org_id: Uuid::from(provision.org_id.unwrap()),
+            nodes: None,
+        };
+
+        match HostProvision::create(req, &self.db).await {
+            Ok(_) => {
+                let response_meta = success_response_meta(
+                    response_meta::Status::Success as i32,
+                    inner.meta.unwrap().id,
+                );
+                let response = CreateHostProvisionResponse {
+                    meta: Some(response_meta),
+                };
+
+                Ok(Response::new(response))
+            }
+            Err(e) => Err(Status::from(e)),
+        }
     }
 }
