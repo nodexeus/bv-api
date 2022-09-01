@@ -1,10 +1,10 @@
 use api::grpc::blockjoy::hosts_client::HostsClient;
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
+use api::grpc::blockjoy_ui::host_provision_service_client::HostProvisionServiceClient;
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
 use api::grpc::blockjoy_ui::organization_service_client::OrganizationServiceClient;
 use api::grpc::blockjoy_ui::user_service_client::UserServiceClient;
 use tonic::transport::Channel;
-use api::grpc::blockjoy_ui::host_provision_service_client::HostProvisionServiceClient;
 
 pub trait GrpcClient<T> {
     fn create(channel: Channel) -> Self;
