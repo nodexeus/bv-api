@@ -4,10 +4,12 @@ pub mod from {
         command, node_command, Command as GrpcCommand, CommandMeta, HostInfo, NodeCommand,
         NodeDelete, NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
     };
-    use crate::grpc::blockjoy_ui::{Organization, User as GrpcUiUser, Uuid as GrpcUiUuid};
+    use crate::grpc::blockjoy_ui::{
+        Host as GrpcHost, Organization, User as GrpcUiUser, Uuid as GrpcUiUuid,
+    };
     use crate::grpc::helpers::pb_current_timestamp;
-    use crate::models::HostSelectiveUpdate;
     use crate::models::{Command as DbCommand, HostCmd, Org, User};
+    use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
     use prost_types::Timestamp;
     use std::str::FromStr;
@@ -233,6 +235,36 @@ pub mod from {
                 updated_at: Some(Timestamp {
                     seconds: org.updated_at.timestamp(),
                     nanos: org.updated_at.timestamp_nanos() as i32,
+                }),
+            }
+        }
+    }
+
+    impl From<Host> for GrpcHost {
+        fn from(host: Host) -> Self {
+            GrpcHost::from(&host)
+        }
+    }
+
+    impl From<&Host> for GrpcHost {
+        fn from(host: &Host) -> Self {
+            Self {
+                id: Some(GrpcUiUuid::from(host.id)),
+                org_id: host.org_id.map(GrpcUiUuid::from),
+                name: Some(host.name.clone()),
+                version: host.version.clone().map(String::from),
+                location: host.location.clone().map(String::from),
+                cpu_count: host.cpu_count.map(i64::from),
+                mem_size: host.mem_size.map(i64::from),
+                disk_size: host.disk_size.map(i64::from),
+                os: host.os.clone().map(String::from),
+                os_version: host.os_version.clone().map(String::from),
+                ip: Some(host.ip_addr.clone()),
+                status: None,
+                nodes: vec![],
+                created_at: Some(Timestamp {
+                    seconds: host.created_at.timestamp(),
+                    nanos: host.created_at.timestamp_nanos() as i32,
                 }),
             }
         }
