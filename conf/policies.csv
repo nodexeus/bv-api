@@ -1,4 +1,5 @@
 p, master_admin, /blockjoy.api.v1.Hosts/InfoUpdate, POST
+p, master_admin, /blockjoy.api.v1.Hosts/Delete, POST
 p, master_admin, /blockjoy.api.v1.CommandFlow/Commands, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/Refresh, POST
 p, master_admin, /blockjoy.api.ui_v1.UserService/Get, POST

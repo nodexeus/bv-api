@@ -1,11 +1,11 @@
 use crate::auth::{FindableById, TokenIdentifyable};
 use crate::grpc::blockjoy::hosts_server::Hosts;
 use crate::grpc::blockjoy::{
-    HostInfoUpdateRequest, HostInfoUpdateResponse, ProvisionHostRequest, ProvisionHostResponse,
-    Uuid as GrpcUuid,
+    DeleteHostRequest, DeleteHostResponse, HostInfoUpdateRequest, HostInfoUpdateResponse,
+    ProvisionHostRequest, ProvisionHostResponse, Uuid as GrpcUuid,
 };
 use crate::grpc::convert::into::IntoData;
-use crate::models::{Host, HostProvision, HostSelectiveUpdate};
+use crate::models::{Host, HostProvision, HostSelectiveUpdate, Token};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -71,6 +71,39 @@ impl Hosts for HostsServiceImpl {
                 "Host {:?} not found. {}",
                 request_host_id, e
             ))),
+        }
+    }
+
+    async fn delete(
+        &self,
+        request: Request<DeleteHostRequest>,
+    ) -> Result<Response<DeleteHostResponse>, Status> {
+        let host_token_id = request
+            .extensions()
+            .get::<Token>()
+            .unwrap()
+            .host_id
+            .unwrap();
+        let inner = request.into_inner();
+        let host_id = Uuid::from(inner.host_id.unwrap());
+
+        if host_token_id == host_id {
+            match Host::delete(host_id, &self.db).await {
+                Ok(_) => {
+                    let response = DeleteHostResponse {
+                        messages: vec![],
+                        origin_request_id: inner.request_id,
+                    };
+
+                    Ok(Response::new(response))
+                }
+                Err(e) => Err(Status::from(e)),
+            }
+        } else {
+            Err(Status::permission_denied(format!(
+                "Not allowed to delete host '{}'",
+                host_id
+            )))
         }
     }
 }
