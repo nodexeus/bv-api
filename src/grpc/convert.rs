@@ -5,10 +5,13 @@ pub mod from {
         NodeDelete, NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
     };
     use crate::grpc::blockjoy_ui::{
-        Host as GrpcHost, Organization, User as GrpcUiUser, Uuid as GrpcUiUuid,
+        Host as GrpcHost, HostProvision as GrpcHostProvision, Organization, User as GrpcUiUser,
+        Uuid as GrpcUiUuid,
     };
     use crate::grpc::helpers::pb_current_timestamp;
-    use crate::models::{Command as DbCommand, ConnectionStatus, HostCmd, HostRequest, Org, User};
+    use crate::models::{
+        Command as DbCommand, ConnectionStatus, HostCmd, HostProvision, HostRequest, Org, User,
+    };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
     use prost_types::Timestamp;
@@ -61,6 +64,25 @@ pub mod from {
                 val_ip_addrs: None,
                 status: None,
                 token_id: None,
+            }
+        }
+    }
+
+    impl From<HostProvision> for GrpcHostProvision {
+        fn from(hp: HostProvision) -> Self {
+            Self {
+                id: Some(hp.id),
+                org_id: Some(GrpcUiUuid::from(hp.org_id)),
+                host_id: hp.host_id.map(GrpcUiUuid::from),
+                created_at: Some(Timestamp {
+                    seconds: hp.created_at.timestamp(),
+                    nanos: hp.created_at.timestamp_nanos() as i32,
+                }),
+                claimed_at: hp.claimed_at.map(|ts| Timestamp {
+                    seconds: ts.timestamp(),
+                    nanos: ts.timestamp_nanos() as i32,
+                }),
+                install_cmd: hp.install_cmd.map(String::from),
             }
         }
     }
