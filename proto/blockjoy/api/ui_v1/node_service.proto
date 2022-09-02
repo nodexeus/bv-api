@@ -20,7 +20,7 @@ message GetNodeRequest {
 
 message GetNodeResponse {
   ResponseMeta meta = 1;
-  repeated Node nodes = 2;
+  Node node = 2;
 }
 
 message UpdateNodeRequest {
