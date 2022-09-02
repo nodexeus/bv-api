@@ -27,7 +27,6 @@ async fn responds_not_found_without_any_for_get() {
     let inner = GetNodeRequest {
         meta: Some(request_meta),
         id: None,
-        org_id: None,
     };
     let mut request = Request::new(inner);
 
@@ -54,7 +53,6 @@ async fn responds_ok_with_id_for_get() {
     let inner = GetNodeRequest {
         meta: Some(request_meta),
         id: Some(GrpcUuid::from(Uuid::new_v4())),
-        org_id: None,
     };
     let mut request = Request::new(inner);
 
@@ -81,7 +79,6 @@ async fn responds_ok_with_org_id_for_get() {
     let inner = GetNodeRequest {
         meta: Some(request_meta),
         id: None,
-        org_id: Some(GrpcUuid::from(Uuid::new_v4())),
     };
     let mut request = Request::new(inner);
 
