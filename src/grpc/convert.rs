@@ -347,6 +347,7 @@ pub mod from {
             Self {
                 id: Some(GrpcUiUuid::from(node.id)),
                 org_id: Some(GrpcUiUuid::from(node.org_id)),
+                host_id: Some(GrpcUiUuid::from(node.host_id)),
                 blockchain_id: Some(GrpcUiUuid::from(node.blockchain_id)),
                 name: node.name.clone().map(String::from),
                 // TODO: get node groups
@@ -377,6 +378,7 @@ pub mod from {
             Self {
                 id: None,
                 org_id: Some(GrpcUiUuid::from(req.org_id)),
+                host_id: Some(GrpcUiUuid::from(req.host_id)),
                 blockchain_id: Some(GrpcUiUuid::from(req.blockchain_id)),
                 name: req.name.clone().map(String::from),
                 // TODO
@@ -405,19 +407,19 @@ pub mod from {
     impl From<GrpcNode> for NodeCreateRequest {
         fn from(node: GrpcNode) -> Self {
             Self {
-                org_id: node.org_id.map(Uuid::from).unwrap(),
-                host_id: node.host_id.map(Uuid::from).unwrap(),
+                org_id: node.org_id.map(Uuid::from).unwrap_or_default(),
+                host_id: node.host_id.map(Uuid::from).unwrap_or_default(),
                 name: node.name.map(String::from),
                 groups: Some(node.groups.join(",")),
                 version: node.version.map(String::from),
                 ip_addr: node.ip.map(String::from),
-                blockchain_id: node.blockchain_id.map(Uuid::from).unwrap(),
-                node_type: NodeType::from(node.r#type.unwrap()),
+                blockchain_id: node.blockchain_id.map(Uuid::from).unwrap_or_default(),
+                node_type: NodeType::from(node.r#type.unwrap_or_default()),
                 address: node.address.map(String::from),
                 wallet_address: node.wallet_address.map(String::from),
                 block_height: node.block_height.map(i64::from),
                 node_data: node.node_data.map(Value::from),
-                chain_status: NodeChainStatus::from(node.status.unwrap()),
+                chain_status: NodeChainStatus::from(node.status.unwrap_or_default()),
                 sync_status: NodeSyncStatus::Unknown,
                 staking_status: Some(NodeStakingStatus::Unknown),
                 container_status: ContainerStatus::Unknown,

@@ -165,7 +165,6 @@ async fn responds_not_found_for_provision() {
         info: Some(host_info),
         validator_ips: vec![],
         org_id: None,
-        token: "".into(),
         status: 0,
     };
     let request = Request::new(inner);
@@ -209,7 +208,6 @@ async fn responds_ok_for_provision() {
         info: Some(host_info),
         validator_ips: vec![],
         org_id: None,
-        token: "".into(),
         status: 0,
     };
     let request = Request::new(inner);

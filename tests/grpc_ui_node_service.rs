@@ -118,9 +118,52 @@ async fn responds_ok_with_valid_data_for_create() {
         .id;
     let node = GrpcNode {
         id: None,
-        host_id: Some(host.id),
+        host_id: Some(GrpcUuid::from(host.id)),
         org_id: Some(GrpcUuid::from(org_id)),
         blockchain_id: Some(GrpcUuid::from(blockchain.id)),
+        name: None,
+        status: Some(node::NodeStatus::UndefinedApplicationStatus as i32),
+        address: None,
+        r#type: Some(node::NodeType::Api as i32),
+        version: None,
+        wallet_address: None,
+        block_height: None,
+        node_data: None,
+        ip: None,
+        created_at: None,
+        updated_at: None,
+        groups: vec![],
+    };
+    let token = user.get_token(&db).await.unwrap();
+    let inner = CreateNodeRequest {
+        meta: Some(request_meta),
+        node: Some(node),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+    );
+
+    assert_grpc_request! { create, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_internal_with_invalid_data_for_create() {
+    let db = Arc::new(_before_values.await);
+    let request_meta = RequestMeta {
+        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        token: None,
+        fields: vec![],
+        limit: None,
+    };
+    let node = GrpcNode {
+        id: None,
+        host_id: None,
+        org_id: None,
+        blockchain_id: None,
         name: None,
         status: Some(node::NodeStatus::UndefinedApplicationStatus as i32),
         address: None,
@@ -147,5 +190,5 @@ async fn responds_ok_with_valid_data_for_create() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
-    assert_grpc_request! { create, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
+    assert_grpc_request! { create, request, tonic::Code::Internal, db, NodeServiceClient<Channel> };
 }
