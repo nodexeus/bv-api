@@ -16,7 +16,6 @@ message CreateNodeResponse {
 message GetNodeRequest {
   RequestMeta meta = 1;
   optional Uuid id = 2;
-  optional Uuid org_id = 3;
 }
 
 message GetNodeResponse {
