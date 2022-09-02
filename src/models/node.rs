@@ -322,14 +322,14 @@ pub struct NodeCreateRequest {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeInfo {
-    version: Option<String>,
-    ip_addr: Option<String>,
-    block_height: Option<i64>,
-    node_data: Option<serde_json::Value>,
-    chain_status: Option<NodeChainStatus>,
-    sync_status: Option<NodeSyncStatus>,
-    staking_status: Option<NodeStakingStatus>,
-    container_status: Option<ContainerStatus>,
+    pub version: Option<String>,
+    pub ip_addr: Option<String>,
+    pub block_height: Option<i64>,
+    pub node_data: Option<serde_json::Value>,
+    pub chain_status: Option<NodeChainStatus>,
+    pub sync_status: Option<NodeSyncStatus>,
+    pub staking_status: Option<NodeStakingStatus>,
+    pub container_status: Option<ContainerStatus>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]

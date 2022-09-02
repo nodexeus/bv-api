@@ -12,8 +12,8 @@ pub mod from {
     use crate::grpc::helpers::pb_current_timestamp;
     use crate::models::{
         Command as DbCommand, ConnectionStatus, ContainerStatus, HostCmd, HostProvision,
-        HostRequest, Node, NodeChainStatus, NodeCreateRequest, NodeStakingStatus, NodeSyncStatus,
-        NodeType, Org, User,
+        HostRequest, Node, NodeChainStatus, NodeCreateRequest, NodeInfo, NodeStakingStatus,
+        NodeSyncStatus, NodeType, Org, User,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
@@ -423,6 +423,21 @@ pub mod from {
                 sync_status: NodeSyncStatus::Unknown,
                 staking_status: Some(NodeStakingStatus::Unknown),
                 container_status: ContainerStatus::Unknown,
+            }
+        }
+    }
+
+    impl From<GrpcNode> for NodeInfo {
+        fn from(node: GrpcNode) -> Self {
+            Self {
+                version: node.version,
+                ip_addr: node.ip,
+                block_height: node.block_height,
+                node_data: node.node_data.map(Value::from),
+                chain_status: node.status.map(NodeChainStatus::from),
+                sync_status: None,
+                staking_status: None,
+                container_status: None,
             }
         }
     }

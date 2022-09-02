@@ -4,7 +4,7 @@ use crate::grpc::blockjoy_ui::{
     Node as GrpcNode, ResponseMeta, UpdateNodeRequest, UpdateNodeResponse,
 };
 use crate::grpc::helpers::success_response_meta;
-use crate::models::Node;
+use crate::models::{Node, NodeInfo};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -78,8 +78,26 @@ impl NodeService for NodeServiceImpl {
 
     async fn update(
         &self,
-        _request: Request<UpdateNodeRequest>,
+        request: Request<UpdateNodeRequest>,
     ) -> Result<Response<UpdateNodeResponse>, Status> {
-        todo!()
+        let inner = request.into_inner();
+        let node = inner.node.unwrap();
+        let node_id = Uuid::from(node.id.clone().unwrap());
+        let fields: NodeInfo = node.into();
+
+        match Node::update_info(&node_id, &fields, &self.db).await {
+            Ok(_) => {
+                let response_meta = success_response_meta(
+                    response_meta::Status::Success as i32,
+                    inner.meta.unwrap().id,
+                );
+                let response = UpdateNodeResponse {
+                    meta: Some(response_meta),
+                };
+
+                Ok(Response::new(response))
+            }
+            Err(e) => Err(Status::from(e)),
+        }
     }
 }
