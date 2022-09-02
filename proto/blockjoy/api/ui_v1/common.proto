@@ -231,3 +231,9 @@ message UserConfigurationParameter {
   string name = 1;
   google.protobuf.Any value = 2;
 }
+
+/* Generic parameter key/value pair */
+message Parameter {
+  string name = 1;
+  google.protobuf.Any value = 2;
+}
