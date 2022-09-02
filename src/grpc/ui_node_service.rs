@@ -34,7 +34,7 @@ impl NodeService for NodeServiceImpl {
                 match Node::find_by_id(&node_id, &self.db).await {
                     Ok(node) => {
                         let response_meta = success_response_meta(
-                            response_meta::Status::Success as i32,
+                            response_meta::Status::Success.into(),
                             inner.meta.unwrap().id,
                         );
                         let response = GetNodeResponse {
@@ -61,7 +61,7 @@ impl NodeService for NodeServiceImpl {
         match Node::create(&fields, &self.db).await {
             Ok(node) => {
                 let response_meta = ResponseMeta {
-                    status: response_meta::Status::Success as i32,
+                    status: response_meta::Status::Success.into(),
                     origin_request_id: inner.meta.unwrap().id,
                     messages: vec![node.id.to_string()],
                     pagination: None,
@@ -88,7 +88,7 @@ impl NodeService for NodeServiceImpl {
         match Node::update_info(&node_id, &fields, &self.db).await {
             Ok(_) => {
                 let response_meta = success_response_meta(
-                    response_meta::Status::Success as i32,
+                    response_meta::Status::Success.into(),
                     inner.meta.unwrap().id,
                 );
                 let response = UpdateNodeResponse {
