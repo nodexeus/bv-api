@@ -39,7 +39,6 @@ message ProvisionHostRequest {
     Uuid org_id = 3;
     HostInfo info = 4;
     repeated string validator_ips = 5;
-    string token = 6;
     ConnectionStatus status = 7;
 }
 
