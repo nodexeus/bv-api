@@ -4,7 +4,9 @@ mod setup;
 use crate::setup::{get_admin_user, get_blockchain, get_test_host};
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::node_service_client::NodeServiceClient;
-use api::grpc::blockjoy_ui::{GetNodeRequest, RequestMeta, Uuid as GrpcUuid};
+use api::grpc::blockjoy_ui::{
+    node, CreateNodeRequest, GetNodeRequest, Node as GrpcNode, RequestMeta, Uuid as GrpcUuid,
+};
 use api::models::{
     ContainerStatus, Node, NodeChainStatus, NodeCreateRequest, NodeSyncStatus, NodeType, Org,
 };
@@ -62,7 +64,7 @@ async fn responds_ok_with_id_for_get() {
         .id;
     let req = NodeCreateRequest {
         host_id: host.id,
-        org_id: org_id,
+        org_id,
         blockchain_id: blockchain.id,
         node_type: NodeType::Validator,
         chain_status: NodeChainStatus::Unknown,
@@ -93,4 +95,57 @@ async fn responds_ok_with_id_for_get() {
     );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_ok_with_valid_data_for_create() {
+    let db = Arc::new(_before_values.await);
+    let request_meta = RequestMeta {
+        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        token: None,
+        fields: vec![],
+        limit: None,
+    };
+    let blockchain = get_blockchain(&db).await;
+    let host = get_test_host(&db).await;
+    let user = get_admin_user(&db).await;
+    let org_id = Org::find_all_by_user(user.id, &db)
+        .await
+        .unwrap()
+        .first()
+        .unwrap()
+        .id;
+    let node = GrpcNode {
+        id: None,
+        host_id: Some(host.id),
+        org_id: Some(GrpcUuid::from(org_id)),
+        blockchain_id: Some(GrpcUuid::from(blockchain.id)),
+        name: None,
+        status: Some(node::NodeStatus::UndefinedApplicationStatus as i32),
+        address: None,
+        r#type: Some(node::NodeType::Api as i32),
+        version: None,
+        wallet_address: None,
+        block_height: None,
+        node_data: None,
+        ip: None,
+        created_at: None,
+        updated_at: None,
+        groups: vec![],
+    };
+    let user = get_admin_user(&db).await;
+    let token = user.get_token(&db).await.unwrap();
+    let inner = CreateNodeRequest {
+        meta: Some(request_meta),
+        node: Some(node),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+    );
+
+    assert_grpc_request! { create, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
 }

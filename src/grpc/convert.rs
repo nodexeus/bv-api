@@ -11,12 +11,15 @@ pub mod from {
     };
     use crate::grpc::helpers::pb_current_timestamp;
     use crate::models::{
-        Command as DbCommand, ConnectionStatus, HostCmd, HostProvision, HostRequest, Node,
-        NodeChainStatus, NodeType, Org, User,
+        Command as DbCommand, ConnectionStatus, ContainerStatus, HostCmd, HostProvision,
+        HostRequest, Node, NodeChainStatus, NodeCreateRequest, NodeStakingStatus, NodeSyncStatus,
+        NodeType, Org, User,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
     use prost_types::Timestamp;
+    use serde_json::Value;
+    use std::i64;
     use std::str::FromStr;
     use tonic::{Code, Status};
     use uuid::Uuid;
@@ -365,6 +368,59 @@ pub mod from {
                     nanos: node.updated_at.timestamp_nanos() as i32,
                 }),
                 status: Some(GrpcNodeStatus::from(node.chain_status) as i32),
+            }
+        }
+    }
+
+    impl From<&NodeCreateRequest> for GrpcNode {
+        fn from(req: &NodeCreateRequest) -> Self {
+            Self {
+                id: None,
+                org_id: Some(GrpcUiUuid::from(req.org_id)),
+                blockchain_id: Some(GrpcUiUuid::from(req.blockchain_id)),
+                name: req.name.clone().map(String::from),
+                // TODO
+                groups: vec![],
+                version: req.version.clone().map(String::from),
+                ip: req.ip_addr.clone().map(String::from),
+                // TODO
+                r#type: None,
+                address: req.address.clone().map(String::from),
+                wallet_address: req.wallet_address.clone().map(String::from),
+                block_height: req.block_height.map(i64::from),
+                node_data: None,
+                created_at: None,
+                updated_at: None,
+                status: Some(GrpcNodeStatus::from(req.chain_status) as i32),
+            }
+        }
+    }
+
+    impl From<NodeCreateRequest> for GrpcNode {
+        fn from(req: NodeCreateRequest) -> Self {
+            Self::from(&req)
+        }
+    }
+
+    impl From<GrpcNode> for NodeCreateRequest {
+        fn from(node: GrpcNode) -> Self {
+            Self {
+                org_id: node.org_id.map(Uuid::from).unwrap(),
+                host_id: node.host_id.map(Uuid::from).unwrap(),
+                name: node.name.map(String::from),
+                groups: Some(node.groups.join(",")),
+                version: node.version.map(String::from),
+                ip_addr: node.ip.map(String::from),
+                blockchain_id: node.blockchain_id.map(Uuid::from).unwrap(),
+                node_type: NodeType::from(node.r#type.unwrap()),
+                address: node.address.map(String::from),
+                wallet_address: node.wallet_address.map(String::from),
+                block_height: node.block_height.map(i64::from),
+                node_data: node.node_data.map(Value::from),
+                chain_status: NodeChainStatus::from(node.status.unwrap()),
+                sync_status: NodeSyncStatus::Unknown,
+                staking_status: Some(NodeStakingStatus::Unknown),
+                container_status: ContainerStatus::Unknown,
             }
         }
     }

@@ -23,6 +23,22 @@ pub enum NodeType {
     Validator,
 }
 
+impl From<i32> for NodeType {
+    fn from(ty: i32) -> Self {
+        match ty {
+            0 => Self::Undefined,
+            1 => Self::Api,
+            2 => Self::Etl,
+            3 => Self::Miner,
+            4 => Self::Node,
+            5 => Self::Oracle,
+            6 => Self::Relay,
+            7 => Self::Validator,
+            _ => Self::Undefined,
+        }
+    }
+}
+
 /// ContainerStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -95,6 +111,36 @@ pub enum NodeChainStatus {
     Relaying,
     Removed,
     Removing,
+}
+
+impl From<i32> for NodeChainStatus {
+    fn from(status: i32) -> Self {
+        match status {
+            0 => Self::Unknown,
+            1 => Self::Follower,
+            2 => Self::Staked,
+            3 => Self::Staking,
+            4 => Self::Validating,
+            5 => Self::Consensus,
+            6 => Self::Broadcasting,
+            7 => Self::Cancelled,
+            8 => Self::Delegating,
+            9 => Self::Delinquent,
+            10 => Self::Disabled,
+            11 => Self::Earning,
+            12 => Self::Electing,
+            13 => Self::Elected,
+            14 => Self::Exporting,
+            15 => Self::Ingesting,
+            16 => Self::Mining,
+            17 => Self::Minting,
+            18 => Self::Processing,
+            19 => Self::Relaying,
+            20 => Self::Removed,
+            21 => Self::Removing,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, FromRow)]

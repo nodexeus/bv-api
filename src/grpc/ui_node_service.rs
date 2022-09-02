@@ -1,7 +1,7 @@
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
     response_meta, CreateNodeRequest, CreateNodeResponse, GetNodeRequest, GetNodeResponse,
-    Node as GrpcNode, UpdateNodeRequest, UpdateNodeResponse,
+    Node as GrpcNode, ResponseMeta, UpdateNodeRequest, UpdateNodeResponse,
 };
 use crate::grpc::helpers::success_response_meta;
 use crate::models::Node;
@@ -53,9 +53,27 @@ impl NodeService for NodeServiceImpl {
 
     async fn create(
         &self,
-        _request: Request<CreateNodeRequest>,
+        request: Request<CreateNodeRequest>,
     ) -> Result<Response<CreateNodeResponse>, Status> {
-        todo!()
+        let inner = request.into_inner();
+        let fields = inner.node.unwrap().into();
+
+        match Node::create(&fields, &self.db).await {
+            Ok(node) => {
+                let response_meta = ResponseMeta {
+                    status: response_meta::Status::Success as i32,
+                    origin_request_id: inner.meta.unwrap().id,
+                    messages: vec![node.id.to_string()],
+                    pagination: None,
+                };
+                let response = CreateNodeResponse {
+                    meta: Some(response_meta),
+                };
+
+                Ok(Response::new(response))
+            }
+            Err(e) => Err(Status::from(e)),
+        }
     }
 
     async fn update(
