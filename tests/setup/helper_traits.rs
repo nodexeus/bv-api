@@ -2,6 +2,7 @@ use api::grpc::blockjoy::hosts_client::HostsClient;
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
 use api::grpc::blockjoy_ui::host_provision_service_client::HostProvisionServiceClient;
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
+use api::grpc::blockjoy_ui::node_service_client::NodeServiceClient;
 use api::grpc::blockjoy_ui::organization_service_client::OrganizationServiceClient;
 use api::grpc::blockjoy_ui::user_service_client::UserServiceClient;
 use tonic::transport::Channel;
@@ -41,6 +42,12 @@ impl GrpcClient<Channel> for HostServiceClient<Channel> {
 }
 
 impl GrpcClient<Channel> for HostProvisionServiceClient<Channel> {
+    fn create(channel: Channel) -> Self {
+        Self::new(channel)
+    }
+}
+
+impl GrpcClient<Channel> for NodeServiceClient<Channel> {
     fn create(channel: Channel) -> Self {
         Self::new(channel)
     }

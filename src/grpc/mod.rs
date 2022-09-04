@@ -6,6 +6,7 @@ pub mod host_service;
 pub mod organization_service;
 pub mod ui_host_provision_service;
 pub mod ui_host_service;
+pub mod ui_node_service;
 pub mod user_service;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -25,12 +26,14 @@ use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationServiceServer;
 use crate::grpc::blockjoy_ui::host_provision_service_server::HostProvisionServiceServer;
 use crate::grpc::blockjoy_ui::host_service_server::HostServiceServer;
+use crate::grpc::blockjoy_ui::node_service_server::NodeServiceServer;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationServiceServer;
 use crate::grpc::blockjoy_ui::user_service_server::UserServiceServer;
 use crate::grpc::command_flow::CommandFlowServerImpl;
 use crate::grpc::organization_service::OrganizationServiceImpl;
 use crate::grpc::ui_host_provision_service::HostProvisionServiceImpl;
 use crate::grpc::ui_host_service::HostServiceImpl;
+use crate::grpc::ui_node_service::NodeServiceImpl;
 use crate::grpc::user_service::UserServiceImpl;
 use crate::server::DbPool;
 use axum::Extension;
@@ -78,6 +81,7 @@ pub async fn server(
     let ui_host_service = HostServiceServer::new(HostServiceImpl::new(db.clone()));
     let ui_hostprovision_service =
         HostProvisionServiceServer::new(HostProvisionServiceImpl::new(db.clone()));
+    let ui_node_service = NodeServiceServer::new(NodeServiceImpl::new(db.clone()));
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
         .layer(Extension(db.clone()))
@@ -94,4 +98,5 @@ pub async fn server(
         .add_service(ui_user_service)
         .add_service(ui_host_service)
         .add_service(ui_hostprovision_service)
+        .add_service(ui_node_service)
 }

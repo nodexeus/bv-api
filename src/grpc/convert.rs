@@ -5,16 +5,21 @@ pub mod from {
         NodeDelete, NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
     };
     use crate::grpc::blockjoy_ui::{
-        Host as GrpcHost, HostProvision as GrpcHostProvision, Organization, User as GrpcUiUser,
+        node::NodeStatus as GrpcNodeStatus, node::NodeType as GrpcNodeType, Host as GrpcHost,
+        HostProvision as GrpcHostProvision, Node as GrpcNode, Organization, User as GrpcUiUser,
         Uuid as GrpcUiUuid,
     };
     use crate::grpc::helpers::pb_current_timestamp;
     use crate::models::{
-        Command as DbCommand, ConnectionStatus, HostCmd, HostProvision, HostRequest, Org, User,
+        Command as DbCommand, ConnectionStatus, ContainerStatus, HostCmd, HostProvision,
+        HostRequest, Node, NodeChainStatus, NodeCreateRequest, NodeInfo, NodeStakingStatus,
+        NodeSyncStatus, NodeType, Org, User,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
     use prost_types::Timestamp;
+    use serde_json::Value;
+    use std::i64;
     use std::str::FromStr;
     use tonic::{Code, Status};
     use uuid::Uuid;
@@ -327,6 +332,161 @@ pub mod from {
                     seconds: host.created_at.timestamp(),
                     nanos: host.created_at.timestamp_nanos() as i32,
                 }),
+            }
+        }
+    }
+
+    impl From<Node> for GrpcNode {
+        fn from(node: Node) -> Self {
+            Self::from(&node)
+        }
+    }
+
+    impl From<&Node> for GrpcNode {
+        fn from(node: &Node) -> Self {
+            Self {
+                id: Some(GrpcUiUuid::from(node.id)),
+                org_id: Some(GrpcUiUuid::from(node.org_id)),
+                host_id: Some(GrpcUiUuid::from(node.host_id)),
+                blockchain_id: Some(GrpcUiUuid::from(node.blockchain_id)),
+                name: node.name.clone().map(String::from),
+                // TODO: get node groups
+                groups: vec![],
+                version: node.version.clone().map(String::from),
+                ip: node.ip_addr.clone().map(String::from),
+                r#type: Some(GrpcNodeType::from(node.node_type) as i32),
+                address: node.address.clone().map(String::from),
+                wallet_address: node.wallet_address.clone().map(String::from),
+                block_height: node.block_height.map(i64::from),
+                // TODO: Get node data
+                node_data: None,
+                created_at: Some(Timestamp {
+                    seconds: node.created_at.timestamp(),
+                    nanos: node.created_at.timestamp_nanos() as i32,
+                }),
+                updated_at: Some(Timestamp {
+                    seconds: node.updated_at.timestamp(),
+                    nanos: node.updated_at.timestamp_nanos() as i32,
+                }),
+                status: Some(GrpcNodeStatus::from(node.chain_status) as i32),
+            }
+        }
+    }
+
+    impl From<&NodeCreateRequest> for GrpcNode {
+        fn from(req: &NodeCreateRequest) -> Self {
+            Self {
+                id: None,
+                org_id: Some(GrpcUiUuid::from(req.org_id)),
+                host_id: Some(GrpcUiUuid::from(req.host_id)),
+                blockchain_id: Some(GrpcUiUuid::from(req.blockchain_id)),
+                name: req.name.clone().map(String::from),
+                // TODO
+                groups: vec![],
+                version: req.version.clone().map(String::from),
+                ip: req.ip_addr.clone().map(String::from),
+                // TODO
+                r#type: None,
+                address: req.address.clone().map(String::from),
+                wallet_address: req.wallet_address.clone().map(String::from),
+                block_height: req.block_height.map(i64::from),
+                node_data: None,
+                created_at: None,
+                updated_at: None,
+                status: Some(GrpcNodeStatus::from(req.chain_status) as i32),
+            }
+        }
+    }
+
+    impl From<NodeCreateRequest> for GrpcNode {
+        fn from(req: NodeCreateRequest) -> Self {
+            Self::from(&req)
+        }
+    }
+
+    impl From<GrpcNode> for NodeCreateRequest {
+        fn from(node: GrpcNode) -> Self {
+            Self {
+                org_id: node.org_id.map(Uuid::from).unwrap_or_default(),
+                host_id: node.host_id.map(Uuid::from).unwrap_or_default(),
+                name: node.name.map(String::from),
+                groups: Some(node.groups.join(",")),
+                version: node.version.map(String::from),
+                ip_addr: node.ip.map(String::from),
+                blockchain_id: node.blockchain_id.map(Uuid::from).unwrap_or_default(),
+                node_type: NodeType::from(node.r#type.unwrap_or_default()),
+                address: node.address.map(String::from),
+                wallet_address: node.wallet_address.map(String::from),
+                block_height: node.block_height.map(i64::from),
+                node_data: node.node_data.map(Value::from),
+                chain_status: NodeChainStatus::from(node.status.unwrap_or_default()),
+                sync_status: NodeSyncStatus::Unknown,
+                staking_status: Some(NodeStakingStatus::Unknown),
+                container_status: ContainerStatus::Unknown,
+            }
+        }
+    }
+
+    impl From<GrpcNode> for NodeInfo {
+        fn from(node: GrpcNode) -> Self {
+            Self {
+                version: node.version,
+                ip_addr: node.ip,
+                block_height: node.block_height,
+                node_data: node.node_data.map(Value::from),
+                chain_status: node.status.map(NodeChainStatus::from),
+                sync_status: None,
+                staking_status: None,
+                container_status: None,
+            }
+        }
+    }
+
+    impl From<NodeType> for GrpcNodeType {
+        fn from(nt: NodeType) -> Self {
+            match nt {
+                NodeType::Node => GrpcNodeType::Node,
+                NodeType::Validator => GrpcNodeType::Validator,
+                NodeType::Api => GrpcNodeType::Api,
+                NodeType::Etl => GrpcNodeType::Etl,
+                NodeType::Miner => GrpcNodeType::Miner,
+                NodeType::Oracle => GrpcNodeType::Oracle,
+                NodeType::Relay => GrpcNodeType::Relay,
+                NodeType::Undefined => GrpcNodeType::UndefinedType,
+            }
+        }
+    }
+
+    impl From<NodeChainStatus> for GrpcNodeStatus {
+        fn from(ncs: NodeChainStatus) -> Self {
+            match ncs {
+                NodeChainStatus::Unknown => GrpcNodeStatus::UndefinedApplicationStatus,
+                NodeChainStatus::Broadcasting => GrpcNodeStatus::Broadcasting,
+                NodeChainStatus::Cancelled => GrpcNodeStatus::Cancelled,
+                // TODO
+                NodeChainStatus::Consensus => GrpcNodeStatus::UndefinedApplicationStatus,
+                NodeChainStatus::Delegating => GrpcNodeStatus::Delegating,
+                NodeChainStatus::Delinquent => GrpcNodeStatus::Delinquent,
+                NodeChainStatus::Disabled => GrpcNodeStatus::Disabled,
+                NodeChainStatus::Earning => GrpcNodeStatus::Earning,
+                NodeChainStatus::Elected => GrpcNodeStatus::Elected,
+                NodeChainStatus::Electing => GrpcNodeStatus::Electing,
+                NodeChainStatus::Exporting => GrpcNodeStatus::Exporting,
+                // TODO
+                NodeChainStatus::Follower => GrpcNodeStatus::UndefinedApplicationStatus,
+                NodeChainStatus::Ingesting => GrpcNodeStatus::Ingesting,
+                NodeChainStatus::Mining => GrpcNodeStatus::Mining,
+                NodeChainStatus::Minting => GrpcNodeStatus::Minting,
+                NodeChainStatus::Processing => GrpcNodeStatus::Processing,
+                NodeChainStatus::Relaying => GrpcNodeStatus::Relaying,
+                NodeChainStatus::Removed => GrpcNodeStatus::Removed,
+                NodeChainStatus::Removing => GrpcNodeStatus::Removing,
+                // TODO
+                NodeChainStatus::Staked => GrpcNodeStatus::UndefinedApplicationStatus,
+                // TODO
+                NodeChainStatus::Staking => GrpcNodeStatus::UndefinedApplicationStatus,
+                // TODO
+                NodeChainStatus::Validating => GrpcNodeStatus::UndefinedApplicationStatus,
             }
         }
     }

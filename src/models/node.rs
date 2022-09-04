@@ -23,6 +23,22 @@ pub enum NodeType {
     Validator,
 }
 
+impl From<i32> for NodeType {
+    fn from(ty: i32) -> Self {
+        match ty {
+            0 => Self::Undefined,
+            1 => Self::Api,
+            2 => Self::Etl,
+            3 => Self::Miner,
+            4 => Self::Node,
+            5 => Self::Oracle,
+            6 => Self::Relay,
+            7 => Self::Validator,
+            _ => Self::Undefined,
+        }
+    }
+}
+
 /// ContainerStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -97,27 +113,57 @@ pub enum NodeChainStatus {
     Removing,
 }
 
+impl From<i32> for NodeChainStatus {
+    fn from(status: i32) -> Self {
+        match status {
+            0 => Self::Unknown,
+            1 => Self::Follower,
+            2 => Self::Staked,
+            3 => Self::Staking,
+            4 => Self::Validating,
+            5 => Self::Consensus,
+            6 => Self::Broadcasting,
+            7 => Self::Cancelled,
+            8 => Self::Delegating,
+            9 => Self::Delinquent,
+            10 => Self::Disabled,
+            11 => Self::Earning,
+            12 => Self::Electing,
+            13 => Self::Elected,
+            14 => Self::Exporting,
+            15 => Self::Ingesting,
+            16 => Self::Mining,
+            17 => Self::Minting,
+            18 => Self::Processing,
+            19 => Self::Relaying,
+            20 => Self::Removed,
+            21 => Self::Removing,
+            _ => Self::Unknown,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, FromRow)]
 pub struct Node {
-    id: Uuid,
-    org_id: Uuid,
-    host_id: Uuid,
-    name: Option<String>,
-    groups: Option<String>,
-    version: Option<String>,
-    ip_addr: Option<String>,
-    blockchain_id: Uuid,
-    node_type: NodeType,
-    address: Option<String>,
-    wallet_address: Option<String>,
-    block_height: Option<i64>,
-    node_data: Option<serde_json::Value>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    sync_status: NodeSyncStatus,
-    chain_status: NodeChainStatus,
-    staking_status: NodeStakingStatus,
-    container_status: ContainerStatus,
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub host_id: Uuid,
+    pub name: Option<String>,
+    pub groups: Option<String>,
+    pub version: Option<String>,
+    pub ip_addr: Option<String>,
+    pub blockchain_id: Uuid,
+    pub node_type: NodeType,
+    pub address: Option<String>,
+    pub wallet_address: Option<String>,
+    pub block_height: Option<i64>,
+    pub node_data: Option<serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub sync_status: NodeSyncStatus,
+    pub chain_status: NodeChainStatus,
+    pub staking_status: NodeStakingStatus,
+    pub container_status: ContainerStatus,
 }
 
 impl Node {
@@ -276,14 +322,14 @@ pub struct NodeCreateRequest {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeInfo {
-    version: Option<String>,
-    ip_addr: Option<String>,
-    block_height: Option<i64>,
-    node_data: Option<serde_json::Value>,
-    chain_status: Option<NodeChainStatus>,
-    sync_status: Option<NodeSyncStatus>,
-    staking_status: Option<NodeStakingStatus>,
-    container_status: Option<ContainerStatus>,
+    pub version: Option<String>,
+    pub ip_addr: Option<String>,
+    pub block_height: Option<i64>,
+    pub node_data: Option<serde_json::Value>,
+    pub chain_status: Option<NodeChainStatus>,
+    pub sync_status: Option<NodeSyncStatus>,
+    pub staking_status: Option<NodeStakingStatus>,
+    pub container_status: Option<ContainerStatus>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
