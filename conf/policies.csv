@@ -18,6 +18,17 @@ p, master_admin, /blockjoy.api.ui_v1.HostProvisionService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.NodeService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.NodeService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.NodeService/Update, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/CreateNode, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/DeleteNode, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/StartNode, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/StopNode, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/RestartNode, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/CreateHost, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/DeleteHost, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/StartHost, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/StopHost, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/RestartHost, POST
+p, master_admin, /blockjoy.api.ui_v1.CommandService/ExecuteGeneric, POST
 
 g, admin, master_admin
 g, guest, outbound

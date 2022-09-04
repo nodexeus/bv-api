@@ -4,6 +4,7 @@ pub mod convert;
 pub mod helpers;
 pub mod host_service;
 pub mod organization_service;
+pub mod ui_command_service;
 pub mod ui_host_provision_service;
 pub mod ui_host_service;
 pub mod ui_node_service;
@@ -24,6 +25,7 @@ use crate::auth::{unauthenticated_paths::UnauthenticatedPaths, Authorization};
 use crate::grpc::authentication_service::AuthenticationServiceImpl;
 use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationServiceServer;
+use crate::grpc::blockjoy_ui::command_service_server::CommandServiceServer;
 use crate::grpc::blockjoy_ui::host_provision_service_server::HostProvisionServiceServer;
 use crate::grpc::blockjoy_ui::host_service_server::HostServiceServer;
 use crate::grpc::blockjoy_ui::node_service_server::NodeServiceServer;
@@ -31,6 +33,7 @@ use crate::grpc::blockjoy_ui::organization_service_server::OrganizationServiceSe
 use crate::grpc::blockjoy_ui::user_service_server::UserServiceServer;
 use crate::grpc::command_flow::CommandFlowServerImpl;
 use crate::grpc::organization_service::OrganizationServiceImpl;
+use crate::grpc::ui_command_service::CommandServiceImpl;
 use crate::grpc::ui_host_provision_service::HostProvisionServiceImpl;
 use crate::grpc::ui_host_service::HostServiceImpl;
 use crate::grpc::ui_node_service::NodeServiceImpl;
@@ -81,6 +84,7 @@ pub async fn server(
     let ui_host_service = HostServiceServer::new(HostServiceImpl::new(db.clone()));
     let ui_hostprovision_service =
         HostProvisionServiceServer::new(HostProvisionServiceImpl::new(db.clone()));
+    let ui_command_service = CommandServiceServer::new(CommandServiceImpl::new(db.clone()));
     let ui_node_service = NodeServiceServer::new(NodeServiceImpl::new(db.clone()));
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
@@ -99,4 +103,5 @@ pub async fn server(
         .add_service(ui_host_service)
         .add_service(ui_hostprovision_service)
         .add_service(ui_node_service)
+        .add_service(ui_command_service)
 }
