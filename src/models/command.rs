@@ -21,9 +21,11 @@ pub enum HostCmd {
     MigrateNode,
     GetNodeVersion,
     GetBVSVersion,
+    CreateBVS,
     UpdateBVS,
     RestartBVS,
     RemoveBVS,
+    StopBVS,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

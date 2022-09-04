@@ -180,6 +180,8 @@ pub mod from {
                 HostCmd::UpdateBVS => unimplemented!(),
                 HostCmd::RestartBVS => unimplemented!(),
                 HostCmd::RemoveBVS => unimplemented!(),
+                HostCmd::CreateBVS => unimplemented!(),
+                HostCmd::StopBVS => unimplemented!(),
                 // TODO: Missing
                 // NodeStart, NodeUpgrade
             }
