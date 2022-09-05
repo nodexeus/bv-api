@@ -3,11 +3,12 @@ use crate::grpc::blockjoy::{
     command_flow_server::CommandFlow, info_update::Info as GrpcInfo, Command as GrpcCommand,
     Command, InfoUpdate, NodeInfo,
 };
+use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Command as DbCommand, Host, Token};
 use crate::models::{Node, UpdateInfo};
 use crate::server::DbPool;
 use anyhow::anyhow;
-use sqlx::postgres::{PgListener, PgNotification};
+use crossbeam_channel::Receiver;
 use sqlx::PgPool;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -47,16 +48,21 @@ fn match_for_io_error(err_status: &Status) -> Option<&std::io::Error> {
 pub struct CommandFlowServerImpl {
     db: DbPool,
     buffer_size: usize,
+    notifier: ChannelNotifier,
 }
 
 impl CommandFlowServerImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, notifier: ChannelNotifier) -> Self {
         let buffer_size: usize = env::var("BIDI_BUFFER_SIZE")
             .map(|bs| bs.parse::<usize>())
             .unwrap()
             .unwrap_or(128);
 
-        Self { db, buffer_size }
+        Self {
+            db,
+            buffer_size,
+            notifier,
+        }
     }
 
     /// Actually perform info update on an identified resource
@@ -92,11 +98,11 @@ impl CommandFlowServerImpl {
 
     /// Received notification about new command row, sending corresponding message
     async fn process_notification(
-        notification: PgNotification,
+        notification: NotificationPayload,
         db: DbPool,
         sender: Sender<Result<Command, Status>>,
     ) -> ApiResult<()> {
-        let cmd_id = Uuid::parse_str(notification.payload()).unwrap();
+        let cmd_id = notification.get_id();
         let command = DbCommand::find_by_id(cmd_id, &db).await;
 
         match command {
@@ -118,53 +124,19 @@ impl CommandFlowServerImpl {
         }
     }
 
-    #[cfg(not(test))]
     async fn handle_notifications(
         host_id: Uuid,
         db: Arc<PgPool>,
-        sender: Sender<Result<Command, Status>>,
+        notifications: Receiver<ChannelNotification>,
+        stream_sender: Sender<Result<Command, Status>>,
     ) -> Result<(), Status> {
-        let mut db_listener = PgListener::connect_with(&db.clone()).await.unwrap();
-
-        if let Err(e) = db_listener.listen("new_commands").await {
-            tracing::error!("Couldn't create PgListener: {:?}", e);
-            return Err(Status::resource_exhausted(format!("{}", e)));
-        }
-
-        while let Ok(notification) = db_listener.recv().await {
-            Self::process_notification(notification, db.clone(), sender.clone()).await?
-        }
-
-        // Connection broke
-        match Host::toggle_online(host_id, false, &db.clone()).await {
-            Ok(_) => Ok(()),
-            Err(e) => Err(Status::from(e)),
-        }
-    }
-
-    #[cfg(test)]
-    async fn handle_notifications(
-        host_id: Uuid,
-        db: Arc<PgPool>,
-        sender: Sender<Result<Command, Status>>,
-    ) -> Result<(), Status> {
-        let mut db_listener = PgListener::connect_with(&db.clone()).await.unwrap();
-
-        if let Err(e) = db_listener.listen("new_commands").await {
-            tracing::error!("Couldn't create PgListener: {:?}", e);
-            return Err(Status::resource_exhausted(format!("{}", e)));
-        }
-
-        let mut cnt: usize = 0;
-
-        while let Ok(notification) = db_listener.recv().await {
-            if cnt > 4 {
-                break;
+        while let Ok(notification) = notifications.recv() {
+            match notification {
+                ChannelNotification::Command(cmd) => {
+                    Self::process_notification(cmd, db.clone(), stream_sender.clone()).await?
+                }
+                _ => tracing::error!("received non Command notification"),
             }
-
-            Self::process_notification(notification, db.clone(), sender.clone()).await?;
-
-            cnt += 1;
         }
 
         // Connection broke
@@ -215,9 +187,13 @@ impl CommandFlow for CommandFlowServerImpl {
         let db = self.db.clone();
         let sender = tx.clone();
 
-        // Create task handling incoming DB notifications
-        let handle_notifications =
-            tokio::spawn(Self::handle_notifications(host_id, db.clone(), sender));
+        // Create task handling incoming notifications
+        let handle_notifications = tokio::spawn(Self::handle_notifications(
+            host_id,
+            db.clone(),
+            self.notifier.commands_receiver().clone(),
+            sender,
+        ));
 
         // Join handles to ensure max. concurrency
         match tokio::try_join!(handle_updates, handle_notifications) {
@@ -238,6 +214,7 @@ mod tests {
     use crate::models::{
         ConnectionStatus, Host, HostCmd, HostRequest, TokenRole, User, UserRequest,
     };
+    use crossbeam_channel::Sender;
     use http::Uri;
     use sqlx::postgres::PgPoolOptions;
     use sqlx::PgPool;
@@ -246,9 +223,12 @@ mod tests {
     use std::sync::Arc;
 
     use crate::auth::TokenIdentifyable;
+    use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
     use crate::grpc::blockjoy::info_update::Info;
     use crate::grpc::blockjoy::{command_flow_client::CommandFlowClient, Uuid as GrpcUuid};
     use crate::grpc::blockjoy::{InfoUpdate, NodeInfo};
+    use crate::grpc::command_flow::CommandFlowServerImpl;
+    use crate::grpc::notification::{get_channel_pair, ChannelNotification};
     use crate::models::validator::{
         StakeStatus, Validator, ValidatorStatus, ValidatorStatusRequest,
     };

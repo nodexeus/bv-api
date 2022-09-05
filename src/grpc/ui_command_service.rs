@@ -1,19 +1,20 @@
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
-use crate::grpc::blockjoy_ui::{
-    response_meta, CommandRequest, CommandResponse, ResponseMeta, Uuid as GrpcUiUuid,
-};
+use crate::grpc::blockjoy_ui::{response_meta, CommandRequest, CommandResponse, ResponseMeta};
+use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd};
 use crate::server::DbPool;
+use crossbeam_channel::SendError;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 pub struct CommandServiceImpl {
     db: DbPool,
+    notifier: ChannelNotifier,
 }
 
 impl CommandServiceImpl {
-    pub fn new(db: DbPool) -> Self {
-        Self { db }
+    pub fn new(db: DbPool, notifier: ChannelNotifier) -> Self {
+        Self { db, notifier }
     }
 
     async fn create_command(
@@ -21,26 +22,18 @@ impl CommandServiceImpl {
         host_id: Uuid,
         cmd: HostCmd,
         sub_cmd: Option<String>,
-        request_id: Option<GrpcUiUuid>,
-    ) -> Result<Response<CommandResponse>, Status> {
+    ) -> crate::errors::Result<Command> {
         let req = DbCommandRequest { cmd, sub_cmd };
 
-        match Command::create(host_id, req, &self.db).await {
-            Ok(cmd) => {
-                let response_meta = ResponseMeta {
-                    status: response_meta::Status::Success.into(),
-                    origin_request_id: request_id,
-                    messages: vec![cmd.id.to_string()],
-                    pagination: None,
-                };
-                let response = CommandResponse {
-                    meta: Some(response_meta),
-                };
+        Command::create(host_id, req, &self.db).await
+    }
 
-                Ok(Response::new(response))
-            }
-            Err(e) => Err(Status::from(e)),
-        }
+    fn send_notification(
+        &self,
+        notification: ChannelNotification,
+    ) -> Result<(), SendError<ChannelNotification>> {
+        tracing::debug!("Sending notification: {:?}", notification);
+        self.notifier.commands_sender().send(notification)
     }
 }
 
@@ -50,8 +43,33 @@ macro_rules! create_command {
 
         match inner.id {
             Some(host_id) => {
-                $obj.create_command(Uuid::from(host_id), $cmd, $sub_cmd, inner.meta.unwrap().id)
+                match $obj
+                    .create_command(Uuid::from(host_id), $cmd, $sub_cmd)
                     .await
+                {
+                    Ok(cmd) => {
+                        let notification =
+                            ChannelNotification::Command(NotificationPayload::new(cmd.id));
+
+                        match $obj.send_notification(notification) {
+                            Ok(_) => {
+                                let response_meta = ResponseMeta {
+                                    status: response_meta::Status::Success.into(),
+                                    origin_request_id: inner.meta.unwrap().id,
+                                    messages: vec![cmd.id.to_string()],
+                                    pagination: None,
+                                };
+                                let response = CommandResponse {
+                                    meta: Some(response_meta),
+                                };
+
+                                Ok(Response::new(response))
+                            }
+                            Err(e) => Err(Status::internal(e.to_string())),
+                        }
+                    }
+                    Err(e) => Err(Status::from(e)),
+                }
             }
             None => Err(Status::not_found("No host ID provided")),
         }
