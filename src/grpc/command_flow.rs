@@ -214,7 +214,6 @@ mod tests {
     use crate::models::{
         ConnectionStatus, Host, HostCmd, HostRequest, TokenRole, User, UserRequest,
     };
-    use crossbeam_channel::Sender;
     use http::Uri;
     use sqlx::postgres::PgPoolOptions;
     use sqlx::PgPool;
@@ -223,12 +222,9 @@ mod tests {
     use std::sync::Arc;
 
     use crate::auth::TokenIdentifyable;
-    use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
     use crate::grpc::blockjoy::info_update::Info;
     use crate::grpc::blockjoy::{command_flow_client::CommandFlowClient, Uuid as GrpcUuid};
     use crate::grpc::blockjoy::{InfoUpdate, NodeInfo};
-    use crate::grpc::command_flow::CommandFlowServerImpl;
-    use crate::grpc::notification::{get_channel_pair, ChannelNotification};
     use crate::models::validator::{
         StakeStatus, Validator, ValidatorStatus, ValidatorStatusRequest,
     };
