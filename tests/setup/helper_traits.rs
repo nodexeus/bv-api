@@ -1,6 +1,7 @@
 use api::grpc::blockjoy::hosts_client::HostsClient;
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
 use api::grpc::blockjoy_ui::command_service_client::CommandServiceClient;
+use api::grpc::blockjoy_ui::dashboard_service_client::DashboardServiceClient;
 use api::grpc::blockjoy_ui::host_provision_service_client::HostProvisionServiceClient;
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
 use api::grpc::blockjoy_ui::node_service_client::NodeServiceClient;
@@ -62,6 +63,12 @@ impl GrpcClient<Channel> for CommandServiceClient<Channel> {
 }
 
 impl GrpcClient<Channel> for UpdateServiceClient<Channel> {
+    fn create(channel: Channel) -> Self {
+        Self::new(channel)
+    }
+}
+
+impl GrpcClient<Channel> for DashboardServiceClient<Channel> {
     fn create(channel: Channel) -> Self {
         Self::new(channel)
     }

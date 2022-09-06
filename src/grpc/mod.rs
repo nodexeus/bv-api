@@ -6,6 +6,7 @@ pub mod host_service;
 pub mod notification;
 pub mod organization_service;
 pub mod ui_command_service;
+pub mod ui_dashboard_service;
 pub mod ui_host_provision_service;
 pub mod ui_host_service;
 pub mod ui_node_service;
@@ -28,6 +29,7 @@ use crate::grpc::authentication_service::AuthenticationServiceImpl;
 use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationServiceServer;
 use crate::grpc::blockjoy_ui::command_service_server::CommandServiceServer;
+use crate::grpc::blockjoy_ui::dashboard_service_server::DashboardServiceServer;
 use crate::grpc::blockjoy_ui::host_provision_service_server::HostProvisionServiceServer;
 use crate::grpc::blockjoy_ui::host_service_server::HostServiceServer;
 use crate::grpc::blockjoy_ui::node_service_server::NodeServiceServer;
@@ -38,6 +40,7 @@ use crate::grpc::command_flow::CommandFlowServerImpl;
 use crate::grpc::notification::ChannelNotifier;
 use crate::grpc::organization_service::OrganizationServiceImpl;
 use crate::grpc::ui_command_service::CommandServiceImpl;
+use crate::grpc::ui_dashboard_service::DashboardServiceImpl;
 use crate::grpc::ui_host_provision_service::HostProvisionServiceImpl;
 use crate::grpc::ui_host_service::HostServiceImpl;
 use crate::grpc::ui_node_service::NodeServiceImpl;
@@ -97,6 +100,7 @@ pub async fn server(
         CommandServiceServer::new(CommandServiceImpl::new(db.clone(), notifier.clone()));
     let ui_node_service = NodeServiceServer::new(NodeServiceImpl::new(db.clone()));
     let ui_update_service = UpdateServiceServer::new(UpdateServiceImpl::new(db.clone(), notifier));
+    let ui_dashboard_service = DashboardServiceServer::new(DashboardServiceImpl::new(db.clone()));
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
         .layer(Extension(db.clone()))
@@ -116,4 +120,5 @@ pub async fn server(
         .add_service(ui_node_service)
         .add_service(ui_command_service)
         .add_service(ui_update_service)
+        .add_service(ui_dashboard_service)
 }

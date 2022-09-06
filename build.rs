@@ -14,6 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "authentication_service.proto",
                 "billing_service.proto",
                 "command_service.proto",
+                "dashboard_service.proto",
                 "host_provision_service.proto",
                 "fe_host_service.proto",
                 "node_service.proto",
