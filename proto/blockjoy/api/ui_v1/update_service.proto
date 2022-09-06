@@ -10,7 +10,7 @@ message GetUpdatesRequest {
 
 message GetUpdatesResponse {
   ResponseMeta meta = 1;
-  InfoUpdate update = 2;
+  UpdateNotification update = 2;
 }
 
 /* Retrieve updates sent by the API server */

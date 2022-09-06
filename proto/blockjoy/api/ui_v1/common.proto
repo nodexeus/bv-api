@@ -185,9 +185,11 @@ message Organization {
 }
 
 /* Info update as received by UpdateService */
-message InfoUpdate {
-  optional Host host = 1;
-  optional Node node = 2;
+message UpdateNotification {
+  oneof notification {
+    Host host = 1;
+    Node node = 2;
+  }
 }
 
 /* User representation */
