@@ -93,11 +93,11 @@ impl UpdateService for UpdateServiceImpl {
         let handle_host_updates = tokio::spawn(async move {
             while let Ok(host) = hosts_receiver.recv() {
                 match host {
-                    ChannelNotification::Host(pl) => {
-                        let notification_pl =
-                            UpdateServiceImpl::host_payload(pl.get_id(), db.clone()).await;
+                    ChannelNotification::Host(payload) => {
+                        let notification_payload =
+                            UpdateServiceImpl::host_payload(payload.get_id(), db.clone()).await;
                         let notification = UpdateNotification {
-                            notification: notification_pl,
+                            notification: notification_payload,
                         };
                         let response = GetUpdatesResponse {
                             meta: Some(host_response_meta.clone()),
@@ -118,11 +118,11 @@ impl UpdateService for UpdateServiceImpl {
         let handle_node_updates = tokio::spawn(async move {
             while let Ok(node) = nodes_receiver.recv() {
                 match node {
-                    ChannelNotification::Node(pl) => {
-                        let notification_pl =
-                            UpdateServiceImpl::node_payload(pl.get_id(), db.clone()).await;
+                    ChannelNotification::Node(payload) => {
+                        let notification_payload =
+                            UpdateServiceImpl::node_payload(payload.get_id(), db.clone()).await;
                         let notification = UpdateNotification {
-                            notification: notification_pl,
+                            notification: notification_payload,
                         };
                         let response = GetUpdatesResponse {
                             meta: Some(node_response_meta.clone()),
