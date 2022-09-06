@@ -3,6 +3,7 @@ pub mod command_flow;
 pub mod convert;
 pub mod helpers;
 pub mod host_service;
+pub mod notification;
 pub mod organization_service;
 pub mod ui_command_service;
 pub mod ui_host_provision_service;
@@ -32,6 +33,7 @@ use crate::grpc::blockjoy_ui::node_service_server::NodeServiceServer;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationServiceServer;
 use crate::grpc::blockjoy_ui::user_service_server::UserServiceServer;
 use crate::grpc::command_flow::CommandFlowServerImpl;
+use crate::grpc::notification::ChannelNotifier;
 use crate::grpc::organization_service::OrganizationServiceImpl;
 use crate::grpc::ui_command_service::CommandServiceImpl;
 use crate::grpc::ui_host_provision_service::HostProvisionServiceImpl;
@@ -68,6 +70,9 @@ pub async fn server(
         Identity,
     >,
 > {
+    // Create channel notifier to send messages from one task to another
+    let notifier = ChannelNotifier::create();
+
     // Add unauthenticated paths. TODO: Should this reside in some config file?
     let unauthenticated = UnauthenticatedPaths::new(vec![
         "/blockjoy.api.v1.Hosts/Provision",
@@ -76,7 +81,8 @@ pub async fn server(
     let enforcer = Authorization::new().await.unwrap();
     let auth_service = AuthorizationService::new(enforcer);
     let h_service = HostsServer::new(HostsServiceImpl::new(db.clone()));
-    let c_service = CommandFlowServer::new(CommandFlowServerImpl::new(db.clone()));
+    let c_service =
+        CommandFlowServer::new(CommandFlowServerImpl::new(db.clone(), notifier.clone()));
     let ui_auth_service =
         AuthenticationServiceServer::new(AuthenticationServiceImpl::new(db.clone()));
     let ui_org_service = OrganizationServiceServer::new(OrganizationServiceImpl::new(db.clone()));
@@ -84,7 +90,8 @@ pub async fn server(
     let ui_host_service = HostServiceServer::new(HostServiceImpl::new(db.clone()));
     let ui_hostprovision_service =
         HostProvisionServiceServer::new(HostProvisionServiceImpl::new(db.clone()));
-    let ui_command_service = CommandServiceServer::new(CommandServiceImpl::new(db.clone()));
+    let ui_command_service =
+        CommandServiceServer::new(CommandServiceImpl::new(db.clone(), notifier));
     let ui_node_service = NodeServiceServer::new(NodeServiceImpl::new(db.clone()));
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
