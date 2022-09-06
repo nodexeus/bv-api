@@ -96,7 +96,7 @@ pub async fn server(
     let ui_command_service =
         CommandServiceServer::new(CommandServiceImpl::new(db.clone(), notifier.clone()));
     let ui_node_service = NodeServiceServer::new(NodeServiceImpl::new(db.clone()));
-    let ui_update_service = UpdateServiceServer::new(UpdateServiceImpl::new(notifier));
+    let ui_update_service = UpdateServiceServer::new(UpdateServiceImpl::new(db.clone(), notifier));
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
         .layer(Extension(db.clone()))

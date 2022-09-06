@@ -1,3 +1,4 @@
+use crate::auth::FindableById;
 use crate::grpc::blockjoy_ui::update_notification::Notification;
 use crate::grpc::blockjoy_ui::update_service_server::UpdateService;
 use crate::grpc::blockjoy_ui::{
@@ -5,6 +6,8 @@ use crate::grpc::blockjoy_ui::{
     ResponseMeta, UpdateNotification,
 };
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier};
+use crate::models::{Host, Node};
+use crate::server::DbPool;
 use std::env;
 use std::pin::Pin;
 use tokio::sync::mpsc;
@@ -14,29 +17,53 @@ use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 pub struct UpdateServiceImpl {
+    db: DbPool,
     notifier: ChannelNotifier,
     buffer_size: usize,
 }
 
 impl UpdateServiceImpl {
-    pub fn new(notifier: ChannelNotifier) -> Self {
+    pub fn new(db: DbPool, notifier: ChannelNotifier) -> Self {
         let buffer_size: usize = env::var("BIDI_BUFFER_SIZE")
             .map(|bs| bs.parse::<usize>())
             .unwrap()
             .unwrap_or(128);
 
         Self {
+            db,
             notifier,
             buffer_size,
         }
     }
 
-    pub async fn host_payload(_id: Uuid) -> Option<Notification> {
-        None
+    pub async fn host_payload(id: Uuid, db: DbPool) -> Option<Notification> {
+        match Host::find_by_id(id, &db).await {
+            Ok(host) => {
+                let n_host = GrpcHost::from(host);
+                let notification = Notification::Host(n_host);
+
+                Some(notification)
+            }
+            Err(e) => {
+                tracing::error!("Host ID {} not found: {}", id, e);
+                None
+            }
+        }
     }
 
-    pub async fn node_payload(_id: Uuid) -> Option<Notification> {
-        None
+    pub async fn node_payload(id: Uuid, db: DbPool) -> Option<Notification> {
+        match Node::find_by_id(&id, &db).await {
+            Ok(node) => {
+                let n_node = GrpcNode::from(node);
+                let notification = Notification::Node(n_node);
+
+                Some(notification)
+            }
+            Err(e) => {
+                tracing::error!("Node ID {} not found: {}", id, e);
+                None
+            }
+        }
     }
 }
 
@@ -61,12 +88,14 @@ impl UpdateService for UpdateServiceImpl {
         let nodes_receiver = self.notifier.nodes_receiver().clone();
         let (tx_hosts, rx) = mpsc::channel(self.buffer_size);
         let tx_nodes = tx_hosts.clone();
+        let db = self.db.clone();
 
         let handle_host_updates = tokio::spawn(async move {
             while let Ok(host) = hosts_receiver.recv() {
                 match host {
                     ChannelNotification::Host(pl) => {
-                        let notification_pl = UpdateServiceImpl::host_payload(pl.get_id()).await;
+                        let notification_pl =
+                            UpdateServiceImpl::host_payload(pl.get_id(), db.clone()).await;
                         let notification = UpdateNotification {
                             notification: notification_pl,
                         };
@@ -84,11 +113,14 @@ impl UpdateService for UpdateServiceImpl {
             }
         });
 
+        let db = self.db.clone();
+
         let handle_node_updates = tokio::spawn(async move {
             while let Ok(node) = nodes_receiver.recv() {
                 match node {
                     ChannelNotification::Node(pl) => {
-                        let notification_pl = UpdateServiceImpl::node_payload(pl.get_id()).await;
+                        let notification_pl =
+                            UpdateServiceImpl::node_payload(pl.get_id(), db.clone()).await;
                         let notification = UpdateNotification {
                             notification: notification_pl,
                         };
