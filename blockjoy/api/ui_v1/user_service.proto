@@ -26,7 +26,6 @@ message CreateUserResponse {
 
 message UpsertConfigurationRequest {
   RequestMeta meta = 1;
-  Uuid user_id = 2;
   repeated UserConfigurationParameter params = 3;
 }
 
@@ -36,7 +35,6 @@ message UpsertConfigurationResponse {
 
 message GetConfigurationRequest {
   RequestMeta meta = 1;
-  Uuid user_id = 2;
 }
 
 message GetConfigurationResponse {
