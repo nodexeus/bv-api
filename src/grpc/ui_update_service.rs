@@ -1,19 +1,42 @@
+use crate::grpc::blockjoy_ui::update_notification::Notification;
 use crate::grpc::blockjoy_ui::update_service_server::UpdateService;
-use crate::grpc::blockjoy_ui::{GetUpdatesRequest, GetUpdatesResponse};
-use crate::grpc::notification::ChannelNotifier;
-use crate::server::DbPool;
+use crate::grpc::blockjoy_ui::{
+    response_meta, GetUpdatesRequest, GetUpdatesResponse, Host as GrpcHost, Node as GrpcNode,
+    ResponseMeta, UpdateNotification,
+};
+use crate::grpc::notification::{ChannelNotification, ChannelNotifier};
+use std::env;
 use std::pin::Pin;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::codegen::futures_core::Stream;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 pub struct UpdateServiceImpl {
-    db: DbPool,
     notifier: ChannelNotifier,
+    buffer_size: usize,
 }
 
 impl UpdateServiceImpl {
-    pub fn new(db: DbPool, notifier: ChannelNotifier) -> Self {
-        Self { db, notifier }
+    pub fn new(notifier: ChannelNotifier) -> Self {
+        let buffer_size: usize = env::var("BIDI_BUFFER_SIZE")
+            .map(|bs| bs.parse::<usize>())
+            .unwrap()
+            .unwrap_or(128);
+
+        Self {
+            notifier,
+            buffer_size,
+        }
+    }
+
+    pub async fn host_payload(_id: Uuid) -> Option<Notification> {
+        None
+    }
+
+    pub async fn node_payload(_id: Uuid) -> Option<Notification> {
+        None
     }
 }
 
@@ -24,8 +47,75 @@ impl UpdateService for UpdateServiceImpl {
 
     async fn updates(
         &self,
-        _request: Request<GetUpdatesRequest>,
+        request: Request<GetUpdatesRequest>,
     ) -> Result<Response<Self::UpdatesStream>, Status> {
-        todo!()
+        let inner = request.into_inner();
+        let host_response_meta = ResponseMeta {
+            status: response_meta::Status::Success.into(),
+            origin_request_id: inner.meta.unwrap().id,
+            messages: vec![],
+            pagination: None,
+        };
+        let node_response_meta = host_response_meta.clone();
+        let hosts_receiver = self.notifier.hosts_receiver().clone();
+        let nodes_receiver = self.notifier.nodes_receiver().clone();
+        let (tx_hosts, rx) = mpsc::channel(self.buffer_size);
+        let tx_nodes = tx_hosts.clone();
+
+        let handle_host_updates = tokio::spawn(async move {
+            while let Ok(host) = hosts_receiver.recv() {
+                match host {
+                    ChannelNotification::Host(pl) => {
+                        let notification_pl = UpdateServiceImpl::host_payload(pl.get_id()).await;
+                        let notification = UpdateNotification {
+                            notification: notification_pl,
+                        };
+                        let response = GetUpdatesResponse {
+                            meta: Some(host_response_meta.clone()),
+                            update: Some(notification),
+                        };
+
+                        if let Err(e) = tx_hosts.send(Ok(response)).await {
+                            tracing::error!("Couldn't send update: {}", e.to_string())
+                        }
+                    }
+                    _ => tracing::error!("Received non Host notification on host channel"),
+                }
+            }
+        });
+
+        let handle_node_updates = tokio::spawn(async move {
+            while let Ok(node) = nodes_receiver.recv() {
+                match node {
+                    ChannelNotification::Node(pl) => {
+                        let notification_pl = UpdateServiceImpl::node_payload(pl.get_id()).await;
+                        let notification = UpdateNotification {
+                            notification: notification_pl,
+                        };
+                        let response = GetUpdatesResponse {
+                            meta: Some(node_response_meta.clone()),
+                            update: Some(notification),
+                        };
+
+                        if let Err(e) = tx_nodes.send(Ok(response)).await {
+                            tracing::error!("Couldn't send update: {}", e.to_string())
+                        }
+                    }
+                    _ => tracing::error!("Received non Node notification on node channel"),
+                }
+            }
+        });
+
+        // Join handles to ensure max. concurrency
+        match tokio::try_join!(handle_host_updates, handle_node_updates) {
+            Ok(_) => tracing::info!("All tasks finished"),
+            Err(e) => tracing::error!("Error in some task: {}", e),
+        }
+
+        let updates_stream = ReceiverStream::new(rx);
+
+        Ok(Response::new(
+            Box::pin(updates_stream) as Self::UpdatesStream
+        ))
     }
 }
