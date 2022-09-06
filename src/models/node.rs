@@ -259,6 +259,57 @@ impl Node {
             .await
             .map_err(ApiError::from)
     }
+
+    pub async fn running_nodes_count(db: &PgPool) -> Result<i32> {
+        match sqlx::query(
+            r#"select count(id) from nodes where chain_status in
+                                 (
+                                  'broadcasting'::enum_node_chain_status,
+                                  'cancelled'::enum_node_chain_status,
+                                  'delegating'::enum_node_chain_status,
+                                  'delinquent'::enum_node_chain_status,
+                                  'earning'::enum_node_chain_status,
+                                  'electing'::enum_node_chain_status,
+                                  'elected'::enum_node_chain_status,
+                                  'exported'::enum_node_chain_status,
+                                  'ingesting'::enum_node_chain_status,
+                                  'mining'::enum_node_chain_status,
+                                  'minting'::enum_node_chain_status,
+                                  'processing'::enum_node_chain_status,
+                                  'relaying'::enum_node_chain_status
+                                 );"#,
+        )
+        .fetch_one(db)
+        .await
+        {
+            Ok(row) => Ok(row.get(0)),
+            Err(e) => {
+                tracing::error!("Got error while retrieving number of running hosts: {}", e);
+                Err(ApiError::from(e))
+            }
+        }
+    }
+
+    pub async fn halted_nodes_count(db: &PgPool) -> Result<i32> {
+        match sqlx::query(
+            r#"select count(id) from nodes where chain_status in
+                                 (
+                                  'unknown'::enum_node_chain_status,
+                                  'disabled'::enum_node_chain_status,
+                                  'removed'::enum_node_chain_status,
+                                  'removing'::enum_node_chain_status
+                                 );"#,
+        )
+        .fetch_one(db)
+        .await
+        {
+            Ok(row) => Ok(row.get(0)),
+            Err(e) => {
+                tracing::error!("Got error while retrieving number of running hosts: {}", e);
+                Err(ApiError::from(e))
+            }
+        }
+    }
 }
 
 #[tonic::async_trait]
