@@ -262,7 +262,7 @@ impl Node {
 
     pub async fn running_nodes_count(db: &PgPool) -> Result<i32> {
         match sqlx::query(
-            r#"select count(id) from nodes where chain_status in
+            r#"select count(id)::int from nodes where chain_status in
                                  (
                                   'broadcasting'::enum_node_chain_status,
                                   'cancelled'::enum_node_chain_status,
@@ -292,7 +292,7 @@ impl Node {
 
     pub async fn halted_nodes_count(db: &PgPool) -> Result<i32> {
         match sqlx::query(
-            r#"select count(id) from nodes where chain_status in
+            r#"select count(id)::int from nodes where chain_status in
                                  (
                                   'unknown'::enum_node_chain_status,
                                   'disabled'::enum_node_chain_status,
