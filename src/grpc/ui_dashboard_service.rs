@@ -1,6 +1,6 @@
 use crate::grpc::blockjoy_ui::dashboard_service_server::DashboardService;
 use crate::grpc::blockjoy_ui::{
-    kpi, response_meta, DashboardKpiRequest, DashboardKpiResponse, Kpi, ResponseMeta,
+    metric, response_meta, DashboardMetricsRequest, DashboardMetricsResponse, Metric, ResponseMeta,
 };
 use crate::models::Node;
 use crate::server::DbPool;
@@ -21,8 +21,8 @@ impl DashboardServiceImpl {
 impl DashboardService for DashboardServiceImpl {
     async fn metrics(
         &self,
-        request: Request<DashboardKpiRequest>,
-    ) -> Result<Response<DashboardKpiResponse>, Status> {
+        request: Request<DashboardMetricsRequest>,
+    ) -> Result<Response<DashboardMetricsResponse>, Status> {
         let inner = request.into_inner();
         let response_meta = ResponseMeta {
             status: response_meta::Status::Success.into(),
@@ -30,18 +30,18 @@ impl DashboardService for DashboardServiceImpl {
             messages: vec![],
             pagination: None,
         };
-        let mut values: Vec<Kpi> = Vec::with_capacity(2);
+        let mut metrics: Vec<Metric> = Vec::with_capacity(2);
 
         if let Ok(running_nodes) = Node::running_nodes_count(&self.db).await {
             let value = Any {
                 type_url: String::from("int32"),
                 value: running_nodes.to_string().into_bytes(),
             };
-            let running = Kpi {
-                name: kpi::Name::Online.into(),
+            let running = Metric {
+                name: metric::Name::Online.into(),
                 value: Some(value),
             };
-            values.insert(0, running);
+            metrics.insert(0, running);
         }
 
         if let Ok(stopped_nodes) = Node::halted_nodes_count(&self.db).await {
@@ -49,16 +49,16 @@ impl DashboardService for DashboardServiceImpl {
                 type_url: String::from("int32"),
                 value: stopped_nodes.to_string().into_bytes(),
             };
-            let running = Kpi {
-                name: kpi::Name::Offline.into(),
+            let running = Metric {
+                name: metric::Name::Offline.into(),
                 value: Some(value),
             };
-            values.insert(1, running);
+            metrics.insert(1, running);
         }
 
-        let response = DashboardKpiResponse {
+        let response = DashboardMetricsResponse {
             meta: Some(response_meta),
-            values,
+            metrics,
         };
 
         Ok(Response::new(response))
