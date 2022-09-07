@@ -19,7 +19,7 @@ impl DashboardServiceImpl {
 
 #[tonic::async_trait]
 impl DashboardService for DashboardServiceImpl {
-    async fn kp_is(
+    async fn metrics(
         &self,
         request: Request<DashboardKpiRequest>,
     ) -> Result<Response<DashboardKpiResponse>, Status> {

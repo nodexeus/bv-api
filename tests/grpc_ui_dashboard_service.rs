@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_unauthenticated_with_invalid_token_for_kpis() {
+async fn responds_unauthenticated_with_invalid_token_for_metrics() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
@@ -31,12 +31,12 @@ async fn responds_unauthenticated_with_invalid_token_for_kpis() {
         format!("Bearer {}", "some-invalid-token").parse().unwrap(),
     );
 
-    assert_grpc_request! { kp_is, request, tonic::Code::Unauthenticated, db, DashboardServiceClient<Channel> };
+    assert_grpc_request! { metrics, request, tonic::Code::Unauthenticated, db, DashboardServiceClient<Channel> };
 }
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_ok_with_valid_token_for_kpis() {
+async fn responds_ok_with_valid_token_for_metrics() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
@@ -56,12 +56,12 @@ async fn responds_ok_with_valid_token_for_kpis() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
-    assert_grpc_request! { kp_is, request, tonic::Code::Ok, db, DashboardServiceClient<Channel> };
+    assert_grpc_request! { metrics, request, tonic::Code::Ok, db, DashboardServiceClient<Channel> };
 }
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_valid_values_for_kpis() {
+async fn responds_valid_values_for_metrics() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
@@ -85,7 +85,7 @@ async fn responds_valid_values_for_kpis() {
         server_and_client_stub::<DashboardServiceClient<Channel>>(db).await;
 
     let request_future = async {
-        match client.kp_is(request).await {
+        match client.metrics(request).await {
             Ok(response) => {
                 let inner = response.into_inner();
                 let values = inner.values;
