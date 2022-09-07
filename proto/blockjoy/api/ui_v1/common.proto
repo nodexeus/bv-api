@@ -215,8 +215,8 @@ message Bill {
   optional string pdf_url = 9;
 }
 
-/* Single KPI value */
-message KPI {
+/* Single metric value */
+message Metric {
   enum Name {
     Unknown = 0;
     Nodes = 1;
