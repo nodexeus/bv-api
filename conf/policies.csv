@@ -30,6 +30,7 @@ p, master_admin, /blockjoy.api.ui_v1.CommandService/StopHost, POST
 p, master_admin, /blockjoy.api.ui_v1.CommandService/RestartHost, POST
 p, master_admin, /blockjoy.api.ui_v1.CommandService/ExecuteGeneric, POST
 p, master_admin, /blockjoy.api.ui_v1.UpdateService/Updates, POST
+p, master_admin, /blockjoy.api.ui_v1.DashboardService/Metrics, POST
 
 g, admin, master_admin
 g, guest, outbound

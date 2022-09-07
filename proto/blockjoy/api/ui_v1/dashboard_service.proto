@@ -4,17 +4,17 @@ package blockjoy.api.ui_v1;
 
 import "common.proto";
 
-message DashboardKpiRequest {
+message DashboardMetricsRequest {
   RequestMeta meta = 1;
 }
 
-message DashboardKpiResponse {
+message DashboardMetricsResponse {
   ResponseMeta meta = 1;
-  repeated KPI values = 2;
+  repeated Metric metrics = 2;
 }
 
-/* Get dashboard KPIs */
+/* Get dashboard metrics */
 service DashboardService {
-  /* Get dashboard KPIs for nodes/hosts etc. */
-  rpc KPIs(DashboardKpiRequest) returns (DashboardKpiResponse) {}
+  /* Get metrics for nodes/hosts etc. */
+  rpc Metrics(DashboardMetricsRequest) returns (DashboardMetricsResponse) {}
 }
