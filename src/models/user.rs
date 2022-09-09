@@ -338,6 +338,12 @@ impl User {
 
         Ok(user)
     }
+
+    pub fn preferred_language(&self) -> &str {
+        // Needs to be done later, but we want to have some stub in place so we keep our code aware
+        // of language differences.
+        "en"
+    }
 }
 
 #[axum::async_trait]
