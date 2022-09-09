@@ -27,8 +27,8 @@ pub async fn start() -> anyhow::Result<()> {
         PgPoolOptions::new()
             .max_connections(db_max_conn)
             .min_connections(db_min_conn)
-            .max_lifetime(Some(Duration::from_secs(60 * 60 * 24)))
-            .idle_timeout(Some(Duration::from_secs(60 * 2)))
+            .max_lifetime(Duration::from_secs(60 * 60 * 24))
+            .idle_timeout(Duration::from_secs(60 * 2))
             .connect(&db_url)
             .await
             .expect("Could not create db connection pool."),

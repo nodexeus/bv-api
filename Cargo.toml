@@ -24,6 +24,7 @@ dotenv = "0.15.0"
 flate2 = "1.0"
 futures-util = "0.3.21"
 h2 = "0.3.13"
+handlebars = "4.3.3"
 http = "0.2.8"
 hyper = "0.14.20"
 jsonwebtoken = "7.2.0"
@@ -42,6 +43,7 @@ sqlx = {version = "0.5", features = ["postgres", "runtime-tokio-rustls", "migrat
 thiserror = "1.0.24"
 tokio = {version = "1.2.0", default-features = false, features = ["io-util", "sync", "macros"]}
 tokio-stream = { version = "0.1.9", features = ["net"] }
+toml = "0.5.9"
 tonic = "0.7.2"
 tower = { version = "0.4", features = ["tokio", "tracing", "util"] }
 tower-http = {version = "0.3.2", features = ["cors", "trace", "compression-gzip", "auth"]}
