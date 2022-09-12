@@ -51,6 +51,7 @@ use axum::Extension;
 use blockjoy::hosts_server::HostsServer;
 use host_service::HostsServiceImpl;
 use sqlx::PgPool;
+use std::env;
 use std::sync::Arc;
 use tonic::transport::server::Router;
 use tonic::transport::Server;
@@ -111,6 +112,7 @@ pub async fn server(
 
     Server::builder()
         .layer(middleware)
+        .concurrency_limit_per_connection(rate_limiting_settings())
         .add_service(h_service)
         .add_service(c_service)
         .add_service(ui_auth_service)
@@ -122,4 +124,11 @@ pub async fn server(
         .add_service(ui_command_service)
         .add_service(ui_update_service)
         .add_service(ui_dashboard_service)
+}
+
+fn rate_limiting_settings() -> usize {
+    env::var("REQUEST_CONCURRENCY_LIMIT")
+        .unwrap()
+        .parse::<usize>()
+        .unwrap()
 }
