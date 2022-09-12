@@ -1,8 +1,7 @@
 use crate::auth::TokenIdentifyable;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
-    response_meta, ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest,
-    RefreshTokenResponse,
+    ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
 };
 use crate::grpc::helpers::success_response_meta;
 use crate::models::{Token, User};
@@ -31,10 +30,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let token = ApiToken {
             value: db_token.token,
         };
-        let meta = success_response_meta(
-            i32::from(response_meta::Status::Success),
-            inner.meta.unwrap().id,
-        );
+        let meta = success_response_meta(inner.meta.unwrap().id);
         let response = LoginUserResponse {
             meta: Some(meta),
             token: Some(token),
@@ -57,7 +53,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
                 value: Token::refresh(db_token, &self.db).await?.token,
             };
 
-            let meta = success_response_meta(i32::from(response_meta::Status::Success), request_id);
+            let meta = success_response_meta(request_id);
             let response = RefreshTokenResponse {
                 meta: Some(meta),
                 token: Some(new_token),
