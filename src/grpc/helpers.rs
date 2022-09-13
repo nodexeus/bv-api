@@ -1,6 +1,8 @@
 use crate::grpc::blockjoy_ui::{response_meta, Pagination, ResponseMeta, Uuid};
 use prost_types::Timestamp;
+use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tonic::Status;
 
 pub fn pb_current_timestamp() -> Timestamp {
     let start = SystemTime::now();
@@ -27,10 +29,14 @@ pub fn success_response_meta(request_id: Option<Uuid>) -> ResponseMeta {
 }
 
 pub fn success_response_with_pagination(request_id: Option<Uuid>) -> ResponseMeta {
+    let max_items = env::var("PAGINATION_MAX_ITEMS")
+        .unwrap()
+        .parse::<i32>()
+        .unwrap_or(10);
     let pagination = Pagination {
-        total_items: 0,
-        offset: 0,
-        items_per_page: 0,
+        total_items: Some(0i32),
+        items_per_page: max_items,
+        current_page: 0,
     };
 
     ResponseMeta {
@@ -38,5 +44,26 @@ pub fn success_response_with_pagination(request_id: Option<Uuid>) -> ResponseMet
         origin_request_id: request_id,
         messages: vec![],
         pagination: Some(pagination),
+    }
+}
+
+pub fn pagination_parameters(pagination: Option<Pagination>) -> Result<(i32, i32), Status> {
+    if let Some(..) = pagination {
+        let pagination = pagination.unwrap();
+        let max_items = env::var("PAGINATION_MAX_ITEMS")
+            .unwrap()
+            .parse::<i32>()
+            .unwrap();
+
+        if pagination.items_per_page > max_items {
+            return Err(Status::cancelled("Max items exceeded"));
+        }
+
+        Ok((
+            pagination.items_per_page,
+            pagination.current_page * pagination.items_per_page,
+        ))
+    } else {
+        Ok((10, 0))
     }
 }

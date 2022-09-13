@@ -1,7 +1,8 @@
 use crate::grpc::blockjoy_ui::user_service_server::UserService;
 use crate::grpc::blockjoy_ui::{
     response_meta, CreateUserRequest, CreateUserResponse, GetConfigurationRequest,
-    GetConfigurationResponse, GetUserRequest, GetUserResponse, ResponseMeta,
+    GetConfigurationResponse, GetUserRequest, GetUserResponse, ResetPasswordRequest,
+    ResetPasswordResponse, ResponseMeta, UpdateUserRequest, UpdateUserResponse,
     UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
 };
 use crate::grpc::helpers::success_response_meta;
@@ -65,6 +66,13 @@ impl UserService for UserServiceImpl {
         }
     }
 
+    async fn update(
+        &self,
+        _request: Request<UpdateUserRequest>,
+    ) -> Result<Response<UpdateUserResponse>, Status> {
+        Err(Status::unimplemented(""))
+    }
+
     async fn upsert_configuration(
         &self,
         _request: Request<UpsertConfigurationRequest>,
@@ -76,6 +84,13 @@ impl UserService for UserServiceImpl {
         &self,
         _request: Request<GetConfigurationRequest>,
     ) -> Result<Response<GetConfigurationResponse>, Status> {
+        Err(Status::unimplemented(""))
+    }
+
+    async fn reset_password(
+        &self,
+        _request: Request<ResetPasswordRequest>,
+    ) -> Result<Response<ResetPasswordResponse>, Status> {
         Err(Status::unimplemented(""))
     }
 }

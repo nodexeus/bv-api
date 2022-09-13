@@ -6,7 +6,7 @@ use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
 use api::grpc::blockjoy_ui::{
     get_hosts_request, CreateHostRequest, DeleteHostRequest, GetHostsRequest, Host as GrpcHost,
-    RequestMeta, UpdateHostRequest, Uuid as GrpcUuid,
+    Pagination, RequestMeta, UpdateHostRequest, Uuid as GrpcUuid,
 };
 use api::models::Org;
 use setup::{server_and_client_stub, setup};
@@ -25,7 +25,7 @@ async fn responds_not_found_without_any_for_get() {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
         fields: vec![],
-        limit: None,
+        pagination: None,
     };
     let user = get_admin_user(&db).await;
     let token = user.get_token(&db).await.unwrap();
@@ -51,7 +51,7 @@ async fn responds_ok_with_id_for_get() {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
         fields: vec![],
-        limit: None,
+        pagination: None,
     };
     let user = get_admin_user(&db.clone()).await;
     let host_id = GrpcUuid::from(get_test_host(&db).await.id);
@@ -78,7 +78,7 @@ async fn responds_ok_with_org_id_for_get() {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
         fields: vec![],
-        limit: None,
+        pagination: None,
     };
     let user = get_admin_user(&db.clone()).await;
     let host = get_test_host(&db).await;
@@ -108,11 +108,16 @@ async fn responds_ok_with_org_id_for_get() {
 #[tokio::test]
 async fn responds_ok_with_pagination_with_org_id_for_get() {
     let db = Arc::new(_before_values.await);
+    let pagination = Pagination {
+        current_page: 0,
+        items_per_page: 10,
+        total_items: None,
+    };
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
         fields: vec![],
-        limit: Some(10),
+        pagination: Some(pagination),
     };
     let user = get_admin_user(&db.clone()).await;
     let orgs = Org::find_all_by_user(user.id, &db).await.unwrap();
@@ -147,8 +152,8 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
                 let pagination = meta.pagination.unwrap();
 
                 assert_eq!(pagination.items_per_page, max_items);
-                assert_eq!(pagination.offset, 0);
-                assert_eq!(pagination.total_items, 0);
+                assert_eq!(pagination.current_page, 0);
+                assert_eq!(pagination.total_items.unwrap(), 0);
             }
             Err(e) => {
                 panic!("got error: {:?}", e);
@@ -171,7 +176,7 @@ async fn responds_ok_with_token_for_get() {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
         fields: vec![],
-        limit: None,
+        pagination: None,
     };
     let user = get_admin_user(&db.clone()).await;
     let host = get_test_host(&db).await;
@@ -199,7 +204,7 @@ async fn responds_ok_with_id_for_delete() {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
         fields: vec![],
-        limit: None,
+        pagination: None,
     };
     let user = get_admin_user(&db.clone()).await;
     let host = get_test_host(&db).await;
@@ -226,7 +231,7 @@ async fn responds_ok_with_host_for_update() {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
         fields: vec![],
-        limit: None,
+        pagination: None,
     };
     let user = get_admin_user(&db.clone()).await;
     let host = GrpcHost::from(get_test_host(&db).await);
@@ -253,7 +258,7 @@ async fn responds_ok_with_host_for_create() {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
         fields: vec![],
-        limit: None,
+        pagination: None,
     };
     let host = GrpcHost {
         name: Some("burli-bua".to_string()),

@@ -5,25 +5,21 @@ use crate::grpc::blockjoy_ui::{
     DeleteHostResponse, GetHostsRequest, GetHostsResponse, Host as GrpcHost, UpdateHostRequest,
     UpdateHostResponse,
 };
-use crate::grpc::helpers::{success_response_meta, success_response_with_pagination};
+use crate::grpc::helpers::{
+    pagination_parameters, success_response_meta, success_response_with_pagination,
+};
 use crate::models::{Host, HostRequest, HostSelectiveUpdate, Token};
 use crate::server::DbPool;
-use std::env;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 pub struct HostServiceImpl {
     db: DbPool,
-    max_items: i32,
 }
 
 impl HostServiceImpl {
     pub fn new(db: DbPool) -> Self {
-        let max_items = env::var("PAGINATION_MAX_ITEMS")
-            .unwrap()
-            .parse::<i32>()
-            .unwrap_or_default();
-        Self { db, max_items }
+        Self { db }
     }
 }
 
@@ -40,7 +36,10 @@ impl HostService for HostServiceImpl {
         let inner = request.into_inner();
         let meta = inner.meta.unwrap();
         let request_id = meta.id;
-        let pagination = meta.limit.unwrap_or(self.max_items);
+        let (limit, offset) = match pagination_parameters(meta.pagination) {
+            Ok((limit, offset)) => (limit, offset),
+            Err(e) => return Err(e),
+        };
 
         if inner.param.is_none() {
             return Err(Status::not_found("None of ID, OrgID, Token was provided"));
@@ -54,9 +53,8 @@ impl HostService for HostServiceImpl {
                 success_response_meta(request_id),
             ),
             get_hosts_request::Param::OrgId(org_id) => {
-                let offset = 0;
                 let hosts =
-                    Host::find_by_org_paginated(Uuid::from(org_id), pagination, offset, &self.db)
+                    Host::find_by_org_paginated(Uuid::from(org_id), limit, offset, &self.db)
                         .await?
                         .iter()
                         .map(GrpcHost::from)
