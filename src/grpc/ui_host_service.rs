@@ -29,6 +29,7 @@ impl HostService for HostServiceImpl {
     /// - ID
     /// - Organization ID
     /// - Token
+    /// One of those options need to be there
     async fn get(
         &self,
         request: Request<GetHostsRequest>,
