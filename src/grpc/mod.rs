@@ -84,6 +84,7 @@ pub async fn server(
     let unauthenticated = UnauthenticatedPaths::new(vec![
         "/blockjoy.api.v1.Hosts/Provision",
         "/blockjoy.api.ui_v1.AuthenticationService/Login",
+        "/blockjoy.api.ui_v1.UserService/ResetPassword",
         "/blockjoy.api.ui_v1.UserService/Create",
     ]);
     let enforcer = Authorization::new().await.unwrap();
