@@ -4,6 +4,7 @@ use crate::grpc::blockjoy_ui::{
     Node as GrpcNode, ResponseMeta, UpdateNodeRequest, UpdateNodeResponse,
 };
 use crate::grpc::helpers::success_response_meta;
+use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Node, NodeInfo};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -11,11 +12,12 @@ use uuid::Uuid;
 
 pub struct NodeServiceImpl {
     db: DbPool,
+    notifier: ChannelNotifier,
 }
 
 impl NodeServiceImpl {
-    pub fn new(db: DbPool) -> Self {
-        Self { db }
+    pub fn new(db: DbPool, notifier: ChannelNotifier) -> Self {
+        Self { db, notifier }
     }
 }
 
@@ -66,8 +68,13 @@ impl NodeService for NodeServiceImpl {
                 let response = CreateNodeResponse {
                     meta: Some(response_meta),
                 };
+                let payload = NotificationPayload::new(node.id);
+                let notification = ChannelNotification::Node(payload);
 
-                Ok(Response::new(response))
+                match self.notifier.nodes_sender().send(notification) {
+                    Ok(_) => Ok(Response::new(response)),
+                    Err(e) => Err(Status::internal(format!("{}", e))),
+                }
             }
             Err(e) => Err(Status::from(e)),
         }
