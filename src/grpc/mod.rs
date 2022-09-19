@@ -101,7 +101,8 @@ pub async fn server(
         HostProvisionServiceServer::new(HostProvisionServiceImpl::new(db.clone()));
     let ui_command_service =
         CommandServiceServer::new(CommandServiceImpl::new(db.clone(), notifier.clone()));
-    let ui_node_service = NodeServiceServer::new(NodeServiceImpl::new(db.clone()));
+    let ui_node_service =
+        NodeServiceServer::new(NodeServiceImpl::new(db.clone(), notifier.clone()));
     let ui_update_service = UpdateServiceServer::new(UpdateServiceImpl::new(db.clone(), notifier));
     let ui_dashboard_service = DashboardServiceServer::new(DashboardServiceImpl::new(db.clone()));
     let middleware = tower::ServiceBuilder::new()
