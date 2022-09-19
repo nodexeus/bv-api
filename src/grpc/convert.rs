@@ -1,19 +1,90 @@
+use crate::errors::Result as ApiResult;
+use crate::grpc::blockjoy::{
+    command, node_command, Command as GrpcCommand, CommandMeta, NodeCommand, NodeCreate,
+    NodeDelete, NodeInfoGet, NodeRestart, NodeStop, NodeType as GrpcNodeType, Uuid as GrpcUuid,
+};
+use crate::grpc::helpers::pb_current_timestamp;
+use crate::models::{Command, HostCmd, Node, NodeType as DbNodeType};
+use crate::server::DbPool;
+
+pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<GrpcCommand> {
+    let meta = Some(CommandMeta {
+        api_command_id: Some(GrpcUuid::from(cmd.resource_id)),
+        created_at: Some(pb_current_timestamp()),
+    });
+    let mut node_cmd = NodeCommand {
+        id: None,
+        command: None,
+        meta,
+    };
+
+    node_cmd.command = match cmd.cmd {
+        HostCmd::RestartNode => Some(node_command::Command::Restart(NodeRestart::default())),
+        HostCmd::KillNode => {
+            tracing::debug!("Using NodeStop for KillNode");
+            Some(node_command::Command::Stop(NodeStop::default()))
+        }
+        HostCmd::ShutdownNode => Some(node_command::Command::Stop(NodeStop::default())),
+        HostCmd::UpdateNode => {
+            tracing::debug!("Using NodeUpgrade for UpdateNode");
+            unimplemented!();
+            /*
+            // TODO: add image
+            Self {
+                r#type: Some(command::Type::Node(NodeUpgrade {})),
+            }
+             */
+        }
+        HostCmd::MigrateNode => {
+            tracing::debug!("Using NodeGenericCommand for MigrateNode");
+            unimplemented!();
+            /*
+            node_cmd.command = Some(node_command::Command::Generic(NodeGenericCommand::default()))
+             */
+        }
+        HostCmd::GetNodeVersion => {
+            tracing::debug!("Using NodeInfoGet for GetNodeVersion");
+            Some(node_command::Command::InfoGet(NodeInfoGet::default()))
+        }
+        // The following should be HostCommands
+        HostCmd::CreateNode => {
+            let node = Node::find_by_id(&cmd.resource_id, &db).await?;
+            let create_cmd = NodeCreate {
+                name: node.name.unwrap_or_default(),
+                blockchain: node.blockchain_id.to_string(),
+                image: None,
+                r#type: <DbNodeType as Into<GrpcNodeType>>::into(node.node_type) as i32,
+            };
+
+            Some(node_command::Command::Create(create_cmd))
+        }
+        HostCmd::DeleteNode => Some(node_command::Command::Delete(NodeDelete::default())),
+        HostCmd::GetBVSVersion => unimplemented!(),
+        HostCmd::UpdateBVS => unimplemented!(),
+        HostCmd::RestartBVS => unimplemented!(),
+        HostCmd::RemoveBVS => unimplemented!(),
+        HostCmd::CreateBVS => unimplemented!(),
+        HostCmd::StopBVS => unimplemented!(),
+        // TODO: Missing
+        // NodeStart, NodeUpgrade
+    };
+
+    Ok(GrpcCommand {
+        r#type: Some(command::Type::Node(node_cmd)),
+    })
+}
+
 pub mod from {
     use crate::errors::ApiError;
-    use crate::grpc::blockjoy::{
-        command, node_command, Command as GrpcCommand, CommandMeta, HostInfo, NodeCommand,
-        NodeDelete, NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
-    };
+    use crate::grpc::blockjoy::{HostInfo, NodeType as GrpcNodeType, Uuid as GrpcUuid};
     use crate::grpc::blockjoy_ui::{
-        node::NodeStatus as GrpcNodeStatus, node::NodeType as GrpcNodeType, Host as GrpcHost,
+        node::NodeStatus as GrpcNodeStatus, node::NodeType as GrpcUiNodeType, Host as GrpcHost,
         HostProvision as GrpcHostProvision, Node as GrpcNode, Organization, User as GrpcUiUser,
         Uuid as GrpcUiUuid,
     };
-    use crate::grpc::helpers::pb_current_timestamp;
     use crate::models::{
-        Command as DbCommand, ConnectionStatus, ContainerStatus, HostCmd, HostProvision,
-        HostRequest, Node, NodeChainStatus, NodeCreateRequest, NodeInfo, NodeStakingStatus,
-        NodeSyncStatus, NodeType, Org, User,
+        ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
+        NodeCreateRequest, NodeInfo, NodeStakingStatus, NodeSyncStatus, NodeType, Org, User,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
@@ -107,85 +178,6 @@ pub mod from {
                 val_ip_addrs: None,
                 status: ConnectionStatus::Online,
             }
-        }
-    }
-
-    impl From<DbCommand> for GrpcCommand {
-        fn from(db_cmd: DbCommand) -> Self {
-            let mut node_cmd = NodeCommand::from(db_cmd.cmd);
-
-            // TODO: what should happen, if there's no UUID in the sub_cmd?
-            node_cmd.id = Some(db_cmd.sub_cmd.unwrap().parse::<GrpcUuid>().unwrap());
-
-            Self {
-                r#type: Some(command::Type::Node(node_cmd)),
-            }
-        }
-    }
-
-    impl From<HostCmd> for NodeCommand {
-        fn from(host_cmd: HostCmd) -> Self {
-            let meta = Some(CommandMeta {
-                // TODO: Use api command ID
-                api_command_id: Some(GrpcUuid::from(Uuid::new_v4())),
-                created_at: Some(pb_current_timestamp()),
-            });
-            let mut node_cmd = NodeCommand {
-                id: None,
-                command: None,
-                meta,
-            };
-
-            match host_cmd {
-                HostCmd::RestartNode => {
-                    node_cmd.command = Some(node_command::Command::Restart(NodeRestart::default()))
-                }
-                HostCmd::KillNode => {
-                    tracing::debug!("Using NodeStop for KillNode");
-                    node_cmd.command = Some(node_command::Command::Stop(NodeStop::default()))
-                }
-                HostCmd::ShutdownNode => {
-                    node_cmd.command = Some(node_command::Command::Stop(NodeStop::default()))
-                }
-                HostCmd::UpdateNode => {
-                    tracing::debug!("Using NodeUpgrade for UpdateNode");
-                    unimplemented!();
-                    /*
-                    // TODO: add image
-                    Self {
-                        r#type: Some(command::Type::Node(NodeUpgrade {})),
-                    }
-                     */
-                }
-                HostCmd::MigrateNode => {
-                    tracing::debug!("Using NodeGenericCommand for MigrateNode");
-                    unimplemented!();
-                    /*
-                    node_cmd.command = Some(node_command::Command::Generic(NodeGenericCommand::default()))
-                     */
-                }
-                HostCmd::GetNodeVersion => {
-                    tracing::debug!("Using NodeInfoGet for GetNodeVersion");
-                    node_cmd.command = Some(node_command::Command::InfoGet(NodeInfoGet::default()))
-                }
-                // The following should be HostCommands
-                HostCmd::CreateNode => {
-                    unimplemented!();
-                }
-                HostCmd::DeleteNode => {
-                    node_cmd.command = Some(node_command::Command::Delete(NodeDelete::default()))
-                }
-                HostCmd::GetBVSVersion => unimplemented!(),
-                HostCmd::UpdateBVS => unimplemented!(),
-                HostCmd::RestartBVS => unimplemented!(),
-                HostCmd::RemoveBVS => unimplemented!(),
-                HostCmd::CreateBVS => unimplemented!(),
-                HostCmd::StopBVS => unimplemented!(),
-                // TODO: Missing
-                // NodeStart, NodeUpgrade
-            }
-
-            node_cmd
         }
     }
 
@@ -454,6 +446,36 @@ pub mod from {
                 NodeType::Oracle => GrpcNodeType::Oracle,
                 NodeType::Relay => GrpcNodeType::Relay,
                 NodeType::Undefined => GrpcNodeType::UndefinedType,
+            }
+        }
+    }
+
+    impl From<NodeType> for GrpcUiNodeType {
+        fn from(nt: NodeType) -> Self {
+            match nt {
+                NodeType::Node => GrpcUiNodeType::Node,
+                NodeType::Validator => GrpcUiNodeType::Validator,
+                NodeType::Api => GrpcUiNodeType::Api,
+                NodeType::Etl => GrpcUiNodeType::Etl,
+                NodeType::Miner => GrpcUiNodeType::Miner,
+                NodeType::Oracle => GrpcUiNodeType::Oracle,
+                NodeType::Relay => GrpcUiNodeType::Relay,
+                NodeType::Undefined => GrpcUiNodeType::UndefinedType,
+            }
+        }
+    }
+
+    impl From<GrpcUiNodeType> for NodeType {
+        fn from(nt: GrpcUiNodeType) -> Self {
+            match nt {
+                GrpcUiNodeType::Node => NodeType::Node,
+                GrpcUiNodeType::Validator => NodeType::Validator,
+                GrpcUiNodeType::Api => NodeType::Api,
+                GrpcUiNodeType::Etl => NodeType::Etl,
+                GrpcUiNodeType::Miner => NodeType::Miner,
+                GrpcUiNodeType::Oracle => NodeType::Oracle,
+                GrpcUiNodeType::Relay => NodeType::Relay,
+                GrpcUiNodeType::UndefinedType => NodeType::Undefined,
             }
         }
     }
