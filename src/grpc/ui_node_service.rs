@@ -68,11 +68,22 @@ impl NodeService for NodeServiceImpl {
                 let response = CreateNodeResponse {
                     meta: Some(response_meta),
                 };
-                let payload = NotificationPayload::new(node.id);
-                let notification = ChannelNotification::Node(payload);
 
-                match self.notifier.nodes_sender().send(notification) {
-                    Ok(_) => Ok(Response::new(response)),
+                let payload = NotificationPayload::new(node.id);
+                let notification = ChannelNotification::Command(payload);
+
+                // Sending commands receiver (in command_flow.rs)
+                match self.notifier.commands_sender().send(notification) {
+                    Ok(_) => {
+                        let payload = NotificationPayload::new(node.id);
+                        let notification = ChannelNotification::Node(payload);
+
+                        // Sending notification to nodes receiver (in ui_update_service.rs)
+                        match self.notifier.nodes_sender().send(notification) {
+                            Ok(_) => Ok(Response::new(response)),
+                            Err(e) => Err(Status::internal(format!("{}", e))),
+                        }
+                    }
                     Err(e) => Err(Status::internal(format!("{}", e))),
                 }
             }
