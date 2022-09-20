@@ -78,17 +78,13 @@ pub mod from {
     use crate::errors::ApiError;
     use crate::grpc::blockjoy::{HostInfo, NodeType as GrpcNodeType, Uuid as GrpcUuid};
     use crate::grpc::blockjoy_ui::{
-        self, node::NodeStatus as GrpcNodeStatus, node::NodeStatus as GrpcNodeStatus,
-        node::NodeType as GrpcNodeType, node::NodeType as GrpcUiNodeType, Host as GrpcHost,
+        self, node::NodeStatus as GrpcNodeStatus, node::NodeType as GrpcUiNodeType,
         Host as GrpcHost, HostProvision as GrpcHostProvision, Node as GrpcNode, Organization,
         User as GrpcUiUser, Uuid as GrpcUiUuid,
     };
     use crate::models::{
-        self, Command as DbCommand, ConnectionStatus, ConnectionStatus, ContainerStatus,
-        ContainerStatus, HostCmd, HostProvision, HostProvision, HostRequest, HostRequest, Node,
-        Node, NodeChainStatus, NodeChainStatus, NodeCreateRequest, NodeCreateRequest, NodeInfo,
-        NodeInfo, NodeStakingStatus, NodeStakingStatus, NodeSyncStatus, NodeSyncStatus, NodeType,
-        NodeType, Org, Org, User, User,
+        self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
+        NodeCreateRequest, NodeInfo, NodeStakingStatus, NodeSyncStatus, NodeType, Org, User,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
@@ -521,7 +517,7 @@ pub mod from {
 
     impl From<models::Blockchain> for blockjoy_ui::Blockchain {
         fn from(model: models::Blockchain) -> Self {
-            let convert_dt = |dt: DateTime<Utc>| prost_types::Timestamp {
+            let convert_dt = |dt: DateTime<Utc>| Timestamp {
                 seconds: dt.timestamp(),
                 nanos: dt.timestamp_nanos() as i32,
             };
