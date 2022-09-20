@@ -1,5 +1,5 @@
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
-use crate::grpc::blockjoy_ui::{response_meta, CommandRequest, CommandResponse, ResponseMeta};
+use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, ResponseMeta};
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd};
 use crate::server::DbPool;
@@ -53,12 +53,8 @@ macro_rules! create_command {
 
                         match $obj.send_notification(notification) {
                             Ok(_) => {
-                                let response_meta = ResponseMeta {
-                                    status: response_meta::Status::Success.into(),
-                                    origin_request_id: inner.meta.unwrap().id,
-                                    messages: vec![cmd.id.to_string()],
-                                    pagination: None,
-                                };
+                                let response_meta =
+                                    ResponseMeta::from_meta(inner.meta).with_message(cmd.id);
                                 let response = CommandResponse {
                                     meta: Some(response_meta),
                                 };

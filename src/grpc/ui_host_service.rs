@@ -5,13 +5,13 @@ use crate::grpc::blockjoy_ui::{
     DeleteHostResponse, GetHostsRequest, GetHostsResponse, Host as GrpcHost, UpdateHostRequest,
     UpdateHostResponse,
 };
-use crate::grpc::helpers::{
-    pagination_parameters, success_response_meta, success_response_with_pagination,
-};
+use crate::grpc::helpers::pagination_parameters;
 use crate::models::{Host, HostRequest, HostSelectiveUpdate, Token};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
+
+use super::blockjoy_ui::ResponseMeta;
 
 pub struct HostServiceImpl {
     db: DbPool,
@@ -51,7 +51,7 @@ impl HostService for HostServiceImpl {
                 vec![GrpcHost::from(
                     Host::find_by_id(Uuid::from(id), &self.db).await?,
                 )],
-                success_response_meta(request_id),
+                ResponseMeta::new(request_id),
             ),
             get_hosts_request::Param::OrgId(org_id) => {
                 let hosts =
@@ -61,13 +61,13 @@ impl HostService for HostServiceImpl {
                         .map(GrpcHost::from)
                         .collect();
 
-                (hosts, success_response_with_pagination(request_id))
+                (hosts, ResponseMeta::new(request_id).with_pagination())
             }
             get_hosts_request::Param::Token(ref token) => (
                 vec![GrpcHost::from(
                     Token::get_host_for_token(token, TokenType::Login, &self.db).await?,
                 )],
-                success_response_meta(request_id),
+                ResponseMeta::new(request_id),
             ),
         };
 
@@ -93,9 +93,8 @@ impl HostService for HostServiceImpl {
 
         match Host::create(fields, &self.db).await {
             Ok(_) => {
-                let response_meta = success_response_meta(inner.meta.unwrap().id);
                 let response = CreateHostResponse {
-                    meta: Some(response_meta),
+                    meta: Some(ResponseMeta::from_meta(inner.meta)),
                 };
 
                 Ok(Response::new(response))
@@ -115,11 +114,9 @@ impl HostService for HostServiceImpl {
 
         match Host::update_all(Uuid::from(host_id), fields, &self.db).await {
             Ok(_) => {
-                let response_meta = success_response_meta(inner.meta.unwrap().id);
                 let response = UpdateHostResponse {
-                    meta: Some(response_meta),
+                    meta: Some(ResponseMeta::from_meta(inner.meta)),
                 };
-
                 Ok(Response::new(response))
             }
             Err(e) => Err(Status::from(e)),
@@ -135,9 +132,8 @@ impl HostService for HostServiceImpl {
 
         match Host::delete(Uuid::from(host_id), &self.db).await {
             Ok(_) => {
-                let response_meta = success_response_meta(inner.meta.unwrap().id);
                 let response = DeleteHostResponse {
-                    meta: Some(response_meta),
+                    meta: Some(ResponseMeta::from_meta(inner.meta)),
                 };
 
                 Ok(Response::new(response))
