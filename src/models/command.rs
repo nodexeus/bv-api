@@ -38,6 +38,7 @@ pub struct Command {
     pub exit_status: Option<i32>,
     pub created_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
+    pub resource_id: Uuid,
 }
 
 impl Command {
@@ -68,11 +69,12 @@ impl Command {
 
     pub async fn create(host_id: Uuid, command: CommandRequest, db: &PgPool) -> Result<Command> {
         sqlx::query_as::<_, Self>(
-            "INSERT INTO commands (host_id, cmd, sub_cmd) VALUES ($1, $2, $3) RETURNING *",
+            "INSERT INTO commands (host_id, cmd, sub_cmd, resource_id) VALUES ($1, $2, $3, $4) RETURNING *",
         )
         .bind(host_id)
         .bind(command.cmd)
         .bind(command.sub_cmd)
+        .bind(command.resource_id)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)
@@ -132,6 +134,7 @@ impl UpdateInfo<CommandInfo, Command> for Command {
 pub struct CommandRequest {
     pub cmd: HostCmd,
     pub sub_cmd: Option<String>,
+    pub resource_id: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

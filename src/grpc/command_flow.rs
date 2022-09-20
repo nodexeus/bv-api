@@ -4,6 +4,7 @@ use crate::grpc::blockjoy::{
     command_flow_server::CommandFlow, info_update::Info as GrpcInfo, Command as GrpcCommand,
     Command, InfoUpdate, NodeInfo,
 };
+use crate::grpc::convert::db_command_to_grpc_command;
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Command as DbCommand, Host, Token};
 use crate::models::{Node, UpdateInfo};
@@ -108,7 +109,7 @@ impl CommandFlowServerImpl {
 
         match command {
             Ok(command) => {
-                let msg = GrpcCommand::from(command);
+                let msg = db_command_to_grpc_command(command, db.clone()).await?;
                 match sender.send(Ok(msg)).await {
                     Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
                     _ => Ok(()), // just return unit type if all went well
