@@ -27,6 +27,8 @@ macro_rules! assert_grpc_request {
                 Ok(response) => {
                     let inner = response.into_inner();
                     println!("response OK: {:?}", inner);
+                    // TODO: removing this assertion makes lots of tests pass that should fail
+                    // assert_eq!($s, tonic::Code::Ok);
                 }
                 Err(e) => {
                     let s = Status::from(e);
@@ -153,10 +155,14 @@ pub async fn reset_db(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("could not update info in test setup");
-    sqlx::query("INSERT INTO blockchains (name,status) values ('Helium', 'production')")
-        .execute(pool)
-        .await
-        .expect("Error inserting blockchains");
+    sqlx::query("INSERT INTO blockchains (id,name,status) values ('1fdbf4c3-ff16-489a-8d3d-87c8620b963c','Helium', 'production')")
+            .execute(pool)
+            .await
+            .expect("Error inserting blockchains");
+    sqlx::query("INSERT INTO blockchains (id,name,status) values ('13f25489-bf9b-4667-9f18-f8caa32fa4a9','GonerChain', 'deleted')")
+                .execute(pool)
+                .await
+                .expect("Error inserting blockchains");
     sqlx::query("DELETE FROM broadcast_filters")
         .execute(pool)
         .await

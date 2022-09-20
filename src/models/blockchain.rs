@@ -29,17 +29,24 @@ pub struct Blockchain {
     pub supports_staking: bool,
     pub supports_broadcast: bool,
     pub version: Option<String>,
+    pub supported_node_types: Vec<super::NodeType>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 impl Blockchain {
     pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM blockchains WHERE status <> 'deleted' order by lower(name)",
-        )
-        .fetch_all(db)
-        .await
-        .map_err(ApiError::from)
+        sqlx::query_as("SELECT * FROM blockchains WHERE status <> 'deleted' order by lower(name)")
+            .fetch_all(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
+    pub async fn find_by_id(id: uuid::Uuid, db: &PgPool) -> Result<Self> {
+        sqlx::query_as("SELECT * FROM blockchains WHERE status <> 'deleted' AND id = $1")
+            .bind(id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
     }
 }

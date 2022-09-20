@@ -78,16 +78,21 @@ pub mod from {
     use crate::errors::ApiError;
     use crate::grpc::blockjoy::{HostInfo, NodeType as GrpcNodeType, Uuid as GrpcUuid};
     use crate::grpc::blockjoy_ui::{
-        node::NodeStatus as GrpcNodeStatus, node::NodeType as GrpcUiNodeType, Host as GrpcHost,
-        HostProvision as GrpcHostProvision, Node as GrpcNode, Organization, User as GrpcUiUser,
-        Uuid as GrpcUiUuid,
+        self, node::NodeStatus as GrpcNodeStatus, node::NodeStatus as GrpcNodeStatus,
+        node::NodeType as GrpcNodeType, node::NodeType as GrpcUiNodeType, Host as GrpcHost,
+        Host as GrpcHost, HostProvision as GrpcHostProvision, Node as GrpcNode, Organization,
+        User as GrpcUiUser, Uuid as GrpcUiUuid,
     };
     use crate::models::{
-        ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
-        NodeCreateRequest, NodeInfo, NodeStakingStatus, NodeSyncStatus, NodeType, Org, User,
+        self, Command as DbCommand, ConnectionStatus, ConnectionStatus, ContainerStatus,
+        ContainerStatus, HostCmd, HostProvision, HostProvision, HostRequest, HostRequest, Node,
+        Node, NodeChainStatus, NodeChainStatus, NodeCreateRequest, NodeCreateRequest, NodeInfo,
+        NodeInfo, NodeStakingStatus, NodeStakingStatus, NodeSyncStatus, NodeSyncStatus, NodeType,
+        NodeType, Org, Org, User, User,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
+    use chrono::{DateTime, Utc};
     use prost_types::Timestamp;
     use serde_json::Value;
     use std::i64;
@@ -510,6 +515,35 @@ pub mod from {
                 NodeChainStatus::Staking => GrpcNodeStatus::UndefinedApplicationStatus,
                 // TODO
                 NodeChainStatus::Validating => GrpcNodeStatus::UndefinedApplicationStatus,
+            }
+        }
+    }
+
+    impl From<models::Blockchain> for blockjoy_ui::Blockchain {
+        fn from(model: models::Blockchain) -> Self {
+            let convert_dt = |dt: DateTime<Utc>| prost_types::Timestamp {
+                seconds: dt.timestamp(),
+                nanos: dt.timestamp_nanos() as i32,
+            };
+            Self {
+                id: Some(model.id.into()),
+                name: model.name,
+                description: model.description,
+                status: model.status as i32,
+                project_url: model.project_url,
+                repo_url: model.repo_url,
+                supports_etl: model.supports_etl,
+                supports_node: model.supports_node,
+                supports_staking: model.supports_staking,
+                supports_broadcast: model.supports_broadcast,
+                version: model.version,
+                supported_nodes_types: model
+                    .supported_node_types
+                    .into_iter()
+                    .map(|node_type| node_type as i32)
+                    .collect(),
+                created_at: Some(convert_dt(model.created_at)),
+                updated_at: Some(convert_dt(model.updated_at)),
             }
         }
     }
