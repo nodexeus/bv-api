@@ -9,11 +9,11 @@ use crate::server::DbPool;
 
 pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<GrpcCommand> {
     let meta = Some(CommandMeta {
-        api_command_id: Some(GrpcUuid::from(cmd.resource_id)),
+        api_command_id: Some(GrpcUuid::from(cmd.id)),
         created_at: Some(pb_current_timestamp()),
     });
     let mut node_cmd = NodeCommand {
-        id: None,
+        id: Some(GrpcUuid::from(cmd.resource_id)),
         command: None,
         meta,
     };
