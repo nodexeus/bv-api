@@ -2,7 +2,7 @@ name: Deploy DEV DO
 
 on:
   push:
-    branches: [main]
+    branches: [main,cd/k8s]
 
 jobs:
   build:
@@ -45,15 +45,21 @@ jobs:
 
       - name: Create Namespace
         run: kubectl create namespace blockvisor --dry-run=true -o yaml | kubectl apply -f -
-      
-      - name: Create Secrets
-        run: kubectl -n blockvisor create secret generic bv --from-literal=DATABASE_URL='${{ secrets.DATABASE_URL }}' --from-literal=API_SERVICE_SECRET='${{ secrets.API_SERVICE_SECRET }}' --dry-run=client -o yaml | kubectl apply -f -
+    
+      - name: Pull Secrets
+        uses: Azure/k8s-create-secret@v3.0
+        with:
+          namespace: 'blockvisor'
+          secret-name: 'bv'
+          secret-type: 'generic'
+          string-data: ${{ secrets.BV }}
+        id: create-secret
 
       - name: Deploy to DigitalOcean Kubernetes
         run: kubectl apply -f $GITHUB_WORKSPACE/deploy/deployment.yml
 
-      - name: Restart Envoy deployment
-        run: kubectl -n blockvisor rollout restart deployment/envoy
+      - name: Verify Envoy deployment
+        run: kubectl -n blockvisor rollout status deployment/envoy
      
       - name: Verify bv-api deployment
         run: kubectl -n blockvisor rollout status deployment/bv-api
