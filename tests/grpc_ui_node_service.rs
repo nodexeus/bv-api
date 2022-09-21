@@ -32,7 +32,7 @@ async fn responds_not_found_without_any_for_get() {
     let token = user.get_token(&db).await.unwrap();
     let inner = GetNodeRequest {
         meta: Some(request_meta),
-        id: None,
+        id: Some(Uuid::new_v4().into()),
     };
     let mut request = Request::new(inner);
 

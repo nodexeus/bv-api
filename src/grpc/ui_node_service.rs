@@ -9,6 +9,8 @@ use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
+use super::helpers::{internal, required};
+
 pub struct NodeServiceImpl {
     db: DbPool,
     notifier: ChannelNotifier,
@@ -27,25 +29,13 @@ impl NodeService for NodeServiceImpl {
         request: Request<GetNodeRequest>,
     ) -> Result<Response<GetNodeResponse>, Status> {
         let inner = request.into_inner();
-
-        match inner.id {
-            Some(node_id) => {
-                let node_id = Uuid::from(node_id);
-
-                match Node::find_by_id(&node_id, &self.db).await {
-                    Ok(node) => {
-                        let response = GetNodeResponse {
-                            meta: Some(ResponseMeta::from_meta(inner.meta)),
-                            node: Some(GrpcNode::from(node)),
-                        };
-
-                        Ok(Response::new(response))
-                    }
-                    Err(e) => Err(Status::from(e)),
-                }
-            }
-            None => Err(Status::not_found("No node ID provided")),
-        }
+        let node_id = inner.id.ok_or_else(required("id"))?;
+        let node = Node::find_by_id(&node_id.into(), &self.db).await?;
+        let response = GetNodeResponse {
+            meta: Some(ResponseMeta::from_meta(inner.meta)),
+            node: Some(GrpcNode::from(node)),
+        };
+        Ok(Response::new(response))
     }
 
     async fn create(
@@ -55,43 +45,35 @@ impl NodeService for NodeServiceImpl {
         let inner = request.into_inner();
         let fields = inner.node.unwrap().into();
 
-        match Node::create(&fields, &self.db).await {
-            Ok(node) => {
-                let response_meta = ResponseMeta::from_meta(inner.meta).with_message(node.id);
-                let response = CreateNodeResponse {
-                    meta: Some(response_meta),
-                };
-                let req = CommandRequest {
-                    cmd: HostCmd::CreateNode,
-                    sub_cmd: None,
-                    resource_id: node.id,
-                };
+        let node = Node::create(&fields, &self.db).await?;
+        let req = CommandRequest {
+            cmd: HostCmd::CreateNode,
+            sub_cmd: None,
+            resource_id: node.id,
+        };
 
-                match Command::create(fields.host_id, req, &self.db).await {
-                    Ok(cmd) => {
-                        let payload = NotificationPayload::new(cmd.id);
-                        let notification = ChannelNotification::Command(payload);
+        let cmd = Command::create(fields.host_id, req, &self.db).await?;
+        let payload = NotificationPayload::new(cmd.id);
+        let notification = ChannelNotification::Command(payload);
 
-                        // Sending commands receiver (in command_flow.rs)
-                        match self.notifier.commands_sender().send(notification) {
-                            Ok(_) => {
-                                let payload = NotificationPayload::new(node.id);
-                                let notification = ChannelNotification::Node(payload);
+        // Sending commands receiver (in command_flow.rs)
+        self.notifier
+            .commands_sender()
+            .send(notification)
+            .map_err(internal)?;
+        let payload = NotificationPayload::new(node.id);
+        let notification = ChannelNotification::Node(payload);
 
-                                // Sending notification to nodes receiver (in ui_update_service.rs)
-                                match self.notifier.nodes_sender().send(notification) {
-                                    Ok(_) => Ok(Response::new(response)),
-                                    Err(e) => Err(Status::internal(format!("{}", e))),
-                                }
-                            }
-                            Err(e) => Err(Status::internal(format!("{}", e))),
-                        }
-                    }
-                    Err(e) => Err(Status::from(e)),
-                }
-            }
-            Err(e) => Err(Status::from(e)),
-        }
+        // Sending notification to nodes receiver (in ui_update_service.rs)
+        self.notifier
+            .nodes_sender()
+            .send(notification)
+            .map_err(internal)?;
+        let response_meta = ResponseMeta::from_meta(inner.meta).with_message(node.id);
+        let response = CreateNodeResponse {
+            meta: Some(response_meta),
+        };
+        Ok(Response::new(response))
     }
 
     async fn update(
@@ -103,14 +85,10 @@ impl NodeService for NodeServiceImpl {
         let node_id = Uuid::from(node.id.clone().unwrap());
         let fields: NodeInfo = node.into();
 
-        match Node::update_info(&node_id, &fields, &self.db).await {
-            Ok(_) => {
-                let response = UpdateNodeResponse {
-                    meta: Some(ResponseMeta::from_meta(inner.meta)),
-                };
-                Ok(Response::new(response))
-            }
-            Err(e) => Err(Status::from(e)),
-        }
+        Node::update_info(&node_id, &fields, &self.db).await?;
+        let response = UpdateNodeResponse {
+            meta: Some(ResponseMeta::from_meta(inner.meta)),
+        };
+        Ok(Response::new(response))
     }
 }
