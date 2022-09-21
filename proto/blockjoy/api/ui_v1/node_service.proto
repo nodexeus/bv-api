@@ -23,6 +23,16 @@ message GetNodeResponse {
   Node node = 2;
 }
 
+message ListNodesRequest {
+  RequestMeta meta = 1;
+  Uuid org_id = 2;
+}
+
+message ListNodesResponse {
+  ResponseMeta meta = 1;
+  repeated Node nodes = 2;
+}
+
 message UpdateNodeRequest {
   RequestMeta meta = 1;
   Node node = 2;
@@ -33,8 +43,10 @@ message UpdateNodeResponse {
 }
 
 service NodeService {
-  /* Get blockchain node(s) */
+  /* Get single blockchain node */
   rpc Get(GetNodeRequest) returns (GetNodeResponse) {}
+  /* Get nodes belonging to org */
+  rpc List(ListNodesRequest) returns (ListNodesResponse) {}
   /* Create a single blockchain node */
   rpc Create(CreateNodeRequest) returns (CreateNodeResponse) {}
   /* Update a single blockchain node */

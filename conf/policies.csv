@@ -17,6 +17,7 @@ p, master_admin, /blockjoy.api.ui_v1.HostService/Delete, POST
 p, master_admin, /blockjoy.api.ui_v1.HostProvisionService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.HostProvisionService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.NodeService/Get, POST
+p, master_admin, /blockjoy.api.ui_v1.NodeService/List, POST
 p, master_admin, /blockjoy.api.ui_v1.NodeService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.NodeService/Update, POST
 p, master_admin, /blockjoy.api.ui_v1.CommandService/CreateNode, POST

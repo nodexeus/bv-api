@@ -1,6 +1,6 @@
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
-use crate::models::{command::HostCmd, validator::Validator, UpdateInfo};
+use crate::models::{validator::Validator, UpdateInfo};
 use crate::server::DbPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -219,17 +219,6 @@ impl Node {
         .await
         .map_err(ApiError::from)?;
 
-        let node_info = serde_json::json!({"node_id": &node.id});
-
-        //TODO: Move this to commands
-        sqlx::query("INSERT INTO commands (host_id, cmd, sub_cmd) values ($1,$2,$3)")
-            .bind(&req.host_id)
-            .bind(HostCmd::CreateNode)
-            .bind(node_info)
-            .execute(&mut tx)
-            .await
-            .map_err(ApiError::from)?;
-
         tx.commit().await?;
 
         Ok(node)
@@ -261,6 +250,14 @@ impl Node {
     pub async fn find_all_by_host(host_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM nodes WHERE host_id = $1 order by name DESC")
             .bind(host_id)
+            .fetch_all(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
+    pub async fn find_all_by_org(org_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM nodes WHERE org_id = $1 order by name DESC")
+            .bind(org_id)
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
