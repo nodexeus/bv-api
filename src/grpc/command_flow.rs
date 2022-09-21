@@ -107,20 +107,31 @@ impl CommandFlowServerImpl {
         let cmd_id = notification.get_id();
         let command = DbCommand::find_by_id(cmd_id, &db).await;
 
+        tracing::info!("Testing for command with ID {}", cmd_id);
+
         match command {
             Ok(command) => {
+                tracing::info!("Command found");
                 let msg = db_command_to_grpc_command(command, db.clone()).await?;
                 match sender.send(Ok(msg)).await {
                     Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
-                    _ => Ok(()), // just return unit type if all went well
+                    _ => {
+                        tracing::info!("Sent channel notification");
+                        Ok(())
+                    } // just return unit type if all went well
                 }
             }
             Err(e) => {
+                tracing::info!("Command with ID {} NOT found", cmd_id);
+
                 let msg = Status::from(e);
 
                 match sender.send(Err(msg)).await {
                     Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
-                    _ => Ok(()), // just return unit type if all went well
+                    _ => {
+                        tracing::info!("Sent channel notification");
+                        Ok(())
+                    } // just return unit type if all went well
                 }
             }
         }
@@ -132,9 +143,13 @@ impl CommandFlowServerImpl {
         notifications: Receiver<ChannelNotification>,
         stream_sender: Sender<Result<Command, Status>>,
     ) -> Result<(), Status> {
+        tracing::info!("Starting handling channel notifications");
+
         while let Ok(notification) = notifications.recv() {
+            tracing::info!("Received notification");
             match notification {
                 ChannelNotification::Command(cmd) => {
+                    tracing::info!("Notification is a command notification: {:?}", cmd);
                     Self::process_notification(cmd, db.clone(), stream_sender.clone()).await?
                 }
                 _ => tracing::error!("received non Command notification"),
@@ -451,9 +466,11 @@ mod tests {
         dotenv::dotenv().ok();
 
         let db_url = std::env::var("DATABASE_URL").expect("Missing DATABASE_URL");
+        /*
         if db_url.contains("digitalocean") {
             panic!("Attempting to use production db?");
         }
+         */
         let db_max_conn = std::env::var("DB_MAX_CONN")
             .unwrap_or_else(|_| "10".to_string())
             .parse()
