@@ -1,7 +1,7 @@
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
-    CreateNodeRequest, CreateNodeResponse, GetNodeRequest, GetNodeResponse, Node as GrpcNode,
-    ResponseMeta, UpdateNodeRequest, UpdateNodeResponse,
+    CreateNodeRequest, CreateNodeResponse, GetNodeRequest, GetNodeResponse, ListNodesRequest,
+    ListNodesResponse, Node as GrpcNode, ResponseMeta, UpdateNodeRequest, UpdateNodeResponse,
 };
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Command, CommandRequest, HostCmd, Node, NodeInfo};
@@ -46,6 +46,28 @@ impl NodeService for NodeServiceImpl {
             }
             None => Err(Status::not_found("No node ID provided")),
         }
+    }
+
+    async fn list(
+        &self,
+        request: Request<ListNodesRequest>,
+    ) -> Result<Response<ListNodesResponse>, Status> {
+        let inner = request.into_inner();
+        let org_id = inner
+            .org_id
+            .ok_or_else(|| Status::internal("Missing org ID"))
+            .unwrap();
+        let mut response = ListNodesResponse {
+            meta: Some(ResponseMeta::from_meta(inner.meta)),
+            nodes: vec![],
+        };
+
+        response.nodes = match Node::find_all_by_org(Uuid::from(org_id), &self.db).await {
+            Ok(nodes) => nodes.iter().map(GrpcNode::from).collect(),
+            Err(_) => vec![],
+        };
+
+        Ok(Response::new(response))
     }
 
     async fn create(

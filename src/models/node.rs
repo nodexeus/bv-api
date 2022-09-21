@@ -255,6 +255,14 @@ impl Node {
             .map_err(ApiError::from)
     }
 
+    pub async fn find_all_by_org(org_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM nodes WHERE org_id = $1 order by name DESC")
+            .bind(org_id)
+            .fetch_all(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
     pub async fn running_nodes_count(db: &PgPool) -> Result<i32> {
         match sqlx::query(
             r#"select count(id)::int from nodes where chain_status in
