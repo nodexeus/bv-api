@@ -1,6 +1,6 @@
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
-use crate::models::{command::HostCmd, validator::Validator, UpdateInfo};
+use crate::models::{validator::Validator, UpdateInfo};
 use crate::server::DbPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -218,17 +218,6 @@ impl Node {
         .fetch_one(&mut tx)
         .await
         .map_err(ApiError::from)?;
-
-        let node_info = serde_json::json!({"node_id": &node.id});
-
-        //TODO: Move this to commands
-        sqlx::query("INSERT INTO commands (host_id, cmd, sub_cmd) values ($1,$2,$3)")
-            .bind(&req.host_id)
-            .bind(HostCmd::CreateNode)
-            .bind(node_info)
-            .execute(&mut tx)
-            .await
-            .map_err(ApiError::from)?;
 
         tx.commit().await?;
 
