@@ -1,9 +1,8 @@
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
-    response_meta, CreateNodeRequest, CreateNodeResponse, GetNodeRequest, GetNodeResponse,
-    Node as GrpcNode, ResponseMeta, UpdateNodeRequest, UpdateNodeResponse,
+    CreateNodeRequest, CreateNodeResponse, GetNodeRequest, GetNodeResponse, Node as GrpcNode,
+    ResponseMeta, UpdateNodeRequest, UpdateNodeResponse,
 };
-use crate::grpc::helpers::success_response_meta;
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Command, CommandRequest, HostCmd, Node, NodeInfo};
 use crate::server::DbPool;
@@ -35,9 +34,8 @@ impl NodeService for NodeServiceImpl {
 
                 match Node::find_by_id(&node_id, &self.db).await {
                     Ok(node) => {
-                        let response_meta = success_response_meta(inner.meta.unwrap().id);
                         let response = GetNodeResponse {
-                            meta: Some(response_meta),
+                            meta: Some(ResponseMeta::from_meta(inner.meta)),
                             node: Some(GrpcNode::from(node)),
                         };
 
@@ -59,12 +57,7 @@ impl NodeService for NodeServiceImpl {
 
         match Node::create(&fields, &self.db).await {
             Ok(node) => {
-                let response_meta = ResponseMeta {
-                    status: response_meta::Status::Success.into(),
-                    origin_request_id: inner.meta.unwrap().id,
-                    messages: vec![node.id.to_string()],
-                    pagination: None,
-                };
+                let response_meta = ResponseMeta::from_meta(inner.meta).with_message(node.id);
                 let response = CreateNodeResponse {
                     meta: Some(response_meta),
                 };
@@ -112,11 +105,9 @@ impl NodeService for NodeServiceImpl {
 
         match Node::update_info(&node_id, &fields, &self.db).await {
             Ok(_) => {
-                let response_meta = success_response_meta(inner.meta.unwrap().id);
                 let response = UpdateNodeResponse {
-                    meta: Some(response_meta),
+                    meta: Some(ResponseMeta::from_meta(inner.meta)),
                 };
-
                 Ok(Response::new(response))
             }
             Err(e) => Err(Status::from(e)),

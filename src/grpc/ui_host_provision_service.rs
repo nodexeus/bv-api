@@ -1,10 +1,8 @@
 use crate::grpc::blockjoy_ui::host_provision_service_server::HostProvisionService;
 use crate::grpc::blockjoy_ui::{
-    response_meta, CreateHostProvisionRequest, CreateHostProvisionResponse,
-    GetHostProvisionRequest, GetHostProvisionResponse, HostProvision as GrpcHostProvision,
-    ResponseMeta,
+    CreateHostProvisionRequest, CreateHostProvisionResponse, GetHostProvisionRequest,
+    GetHostProvisionResponse, HostProvision as GrpcHostProvision, ResponseMeta,
 };
-use crate::grpc::helpers::success_response_meta;
 use crate::models::{HostProvision, HostProvisionRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -31,9 +29,8 @@ impl HostProvisionService for HostProvisionServiceImpl {
         // The protos were changed so I had to make changes here to keep stuff compiling.
         match HostProvision::find_by_id(inner.id.as_deref().unwrap_or(""), &self.db).await {
             Ok(host_provision) => {
-                let response_meta = success_response_meta(inner.meta.unwrap().id);
                 let response = GetHostProvisionResponse {
-                    meta: Some(response_meta),
+                    meta: Some(ResponseMeta::from_meta(inner.meta)),
                     host_provisions: vec![GrpcHostProvision::from(host_provision)],
                 };
 
@@ -56,15 +53,8 @@ impl HostProvisionService for HostProvisionServiceImpl {
 
         match HostProvision::create(req, &self.db).await {
             Ok(provision) => {
-                let response_meta = ResponseMeta {
-                    status: response_meta::Status::Success.into(),
-                    origin_request_id: inner.meta.unwrap().id,
-                    messages: vec![provision.id],
-                    pagination: None,
-                };
-                let response = CreateHostProvisionResponse {
-                    meta: Some(response_meta),
-                };
+                let meta = ResponseMeta::from_meta(inner.meta).with_message(provision.id);
+                let response = CreateHostProvisionResponse { meta: Some(meta) };
 
                 Ok(Response::new(response))
             }

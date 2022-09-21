@@ -1,11 +1,10 @@
 use crate::auth::TokenType;
 use crate::grpc::blockjoy_ui::user_service_server::UserService;
 use crate::grpc::blockjoy_ui::{
-    response_meta, CreateUserRequest, CreateUserResponse, GetConfigurationRequest,
-    GetConfigurationResponse, GetUserRequest, GetUserResponse, ResponseMeta, UpdateUserRequest,
-    UpdateUserResponse, UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
+    CreateUserRequest, CreateUserResponse, GetConfigurationRequest, GetConfigurationResponse,
+    GetUserRequest, GetUserResponse, ResponseMeta, UpdateUserRequest, UpdateUserResponse,
+    UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
 };
-use crate::grpc::helpers::success_response_meta;
 use crate::models::{Token, TokenRole, User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -29,9 +28,8 @@ impl UserService for UserServiceImpl {
         let token = request.extensions().get::<Token>().unwrap().token.clone();
         let inner = request.into_inner();
         let user = Token::get_user_for_token(token, TokenType::Login, &self.db).await?;
-        let meta = success_response_meta(inner.meta.unwrap().id);
         let response = GetUserResponse {
-            meta: Some(meta),
+            meta: Some(ResponseMeta::from_meta(inner.meta)),
             user: Some(GrpcUser::from(user)),
         };
 
@@ -56,14 +54,8 @@ impl UserService for UserServiceImpl {
 
         match User::create(user_request, &self.db, Some(TokenRole::User)).await {
             Ok(new_user) => {
-                let meta = ResponseMeta {
-                    status: i32::from(response_meta::Status::Success),
-                    origin_request_id: inner.meta.ok_or_else(required("meta"))?.id,
-                    messages: vec![new_user.id.to_string()],
-                    pagination: None,
-                };
+                let meta = ResponseMeta::from_meta(inner.meta).with_message(new_user.id);
                 let response = CreateUserResponse { meta: Some(meta) };
-
                 Ok(Response::new(response))
             }
             Err(e) => Err(Status::from(e)),
