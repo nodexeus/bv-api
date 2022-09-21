@@ -203,12 +203,12 @@ impl CommandFlow for CommandFlowServerImpl {
         });
 
         let db = self.db.clone();
-        let sender = tx.clone();
+        let sender = tx;
 
         // Create task handling incoming notifications
         tokio::spawn(Self::handle_notifications(
             host_id,
-            db.clone(),
+            db,
             self.notifier.commands_receiver().clone(),
             sender,
         ));
