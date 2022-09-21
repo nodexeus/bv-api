@@ -51,8 +51,8 @@ jobs:
       - name: Pull Secrets
         run: |
           kubectl create secret db generic --from-literal=DATABASE_URL=${{ secrets.DATABASE_URL }} --dry-run=true -o yaml | kubectl apply -f -
-          kubectl create secret jwt generic --from-literal=JWT_SECRET=${{ secrests.JWT_SECRET }} --dry-run=true -o yaml | kubectl apply -f -
-          kubectl create secret api generic --from-literal=API_SERVICE_SECRET=${{ secrests.API_SERVICE_SECRET }} --dry-run=true -o yaml | kubectl apply -f -
+          kubectl create secret jwt generic --from-literal=JWT_SECRET=${{ secrets.JWT_SECRET }} --dry-run=true -o yaml | kubectl apply -f -
+          kubectl create secret api generic --from-literal=API_SERVICE_SECRET=${{ secrets.API_SERVICE_SECRET }} --dry-run=true -o yaml | kubectl apply -f -
 
       - name: Deploy to DigitalOcean Kubernetes
         run: kubectl apply -f $GITHUB_WORKSPACE/deploy/deployment.yml
