@@ -41,7 +41,7 @@ data:
                           allow_methods: GET, PUT, DELETE, POST, OPTIONS
                           allow_headers: keep-alive,user-agent,cache-control,content-type,content-transfer-encoding,custom-header-1,x-accept-content-transfer-encoding,x-accept-response-streaming,x-user-agent,x-grpc-web,grpc-timeout
                           max_age: "1728000"
-                          expose_headers: custom-header-1,grpc-status,grpc-message
+                          expose_headers: authorization,grpc-status,grpc-message
                   http_filters:
                     - name: envoy.filters.http.grpc_web
                       typed_config:
@@ -110,7 +110,7 @@ metadata:
   name: envoy
   namespace: blockvisor
   annotations:
-    service.beta.kubernetes.io/do-loadbalancer-protocol: http2
+    service.beta.kubernetes.io/do-loadbalancer-protocol: https
     service.beta.kubernetes.io/do-loadbalancer-certificate-id: "23b42f2d-9d0b-418a-b3e0-f9ab24752439"
     service.beta.kubernetes.io/do-loadbalancer-http2-ports: "443"
     service.beta.kubernetes.io/do-loadbalancer-name: bv-api
@@ -170,19 +170,12 @@ spec:
         envFrom:
         - configMapRef:
             name: spec
-        env:
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: bv
-              key: DATABASE_URL
-              optional: false 
-        - name: API_SERVICE_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: bv
-              key: API_SERVICE_SECRET
-              optional: false
+        - secretRef:
+            name: db
+        - secretRef:
+            name: jwt
+        - secretRef:
+            name: api
 ---
 apiVersion: v1
 kind: Service
