@@ -58,7 +58,9 @@ jobs:
         run: kubectl apply -f $GITHUB_WORKSPACE/deploy/deployment.yml
 
       - name: Verify Envoy deployment
-        run: kubectl rollout status deployment/envoy
+        run: |
+          kubectl rollout restart deployment/envoy
+          kubectl rollout status deployment/envoy
      
       - name: Verify bv-api deployment
         run: kubectl rollout status deployment/bv-api
