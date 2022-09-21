@@ -171,11 +171,11 @@ spec:
         - configMapRef:
             name: spec
         - secretRef:
-          name: db
+            name: db
         - secretRef:
-          name: jwt
+            name: jwt
         - secretRef:
-          name: api
+            name: api
 ---
 apiVersion: v1
 kind: Service
