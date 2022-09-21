@@ -49,7 +49,7 @@ impl Hosts for HostsServiceImpl {
         let (request_id, info) = request.into_data();
         let request_host_id = Uuid::from(info.id.clone().unwrap());
         let host = Host::find_by_id(request_host_id, &self.db).await?;
-        let _host = Host::update_all(host.id, HostSelectiveUpdate::from(info), &self.db)
+        Host::update_all(host.id, HostSelectiveUpdate::from(info), &self.db)
             .await
             .map_err(|e| Status::not_found(format!("Host {request_host_id} not found. {e}")))?;
         let result = HostInfoUpdateResponse {
