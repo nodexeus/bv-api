@@ -190,7 +190,7 @@ impl CommandFlow for CommandFlowServerImpl {
         let sender = tx.clone();
 
         // Create task handling incoming updates
-        let handle_updates = tokio::spawn(async move {
+        tokio::spawn(async move {
             while let Some(Ok(update)) = update_stream.next().await {
                 Self::process_info_update(db.clone(), sender.clone(), update).await?
             }
@@ -206,18 +206,12 @@ impl CommandFlow for CommandFlowServerImpl {
         let sender = tx.clone();
 
         // Create task handling incoming notifications
-        let handle_notifications = tokio::spawn(Self::handle_notifications(
+        tokio::spawn(Self::handle_notifications(
             host_id,
             db.clone(),
             self.notifier.commands_receiver().clone(),
             sender,
         ));
-
-        // Join handles to ensure max. concurrency
-        match tokio::try_join!(handle_updates, handle_notifications) {
-            Ok(_) => tracing::info!("All tasks finished"),
-            Err(e) => tracing::error!("Error in some task: {}", e),
-        }
 
         let commands_stream = ReceiverStream::new(rx);
 
