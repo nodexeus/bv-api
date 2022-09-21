@@ -127,8 +127,11 @@ impl Org {
 
     /// Checks if the user is a member
     pub async fn is_member(user_id: &Uuid, org_id: &Uuid, db: &PgPool) -> Result<bool> {
-        let _ = Self::find_org_user(user_id, org_id, db).await?;
-        Ok(true)
+        match Self::find_org_user(user_id, org_id, db).await {
+            Ok(_) => Ok(true),
+            Err(ApiError::NotFoundError(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     /// Returns the user role in the organization
@@ -139,8 +142,7 @@ impl Org {
         .bind(&org_id)
         .bind(&user_id)
         .fetch_one(db)
-        .await
-        .map_err(ApiError::from)?;
+        .await?;
 
         Ok(org_user)
     }
@@ -164,8 +166,7 @@ impl Org {
         .bind(&org_id)
         .bind(user_id)
         .fetch_one(&mut tx)
-        .await
-        .map_err(ApiError::from)?;
+        .await?;
         tx.commit().await?;
 
         org.role = Some(OrgRole::Owner);
@@ -179,8 +180,7 @@ impl Org {
             .bind(&req.name)
             .bind(id)
             .fetch_one(db)
-            .await
-            .map_err(ApiError::from)?;
+            .await?;
 
         Self::find_by_user(&org.id, user_id, db).await
     }

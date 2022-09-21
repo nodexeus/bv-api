@@ -29,25 +29,17 @@ impl Hosts for HostsServiceImpl {
         let inner = request.into_inner();
         let otp = &inner.otp.clone();
         let request_id = inner.request_id.clone();
-        let host_provision = HostProvision::claim_by_grpc_provision(otp, inner, &self.db).await;
-
-        match host_provision {
-            Ok(host) => {
-                let db_token = host.get_token(&self.db).await.unwrap().token;
-                let result = ProvisionHostResponse {
-                    host_id: Some(GrpcUuid::from(host.id)),
-                    token: db_token,
-                    messages: vec!["All good".into()],
-                    origin_request_id: request_id,
-                };
-
-                Ok(Response::new(result))
-            }
-            Err(e) => Err(Status::not_found(format!(
-                "Host provision not found: {:?}",
-                e
-            ))),
-        }
+        let host = HostProvision::claim_by_grpc_provision(otp, inner, &self.db)
+            .await
+            .map_err(|e| Status::not_found(format!("Host provision not found: {e:?}")))?;
+        let db_token = host.get_token(&self.db).await.unwrap().token;
+        let result = ProvisionHostResponse {
+            host_id: Some(GrpcUuid::from(host.id)),
+            token: db_token,
+            messages: vec!["All good".into()],
+            origin_request_id: request_id,
+        };
+        Ok(Response::new(result))
     }
 
     async fn info_update(
@@ -57,21 +49,14 @@ impl Hosts for HostsServiceImpl {
         let (request_id, info) = request.into_data();
         let request_host_id = Uuid::from(info.id.clone().unwrap());
         let host = Host::find_by_id(request_host_id, &self.db).await?;
-
-        match Host::update_all(host.id, HostSelectiveUpdate::from(info), &self.db).await {
-            Ok(_host) => {
-                let result = HostInfoUpdateResponse {
-                    messages: vec![],
-                    origin_request_id: Some(request_id),
-                };
-
-                Ok(Response::new(result))
-            }
-            Err(e) => Err(Status::not_found(format!(
-                "Host {:?} not found. {}",
-                request_host_id, e
-            ))),
-        }
+        let _host = Host::update_all(host.id, HostSelectiveUpdate::from(info), &self.db)
+            .await
+            .map_err(|e| Status::not_found(format!("Host {request_host_id} not found. {e}")))?;
+        let result = HostInfoUpdateResponse {
+            messages: vec![],
+            origin_request_id: Some(request_id),
+        };
+        Ok(Response::new(result))
     }
 
     async fn delete(
@@ -86,24 +71,15 @@ impl Hosts for HostsServiceImpl {
             .unwrap();
         let inner = request.into_inner();
         let host_id = Uuid::from(inner.host_id.unwrap());
-
-        if host_token_id == host_id {
-            match Host::delete(host_id, &self.db).await {
-                Ok(_) => {
-                    let response = DeleteHostResponse {
-                        messages: vec![],
-                        origin_request_id: inner.request_id,
-                    };
-
-                    Ok(Response::new(response))
-                }
-                Err(e) => Err(Status::from(e)),
-            }
-        } else {
-            Err(Status::permission_denied(format!(
-                "Not allowed to delete host '{}'",
-                host_id
-            )))
+        if host_token_id != host_id {
+            let msg = format!("Not allowed to delete host '{host_id}'");
+            return Err(Status::permission_denied(msg));
         }
+        Host::delete(host_id, &self.db).await?;
+        let response = DeleteHostResponse {
+            messages: vec![],
+            origin_request_id: inner.request_id,
+        };
+        Ok(Response::new(response))
     }
 }

@@ -98,20 +98,14 @@ impl OrganizationService for OrganizationServiceImpl {
         let inner = request.into_inner();
         let org_id = Uuid::from(inner.id.unwrap());
 
-        if Org::is_member(&user_id, &org_id, &self.db).await? {
-            match Org::delete(org_id, &self.db).await {
-                Ok(_) => {
-                    let meta = ResponseMeta::from_meta(inner.meta);
-                    let inner = DeleteOrganizationResponse { meta: Some(meta) };
-                    Ok(Response::new(inner))
-                }
-                Err(e) => Err(Status::from(e)),
-            }
-        } else {
-            Err(Status::permission_denied(
-                "User is not member of given organization",
-            ))
+        if !Org::is_member(&user_id, &org_id, &self.db).await? {
+            let msg = "User is not member of given organization";
+            return Err(Status::permission_denied(msg));
         }
+        Org::delete(org_id, &self.db).await?;
+        let meta = ResponseMeta::from_meta(inner.meta);
+        let inner = DeleteOrganizationResponse { meta: Some(meta) };
+        Ok(Response::new(inner))
     }
 
     async fn members(
@@ -120,24 +114,19 @@ impl OrganizationService for OrganizationServiceImpl {
     ) -> Result<Response<OrganizationMemberResponse>, Status> {
         let inner = request.into_inner();
         let meta = inner.meta.unwrap();
-        let request_id = meta.id;
         let org_id = Uuid::from(inner.id.unwrap());
 
-        match pagination_parameters(meta.pagination) {
-            Ok((limit, offset)) => {
-                let users = Org::find_all_member_users_paginated(&org_id, limit, offset, &self.db)
-                    .await?
-                    .iter()
-                    .map(GrpcUiUser::from)
-                    .collect();
-                let inner = OrganizationMemberResponse {
-                    meta: Some(ResponseMeta::new(request_id).with_pagination()),
-                    users,
-                };
+        let (limit, offset) = pagination_parameters(meta.pagination.clone())?;
+        let users = Org::find_all_member_users_paginated(&org_id, limit, offset, &self.db)
+            .await?
+            .iter()
+            .map(GrpcUiUser::from)
+            .collect();
+        let inner = OrganizationMemberResponse {
+            meta: Some(ResponseMeta::from_meta(meta).with_pagination()),
+            users,
+        };
 
-                Ok(Response::new(inner))
-            }
-            Err(e) => return Err(e),
-        }
+        Ok(Response::new(inner))
     }
 }
