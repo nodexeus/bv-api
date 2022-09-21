@@ -1,5 +1,5 @@
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
-use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, ResponseMeta};
+use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, Parameter, ResponseMeta};
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd};
 use crate::server::DbPool;
@@ -22,10 +22,20 @@ impl CommandServiceImpl {
         host_id: Uuid,
         cmd: HostCmd,
         sub_cmd: Option<String>,
-    ) -> crate::errors::Result<Command> {
-        let req = DbCommandRequest { cmd, sub_cmd };
+        params: Vec<Parameter>,
+    ) -> Result<Command, Status> {
+        match Self::get_resource_id_from_params(params) {
+            Ok(resource_id) => {
+                let req = DbCommandRequest {
+                    cmd,
+                    sub_cmd,
+                    resource_id,
+                };
 
-        Command::create(host_id, req, &self.db).await
+                Ok(Command::create(host_id, req, &self.db).await?)
+            }
+            Err(status) => Err(status),
+        }
     }
 
     fn send_notification(
@@ -35,6 +45,21 @@ impl CommandServiceImpl {
         tracing::debug!("Sending notification: {:?}", notification);
         self.notifier.commands_sender().send(notification)
     }
+
+    fn get_resource_id_from_params(params: Vec<Parameter>) -> Result<Uuid, Status> {
+        for param in params {
+            if param.name == "resource_id" {
+                return match param.value {
+                    Some(val) => Ok(Uuid::from_slice(val.value.as_slice())
+                        .map_err(|e| Status::internal(e.to_string()))
+                        .unwrap()),
+                    None => Err(Status::internal("Resource ID can't be empty")),
+                };
+            }
+        }
+
+        Err(Status::internal("Resource ID not available"))
+    }
 }
 
 macro_rules! create_command {
@@ -43,28 +68,21 @@ macro_rules! create_command {
 
         match inner.id {
             Some(host_id) => {
-                match $obj
-                    .create_command(Uuid::from(host_id), $cmd, $sub_cmd)
-                    .await
-                {
-                    Ok(cmd) => {
-                        let notification =
-                            ChannelNotification::Command(NotificationPayload::new(cmd.id));
+                let cmd = $obj
+                    .create_command(Uuid::from(host_id), $cmd, $sub_cmd, inner.params)
+                    .await?;
 
-                        match $obj.send_notification(notification) {
-                            Ok(_) => {
-                                let response_meta =
-                                    ResponseMeta::from_meta(inner.meta).with_message(cmd.id);
-                                let response = CommandResponse {
-                                    meta: Some(response_meta),
-                                };
+                let notification = ChannelNotification::Command(NotificationPayload::new(cmd.id));
 
-                                Ok(Response::new(response))
-                            }
-                            Err(e) => Err(Status::internal(e.to_string())),
-                        }
+                match $obj.send_notification(notification) {
+                    Ok(_) => {
+                        let response = CommandResponse {
+                            meta: Some(ResponseMeta::from_meta(inner.meta).with_message(cmd.id)),
+                        };
+
+                        Ok(Response::new(response))
                     }
-                    Err(e) => Err(Status::from(e)),
+                    Err(e) => Err(Status::internal(e.to_string())),
                 }
             }
             None => Err(Status::not_found("No host ID provided")),

@@ -4,7 +4,7 @@ use crate::grpc::blockjoy_ui::{
     ResponseMeta, UpdateNodeRequest, UpdateNodeResponse,
 };
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
-use crate::models::{Node, NodeInfo};
+use crate::models::{Command, CommandRequest, HostCmd, Node, NodeInfo};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -61,12 +61,33 @@ impl NodeService for NodeServiceImpl {
                 let response = CreateNodeResponse {
                     meta: Some(response_meta),
                 };
-                let payload = NotificationPayload::new(node.id);
-                let notification = ChannelNotification::Node(payload);
+                let req = CommandRequest {
+                    cmd: HostCmd::CreateNode,
+                    sub_cmd: None,
+                    resource_id: node.id,
+                };
 
-                match self.notifier.nodes_sender().send(notification) {
-                    Ok(_) => Ok(Response::new(response)),
-                    Err(e) => Err(Status::internal(format!("{}", e))),
+                match Command::create(fields.host_id, req, &self.db).await {
+                    Ok(cmd) => {
+                        let payload = NotificationPayload::new(cmd.id);
+                        let notification = ChannelNotification::Command(payload);
+
+                        // Sending commands receiver (in command_flow.rs)
+                        match self.notifier.commands_sender().send(notification) {
+                            Ok(_) => {
+                                let payload = NotificationPayload::new(node.id);
+                                let notification = ChannelNotification::Node(payload);
+
+                                // Sending notification to nodes receiver (in ui_update_service.rs)
+                                match self.notifier.nodes_sender().send(notification) {
+                                    Ok(_) => Ok(Response::new(response)),
+                                    Err(e) => Err(Status::internal(format!("{}", e))),
+                                }
+                            }
+                            Err(e) => Err(Status::internal(format!("{}", e))),
+                        }
+                    }
+                    Err(e) => Err(Status::from(e)),
                 }
             }
             Err(e) => Err(Status::from(e)),
