@@ -61,6 +61,7 @@ use tonic::transport::Server;
 use tower::layer::util::{Identity, Stack};
 use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::classify::{GrpcErrorsAsFailures, SharedClassifier};
+use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
 pub async fn server(
@@ -68,12 +69,15 @@ pub async fn server(
 ) -> Router<
     Stack<
         Stack<
-            AsyncRequireAuthorizationLayer<AuthorizationService>,
+            CorsLayer,
             Stack<
-                Extension<UnauthenticatedPaths>,
+                AsyncRequireAuthorizationLayer<AuthorizationService>,
                 Stack<
-                    Extension<Arc<PgPool>>,
-                    Stack<TraceLayer<SharedClassifier<GrpcErrorsAsFailures>>, Identity>,
+                    Extension<UnauthenticatedPaths>,
+                    Stack<
+                        Extension<Arc<PgPool>>,
+                        Stack<TraceLayer<SharedClassifier<GrpcErrorsAsFailures>>, Identity>,
+                    >,
                 >,
             >,
         >,
@@ -116,7 +120,14 @@ pub async fn server(
         .layer(Extension(db.clone()))
         .layer(Extension(unauthenticated))
         .layer(AsyncRequireAuthorizationLayer::new(auth_service))
+        .layer(
+            CorsLayer::new()
+                .allow_headers(tower_http::cors::Any)
+                .allow_methods(tower_http::cors::Any)
+                .allow_origin(tower_http::cors::Any),
+        )
         .into_inner();
+
     Server::builder()
         .layer(middleware)
         .concurrency_limit_per_connection(rate_limiting_settings())

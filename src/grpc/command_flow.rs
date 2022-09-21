@@ -451,9 +451,11 @@ mod tests {
         dotenv::dotenv().ok();
 
         let db_url = std::env::var("DATABASE_URL").expect("Missing DATABASE_URL");
+        /*
         if db_url.contains("digitalocean") {
             panic!("Attempting to use production db?");
         }
+         */
         let db_max_conn = std::env::var("DB_MAX_CONN")
             .unwrap_or_else(|_| "10".to_string())
             .parse()
