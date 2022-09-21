@@ -1,11 +1,11 @@
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationService;
 use crate::grpc::blockjoy_ui::{
-    response_meta, CreateOrganizationRequest, CreateOrganizationResponse,
-    DeleteOrganizationRequest, DeleteOrganizationResponse, GetOrganizationsRequest,
-    GetOrganizationsResponse, Organization, OrganizationMemberRequest, OrganizationMemberResponse,
-    ResponseMeta, UpdateOrganizationRequest, UpdateOrganizationResponse, User as GrpcUiUser,
+    CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
+    DeleteOrganizationResponse, GetOrganizationsRequest, GetOrganizationsResponse, Organization,
+    OrganizationMemberRequest, OrganizationMemberResponse, ResponseMeta, UpdateOrganizationRequest,
+    UpdateOrganizationResponse, User as GrpcUiUser,
 };
-use crate::grpc::helpers::{pagination_parameters, success_response_with_pagination};
+use crate::grpc::helpers::pagination_parameters;
 use crate::models::{Org, OrgRequest, Token};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -35,14 +35,8 @@ impl OrganizationService for OrganizationServiceImpl {
             .iter()
             .map(Organization::from)
             .collect();
-        let response_meta = ResponseMeta {
-            status: i32::from(response_meta::Status::Success),
-            origin_request_id: inner.meta.unwrap().id,
-            messages: vec![],
-            pagination: None,
-        };
         let inner = GetOrganizationsResponse {
-            meta: Some(response_meta),
+            meta: Some(ResponseMeta::from_meta(inner.meta)),
             organizations,
         };
 
@@ -62,12 +56,7 @@ impl OrganizationService for OrganizationServiceImpl {
 
         match Org::create(&org_request, &user_id, &self.db).await {
             Ok(new_org) => {
-                let response_meta = ResponseMeta {
-                    status: i32::from(response_meta::Status::Success),
-                    origin_request_id: inner.meta.unwrap().id,
-                    messages: vec![new_org.id.to_string()],
-                    pagination: None,
-                };
+                let response_meta = ResponseMeta::from_meta(inner.meta).with_message(new_org.id);
                 let inner = CreateOrganizationResponse {
                     meta: Some(response_meta),
                 };
@@ -92,16 +81,8 @@ impl OrganizationService for OrganizationServiceImpl {
 
         match Org::update(Uuid::from(org.id.unwrap()), update, &user_id, &self.db).await {
             Ok(_) => {
-                let response_meta = ResponseMeta {
-                    status: i32::from(response_meta::Status::Success),
-                    origin_request_id: inner.meta.unwrap().id,
-                    messages: vec![],
-                    pagination: None,
-                };
-                let inner = UpdateOrganizationResponse {
-                    meta: Some(response_meta),
-                };
-
+                let meta = ResponseMeta::from_meta(inner.meta);
+                let inner = UpdateOrganizationResponse { meta: Some(meta) };
                 Ok(Response::new(inner))
             }
             Err(e) => Err(Status::from(e)),
@@ -120,16 +101,8 @@ impl OrganizationService for OrganizationServiceImpl {
         if Org::is_member(&user_id, &org_id, &self.db).await? {
             match Org::delete(org_id, &self.db).await {
                 Ok(_) => {
-                    let response_meta = ResponseMeta {
-                        status: i32::from(response_meta::Status::Success),
-                        origin_request_id: inner.meta.unwrap().id,
-                        messages: vec![],
-                        pagination: None,
-                    };
-                    let inner = DeleteOrganizationResponse {
-                        meta: Some(response_meta),
-                    };
-
+                    let meta = ResponseMeta::from_meta(inner.meta);
+                    let inner = DeleteOrganizationResponse { meta: Some(meta) };
                     Ok(Response::new(inner))
                 }
                 Err(e) => Err(Status::from(e)),
@@ -158,7 +131,7 @@ impl OrganizationService for OrganizationServiceImpl {
                     .map(GrpcUiUser::from)
                     .collect();
                 let inner = OrganizationMemberResponse {
-                    meta: Some(success_response_with_pagination(request_id)),
+                    meta: Some(ResponseMeta::new(request_id).with_pagination()),
                     users,
                 };
 

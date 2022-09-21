@@ -3,12 +3,10 @@ use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationServi
 use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
 };
-use crate::grpc::helpers::success_response_meta;
 use crate::models::{self, Token, User};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 
-use super::blockjoy_ui::response_meta::Status::Success;
 use super::blockjoy_ui::{
     ResetPasswordRequest, ResetPasswordResponse, ResponseMeta, UpdatePasswordRequest,
     UpdatePasswordResponse,
@@ -36,9 +34,8 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let token = ApiToken {
             value: db_token.token,
         };
-        let meta = success_response_meta(inner.meta.unwrap().id);
         let response = LoginUserResponse {
-            meta: Some(meta),
+            meta: Some(ResponseMeta::from_meta(inner.meta)),
             token: Some(token),
         };
 
@@ -58,13 +55,10 @@ impl AuthenticationService for AuthenticationServiceImpl {
             let new_token = ApiToken {
                 value: Token::refresh(db_token, &self.db).await?.token,
             };
-
-            let meta = success_response_meta(request_id);
             let response = RefreshTokenResponse {
-                meta: Some(meta),
+                meta: Some(ResponseMeta::new(request_id)),
                 token: Some(new_token),
             };
-
             Ok(Response::new(response))
         } else {
             Err(Status::permission_denied("Not allowed to modify token"))
@@ -87,12 +81,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
             let _ = user.email_reset_password(&self.db).await;
         }
 
-        let meta = ResponseMeta {
-            status: Success.into(),
-            origin_request_id: None,
-            messages: vec![],
-            pagination: None,
-        };
+        let meta = ResponseMeta::new(None);
         let response = ResetPasswordResponse { meta: Some(meta) };
         Ok(Response::new(response))
     }
@@ -108,7 +97,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let _cur_user = cur_user
             .update_password(&request.password, &self.db)
             .await?;
-        let meta = success_response_meta(request.meta.unwrap().id);
+        let meta = ResponseMeta::from_meta(request.meta);
         let response = UpdatePasswordResponse { meta: Some(meta) };
         Ok(Response::new(response))
     }

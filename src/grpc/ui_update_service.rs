@@ -2,8 +2,8 @@ use crate::auth::FindableById;
 use crate::grpc::blockjoy_ui::update_notification::Notification;
 use crate::grpc::blockjoy_ui::update_service_server::UpdateService;
 use crate::grpc::blockjoy_ui::{
-    response_meta, GetUpdatesRequest, GetUpdatesResponse, Host as GrpcHost, Node as GrpcNode,
-    ResponseMeta, UpdateNotification,
+    GetUpdatesRequest, GetUpdatesResponse, Host as GrpcHost, Node as GrpcNode, ResponseMeta,
+    UpdateNotification,
 };
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier};
 use crate::models::{Host, Node};
@@ -77,12 +77,8 @@ impl UpdateService for UpdateServiceImpl {
         request: Request<GetUpdatesRequest>,
     ) -> Result<Response<Self::UpdatesStream>, Status> {
         let inner = request.into_inner();
-        let host_response_meta = ResponseMeta {
-            status: response_meta::Status::Success.into(),
-            origin_request_id: inner.meta.unwrap().id,
-            messages: vec![],
-            pagination: None,
-        };
+
+        let host_response_meta = ResponseMeta::from_meta(inner.meta);
         let node_response_meta = host_response_meta.clone();
         let hosts_receiver = self.notifier.hosts_receiver().clone();
         let nodes_receiver = self.notifier.nodes_receiver().clone();

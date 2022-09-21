@@ -1,7 +1,6 @@
+use super::blockjoy_ui::ResponseMeta;
 use crate::grpc::blockjoy_ui::dashboard_service_server::DashboardService;
-use crate::grpc::blockjoy_ui::{
-    metric, response_meta, DashboardMetricsRequest, DashboardMetricsResponse, Metric, ResponseMeta,
-};
+use crate::grpc::blockjoy_ui::{metric, DashboardMetricsRequest, DashboardMetricsResponse, Metric};
 use crate::models::Node;
 use crate::server::DbPool;
 use prost_types::Any;
@@ -24,12 +23,6 @@ impl DashboardService for DashboardServiceImpl {
         request: Request<DashboardMetricsRequest>,
     ) -> Result<Response<DashboardMetricsResponse>, Status> {
         let inner = request.into_inner();
-        let response_meta = ResponseMeta {
-            status: response_meta::Status::Success.into(),
-            origin_request_id: inner.meta.unwrap().id,
-            messages: vec![],
-            pagination: None,
-        };
         let mut metrics: Vec<Metric> = Vec::with_capacity(2);
 
         if let Ok(running_nodes) = Node::running_nodes_count(&self.db).await {
@@ -57,7 +50,7 @@ impl DashboardService for DashboardServiceImpl {
         }
 
         let response = DashboardMetricsResponse {
-            meta: Some(response_meta),
+            meta: Some(ResponseMeta::from_meta(inner.meta)),
             metrics,
         };
 
