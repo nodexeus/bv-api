@@ -8,6 +8,8 @@ use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
+use super::helpers::required;
+
 pub struct HostProvisionServiceImpl {
     db: DbPool,
 }
@@ -25,19 +27,13 @@ impl HostProvisionService for HostProvisionServiceImpl {
         request: Request<GetHostProvisionRequest>,
     ) -> Result<Response<GetHostProvisionResponse>, Status> {
         let inner = request.into_inner();
-
-        // The protos were changed so I had to make changes here to keep stuff compiling.
-        match HostProvision::find_by_id(inner.id.as_deref().unwrap_or(""), &self.db).await {
-            Ok(host_provision) => {
-                let response = GetHostProvisionResponse {
-                    meta: Some(ResponseMeta::from_meta(inner.meta)),
-                    host_provisions: vec![GrpcHostProvision::from(host_provision)],
-                };
-
-                Ok(Response::new(response))
-            }
-            Err(e) => Err(Status::from(e)),
-        }
+        let host_provision_id = inner.id.ok_or_else(required("id"))?;
+        let host_provision = HostProvision::find_by_id(&host_provision_id, &self.db).await?;
+        let response = GetHostProvisionResponse {
+            meta: Some(ResponseMeta::from_meta(inner.meta)),
+            host_provisions: vec![GrpcHostProvision::from(host_provision)],
+        };
+        Ok(Response::new(response))
     }
 
     async fn create(
@@ -51,14 +47,10 @@ impl HostProvisionService for HostProvisionServiceImpl {
             nodes: None,
         };
 
-        match HostProvision::create(req, &self.db).await {
-            Ok(provision) => {
-                let meta = ResponseMeta::from_meta(inner.meta).with_message(provision.id);
-                let response = CreateHostProvisionResponse { meta: Some(meta) };
+        let provision = HostProvision::create(req, &self.db).await?;
+        let meta = ResponseMeta::from_meta(inner.meta).with_message(provision.id);
+        let response = CreateHostProvisionResponse { meta: Some(meta) };
 
-                Ok(Response::new(response))
-            }
-            Err(e) => Err(Status::from(e)),
-        }
+        Ok(Response::new(response))
     }
 }
