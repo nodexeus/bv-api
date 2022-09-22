@@ -42,7 +42,7 @@ impl Blockchain {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_id(id: uuid::Uuid, db: &PgPool) -> Result<Self> {
+    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
         sqlx::query_as("SELECT * FROM blockchains WHERE status <> 'deleted' AND id = $1")
             .bind(id)
             .fetch_one(db)

@@ -1,10 +1,10 @@
 use crate::errors::Result as ApiResult;
 use crate::grpc::blockjoy::{
     command, node_command, Command as GrpcCommand, CommandMeta, NodeCommand, NodeCreate,
-    NodeDelete, NodeInfoGet, NodeRestart, NodeStop, NodeType as GrpcNodeType, Uuid as GrpcUuid,
+    NodeDelete, NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
 };
 use crate::grpc::helpers::pb_current_timestamp;
-use crate::models::{Command, HostCmd, Node, NodeType as DbNodeType};
+use crate::models::{Command, HostCmd, Node};
 use crate::server::DbPool;
 
 pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<GrpcCommand> {
@@ -53,7 +53,7 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<G
                 name: node.name.unwrap_or_default(),
                 blockchain: node.blockchain_id.to_string(),
                 image: None,
-                r#type: <DbNodeType as Into<GrpcNodeType>>::into(node.node_type) as i32,
+                r#type: node.node_type.to_json(),
             };
 
             Some(node_command::Command::Create(create_cmd))
@@ -76,11 +76,11 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<G
 
 pub mod from {
     use crate::errors::ApiError;
-    use crate::grpc::blockjoy::{HostInfo, NodeType as GrpcNodeType, Uuid as GrpcUuid};
+    use crate::grpc::blockjoy::{HostInfo, Uuid as GrpcUuid};
     use crate::grpc::blockjoy_ui::{
-        self, node::NodeStatus as GrpcNodeStatus, node::NodeType as GrpcUiNodeType,
-        Host as GrpcHost, HostProvision as GrpcHostProvision, Node as GrpcNode, Organization,
-        User as GrpcUiUser, Uuid as GrpcUiUuid,
+        self, node::NodeStatus as GrpcNodeStatus, Host as GrpcHost,
+        HostProvision as GrpcHostProvision, Node as GrpcNode, Organization, User as GrpcUiUser,
+        Uuid as GrpcUiUuid,
     };
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
@@ -348,7 +348,7 @@ pub mod from {
                 groups: vec![],
                 version: node.version.clone().map(String::from),
                 ip: node.ip_addr.clone().map(String::from),
-                r#type: Some(GrpcNodeType::from(node.node_type) as i32),
+                r#type: Some(node.node_type.to_json()),
                 address: node.address.clone().map(String::from),
                 wallet_address: node.wallet_address.clone().map(String::from),
                 block_height: node.block_height.map(i64::from),
@@ -408,7 +408,7 @@ pub mod from {
                 version: node.version.map(String::from),
                 ip_addr: node.ip.map(String::from),
                 blockchain_id: node.blockchain_id.map(Uuid::from).unwrap_or_default(),
-                node_type: NodeType::from(node.r#type.unwrap_or_default()),
+                node_type: sqlx::types::Json(NodeType::from(node.r#type.unwrap_or_default())),
                 address: node.address.map(String::from),
                 wallet_address: node.wallet_address.map(String::from),
                 block_height: node.block_height.map(i64::from),
@@ -432,51 +432,6 @@ pub mod from {
                 sync_status: None,
                 staking_status: None,
                 container_status: None,
-            }
-        }
-    }
-
-    impl From<NodeType> for GrpcNodeType {
-        fn from(nt: NodeType) -> Self {
-            match nt {
-                NodeType::Node => GrpcNodeType::Node,
-                NodeType::Validator => GrpcNodeType::Validator,
-                NodeType::Api => GrpcNodeType::Api,
-                NodeType::Etl => GrpcNodeType::Etl,
-                NodeType::Miner => GrpcNodeType::Miner,
-                NodeType::Oracle => GrpcNodeType::Oracle,
-                NodeType::Relay => GrpcNodeType::Relay,
-                NodeType::Undefined => GrpcNodeType::UndefinedType,
-            }
-        }
-    }
-
-    impl From<NodeType> for GrpcUiNodeType {
-        fn from(nt: NodeType) -> Self {
-            match nt {
-                NodeType::Node => GrpcUiNodeType::Node,
-                NodeType::Validator => GrpcUiNodeType::Validator,
-                NodeType::Api => GrpcUiNodeType::Api,
-                NodeType::Etl => GrpcUiNodeType::Etl,
-                NodeType::Miner => GrpcUiNodeType::Miner,
-                NodeType::Oracle => GrpcUiNodeType::Oracle,
-                NodeType::Relay => GrpcUiNodeType::Relay,
-                NodeType::Undefined => GrpcUiNodeType::UndefinedType,
-            }
-        }
-    }
-
-    impl From<GrpcUiNodeType> for NodeType {
-        fn from(nt: GrpcUiNodeType) -> Self {
-            match nt {
-                GrpcUiNodeType::Node => NodeType::Node,
-                GrpcUiNodeType::Validator => NodeType::Validator,
-                GrpcUiNodeType::Api => NodeType::Api,
-                GrpcUiNodeType::Etl => NodeType::Etl,
-                GrpcUiNodeType::Miner => NodeType::Miner,
-                GrpcUiNodeType::Oracle => NodeType::Oracle,
-                GrpcUiNodeType::Relay => NodeType::Relay,
-                GrpcUiNodeType::UndefinedType => NodeType::Undefined,
             }
         }
     }
@@ -535,9 +490,9 @@ pub mod from {
                 version: model.version,
                 supported_nodes_types: model
                     .supported_node_types
-                    .into_iter()
-                    .map(|node_type| node_type as i32)
-                    .collect(),
+                    .iter()
+                    .map(|n| n.to_json())
+                    .collect::<String>(),
                 created_at: Some(convert_dt(model.created_at)),
                 updated_at: Some(convert_dt(model.updated_at)),
             }

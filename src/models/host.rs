@@ -1,11 +1,10 @@
 use super::{
-    validator::Validator, validator::ValidatorRequest, Node, NodeChainStatus, NodeCreateRequest,
-    NodeProvision, NodeSyncStatus, Token, TokenRole,
+    validator::Validator, validator::ValidatorRequest, Node, NodeProvision, Token, TokenRole,
 };
 use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable, TokenType};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
-use crate::models::{ContainerStatus, UpdateInfo};
+use crate::models::UpdateInfo;
 use crate::server::DbPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -571,34 +570,7 @@ impl HostProvision {
             .execute(db)
             .await?;
 
-        let mut host_nodes = vec![];
-
-        if let Some(nodes) = node_provisions {
-            for node in nodes {
-                let n = NodeCreateRequest {
-                    org_id: host_provision.org_id,
-                    host_id: host.id,
-                    //TODO: Clean this up
-                    name: Some(petname::petname(3, "-")),
-                    groups: None,
-                    version: None,
-                    ip_addr: None,
-                    blockchain_id: node.blockchain_id,
-                    node_type: node.node_type,
-                    address: None,
-                    wallet_address: None,
-                    block_height: None,
-                    node_data: None,
-                    chain_status: NodeChainStatus::Unknown,
-                    sync_status: NodeSyncStatus::Unknown,
-                    staking_status: None,
-                    container_status: ContainerStatus::Installing,
-                };
-                host_nodes.push(Node::create(&n, db).await?);
-            }
-        };
-
-        host.nodes = Some(host_nodes);
+        host.nodes = Some(vec![]);
 
         Ok(host)
     }
