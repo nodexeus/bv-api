@@ -476,6 +476,11 @@ pub mod from {
                 seconds: dt.timestamp(),
                 nanos: dt.timestamp_nanos() as i32,
             };
+            let json = model.supported_node_types.0;
+            let json = serde_json::to_string::<Vec<NodeType>>(&json).unwrap();
+
+            tracing::info!("sending json: {}", &json);
+
             Self {
                 id: Some(model.id.into()),
                 name: model.name,
@@ -488,11 +493,7 @@ pub mod from {
                 supports_staking: model.supports_staking,
                 supports_broadcast: model.supports_broadcast,
                 version: model.version,
-                supported_nodes_types: model
-                    .supported_node_types
-                    .iter()
-                    .map(|n| n.to_json())
-                    .collect::<String>(),
+                supported_nodes_types: json,
                 created_at: Some(convert_dt(model.created_at)),
                 updated_at: Some(convert_dt(model.updated_at)),
             }

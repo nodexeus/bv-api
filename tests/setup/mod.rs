@@ -156,14 +156,38 @@ pub async fn reset_db(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("could not update info in test setup");
-    sqlx::query("INSERT INTO blockchains (id,name,status) values ('1fdbf4c3-ff16-489a-8d3d-87c8620b963c','Helium', 'production')")
-            .execute(pool)
-            .await
-            .expect("Error inserting blockchains");
-    sqlx::query("INSERT INTO blockchains (id,name,status) values ('13f25489-bf9b-4667-9f18-f8caa32fa4a9','GonerChain', 'deleted')")
-                .execute(pool)
-                .await
-                .expect("Error inserting blockchains");
+    sqlx::query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('1fdbf4c3-ff16-489a-8d3d-87c8620b963c','Helium', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]')")
+        .execute(pool)
+        .await
+        .expect("Error inserting blockchain");
+    sqlx::query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('fd5e2a49-f741-4eb2-a8b1-ee6222146ced','DeletedChain', 'deleted', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]')")
+        .execute(pool)
+        .await
+        .expect("Error inserting blockchain");
+    sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Pocket', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]')")
+        .execute(pool)
+        .await
+        .expect("Error inserting blockchain");
+    sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Cosmos', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
+        .execute(pool)
+        .await
+        .expect("Error inserting blockchain");
+    sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Etherium', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
+        .execute(pool)
+        .await
+        .expect("Error inserting blockchain");
+    sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Etherium PoS', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
+        .execute(pool)
+        .await
+        .expect("Error inserting blockchain");
+    sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Lightning', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
+        .execute(pool)
+        .await
+        .expect("Error inserting blockchain");
+    sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Algorand', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
+        .execute(pool)
+        .await
+        .expect("Error inserting blockchain");
     sqlx::query("DELETE FROM broadcast_filters")
         .execute(pool)
         .await
