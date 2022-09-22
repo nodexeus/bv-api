@@ -9,9 +9,11 @@ use api::grpc::blockjoy_ui::{
     Uuid as GrpcUuid,
 };
 use api::models::{
-    ContainerStatus, Node, NodeChainStatus, NodeCreateRequest, NodeSyncStatus, NodeType, Org,
+    ContainerStatus, Node, NodeChainStatus, NodeCreateRequest, NodeSyncStatus, NodeType,
+    NodeTypeKey, Org,
 };
 use setup::{server_and_client_stub, setup};
+use sqlx::types::Json;
 use std::sync::Arc;
 use test_macros::*;
 use tonic::transport::Channel;
@@ -67,7 +69,7 @@ async fn responds_ok_with_id_for_get() {
         host_id: host.id,
         org_id,
         blockchain_id: blockchain.id,
-        node_type: NodeType::Validator,
+        node_type: Json(NodeType::special_type(NodeTypeKey::Api)),
         chain_status: NodeChainStatus::Unknown,
         sync_status: NodeSyncStatus::Syncing,
         container_status: ContainerStatus::Installing,
@@ -125,7 +127,7 @@ async fn responds_ok_with_valid_data_for_create() {
         name: None,
         status: Some(node::NodeStatus::UndefinedApplicationStatus as i32),
         address: None,
-        r#type: Some(node::NodeType::Api as i32),
+        r#type: Some(NodeType::special_type(NodeTypeKey::Api).to_json()),
         version: None,
         wallet_address: None,
         block_height: None,
@@ -168,7 +170,7 @@ async fn responds_internal_with_invalid_data_for_create() {
         name: None,
         status: Some(node::NodeStatus::UndefinedApplicationStatus as i32),
         address: None,
-        r#type: Some(node::NodeType::Api as i32),
+        r#type: Some(NodeType::special_type(NodeTypeKey::Api).to_json()),
         version: None,
         wallet_address: None,
         block_height: None,
@@ -217,7 +219,7 @@ async fn responds_ok_with_valid_data_for_update() {
         host_id: host.id,
         org_id,
         blockchain_id: blockchain.id,
-        node_type: NodeType::Validator,
+        node_type: Json(NodeType::special_type(NodeTypeKey::Validator)),
         chain_status: NodeChainStatus::Unknown,
         sync_status: NodeSyncStatus::Syncing,
         container_status: ContainerStatus::Installing,
@@ -275,7 +277,7 @@ async fn responds_internal_with_invalid_data_for_update() {
         host_id: host.id,
         org_id,
         blockchain_id: blockchain.id,
-        node_type: NodeType::Validator,
+        node_type: Json(NodeType::special_type(NodeTypeKey::Validator)),
         chain_status: NodeChainStatus::Unknown,
         sync_status: NodeSyncStatus::Syncing,
         container_status: ContainerStatus::Installing,

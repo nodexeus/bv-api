@@ -556,11 +556,6 @@ impl HostProvision {
         req.org_id = Some(host_provision.org_id);
         req.val_ip_addrs = None;
 
-        let node_provisions: Option<Vec<NodeProvision>> =
-            serde_json::from_str(&host_provision.nodes.unwrap_or_default()).map_err(|_| {
-                ApiError::UnexpectedError(anyhow::anyhow!("Couldn't parse nodes data"))
-            })?;
-
         //TODO: transaction this
         let mut host = Host::create(req.into(), db).await?;
 
