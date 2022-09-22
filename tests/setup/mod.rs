@@ -176,7 +176,7 @@ pub async fn reset_db(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("Error inserting blockchain");
-    sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Etherium PoS', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
+    sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Etherium PoS', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []},{\"id\": 8,\"properties\": []}]');")
         .execute(pool)
         .await
         .expect("Error inserting blockchain");
