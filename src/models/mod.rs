@@ -12,6 +12,7 @@ mod token;
 mod user;
 // needs to be brought into namespace like this because of
 // name ambiguities with another crate
+mod node_type;
 pub mod validator;
 
 use crate::errors::Result as ApiResult;
@@ -23,6 +24,7 @@ pub use host::*;
 pub use info::*;
 pub use invoice::*;
 pub use node::*;
+pub use node_type::*;
 pub use org::*;
 pub use payment::*;
 pub use reward::*;
