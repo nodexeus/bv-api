@@ -1,10 +1,10 @@
 use crate::errors::Result as ApiResult;
 use crate::grpc::blockjoy::{
-    command, node_command, Command as GrpcCommand, CommandMeta, NodeCommand, NodeCreate,
-    NodeDelete, NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
+    command, node_command, Command as GrpcCommand, CommandMeta, ContainerImage, NodeCommand,
+    NodeCreate, NodeDelete, NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
 };
-use crate::grpc::helpers::pb_current_timestamp;
-use crate::models::{Command, HostCmd, Node};
+use crate::grpc::helpers::{image_url_from_node, pb_current_timestamp};
+use crate::models::{Blockchain, Command, HostCmd, Node};
 use crate::server::DbPool;
 
 pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<GrpcCommand> {
@@ -49,10 +49,14 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<G
         // The following should be HostCommands
         HostCmd::CreateNode => {
             let node = Node::find_by_id(&cmd.resource_id, &db).await?;
+            let blockchain = Blockchain::find_by_id(node.blockchain_id, &db).await?;
+            let image = ContainerImage {
+                url: image_url_from_node(&node, blockchain.name),
+            };
             let create_cmd = NodeCreate {
                 name: node.name.unwrap_or_default(),
                 blockchain: node.blockchain_id.to_string(),
-                image: None,
+                image: Some(image),
                 r#type: node.node_type.to_json(),
             };
 
@@ -343,7 +347,7 @@ pub mod from {
                 org_id: Some(GrpcUiUuid::from(node.org_id)),
                 host_id: Some(GrpcUiUuid::from(node.host_id)),
                 blockchain_id: Some(GrpcUiUuid::from(node.blockchain_id)),
-                name: node.name.clone().map(String::from),
+                name: Some(petname::petname(3, "_")),
                 // TODO: get node groups
                 groups: vec![],
                 version: node.version.clone().map(String::from),
