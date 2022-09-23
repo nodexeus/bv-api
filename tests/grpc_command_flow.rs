@@ -29,7 +29,7 @@ async fn setup() -> (Arc<sqlx::PgPool>, Node) {
 
 #[before(call = "setup")]
 #[tokio::test(flavor = "multi_thread")]
-async fn test_that_streaming_does_something_plzzzz() {
+async fn test_command_flow_works() {
     let (db, node) = _before_values.await;
     let hosts = Host::find_all(&db).await.unwrap();
     let host = hosts.first().unwrap();

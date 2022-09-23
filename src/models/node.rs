@@ -312,10 +312,6 @@ impl Node {
 impl UpdateInfo<GrpcNodeInfo, Node> for Node {
     async fn update_info(info: GrpcNodeInfo, db: &PgPool) -> Result<Node> {
         let req: NodeUpdateRequest = info.into();
-        println!("-- Executing kweery --");
-        println!("Opened up trx");
-        let existing: Vec<Self> = sqlx::query_as("SELECT * FROM nodes;").fetch_all(db).await?;
-        dbg!(existing);
         let node = sqlx::query_as::<_, Node>(
             r##"UPDATE nodes SET
                          name = COALESCE($1, name),
@@ -338,7 +334,6 @@ impl UpdateInfo<GrpcNodeInfo, Node> for Node {
         .fetch_one(db)
         .await?;
 
-        println!("-- Done --------------");
         Ok(node)
     }
 }
