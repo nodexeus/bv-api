@@ -1,48 +1,12 @@
+use super::node_type::*;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
-use crate::models::{command::HostCmd, validator::Validator, UpdateInfo};
+use crate::models::{validator::Validator, UpdateInfo};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::{PgHasArrayType, PgRow};
-use sqlx::{FromRow, PgPool, Row};
+use sqlx::postgres::PgRow;
+use sqlx::{types::Json, FromRow, PgPool, Row};
 use uuid::Uuid;
-
-/// NodeType reflects blockjoy.api.v1.node.NodeType in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "enum_node_type", rename_all = "snake_case")]
-pub enum NodeType {
-    Undefined,
-    Api,
-    Etl,
-    Miner,
-    Node,
-    Oracle,
-    Relay,
-    Validator,
-}
-
-impl From<i32> for NodeType {
-    fn from(ty: i32) -> Self {
-        match ty {
-            0 => Self::Undefined,
-            1 => Self::Api,
-            2 => Self::Etl,
-            3 => Self::Miner,
-            4 => Self::Node,
-            5 => Self::Oracle,
-            6 => Self::Relay,
-            7 => Self::Validator,
-            _ => Self::Undefined,
-        }
-    }
-}
-
-impl PgHasArrayType for NodeType {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("_enum_node_type")
-    }
-}
 
 /// ContainerStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -184,7 +148,7 @@ pub struct Node {
     pub version: Option<String>,
     pub ip_addr: Option<String>,
     pub blockchain_id: Uuid,
-    pub node_type: NodeType,
+    pub node_type: Json<NodeType>,
     pub address: Option<String>,
     pub wallet_address: Option<String>,
     pub block_height: Option<i64>,
@@ -242,18 +206,11 @@ impl Node {
         .bind(&req.sync_status)
         .fetch_one(&mut tx)
         .await
-        .map_err(ApiError::from)?;
-
-        let node_info = serde_json::json!({"node_id": &node.id});
-
-        //TODO: Move this to commands
-        sqlx::query("INSERT INTO commands (host_id, cmd, sub_cmd) values ($1,$2,$3)")
-            .bind(&req.host_id)
-            .bind(HostCmd::CreateNode)
-            .bind(node_info)
-            .execute(&mut tx)
-            .await
-            .map_err(ApiError::from)?;
+        //.map_err(ApiError::from)?;
+        .map_err(|e| {
+            tracing::error!("Error creating node: {}", e);
+            ApiError::from(e)
+        })?;
 
         tx.commit().await?;
 
@@ -286,6 +243,14 @@ impl Node {
     pub async fn find_all_by_host(host_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM nodes WHERE host_id = $1 order by name DESC")
             .bind(host_id)
+            .fetch_all(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
+    pub async fn find_all_by_org(org_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM nodes WHERE org_id = $1 order by name DESC")
+            .bind(org_id)
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
@@ -393,7 +358,7 @@ pub struct NodeCreateRequest {
     pub version: Option<String>,
     pub ip_addr: Option<String>,
     pub blockchain_id: Uuid,
-    pub node_type: NodeType,
+    pub node_type: Json<NodeType>,
     pub address: Option<String>,
     pub wallet_address: Option<String>,
     pub block_height: Option<i64>,

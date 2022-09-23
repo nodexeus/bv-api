@@ -9,6 +9,8 @@ use crate::models::{Token, TokenRole, User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 
+use super::helpers::required;
+
 pub struct UserServiceImpl {
     db: DbPool,
 }
@@ -41,8 +43,6 @@ impl UserService for UserServiceImpl {
         request: Request<CreateUserRequest>,
     ) -> Result<Response<CreateUserResponse>, Status> {
         let inner = request.into_inner();
-        let required =
-            |name| move || tonic::Status::invalid_argument(format!("`{name}` is required"));
         let user = inner.user.ok_or_else(required("user"))?;
         let user_request = UserRequest {
             email: user.email.ok_or_else(required("email"))?,
@@ -52,14 +52,10 @@ impl UserService for UserServiceImpl {
             password_confirm: inner.password_confirmation,
         };
 
-        match User::create(user_request, &self.db, Some(TokenRole::User)).await {
-            Ok(new_user) => {
-                let meta = ResponseMeta::from_meta(inner.meta).with_message(new_user.id);
-                let response = CreateUserResponse { meta: Some(meta) };
-                Ok(Response::new(response))
-            }
-            Err(e) => Err(Status::from(e)),
-        }
+        let new_user = User::create(user_request, &self.db, Some(TokenRole::User)).await?;
+        let meta = ResponseMeta::from_meta(inner.meta).with_message(new_user.id);
+        let response = CreateUserResponse { meta: Some(meta) };
+        Ok(Response::new(response))
     }
 
     async fn update(

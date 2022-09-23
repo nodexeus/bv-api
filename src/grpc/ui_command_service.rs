@@ -1,10 +1,10 @@
-use std::sync::Arc;
-
+use super::helpers::{internal, required};
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
 use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, Parameter, ResponseMeta};
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd};
 use crate::server::DbPool;
+use std::sync::Arc;
 use tokio::sync::broadcast;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -26,18 +26,13 @@ impl CommandServiceImpl {
         sub_cmd: Option<String>,
         params: Vec<Parameter>,
     ) -> Result<Command, Status> {
-        match Self::get_resource_id_from_params(params) {
-            Ok(resource_id) => {
-                let req = DbCommandRequest {
-                    cmd,
-                    sub_cmd,
-                    resource_id,
-                };
-
-                Ok(Command::create(host_id, req, &self.db).await?)
-            }
-            Err(status) => Err(status),
-        }
+        let resource_id = Self::get_resource_id_from_params(params)?;
+        let req = DbCommandRequest {
+            cmd,
+            sub_cmd,
+            resource_id,
+        };
+        Ok(Command::create(host_id, req, &self.db).await?)
     }
 
     fn send_notification(
@@ -52,18 +47,13 @@ impl CommandServiceImpl {
     }
 
     fn get_resource_id_from_params(params: Vec<Parameter>) -> Result<Uuid, Status> {
-        for param in params {
-            if param.name == "resource_id" {
-                return match param.value {
-                    Some(val) => Ok(Uuid::from_slice(val.value.as_slice())
-                        .map_err(|e| Status::internal(e.to_string()))
-                        .unwrap()),
-                    None => Err(Status::internal("Resource ID can't be empty")),
-                };
-            }
-        }
-
-        Err(Status::internal("Resource ID not available"))
+        let bad_uuid = |_| Status::invalid_argument("Malformatted uuid");
+        params
+            .into_iter()
+            .find(|p| p.name == "resource_id")
+            .ok_or_else(|| Status::internal("Resource ID not available"))
+            .and_then(|val| val.value.ok_or_else(required("val.value")))
+            .and_then(|val| Uuid::from_slice(val.value.as_slice()).map_err(bad_uuid))
     }
 }
 
@@ -71,27 +61,21 @@ macro_rules! create_command {
     ($obj:expr, $req:expr, $cmd:expr, $sub_cmd:expr) => {{
         let inner = $req.into_inner();
 
-        match inner.id {
-            Some(host_id) => {
-                let cmd = $obj
-                    .create_command(Uuid::from(host_id), $cmd, $sub_cmd, inner.params)
-                    .await?;
+        let host_id = inner
+            .id
+            .ok_or_else(|| Status::not_found("No host ID provided"))?;
+        let cmd = $obj
+            .create_command(Uuid::from(host_id), $cmd, $sub_cmd, inner.params)
+            .await?;
 
-                let notification = ChannelNotification::Command(NotificationPayload::new(cmd.id));
+        let notification = ChannelNotification::Command(NotificationPayload::new(cmd.id));
 
-                match $obj.send_notification(notification) {
-                    Ok(_) => {
-                        let response = CommandResponse {
-                            meta: Some(ResponseMeta::from_meta(inner.meta).with_message(cmd.id)),
-                        };
+        $obj.send_notification(notification).map_err(internal)?;
+        let response = CommandResponse {
+            meta: Some(ResponseMeta::from_meta(inner.meta).with_message(cmd.id)),
+        };
 
-                        Ok(Response::new(response))
-                    }
-                    Err(e) => Err(Status::internal(e.to_string())),
-                }
-            }
-            None => Err(Status::not_found("No host ID provided")),
-        }
+        Ok(Response::new(response))
     }};
 }
 

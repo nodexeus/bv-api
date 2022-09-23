@@ -21,6 +21,14 @@ pub fn pb_current_timestamp() -> Timestamp {
     Timestamp { seconds, nanos }
 }
 
+pub fn required(name: &'static str) -> impl Fn() -> tonic::Status {
+    move || tonic::Status::invalid_argument(format!("`{name}` is required"))
+}
+
+pub fn internal(error: impl std::error::Error) -> tonic::Status {
+    tonic::Status::internal(error.to_string())
+}
+
 impl ResponseMeta {
     /// Creates a new `ResponseMeta` with the provided request id and the status `Success`.
     pub fn new(request_id: Option<Uuid>) -> Self {

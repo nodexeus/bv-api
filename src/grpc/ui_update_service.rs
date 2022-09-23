@@ -2,8 +2,7 @@ use crate::auth::FindableById;
 use crate::grpc::blockjoy_ui::update_notification::Notification;
 use crate::grpc::blockjoy_ui::update_service_server::UpdateService;
 use crate::grpc::blockjoy_ui::{
-    GetUpdatesRequest, GetUpdatesResponse, Host as GrpcHost, Node as GrpcNode, ResponseMeta,
-    UpdateNotification,
+    GetUpdatesRequest, GetUpdatesResponse, ResponseMeta, UpdateNotification,
 };
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier};
 use crate::models::{Host, Node};
@@ -26,8 +25,8 @@ pub struct UpdateServiceImpl {
 impl UpdateServiceImpl {
     pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         let buffer_size: usize = env::var("BIDI_BUFFER_SIZE")
-            .map(|bs| bs.parse::<usize>())
-            .unwrap()
+            .ok()
+            .and_then(|bs| bs.parse().ok())
             .unwrap_or(128);
 
         Self {
@@ -38,33 +37,19 @@ impl UpdateServiceImpl {
     }
 
     pub async fn host_payload(id: Uuid, db: DbPool) -> Option<Notification> {
-        match Host::find_by_id(id, &db).await {
-            Ok(host) => {
-                let n_host = GrpcHost::from(host);
-                let notification = Notification::Host(n_host);
-
-                Some(notification)
-            }
-            Err(e) => {
-                tracing::error!("Host ID {} not found: {}", id, e);
-                None
-            }
-        }
+        Host::find_by_id(id, &db)
+            .await
+            .map_err(|e| tracing::error!("Host ID {id} not found: {e}"))
+            .map(|h| Notification::Host(h.into()))
+            .ok()
     }
 
     pub async fn node_payload(id: Uuid, db: DbPool) -> Option<Notification> {
-        match Node::find_by_id(&id, &db).await {
-            Ok(node) => {
-                let n_node = GrpcNode::from(node);
-                let notification = Notification::Node(n_node);
-
-                Some(notification)
-            }
-            Err(e) => {
-                tracing::error!("Node ID {} not found: {}", id, e);
-                None
-            }
-        }
+        Node::find_by_id(&id, &db)
+            .await
+            .map_err(|e| tracing::error!("Node ID {id} not found: {e}"))
+            .map(|n| Notification::Node(n.into()))
+            .ok()
     }
 }
 
@@ -102,10 +87,12 @@ impl UpdateService for UpdateServiceImpl {
                         };
 
                         if let Err(e) = tx_hosts.send(Ok(response)).await {
-                            tracing::error!("Couldn't send update: {}", e.to_string())
+                            tracing::error!("Couldn't send update: {}", e)
                         }
                     }
-                    _ => tracing::error!("Received non Host notification on host channel"),
+                    other => {
+                        tracing::error!("Received non Host notification on host channel: {other:?}")
+                    }
                 }
             }
         });
@@ -127,10 +114,12 @@ impl UpdateService for UpdateServiceImpl {
                         };
 
                         if let Err(e) = tx_nodes.send(Ok(response)).await {
-                            tracing::error!("Couldn't send update: {}", e.to_string())
+                            tracing::error!("Couldn't send update: {}", e)
                         }
                     }
-                    _ => tracing::error!("Received non Node notification on node channel"),
+                    other => {
+                        tracing::error!("Received non Node notification on node channel: {other:?}")
+                    }
                 }
             }
         });
@@ -143,8 +132,6 @@ impl UpdateService for UpdateServiceImpl {
 
         let updates_stream = ReceiverStream::new(rx);
 
-        Ok(Response::new(
-            Box::pin(updates_stream) as Self::UpdatesStream
-        ))
+        Ok(Response::new(Box::pin(updates_stream)))
     }
 }

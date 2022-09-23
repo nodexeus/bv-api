@@ -26,7 +26,7 @@ fn match_for_io_error(err_status: &Status) -> Option<&std::io::Error> {
     let mut err: &(dyn Error + 'static) = err_status;
 
     loop {
-        if let Some(io_err) = err.downcast_ref::<std::io::Error>() {
+        if let Some(io_err) = err.downcast_ref() {
             return Some(io_err);
         }
 
@@ -54,7 +54,7 @@ pub struct CommandFlowServerImpl {
 impl CommandFlowServerImpl {
     pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         let buffer_size: usize = env::var("BIDI_BUFFER_SIZE")
-            .map(|bs| bs.parse::<usize>())
+            .map(|bs| bs.parse())
             .unwrap()
             .unwrap_or(128);
 
@@ -166,10 +166,8 @@ impl CommandFlowServerImpl {
         }
 
         // Connection broke
-        match Host::toggle_online(host_id, false, &db.clone()).await {
-            Ok(_) => Ok(()),
-            Err(e) => Err(Status::from(e)),
-        }
+        Host::toggle_online(host_id, false, &db.clone()).await?;
+        Ok(())
     }
 }
 
@@ -183,11 +181,9 @@ impl CommandFlow for CommandFlowServerImpl {
     ) -> Result<Response<Self::CommandsStream>, Status> {
         // DB token must be added by middleware beforehand
         let db_token = request.extensions().get::<Token>().unwrap();
-        let host_id =
-            match Token::get_host_for_token(&db_token.token, TokenType::Login, &self.db).await {
-                Ok(host) => host.id,
-                Err(e) => return Err(Status::from(e)),
-            };
+        let host_id = Token::get_host_for_token(&db_token.token, TokenType::Login, &self.db)
+            .await?
+            .id;
 
         // Host::toggle_online(host_id, true, &self.db).await?;
 

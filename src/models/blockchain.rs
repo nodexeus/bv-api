@@ -1,6 +1,7 @@
 use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::types::Json;
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
@@ -29,7 +30,7 @@ pub struct Blockchain {
     pub supports_staking: bool,
     pub supports_broadcast: bool,
     pub version: Option<String>,
-    pub supported_node_types: Vec<super::NodeType>,
+    pub supported_node_types: Json<Vec<super::NodeType>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -42,7 +43,7 @@ impl Blockchain {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_id(id: uuid::Uuid, db: &PgPool) -> Result<Self> {
+    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
         sqlx::query_as("SELECT * FROM blockchains WHERE status <> 'deleted' AND id = $1")
             .bind(id)
             .fetch_one(db)
