@@ -1,7 +1,6 @@
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::CommandInfo;
 use crate::models::UpdateInfo;
-use crate::server::DbPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
@@ -107,7 +106,7 @@ impl Command {
 
 #[tonic::async_trait]
 impl UpdateInfo<CommandInfo, Command> for Command {
-    async fn update_info(info: CommandInfo, db: DbPool) -> Result<Command> {
+    async fn update_info(info: CommandInfo, db: &sqlx::PgPool) -> Result<Command> {
         let id = Uuid::from(info.id.unwrap());
         let mut tx = db.begin().await?;
         let cmd = sqlx::query_as::<_, Command>(
