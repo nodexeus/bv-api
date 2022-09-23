@@ -1,10 +1,28 @@
 use crate::grpc::blockjoy_ui::{response_meta, Pagination, ResponseMeta, Uuid};
+use crate::models::{Node, NodeTypeKey};
+use heck::ToLowerCamelCase;
 use prost_types::Timestamp;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tonic::Status;
 
 use super::blockjoy_ui::RequestMeta;
+
+pub fn image_url_from_node(node: &Node, chain_name: String) -> String {
+    let node_type = NodeTypeKey::str_from_value(node.node_type.0.get_id()).to_lowercase();
+    let version = node
+        .version
+        .clone()
+        .unwrap_or_else(|| "latest".to_string())
+        .to_lowercase();
+
+    format!(
+        "{}/{}/{}",
+        chain_name.to_lower_camel_case(),
+        node_type,
+        version
+    )
+}
 
 pub fn pb_current_timestamp() -> Timestamp {
     let start = SystemTime::now();
@@ -21,12 +39,12 @@ pub fn pb_current_timestamp() -> Timestamp {
     Timestamp { seconds, nanos }
 }
 
-pub fn required(name: &'static str) -> impl Fn() -> tonic::Status {
-    move || tonic::Status::invalid_argument(format!("`{name}` is required"))
+pub fn required(name: &'static str) -> impl Fn() -> Status {
+    move || Status::invalid_argument(format!("`{name}` is required"))
 }
 
-pub fn internal(error: impl std::error::Error) -> tonic::Status {
-    tonic::Status::internal(error.to_string())
+pub fn internal(error: impl std::error::Error) -> Status {
+    Status::internal(error.to_string())
 }
 
 impl ResponseMeta {

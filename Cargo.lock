@@ -90,6 +90,7 @@ dependencies = [
  "futures-util",
  "h2",
  "handlebars",
+ "heck 0.4.0",
  "http",
  "hyper",
  "jsonwebtoken",
