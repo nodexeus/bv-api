@@ -15,11 +15,11 @@ use tonic::Request;
 async fn setup() -> (Arc<sqlx::PgPool>, Node) {
     let db = setup::setup().await;
     let node: Node = sqlx::query_as(
-        "INSERT INTO
-            nodes (org_id, host_id, node_type, blockchain_id)
-        VALUES
-            ((SELECT id FROM orgs LIMIT 1), (SELECT id FROM hosts LIMIT 1), 'etl', (SELECT id FROM blockchains LIMIT 1))
-        RETURNING *;",
+        r#"INSERT INTO
+                nodes (org_id, host_id, node_type, blockchain_id)
+            VALUES
+                ((SELECT id FROM orgs LIMIT 1), (SELECT id FROM hosts LIMIT 1), '{"id":404}', (SELECT id FROM blockchains LIMIT 1))
+            RETURNING *;"#,
     )
     .fetch_one(&db)
     .await
