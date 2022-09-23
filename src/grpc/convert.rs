@@ -379,8 +379,7 @@ pub mod from {
                 groups: vec![],
                 version: req.version.clone().map(String::from),
                 ip: req.ip_addr.clone().map(String::from),
-                // TODO
-                r#type: None,
+                r#type: Some(serde_json::to_string::<NodeType>(req.node_type.as_ref()).unwrap()),
                 address: req.address.clone().map(String::from),
                 wallet_address: req.wallet_address.clone().map(String::from),
                 block_height: req.block_height.map(i64::from),

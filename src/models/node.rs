@@ -181,7 +181,11 @@ impl Node {
         .bind(&req.sync_status)
         .fetch_one(&mut tx)
         .await
-        .map_err(ApiError::from)?;
+        //.map_err(ApiError::from)?;
+        .map_err(|e| {
+            tracing::error!("Error creating node: {}", e);
+            ApiError::from(e)
+        })?;
 
         tx.commit().await?;
 
