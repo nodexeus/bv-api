@@ -38,7 +38,7 @@ rand_core = {version = "0.6", features = ["std"]}
 random-string = "1.0.0"
 sendgrid = {version = "0.17.4", default-features = false, features = ["rustls", "async"]}
 serde = {version = "1.0.125", features = ["derive"]}
-serde_json = "1.0.81"
+serde_json = { version = "1.0.81", features = ["raw_value"] }
 sqlx = {version = "0.5", features = ["postgres", "runtime-tokio-rustls", "migrate", "chrono", "uuid", "json"]}
 thiserror = "1.0.24"
 tokio = {version = "1.2.0", default-features = false, features = ["io-util", "sync", "macros"]}

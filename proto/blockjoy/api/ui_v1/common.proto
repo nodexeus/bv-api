@@ -115,19 +115,6 @@ message HostProvision {
 
 /* Blockchain node representation */
 message Node {
-  /* Declare node type */
-  enum NodeType {
-    // Define the type of node
-    UndefinedType = 0;
-    Node = 1;
-    API = 2;
-    ETL = 3;
-    Miner = 4;
-    Validator = 5;
-    Oracle = 6;
-    Relay = 7;
-  }
-
   /**
    * Describe the node's chain related status
    * Generic, NOT chain specific states. These states are used to describe the
@@ -162,7 +149,7 @@ message Node {
   repeated string groups = 6;
   optional string version = 7;
   optional string ip = 8;
-  optional NodeType type = 9;
+  optional string type = 9;
   optional string address = 10;
   optional string wallet_address = 11;
   optional int64 block_height = 12;
@@ -262,5 +249,5 @@ message Blockchain {
   bool supports_node = 11;
   bool supports_staking = 12;
   bool supports_broadcast = 13;
-  repeated Node.NodeType supported_nodes_types = 14;
+  string supported_nodes_types = 14;
 }
