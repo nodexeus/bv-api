@@ -195,7 +195,7 @@ impl CommandFlow for CommandFlowServerImpl {
 
         // We will use this channel to signal to our event listener to stop when the user closes it
         // stream.
-        let (stop_tx, stop_rx) = mpsc::channel(self.buffer_size);
+        let (stop_tx, stop_rx) = mpsc::channel(1);
         let mut update_stream = request.into_inner();
 
         // Clones intended to be moved inside async closures
