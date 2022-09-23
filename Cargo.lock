@@ -84,7 +84,6 @@ dependencies = [
  "base64 0.13.0",
  "casbin",
  "chrono",
- "crossbeam-channel",
  "dotenv",
  "flate2",
  "futures-util",

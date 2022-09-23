@@ -6,6 +6,7 @@ use crate::grpc::blockjoy_ui::{
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Command, CommandRequest, HostCmd, Node, NodeInfo};
 use crate::server::DbPool;
+use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -13,11 +14,11 @@ use super::helpers::{internal, required};
 
 pub struct NodeServiceImpl {
     db: DbPool,
-    notifier: ChannelNotifier,
+    notifier: Arc<ChannelNotifier>,
 }
 
 impl NodeServiceImpl {
-    pub fn new(db: DbPool, notifier: ChannelNotifier) -> Self {
+    pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         Self { db, notifier }
     }
 }

@@ -85,7 +85,7 @@ pub async fn server(
     >,
 > {
     // Create channel notifier to send messages from one task to another
-    let notifier = ChannelNotifier::create();
+    let notifier = Arc::new(ChannelNotifier::create());
 
     // Add unauthenticated paths. TODO: Should this reside in some config file?
     let unauthenticated = UnauthenticatedPaths::new(vec![

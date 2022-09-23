@@ -10,13 +10,11 @@ use crate::models::{Command as DbCommand, Host, Token};
 use crate::models::{Node, UpdateInfo};
 use crate::server::DbPool;
 use anyhow::anyhow;
-use crossbeam_channel::Receiver;
 use sqlx::PgPool;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::{env, error::Error};
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{broadcast, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 use tonic::codegen::futures_core::Stream;
@@ -50,11 +48,11 @@ fn match_for_io_error(err_status: &Status) -> Option<&std::io::Error> {
 pub struct CommandFlowServerImpl {
     db: DbPool,
     buffer_size: usize,
-    notifier: ChannelNotifier,
+    notifier: Arc<ChannelNotifier>,
 }
 
 impl CommandFlowServerImpl {
-    pub fn new(db: DbPool, notifier: ChannelNotifier) -> Self {
+    pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         let buffer_size: usize = env::var("BIDI_BUFFER_SIZE")
             .map(|bs| bs.parse())
             .unwrap()
@@ -73,12 +71,12 @@ impl CommandFlowServerImpl {
         R: UpdateInfo<T, R>,
     {
         // TODO: check ownership
-        R::update_info(info, db).await
+        R::update_info(info, &db).await
     }
 
     async fn process_info_update(
         db: Arc<PgPool>,
-        update_sender: Sender<Result<Command, Status>>,
+        update_sender: mpsc::Sender<Result<Command, Status>>,
         update: InfoUpdate,
     ) -> ApiResult<()> {
         let update_result = match update.info.unwrap() {
@@ -102,7 +100,7 @@ impl CommandFlowServerImpl {
     async fn process_notification(
         notification: NotificationPayload,
         db: DbPool,
-        sender: Sender<Result<Command, Status>>,
+        sender: mpsc::Sender<Result<Command, Status>>,
     ) -> ApiResult<()> {
         let cmd_id = notification.get_id();
         let command = DbCommand::find_by_id(cmd_id, &db).await;
@@ -140,19 +138,30 @@ impl CommandFlowServerImpl {
     async fn handle_notifications(
         host_id: Uuid,
         db: Arc<PgPool>,
-        notifications: Receiver<ChannelNotification>,
-        stream_sender: Sender<Result<Command, Status>>,
+        mut notifications: broadcast::Receiver<ChannelNotification>,
+        stream_sender: mpsc::Sender<Result<Command, Status>>,
+        mut stop_tx: mpsc::Receiver<()>,
     ) -> Result<(), Status> {
         tracing::info!("Starting handling channel notifications");
 
-        while let Ok(notification) = notifications.recv() {
-            tracing::info!("Received notification");
-            match notification {
-                ChannelNotification::Command(cmd) => {
-                    tracing::info!("Notification is a command notification: {:?}", cmd);
-                    Self::process_notification(cmd, db.clone(), stream_sender.clone()).await?
-                }
-                _ => tracing::error!("received non Command notification"),
+        loop {
+            tokio::select! {
+                notification = notifications.recv() => {
+                    tracing::info!("Received notification");
+                    match notification {
+                        Ok(ChannelNotification::Command(cmd)) => {
+                            tracing::info!("Notification is a command notification: {:?}", cmd);
+                            Self::process_notification(cmd, db.clone(), stream_sender.clone()).await?
+                        }
+                        Ok(_) => tracing::error!("received non Command notification"),
+                        Err(e) => {
+                            tracing::error!("Channel returned error: {e:?}");
+                            break;
+                        }
+                    }
+                },
+                // When we receive a stop message, we break the loop
+                _ = stop_tx.recv() => break,
             }
         }
 
@@ -179,6 +188,10 @@ impl CommandFlow for CommandFlowServerImpl {
         // Host::toggle_online(host_id, true, &self.db).await?;
 
         let (tx, rx) = mpsc::channel(self.buffer_size);
+
+        // We will use this channel to signal to our event listener to stop when the user closes it
+        // stream.
+        let (stop_tx, stop_rx) = mpsc::channel(1);
         let mut update_stream = request.into_inner();
 
         // Clones intended to be moved inside async closures
@@ -190,8 +203,13 @@ impl CommandFlow for CommandFlowServerImpl {
             while let Some(Ok(update)) = update_stream.next().await {
                 Self::process_info_update(db.clone(), sender.clone(), update).await?
             }
+            // Since we are done, we should instruct the other task to also stop.
+            stop_tx
+                .send(())
+                .await
+                .map_err(|_| Status::internal("Channel error"))?;
 
-            // Connection broke
+            // Connection broke or closed
             match Host::toggle_online(host_id, false, &db.clone()).await {
                 Ok(_) => Ok(()),
                 Err(e) => Err(Status::from(e)),
@@ -200,20 +218,15 @@ impl CommandFlow for CommandFlowServerImpl {
 
         let db = self.db.clone();
         let sender = tx;
+        let notifier = self.notifier.commands_receiver();
 
         // Create task handling incoming notifications
-        tokio::spawn(Self::handle_notifications(
-            host_id,
-            db,
-            self.notifier.commands_receiver().clone(),
-            sender,
-        ));
+        let notification_task = Self::handle_notifications(host_id, db, notifier, sender, stop_rx);
+        tokio::spawn(notification_task);
 
         let commands_stream = ReceiverStream::new(rx);
 
-        Ok(Response::new(
-            Box::pin(commands_stream) as Self::CommandsStream
-        ))
+        Ok(Response::new(Box::pin(commands_stream)))
     }
 }
 
