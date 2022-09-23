@@ -1,3 +1,4 @@
+use api::grpc::blockjoy::command_flow_client::CommandFlowClient;
 use api::grpc::blockjoy::hosts_client::HostsClient;
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
 use api::grpc::blockjoy_ui::blockchain_service_client::BlockchainServiceClient;
@@ -76,6 +77,12 @@ impl GrpcClient<Channel> for DashboardServiceClient<Channel> {
 }
 
 impl GrpcClient<Channel> for BlockchainServiceClient<Channel> {
+    fn create(channel: Channel) -> Self {
+        Self::new(channel)
+    }
+}
+
+impl GrpcClient<Channel> for CommandFlowClient<Channel> {
     fn create(channel: Channel) -> Self {
         Self::new(channel)
     }

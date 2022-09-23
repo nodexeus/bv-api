@@ -6,7 +6,6 @@ use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable, Token
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
 use crate::models::{ContainerStatus, UpdateInfo};
-use crate::server::DbPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -339,7 +338,7 @@ impl Owned<Host, ()> for Host {
 
 #[tonic::async_trait]
 impl UpdateInfo<HostInfo, Host> for Host {
-    async fn update_info(info: HostInfo, db: DbPool) -> Result<Host> {
+    async fn update_info(info: HostInfo, db: &sqlx::PgPool) -> Result<Host> {
         let id = Uuid::from(info.id.unwrap());
         let mut tx = db.begin().await?;
         let host = sqlx::query(

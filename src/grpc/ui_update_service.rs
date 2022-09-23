@@ -10,6 +10,7 @@ use crate::models::{Host, Node};
 use crate::server::DbPool;
 use std::env;
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::codegen::futures_core::Stream;
@@ -18,12 +19,12 @@ use uuid::Uuid;
 
 pub struct UpdateServiceImpl {
     db: DbPool,
-    notifier: ChannelNotifier,
+    notifier: Arc<ChannelNotifier>,
     buffer_size: usize,
 }
 
 impl UpdateServiceImpl {
-    pub fn new(db: DbPool, notifier: ChannelNotifier) -> Self {
+    pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         let buffer_size: usize = env::var("BIDI_BUFFER_SIZE")
             .map(|bs| bs.parse::<usize>())
             .unwrap()
@@ -80,14 +81,14 @@ impl UpdateService for UpdateServiceImpl {
 
         let host_response_meta = ResponseMeta::from_meta(inner.meta);
         let node_response_meta = host_response_meta.clone();
-        let hosts_receiver = self.notifier.hosts_receiver().clone();
-        let nodes_receiver = self.notifier.nodes_receiver().clone();
+        let mut hosts_receiver = self.notifier.hosts_receiver();
+        let mut nodes_receiver = self.notifier.nodes_receiver();
         let (tx_hosts, rx) = mpsc::channel(self.buffer_size);
         let tx_nodes = tx_hosts.clone();
         let db = self.db.clone();
 
         let handle_host_updates = tokio::spawn(async move {
-            while let Ok(host) = hosts_receiver.recv() {
+            while let Ok(host) = hosts_receiver.recv().await {
                 match host {
                     ChannelNotification::Host(payload) => {
                         let notification_payload =
@@ -112,7 +113,7 @@ impl UpdateService for UpdateServiceImpl {
         let db = self.db.clone();
 
         let handle_node_updates = tokio::spawn(async move {
-            while let Ok(node) = nodes_receiver.recv() {
+            while let Ok(node) = nodes_receiver.recv().await {
                 match node {
                     ChannelNotification::Node(payload) => {
                         let notification_payload =

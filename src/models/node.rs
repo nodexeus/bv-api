@@ -1,7 +1,6 @@
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
 use crate::models::{command::HostCmd, validator::Validator, UpdateInfo};
-use crate::server::DbPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::{PgHasArrayType, PgRow};
@@ -74,6 +73,17 @@ pub enum NodeSyncStatus {
     Synced,
 }
 
+impl From<i32> for NodeSyncStatus {
+    fn from(n: i32) -> Self {
+        match n {
+            0 => Self::Unknown,
+            1 => Self::Syncing,
+            2 => Self::Synced,
+            _ => Self::Unknown,
+        }
+    }
+}
+
 /// NodeStakingStatus reflects blockjoy.api.v1.node.NodeInfo.StakingStatus in node.proto
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -86,6 +96,21 @@ pub enum NodeStakingStatus {
     Validating,
     Consensus,
     Unstaked,
+}
+
+impl From<i32> for NodeStakingStatus {
+    fn from(n: i32) -> Self {
+        match n {
+            0 => Self::Unknown,
+            1 => Self::Follower,
+            2 => Self::Staked,
+            3 => Self::Staking,
+            4 => Self::Validating,
+            5 => Self::Consensus,
+            6 => Self::Unstaked,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 /// NodeChainStatus reflects blockjoy.api.v1.node.NodeInfo.ApplicationStatus in node.proto
@@ -320,9 +345,12 @@ impl Node {
 
 #[tonic::async_trait]
 impl UpdateInfo<GrpcNodeInfo, Node> for Node {
-    async fn update_info(info: GrpcNodeInfo, db: DbPool) -> Result<Node> {
-        let id = Uuid::from(info.id.unwrap());
-        let mut tx = db.begin().await?;
+    async fn update_info(info: GrpcNodeInfo, db: &PgPool) -> Result<Node> {
+        let req: NodeUpdateRequest = info.into();
+        println!("-- Executing kweery --");
+        println!("Opened up trx");
+        let existing: Vec<Self> = sqlx::query_as("SELECT * FROM nodes;").fetch_all(db).await?;
+        dbg!(existing);
         let node = sqlx::query_as::<_, Node>(
             r##"UPDATE nodes SET
                          name = COALESCE($1, name),
@@ -335,18 +363,17 @@ impl UpdateInfo<GrpcNodeInfo, Node> for Node {
                 RETURNING *
             "##,
         )
-        .bind(info.name)
-        .bind(info.ip)
-        .bind(info.app_status.as_ref().unwrap())
-        .bind(info.sync_status.as_ref().unwrap())
-        .bind(info.staking_status.as_ref().unwrap())
-        .bind(info.block_height)
-        .bind(id)
-        .fetch_one(&mut tx)
+        .bind(req.name)
+        .bind(req.ip_addr)
+        .bind(req.chain_status.unwrap())
+        .bind(req.sync_status.unwrap())
+        .bind(req.staking_status.unwrap())
+        .bind(req.block_height)
+        .bind(req.id.unwrap())
+        .fetch_one(db)
         .await?;
 
-        tx.commit().await?;
-
+        println!("-- Done --------------");
         Ok(node)
     }
 }
@@ -375,6 +402,30 @@ pub struct NodeCreateRequest {
     pub sync_status: NodeSyncStatus,
     pub staking_status: Option<NodeStakingStatus>,
     pub container_status: ContainerStatus,
+}
+
+pub struct NodeUpdateRequest {
+    pub id: Option<Uuid>,
+    pub name: Option<String>,
+    pub ip_addr: Option<String>,
+    pub chain_status: Option<NodeChainStatus>,
+    pub sync_status: Option<NodeSyncStatus>,
+    pub staking_status: Option<NodeStakingStatus>,
+    pub block_height: Option<i64>,
+}
+
+impl From<GrpcNodeInfo> for NodeUpdateRequest {
+    fn from(info: GrpcNodeInfo) -> Self {
+        Self {
+            id: info.id.map(Into::into),
+            name: info.name,
+            ip_addr: info.ip,
+            chain_status: info.app_status.map(Into::into),
+            sync_status: info.sync_status.map(Into::into),
+            staking_status: info.staking_status.map(Into::into),
+            block_height: info.block_height,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

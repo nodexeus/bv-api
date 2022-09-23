@@ -1,19 +1,21 @@
+use std::sync::Arc;
+
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
 use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, Parameter, ResponseMeta};
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd};
 use crate::server::DbPool;
-use crossbeam_channel::SendError;
+use tokio::sync::broadcast;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 pub struct CommandServiceImpl {
     db: DbPool,
-    notifier: ChannelNotifier,
+    notifier: Arc<ChannelNotifier>,
 }
 
 impl CommandServiceImpl {
-    pub fn new(db: DbPool, notifier: ChannelNotifier) -> Self {
+    pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         Self { db, notifier }
     }
 
@@ -41,9 +43,12 @@ impl CommandServiceImpl {
     fn send_notification(
         &self,
         notification: ChannelNotification,
-    ) -> Result<(), SendError<ChannelNotification>> {
+    ) -> Result<(), broadcast::error::SendError<ChannelNotification>> {
         tracing::debug!("Sending notification: {:?}", notification);
-        self.notifier.commands_sender().send(notification)
+        self.notifier
+            .commands_sender()
+            .send(notification)
+            .map(|_| ())
     }
 
     fn get_resource_id_from_params(params: Vec<Parameter>) -> Result<Uuid, Status> {
