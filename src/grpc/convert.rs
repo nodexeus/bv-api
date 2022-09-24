@@ -312,7 +312,8 @@ pub mod from {
 
     impl From<&Host> for GrpcHost {
         fn from(host: &Host) -> Self {
-            let nodes = host.nodes.as_ref().unwrap();
+            let empty: Vec<Node> = vec![];
+            let nodes = host.nodes.as_ref().unwrap_or(&empty);
 
             Self {
                 id: Some(GrpcUiUuid::from(host.id)),
@@ -349,7 +350,7 @@ pub mod from {
                 org_id: Some(GrpcUiUuid::from(node.org_id)),
                 host_id: Some(GrpcUiUuid::from(node.host_id)),
                 blockchain_id: Some(GrpcUiUuid::from(node.blockchain_id)),
-                name: Some(petname::petname(3, "_")),
+                name: node.name.clone(),
                 // TODO: get node groups
                 groups: vec![],
                 version: node.version.clone().map(String::from),
