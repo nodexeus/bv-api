@@ -378,7 +378,7 @@ pub mod from {
                 org_id: Some(GrpcUiUuid::from(req.org_id)),
                 host_id: Some(GrpcUiUuid::from(req.host_id)),
                 blockchain_id: Some(GrpcUiUuid::from(req.blockchain_id)),
-                name: req.name.clone().map(String::from),
+                name: Some(petname::petname(3, "_")),
                 // TODO
                 groups: vec![],
                 version: req.version.clone().map(String::from),
