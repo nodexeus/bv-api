@@ -113,12 +113,22 @@ impl Host {
     }
 
     pub async fn find_by_org(org_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
-        sqlx::query("SELECT * FROM hosts where org_id = $1 order by lower(name)")
+        let hosts = sqlx::query("SELECT * FROM hosts where org_id = $1 order by lower(name)")
             .bind(org_id)
             .map(Self::from)
             .fetch_all(db)
             .await
-            .map_err(ApiError::from)
+            .map_err(ApiError::from)?;
+        let mut hosts_with_nodes: Vec<Host> = Vec::with_capacity(hosts.len());
+
+        for mut host in hosts {
+            let nodes = Node::find_all_by_host(host.id, db).await?;
+            host.nodes = Some(nodes);
+
+            hosts_with_nodes.push(host);
+        }
+
+        Ok(hosts_with_nodes)
     }
 
     pub async fn find_by_org_paginated(
@@ -127,14 +137,26 @@ impl Host {
         offset: i32,
         db: &PgPool,
     ) -> Result<Vec<Self>> {
-        sqlx::query("SELECT * FROM hosts where org_id = $1 order by lower(name) LIMIT $2 OFFSET $3")
-            .bind(org_id)
-            .bind(limit)
-            .bind(offset)
-            .map(Self::from)
-            .fetch_all(db)
-            .await
-            .map_err(ApiError::from)
+        let hosts = sqlx::query(
+            "SELECT * FROM hosts where org_id = $1 order by lower(name) LIMIT $2 OFFSET $3",
+        )
+        .bind(org_id)
+        .bind(limit)
+        .bind(offset)
+        .map(Self::from)
+        .fetch_all(db)
+        .await
+        .map_err(ApiError::from)?;
+        let mut hosts_with_nodes: Vec<Host> = Vec::with_capacity(hosts.len());
+
+        for mut host in hosts {
+            let nodes = Node::find_all_by_host(host.id, db).await?;
+            host.nodes = Some(nodes);
+
+            hosts_with_nodes.push(host);
+        }
+
+        Ok(hosts_with_nodes)
     }
 
     pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
@@ -297,6 +319,8 @@ impl FindableById for Host {
 
         // Add Validators list
         host.validators = Some(Validator::find_all_by_host(host.id, db).await?);
+        // Add Nodes
+        host.nodes = Some(Node::find_all_by_host(host.id, db).await?);
 
         Ok(host)
     }
@@ -337,7 +361,7 @@ impl Owned<Host, ()> for Host {
 
 #[tonic::async_trait]
 impl UpdateInfo<HostInfo, Host> for Host {
-    async fn update_info(info: HostInfo, db: &sqlx::PgPool) -> Result<Host> {
+    async fn update_info(info: HostInfo, db: &PgPool) -> Result<Host> {
         let id = Uuid::from(info.id.unwrap());
         let mut tx = db.begin().await?;
         let host = sqlx::query(

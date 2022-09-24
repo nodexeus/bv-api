@@ -312,6 +312,8 @@ pub mod from {
 
     impl From<&Host> for GrpcHost {
         fn from(host: &Host) -> Self {
+            let nodes = host.nodes.as_ref().unwrap();
+
             Self {
                 id: Some(GrpcUiUuid::from(host.id)),
                 org_id: host.org_id.map(GrpcUiUuid::from),
@@ -325,7 +327,7 @@ pub mod from {
                 os_version: host.os_version.clone().map(String::from),
                 ip: Some(host.ip_addr.clone()),
                 status: None,
-                nodes: vec![],
+                nodes: nodes.iter().map(GrpcNode::from).collect(),
                 created_at: Some(Timestamp {
                     seconds: host.created_at.timestamp(),
                     nanos: host.created_at.timestamp_nanos() as i32,
@@ -406,7 +408,7 @@ pub mod from {
             Self {
                 org_id: node.org_id.map(Uuid::from).unwrap_or_default(),
                 host_id: node.host_id.map(Uuid::from).unwrap_or_default(),
-                name: node.name.map(String::from),
+                name: Some(petname::petname(3, "_")),
                 groups: Some(node.groups.join(",")),
                 version: node.version.map(String::from),
                 ip_addr: node.ip.map(String::from),
