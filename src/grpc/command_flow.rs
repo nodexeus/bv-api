@@ -200,9 +200,12 @@ impl CommandFlow for CommandFlowServerImpl {
 
         // Create task handling incoming updates
         tokio::spawn(async move {
+            tracing::debug!("Started waiting for InfoUpdates");
             while let Some(Ok(update)) = update_stream.next().await {
                 Self::process_info_update(db.clone(), sender.clone(), update).await?
             }
+
+            tracing::debug!("Stopped waiting for InfoUpdates");
             // Since we are done, we should instruct the other task to also stop.
             stop_tx
                 .send(())
