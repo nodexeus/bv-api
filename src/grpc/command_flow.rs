@@ -2,7 +2,7 @@ use crate::auth::TokenType;
 use crate::errors::{ApiError, Result as ApiResult};
 use crate::grpc::blockjoy::{
     command_flow_server::CommandFlow, info_update::Info as GrpcInfo, Command as GrpcCommand,
-    Command, InfoUpdate, NodeInfo,
+    CommandInfo, HostInfo, InfoUpdate, NodeInfo,
 };
 use crate::grpc::convert::db_command_to_grpc_command;
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
@@ -76,23 +76,37 @@ impl CommandFlowServerImpl {
 
     async fn process_info_update(
         db: Arc<PgPool>,
-        update_sender: mpsc::Sender<Result<Command, Status>>,
+        update_sender: mpsc::Sender<Result<GrpcCommand, Status>>,
         update: InfoUpdate,
     ) -> ApiResult<()> {
-        let update_result = match update.info.unwrap() {
-            GrpcInfo::Command(_cmd_info) => unimplemented!(), // Self::handle_info_update::<CommandInfo, Command>(cmd_info, db),
-            GrpcInfo::Host(_host_info) => unimplemented!(), // Self::handle_info_update::<HostInfo, Host>(host_info, db),
-            GrpcInfo::Node(node_info) => Self::handle_info_update::<NodeInfo, Node>(node_info, db),
-        }
-        .await;
-
-        match update_result {
-            // send status info if error occurred
-            Err(e) => match update_sender.send(Err(Status::from(e))).await {
-                Ok(_) => Ok(()),
-                Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
-            },
-            _ => Ok(()), // just return unit type if all went well
+        match update.info.unwrap() {
+            GrpcInfo::Command(cmd_info) => {
+                match Self::handle_info_update::<CommandInfo, DbCommand>(cmd_info, db).await {
+                    Ok(_) => Ok(()),
+                    Err(e) => match update_sender.send(Err(Status::from(e))).await {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
+                    },
+                }
+            }
+            GrpcInfo::Host(host_info) => {
+                match Self::handle_info_update::<HostInfo, Host>(host_info, db).await {
+                    Ok(_) => Ok(()),
+                    Err(e) => match update_sender.send(Err(Status::from(e))).await {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
+                    },
+                }
+            }
+            GrpcInfo::Node(node_info) => {
+                match Self::handle_info_update::<NodeInfo, Node>(node_info, db).await {
+                    Ok(_) => Ok(()),
+                    Err(e) => match update_sender.send(Err(Status::from(e))).await {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
+                    },
+                }
+            }
         }
     }
 
@@ -100,7 +114,7 @@ impl CommandFlowServerImpl {
     async fn process_notification(
         notification: NotificationPayload,
         db: DbPool,
-        sender: mpsc::Sender<Result<Command, Status>>,
+        sender: mpsc::Sender<Result<GrpcCommand, Status>>,
     ) -> ApiResult<()> {
         let cmd_id = notification.get_id();
         let command = DbCommand::find_by_id(cmd_id, &db).await;
@@ -139,7 +153,7 @@ impl CommandFlowServerImpl {
         host_id: Uuid,
         db: Arc<PgPool>,
         mut notifications: broadcast::Receiver<ChannelNotification>,
-        stream_sender: mpsc::Sender<Result<Command, Status>>,
+        stream_sender: mpsc::Sender<Result<GrpcCommand, Status>>,
         mut stop_tx: mpsc::Receiver<()>,
     ) -> Result<(), Status> {
         tracing::info!("Starting handling channel notifications");

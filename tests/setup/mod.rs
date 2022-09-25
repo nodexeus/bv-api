@@ -237,7 +237,7 @@ pub async fn reset_db(pool: &PgPool) {
         org_id: Some(org.id),
         name: "Host-1".into(),
         version: Some("0.1.0".into()),
-        location: Some("Virgina".into()),
+        location: Some("Virginia".into()),
         cpu_count: None,
         mem_size: None,
         disk_size: None,
