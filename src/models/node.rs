@@ -146,7 +146,7 @@ impl TryFrom<i32> for NodeChainStatus {
             20 => Ok(Self::Removed),
             21 => Ok(Self::Removing),
             _ => Err(ApiError::UnexpectedError(anyhow!(
-                "Cannot convert {n} to NodeStakingStatus"
+                "Cannot convert {n} to NodeChainStatus"
             ))),
         }
     }

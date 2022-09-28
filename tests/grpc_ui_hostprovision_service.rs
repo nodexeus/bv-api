@@ -108,7 +108,7 @@ async fn responds_error_with_invalid_provision_for_create() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
-    assert_grpc_request! { create, request, tonic::Code::Unknown, db, HostProvisionServiceClient<Channel> };
+    assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, HostProvisionServiceClient<Channel> };
 }
 
 #[before(call = "setup")]

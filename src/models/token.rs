@@ -188,7 +188,7 @@ impl Token {
         let jwt_token = AuthToken::new(resource_id, expiration.timestamp(), holder_type);
         let token_str = jwt_token
             .encode()
-            .map_err(|e| anyhow!("Errror encoding token: {e}"))?;
+            .map_err(|e| anyhow!("Error encoding token: {e}"))?;
         let id_field = match holder_type {
             TokenHolderType::User => "user_id",
             TokenHolderType::Host => "host_id",

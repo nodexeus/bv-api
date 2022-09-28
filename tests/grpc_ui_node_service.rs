@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_invalid_argument_without_any_for_get() {
+async fn responds_not_found_without_any_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
@@ -43,7 +43,7 @@ async fn responds_invalid_argument_without_any_for_get() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
-    assert_grpc_request! { get, request, tonic::Code::InvalidArgument, db, NodeServiceClient<Channel> };
+    assert_grpc_request! { get, request, tonic::Code::NotFound, db, NodeServiceClient<Channel> };
 }
 
 #[before(call = "setup")]
@@ -165,6 +165,7 @@ async fn responds_internal_with_invalid_data_for_create() {
     let node = GrpcNode {
         id: None,
         host_id: None,
+        // This is required so the test should fail:
         org_id: None,
         blockchain_id: None,
         name: None,
@@ -193,7 +194,7 @@ async fn responds_internal_with_invalid_data_for_create() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
-    assert_grpc_request! { create, request, tonic::Code::Internal, db, NodeServiceClient<Channel> };
+    assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, NodeServiceClient<Channel> };
 }
 
 #[before(call = "setup")]
