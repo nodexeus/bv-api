@@ -13,12 +13,6 @@ test:
 	@cargo test -- --test-threads=1
 	@docker-compose down
 
-test-get: 
-	@docker-compose up -d
-	@sqlx migrate run
-	cargo test --package api --test grpc_organization_service -- responds_ok_for_get --exact --nocapture
-	@docker-compose down
-
 # docker-build:
 #	@docker build . -t ${IMAGE_NAME}
 
