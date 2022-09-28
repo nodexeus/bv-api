@@ -1,8 +1,7 @@
-use std::num::TryFromIntError;
-
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use std::num::TryFromIntError;
 
 pub type Result<T> = std::result::Result<T, ApiError>;
 

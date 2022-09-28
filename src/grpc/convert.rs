@@ -459,9 +459,11 @@ pub mod from {
                     .blockchain_id
                     .ok_or_else(|| ApiError::validation("GrpcNode.blockchain_id is required"))?
                     .try_into()?,
-                node_type: sqlx::types::Json(
-                    node.r#type.ok_or_else(required("node.type"))?.try_into()?,
-                ),
+                node_type: node
+                    .r#type
+                    .ok_or_else(required("node.type"))?
+                    .try_into()
+                    .map(sqlx::types::Json)?,
                 address: node.address.map(String::from),
                 wallet_address: node.wallet_address.map(String::from),
                 block_height: node.block_height.map(i64::from),

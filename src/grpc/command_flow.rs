@@ -151,7 +151,7 @@ impl CommandFlowServerImpl {
     }
 
     async fn handle_notifications(
-        // host_id: Uuid,
+        host_id: uuid::Uuid,
         db: Arc<PgPool>,
         mut notifications: broadcast::Receiver<ChannelNotification>,
         stream_sender: mpsc::Sender<Result<GrpcCommand, Status>>,
@@ -181,7 +181,7 @@ impl CommandFlowServerImpl {
         }
 
         // Connection broke
-        // Host::toggle_online(host_id, false, &db.clone()).await?;
+        Host::toggle_online(host_id, false, &db.clone()).await?;
         Ok(())
     }
 }
@@ -239,7 +239,7 @@ impl CommandFlow for CommandFlowServerImpl {
         let notifier = self.notifier.commands_receiver();
 
         // Create task handling incoming notifications
-        let notification_task = Self::handle_notifications(db, notifier, sender, stop_rx);
+        let notification_task = Self::handle_notifications(host_id, db, notifier, sender, stop_rx);
         tokio::spawn(notification_task);
 
         let commands_stream = ReceiverStream::new(rx);

@@ -96,7 +96,7 @@ impl Host {
             ConnectionStatus::Offline
         };
 
-        sqlx::query("UPDATE hosts set status = $1 where id = $2")
+        sqlx::query("UPDATE hosts SET status = $1 WHERE id = $2 RETURNING *;")
             .bind(status)
             .bind(id)
             .fetch_one(db)
