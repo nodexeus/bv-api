@@ -3,6 +3,7 @@ use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
 use crate::grpc::helpers::{internal, required};
 use crate::models::{validator::Validator, UpdateInfo};
+use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -38,13 +39,17 @@ pub enum NodeSyncStatus {
     Synced,
 }
 
-impl From<i32> for NodeSyncStatus {
-    fn from(n: i32) -> Self {
+impl TryFrom<i32> for NodeSyncStatus {
+    type Error = ApiError;
+
+    fn try_from(n: i32) -> Result<Self> {
         match n {
-            0 => Self::Unknown,
-            1 => Self::Syncing,
-            2 => Self::Synced,
-            _ => Self::Unknown,
+            0 => Ok(Self::Unknown),
+            1 => Ok(Self::Syncing),
+            2 => Ok(Self::Synced),
+            _ => Err(ApiError::UnexpectedError(anyhow!(
+                "Cannot convert {n} to NodeSyncStatus"
+            ))),
         }
     }
 }
@@ -63,17 +68,21 @@ pub enum NodeStakingStatus {
     Unstaked,
 }
 
-impl From<i32> for NodeStakingStatus {
-    fn from(n: i32) -> Self {
+impl TryFrom<i32> for NodeStakingStatus {
+    type Error = ApiError;
+
+    fn try_from(n: i32) -> Result<Self> {
         match n {
-            0 => Self::Unknown,
-            1 => Self::Follower,
-            2 => Self::Staked,
-            3 => Self::Staking,
-            4 => Self::Validating,
-            5 => Self::Consensus,
-            6 => Self::Unstaked,
-            _ => Self::Unknown,
+            0 => Ok(Self::Unknown),
+            1 => Ok(Self::Follower),
+            2 => Ok(Self::Staked),
+            3 => Ok(Self::Staking),
+            4 => Ok(Self::Validating),
+            5 => Ok(Self::Consensus),
+            6 => Ok(Self::Unstaked),
+            _ => Err(ApiError::UnexpectedError(anyhow!(
+                "Cannot convert {n} to NodeStakingStatus"
+            ))),
         }
     }
 }
@@ -109,32 +118,36 @@ pub enum NodeChainStatus {
     Removing,
 }
 
-impl From<i32> for NodeChainStatus {
-    fn from(status: i32) -> Self {
-        match status {
-            0 => Self::Unknown,
-            1 => Self::Follower,
-            2 => Self::Staked,
-            3 => Self::Staking,
-            4 => Self::Validating,
-            5 => Self::Consensus,
-            6 => Self::Broadcasting,
-            7 => Self::Cancelled,
-            8 => Self::Delegating,
-            9 => Self::Delinquent,
-            10 => Self::Disabled,
-            11 => Self::Earning,
-            12 => Self::Electing,
-            13 => Self::Elected,
-            14 => Self::Exporting,
-            15 => Self::Ingesting,
-            16 => Self::Mining,
-            17 => Self::Minting,
-            18 => Self::Processing,
-            19 => Self::Relaying,
-            20 => Self::Removed,
-            21 => Self::Removing,
-            _ => Self::Unknown,
+impl TryFrom<i32> for NodeChainStatus {
+    type Error = ApiError;
+
+    fn try_from(n: i32) -> Result<Self> {
+        match n {
+            0 => Ok(Self::Unknown),
+            1 => Ok(Self::Follower),
+            2 => Ok(Self::Staked),
+            3 => Ok(Self::Staking),
+            4 => Ok(Self::Validating),
+            5 => Ok(Self::Consensus),
+            6 => Ok(Self::Broadcasting),
+            7 => Ok(Self::Cancelled),
+            8 => Ok(Self::Delegating),
+            9 => Ok(Self::Delinquent),
+            10 => Ok(Self::Disabled),
+            11 => Ok(Self::Earning),
+            12 => Ok(Self::Electing),
+            13 => Ok(Self::Elected),
+            14 => Ok(Self::Exporting),
+            15 => Ok(Self::Ingesting),
+            16 => Ok(Self::Mining),
+            17 => Ok(Self::Minting),
+            18 => Ok(Self::Processing),
+            19 => Ok(Self::Relaying),
+            20 => Ok(Self::Removed),
+            21 => Ok(Self::Removing),
+            _ => Err(ApiError::UnexpectedError(anyhow!(
+                "Cannot convert {n} to NodeStakingStatus"
+            ))),
         }
     }
 }
@@ -384,9 +397,9 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
             id,
             name: info.name,
             ip_addr: info.ip,
-            chain_status: info.app_status.map(Into::into),
-            sync_status: info.sync_status.map(Into::into),
-            staking_status: info.staking_status.map(Into::into),
+            chain_status: info.app_status.map(|n| n.try_into()).transpose()?,
+            sync_status: info.sync_status.map(|n| n.try_into()).transpose()?,
+            staking_status: info.staking_status.map(|n| n.try_into()).transpose()?,
             block_height: info.block_height,
         };
         Ok(req)
@@ -433,7 +446,7 @@ impl NodeGroup {
         Ok(NodeGroup {
             id,
             name,
-            node_count: validators.len() as i64,
+            node_count: validators.len().try_into()?,
             nodes: Some(validators),
         })
     }

@@ -85,9 +85,9 @@ where
                 action: request.method().to_string(),
             };
 
-            let result = dbg!(enforcer
+            let result = enforcer
                 .try_authorized(auth_data)
-                .map_err(|e| unauthorized_response(&e.to_string())))?;
+                .map_err(|e| unauthorized_response(&e.to_string()))?;
             // Evaluate authorization result
             match result {
                 AuthorizationState::Authorized => {

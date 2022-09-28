@@ -101,7 +101,7 @@ impl NodeService for NodeServiceImpl {
             .as_ref()
             .ok_or_else(required("node.id"))?
             .try_into()?;
-        let fields: NodeInfo = node.into();
+        let fields: NodeInfo = node.try_into()?;
 
         Node::update_info(&node_id, &fields, &self.db).await?;
         let response = UpdateNodeResponse {

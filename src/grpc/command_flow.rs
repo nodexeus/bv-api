@@ -166,7 +166,7 @@ impl CommandFlowServerImpl {
                     match notification {
                         Ok(ChannelNotification::Command(cmd)) => {
                             tracing::info!("Notification is a command notification: {:?}", cmd);
-                            dbg!(Self::process_notification(cmd, db.clone(), stream_sender.clone()).await)?
+                            Self::process_notification(cmd, db.clone(), stream_sender.clone()).await?
                         }
                         Ok(_) => tracing::error!("received non Command notification"),
                         Err(e) => {
@@ -522,7 +522,7 @@ mod tests {
                 id: Some(GrpcUuid::from(Uuid::new_v4())),
                 name: Some("strizzi".into()),
                 ip: Some("123.456.789.0".into()),
-                block_height: Some(i as i64),
+                block_height: Some(i.into()),
                 onchain_name: Some("strizzi-asdfasdf".into()),
                 app_status: None,
                 container_status: None,

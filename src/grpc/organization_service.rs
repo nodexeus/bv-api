@@ -1,3 +1,4 @@
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationService;
 use crate::grpc::blockjoy_ui::{
     CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
@@ -31,14 +32,12 @@ impl OrganizationService for OrganizationServiceImpl {
         let db_token = try_get_token(&request)?;
         let user_id = db_token.try_user_id()?;
         let inner = request.into_inner();
-        let organizations: Vec<Organization> = Org::find_all_by_user(user_id, &self.db)
-            .await?
-            .iter()
-            .map(Organization::from)
-            .collect();
+        let organizations: Vec<Org> = Org::find_all_by_user(user_id, &self.db).await?;
+        let organizations: Result<_, ApiError> =
+            organizations.iter().map(Organization::try_from).collect();
         let inner = GetOrganizationsResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            organizations,
+            organizations: organizations?,
         };
 
         Ok(Response::new(inner))
@@ -113,14 +112,11 @@ impl OrganizationService for OrganizationServiceImpl {
         let org_id = inner.id.ok_or_else(required("id"))?.try_into()?;
 
         let (limit, offset) = pagination_parameters(meta.pagination.clone())?;
-        let users = Org::find_all_member_users_paginated(&org_id, limit, offset, &self.db)
-            .await?
-            .iter()
-            .map(GrpcUiUser::from)
-            .collect();
+        let users = Org::find_all_member_users_paginated(&org_id, limit, offset, &self.db).await?;
+        let users: Result<_, ApiError> = users.iter().map(GrpcUiUser::try_from).collect();
         let inner = OrganizationMemberResponse {
             meta: Some(ResponseMeta::from_meta(meta).with_pagination()),
-            users,
+            users: users?,
         };
 
         Ok(Response::new(inner))

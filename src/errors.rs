@@ -1,3 +1,5 @@
+use std::num::TryFromIntError;
+
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -26,6 +28,9 @@ pub enum ApiError {
 
     #[error("Error related to JSON parsing or serialization: {0}")]
     JsonError(#[from] serde_json::Error),
+
+    #[error("Error converting to integer sizes: {0}")]
+    IntegerError(#[from] TryFromIntError),
 
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),

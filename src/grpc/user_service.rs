@@ -32,7 +32,7 @@ impl UserService for UserServiceImpl {
         let user = Token::get_user_for_token(token, TokenType::Login, &self.db).await?;
         let response = GetUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            user: Some(GrpcUser::from(user)),
+            user: Some(GrpcUser::try_from(user)?),
         };
 
         Ok(Response::new(response))

@@ -89,17 +89,26 @@ pub mod from {
     use crate::grpc::helpers::required;
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
-        NodeCreateRequest, NodeInfo, NodeStakingStatus, NodeSyncStatus, NodeType, Org, User,
+        NodeCreateRequest, NodeInfo, NodeStakingStatus, NodeSyncStatus, Org, User,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
-    use chrono::{DateTime, Utc};
     use prost_types::Timestamp;
     use serde_json::Value;
     use std::i64;
     use std::str::FromStr;
     use tonic::{Code, Status};
     use uuid::Uuid;
+
+    /// Private function to convert the datetimes from the database into the API representation of
+    /// a timestamp.
+    fn try_dt_to_ts(datetime: chrono::DateTime<chrono::Utc>) -> Result<Timestamp, ApiError> {
+        let timestamp = Timestamp {
+            seconds: datetime.timestamp(),
+            nanos: datetime.timestamp_nanos().try_into()?,
+        };
+        Ok(timestamp)
+    }
 
     impl FromStr for GrpcUuid {
         type Err = ApiError;
@@ -164,22 +173,19 @@ pub mod from {
         }
     }
 
-    impl From<HostProvision> for GrpcHostProvision {
-        fn from(hp: HostProvision) -> Self {
-            Self {
+    impl TryFrom<HostProvision> for GrpcHostProvision {
+        type Error = ApiError;
+
+        fn try_from(hp: HostProvision) -> Result<Self, Self::Error> {
+            let hp = Self {
                 id: Some(hp.id),
                 org_id: Some(GrpcUiUuid::from(hp.org_id)),
                 host_id: hp.host_id.map(GrpcUiUuid::from),
-                created_at: Some(Timestamp {
-                    seconds: hp.created_at.timestamp(),
-                    nanos: hp.created_at.timestamp_nanos() as i32,
-                }),
-                claimed_at: hp.claimed_at.map(|ts| Timestamp {
-                    seconds: ts.timestamp(),
-                    nanos: ts.timestamp_nanos() as i32,
-                }),
+                created_at: Some(try_dt_to_ts(hp.created_at)?),
+                claimed_at: hp.claimed_at.map(try_dt_to_ts).transpose()?,
                 install_cmd: hp.install_cmd.map(String::from),
-            }
+            };
+            Ok(hp)
         }
     }
 
@@ -239,19 +245,19 @@ pub mod from {
         }
     }
 
-    impl From<&User> for GrpcUiUser {
-        fn from(user: &User) -> Self {
-            Self {
+    impl TryFrom<&User> for GrpcUiUser {
+        type Error = ApiError;
+
+        fn try_from(user: &User) -> Result<Self, Self::Error> {
+            let user = Self {
                 id: Some(GrpcUiUuid::from(user.id)),
                 email: Some(user.email.clone()),
                 first_name: Some(user.first_name.clone()),
                 last_name: Some(user.last_name.clone()),
-                created_at: Some(Timestamp {
-                    seconds: user.created_at.timestamp(),
-                    nanos: user.created_at.timestamp_nanos() as i32,
-                }),
+                created_at: Some(try_dt_to_ts(user.created_at)?),
                 updated_at: None,
-            }
+            };
+            Ok(user)
         }
     }
 
@@ -282,44 +288,43 @@ pub mod from {
         }
     }
 
-    impl From<User> for GrpcUiUser {
-        fn from(user: User) -> Self {
-            Self {
+    impl TryFrom<User> for GrpcUiUser {
+        type Error = ApiError;
+
+        fn try_from(user: User) -> Result<Self, Self::Error> {
+            let user = Self {
                 id: Some(GrpcUiUuid::from(user.id)),
                 email: Some(user.email),
                 first_name: Some(user.first_name),
                 last_name: Some(user.last_name),
-                created_at: Some(Timestamp {
-                    seconds: user.created_at.timestamp(),
-                    nanos: user.created_at.timestamp_nanos() as i32,
-                }),
+                created_at: Some(try_dt_to_ts(user.created_at)?),
                 updated_at: None,
-            }
+            };
+            Ok(user)
         }
     }
 
-    impl From<Org> for Organization {
-        fn from(org: Org) -> Self {
-            Organization::from(&org)
+    impl TryFrom<Org> for Organization {
+        type Error = ApiError;
+
+        fn try_from(org: Org) -> Result<Self, Self::Error> {
+            Organization::try_from(&org)
         }
     }
 
-    impl From<&Org> for Organization {
-        fn from(org: &Org) -> Self {
-            Self {
+    impl TryFrom<&Org> for Organization {
+        type Error = ApiError;
+
+        fn try_from(org: &Org) -> Result<Self, Self::Error> {
+            let org = Self {
                 id: Some(GrpcUiUuid::from(org.id)),
                 name: Some(org.name.clone()),
                 personal: Some(org.is_personal),
                 member_count: org.member_count,
-                created_at: Some(Timestamp {
-                    seconds: org.created_at.timestamp(),
-                    nanos: org.created_at.timestamp_nanos() as i32,
-                }),
-                updated_at: Some(Timestamp {
-                    seconds: org.updated_at.timestamp(),
-                    nanos: org.updated_at.timestamp_nanos() as i32,
-                }),
-            }
+                created_at: Some(try_dt_to_ts(org.created_at)?),
+                updated_at: Some(try_dt_to_ts(org.updated_at)?),
+            };
+            Ok(org)
         }
     }
 
@@ -353,10 +358,7 @@ pub mod from {
                 ip: Some(host.ip_addr.clone()),
                 status: None,
                 nodes: nodes?,
-                created_at: Some(Timestamp {
-                    seconds: host.created_at.timestamp(),
-                    nanos: host.created_at.timestamp_nanos() as i32,
-                }),
+                created_at: Some(try_dt_to_ts(host.created_at)?),
             };
             Ok(grpc_host)
         }
@@ -390,15 +392,9 @@ pub mod from {
                 block_height: node.block_height.map(i64::from),
                 // TODO: Get node data
                 node_data: None,
-                created_at: Some(Timestamp {
-                    seconds: node.created_at.timestamp(),
-                    nanos: node.created_at.timestamp_nanos() as i32,
-                }),
-                updated_at: Some(Timestamp {
-                    seconds: node.updated_at.timestamp(),
-                    nanos: node.updated_at.timestamp_nanos() as i32,
-                }),
-                status: Some(GrpcNodeStatus::from(node.chain_status) as i32),
+                created_at: Some(try_dt_to_ts(node.created_at)?),
+                updated_at: Some(try_dt_to_ts(node.updated_at)?),
+                status: Some(GrpcNodeStatus::from(node.chain_status).into()),
             };
             Ok(grpc_node)
         }
@@ -428,7 +424,7 @@ pub mod from {
                 node_data: None,
                 created_at: None,
                 updated_at: None,
-                status: Some(GrpcNodeStatus::from(req.chain_status) as i32),
+                status: Some(GrpcNodeStatus::from(req.chain_status).into()),
             };
             Ok(node)
         }
@@ -463,12 +459,17 @@ pub mod from {
                     .blockchain_id
                     .ok_or_else(|| ApiError::validation("GrpcNode.blockchain_id is required"))?
                     .try_into()?,
-                node_type: sqlx::types::Json(NodeType::try_from(node.r#type.unwrap_or_default())?),
+                node_type: sqlx::types::Json(
+                    node.r#type.ok_or_else(required("node.type"))?.try_into()?,
+                ),
                 address: node.address.map(String::from),
                 wallet_address: node.wallet_address.map(String::from),
                 block_height: node.block_height.map(i64::from),
                 node_data: node.node_data.map(Value::from),
-                chain_status: NodeChainStatus::from(node.status.unwrap_or_default()),
+                chain_status: node
+                    .status
+                    .ok_or_else(required("node.status"))?
+                    .try_into()?,
                 sync_status: NodeSyncStatus::Unknown,
                 staking_status: Some(NodeStakingStatus::Unknown),
                 container_status: ContainerStatus::Unknown,
@@ -477,18 +478,21 @@ pub mod from {
         }
     }
 
-    impl From<GrpcNode> for NodeInfo {
-        fn from(node: GrpcNode) -> Self {
-            Self {
+    impl TryFrom<GrpcNode> for NodeInfo {
+        type Error = ApiError;
+
+        fn try_from(node: GrpcNode) -> Result<Self, Self::Error> {
+            let node_info = Self {
                 version: node.version,
                 ip_addr: node.ip,
                 block_height: node.block_height,
                 node_data: node.node_data.map(Value::from),
-                chain_status: node.status.map(NodeChainStatus::from),
+                chain_status: node.status.map(|n| n.try_into()).transpose()?,
                 sync_status: None,
                 staking_status: None,
                 container_status: None,
-            }
+            };
+            Ok(node_info)
         }
     }
 
@@ -530,10 +534,6 @@ pub mod from {
         type Error = ApiError;
 
         fn try_from(model: models::Blockchain) -> Result<Self, Self::Error> {
-            let convert_dt = |dt: DateTime<Utc>| Timestamp {
-                seconds: dt.timestamp(),
-                nanos: dt.timestamp_nanos() as i32,
-            };
             let json = model.supported_node_types.0;
             let json = serde_json::to_string(&json)
                 .map_err(|e| anyhow!("Could not serialize supported node types: {e}"))?;
@@ -553,8 +553,8 @@ pub mod from {
                 supports_broadcast: model.supports_broadcast,
                 version: model.version,
                 supported_nodes_types: json,
-                created_at: Some(convert_dt(model.created_at)),
-                updated_at: Some(convert_dt(model.updated_at)),
+                created_at: Some(try_dt_to_ts(model.created_at)?),
+                updated_at: Some(try_dt_to_ts(model.updated_at)?),
             };
             Ok(blockchain)
         }

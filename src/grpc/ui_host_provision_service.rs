@@ -29,7 +29,7 @@ impl HostProvisionService for HostProvisionServiceImpl {
         let host_provision = HostProvision::find_by_id(&host_provision_id, &self.db).await?;
         let response = GetHostProvisionResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            host_provisions: vec![GrpcHostProvision::from(host_provision)],
+            host_provisions: vec![GrpcHostProvision::try_from(host_provision)?],
         };
         Ok(Response::new(response))
     }
