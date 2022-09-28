@@ -1,4 +1,5 @@
 use super::blockjoy_ui::{self, ResponseMeta};
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::blockchain_service_server::BlockchainService;
 use crate::models;
 use crate::server::DbPool;
@@ -25,13 +26,13 @@ impl BlockchainService for BlockchainServiceImpl {
         let id = inner
             .id
             .ok_or_else(|| tonic::Status::invalid_argument("The `id` field is required"))?
-            .into();
+            .try_into()?;
         let blockchain = models::Blockchain::find_by_id(id, &self.db)
             .await
             .map_err(|_| tonic::Status::not_found("No such blockchain"))?;
         let response = blockjoy_ui::GetBlockchainResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            blockchain: Some(blockchain.into()),
+            blockchain: Some(blockchain.try_into()?),
         };
         Ok(tonic::Response::new(response))
     }
@@ -42,9 +43,11 @@ impl BlockchainService for BlockchainServiceImpl {
     ) -> Result<tonic::Response<blockjoy_ui::ListBlockchainsResponse>> {
         let inner = request.into_inner();
         let blockchains = models::Blockchain::find_all(&self.db).await?;
+        let blockchains: Result<Vec<_>, ApiError> =
+            blockchains.into_iter().map(|b| b.try_into()).collect();
         let response = blockjoy_ui::ListBlockchainsResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            blockchains: blockchains.into_iter().map(Into::into).collect(),
+            blockchains: blockchains?,
         };
         Ok(tonic::Response::new(response))
     }

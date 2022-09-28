@@ -1,3 +1,4 @@
+use super::helpers::required;
 use crate::grpc::blockjoy_ui::host_provision_service_server::HostProvisionService;
 use crate::grpc::blockjoy_ui::{
     CreateHostProvisionRequest, CreateHostProvisionResponse, GetHostProvisionRequest,
@@ -6,9 +7,6 @@ use crate::grpc::blockjoy_ui::{
 use crate::models::{HostProvision, HostProvisionRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
-
-use super::helpers::required;
 
 pub struct HostProvisionServiceImpl {
     db: DbPool,
@@ -41,9 +39,14 @@ impl HostProvisionService for HostProvisionServiceImpl {
         request: Request<CreateHostProvisionRequest>,
     ) -> Result<Response<CreateHostProvisionResponse>, Status> {
         let inner = request.into_inner();
-        let provision = inner.host_provision.unwrap();
+        let provision = inner
+            .host_provision
+            .ok_or_else(required("host_provision"))?;
+        let org_id = provision
+            .org_id
+            .ok_or_else(required("host_provision.org_id"))?;
         let req = HostProvisionRequest {
-            org_id: Uuid::from(provision.org_id.unwrap()),
+            org_id: org_id.try_into()?,
             nodes: None,
         };
 

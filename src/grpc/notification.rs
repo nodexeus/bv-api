@@ -84,7 +84,7 @@ pub fn get_channel_pair() -> (Sender<ChannelNotification>, Receiver<ChannelNotif
 
 fn get_bidi_channel_size() -> usize {
     env::var("INTERNAL_BUFFER_SIZE")
-        .map(|bs| bs.parse::<usize>())
-        .unwrap()
+        .ok()
+        .and_then(|bs| bs.parse().ok())
         .unwrap_or(128)
 }

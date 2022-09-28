@@ -64,6 +64,7 @@ pub type AuthorizationResult = std::result::Result<AuthorizationState, Authoriza
 pub type InitResult = std::result::Result<Authorization, AuthorizationError>;
 
 /// Restrict possible authorization results
+#[derive(Debug)]
 pub enum AuthorizationState {
     Authorized,
     Denied,

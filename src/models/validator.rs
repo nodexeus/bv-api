@@ -157,7 +157,7 @@ impl Validator {
         validator: ValidatorStatusRequest,
         db: &PgPool,
     ) -> Result<Self> {
-        let mut tx = db.begin().await.unwrap();
+        let mut tx = db.begin().await?;
         let validator = sqlx::query_as::<_, Self>(
             r#"UPDATE validators SET version=$1, block_height=$2, status=$3, updated_at=now()  WHERE id = $4 RETURNING *"#
         )
@@ -168,7 +168,7 @@ impl Validator {
             .fetch_one(&mut tx)
             .await?;
 
-        tx.commit().await.unwrap();
+        tx.commit().await?;
         Ok(validator)
     }
 
@@ -197,7 +197,7 @@ impl Validator {
         owner_address: Option<String>,
         db: &PgPool,
     ) -> Result<Self> {
-        let mut tx = db.begin().await.unwrap();
+        let mut tx = db.begin().await?;
         let validator = sqlx::query_as::<_, Self>(
             r#"UPDATE validators SET owner_address=$1, updated_at=now()  WHERE id = $2 RETURNING *"#,
         )
@@ -206,7 +206,7 @@ impl Validator {
             .fetch_one(&mut tx)
             .await?;
 
-        tx.commit().await.unwrap();
+        tx.commit().await?;
         Ok(validator)
     }
 
@@ -238,7 +238,7 @@ impl Validator {
             }
         };
 
-        let mut tx = db.begin().await.unwrap();
+        let mut tx = db.begin().await?;
         let validator = sqlx::query_as::<_, Self>(
             r#"UPDATE validators SET version=$1, address=$2, swarm_key=$3, address_name=$4, updated_at=now() WHERE id = $5 RETURNING *"#
         )
@@ -250,7 +250,7 @@ impl Validator {
             .fetch_one(&mut tx)
             .await?;
 
-        tx.commit().await.unwrap();
+        tx.commit().await?;
         Ok(validator)
     }
 

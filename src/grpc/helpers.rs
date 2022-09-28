@@ -1,5 +1,6 @@
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::{response_meta, Pagination, ResponseMeta, Uuid};
-use crate::models::{Node, NodeTypeKey};
+use crate::models::{self, Node, NodeTypeKey};
 use heck::ToLowerCamelCase;
 use prost_types::Timestamp;
 use std::env;
@@ -43,8 +44,17 @@ pub fn required(name: &'static str) -> impl Fn() -> Status {
     move || Status::invalid_argument(format!("`{name}` is required"))
 }
 
-pub fn internal(error: impl std::error::Error) -> Status {
+pub fn internal(error: impl std::fmt::Display) -> Status {
     Status::internal(error.to_string())
+}
+
+pub fn try_get_token<T>(req: &tonic::Request<T>) -> Result<models::Token, ApiError> {
+    let tkn = req
+        .extensions()
+        .get::<models::Token>()
+        .ok_or_else(|| Status::internal("Token lost!"))?
+        .clone();
+    Ok(tkn)
 }
 
 impl ResponseMeta {

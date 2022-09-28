@@ -24,8 +24,17 @@ pub enum ApiError {
     #[error("Error processing JWT")]
     JWTError(#[from] jsonwebtoken::errors::Error),
 
+    #[error("Error related to JSON parsing or serialization: {0}")]
+    JsonError(#[from] serde_json::Error),
+
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
+}
+
+impl ApiError {
+    pub fn validation(msg: impl std::fmt::Display) -> Self {
+        Self::ValidationError(msg.to_string())
+    }
 }
 
 impl std::fmt::Debug for ApiError {

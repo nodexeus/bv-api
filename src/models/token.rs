@@ -59,6 +59,11 @@ impl Token {
         base64_encode(&self.token)
     }
 
+    pub fn try_user_id(&self) -> Result<Uuid> {
+        self.user_id
+            .ok_or_else(|| ApiError::UnexpectedError(anyhow!("User ID missing from token!")))
+    }
+
     pub async fn get<T: TokenIdentifyable>(
         resource_id: Uuid,
         token_type: TokenType,
@@ -91,7 +96,7 @@ impl Token {
         }
     }
 
-    pub async fn refresh(token_str: String, db: &PgPool) -> Result<Self> {
+    pub async fn refresh(token_str: &str, db: &PgPool) -> Result<Self> {
         // 1. Get the old token
         let old_token = sqlx::query_as::<_, Self>("SELECT * FROM tokens WHERE token = $1")
             .bind(token_str)
@@ -181,7 +186,9 @@ impl Token {
     ) -> Result<Self> {
         let expiration = Self::get_expiration(Self::get_expiration_period(holder_type, token_type));
         let jwt_token = AuthToken::new(resource_id, expiration.timestamp(), holder_type);
-        let token_str = jwt_token.encode().unwrap();
+        let token_str = jwt_token
+            .encode()
+            .map_err(|e| anyhow!("Errror encoding token: {e}"))?;
         let id_field = match holder_type {
             TokenHolderType::User => "user_id",
             TokenHolderType::Host => "host_id",
@@ -271,9 +278,9 @@ impl Token {
         };
 
         env::var(name)
-            .unwrap_or_else(|_| "1".into())
-            .parse()
-            .unwrap()
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1)
     }
 }
 

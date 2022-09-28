@@ -96,7 +96,7 @@ pub async fn get_qr(
     Path(user_id): Path<Uuid>,
 ) -> ApiResult<impl IntoResponse> {
     let qr_data = User::get_qr_by_id(db.as_ref(), user_id).await?;
-    let png: Vec<u8> = qrcode_generator::to_png_to_vec(qr_data, QrCodeEcc::Low, 1024).unwrap();
+    let png: Vec<u8> = qrcode_generator::to_png_to_vec(qr_data, QrCodeEcc::Low, 1024).expect("Commented out code heheh");
 
     Ok(Response::builder()
         .status(StatusCode::OK)

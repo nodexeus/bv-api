@@ -94,7 +94,9 @@ pub async fn server(
         "/blockjoy.api.ui_v1.UserService/ResetPassword",
         "/blockjoy.api.ui_v1.UserService/Create",
     ]);
-    let enforcer = Authorization::new().await.unwrap();
+    let enforcer = Authorization::new()
+        .await
+        .expect("Could not create Authorization!");
     let auth_service = AuthorizationService::new(enforcer);
     let h_service = HostsServer::new(HostsServiceImpl::new(db.clone()));
     let c_service =
@@ -147,7 +149,7 @@ pub async fn server(
 
 fn rate_limiting_settings() -> usize {
     env::var("REQUEST_CONCURRENCY_LIMIT")
-        .unwrap()
-        .parse::<usize>()
+        .ok()
+        .and_then(|s| s.parse().ok())
         .unwrap_or(32)
 }

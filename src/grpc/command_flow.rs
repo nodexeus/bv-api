@@ -1,3 +1,4 @@
+use super::helpers::required;
 use crate::auth::TokenType;
 use crate::errors::{ApiError, Result as ApiResult};
 use crate::grpc::blockjoy::{
@@ -5,9 +6,9 @@ use crate::grpc::blockjoy::{
     CommandInfo, HostInfo, InfoUpdate, NodeInfo,
 };
 use crate::grpc::convert::db_command_to_grpc_command;
+use crate::grpc::helpers::try_get_token;
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
-use crate::models::{Command as DbCommand, Host, Token};
-use crate::models::{Node, UpdateInfo};
+use crate::models::{self, Command as DbCommand, Host, Node, UpdateInfo};
 use crate::server::DbPool;
 use anyhow::anyhow;
 use sqlx::PgPool;
@@ -19,7 +20,6 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 use tonic::codegen::futures_core::Stream;
 use tonic::{Request, Response, Status, Streaming};
-use uuid::Uuid;
 
 #[allow(dead_code)]
 fn match_for_io_error(err_status: &Status) -> Option<&std::io::Error> {
@@ -54,8 +54,8 @@ pub struct CommandFlowServerImpl {
 impl CommandFlowServerImpl {
     pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         let buffer_size: usize = env::var("BIDI_BUFFER_SIZE")
-            .map(|bs| bs.parse())
-            .unwrap()
+            .ok()
+            .and_then(|bs| bs.parse().ok())
             .unwrap_or(128);
 
         Self {
@@ -79,7 +79,8 @@ impl CommandFlowServerImpl {
         update_sender: mpsc::Sender<Result<GrpcCommand, Status>>,
         update: InfoUpdate,
     ) -> ApiResult<()> {
-        match update.info.unwrap() {
+        let info = update.info.ok_or_else(required("update.info"))?;
+        match info {
             GrpcInfo::Command(cmd_info) => {
                 match Self::handle_info_update::<CommandInfo, DbCommand>(cmd_info, db).await {
                     Ok(_) => Ok(()),
@@ -150,7 +151,7 @@ impl CommandFlowServerImpl {
     }
 
     async fn handle_notifications(
-        host_id: Uuid,
+        // host_id: Uuid,
         db: Arc<PgPool>,
         mut notifications: broadcast::Receiver<ChannelNotification>,
         stream_sender: mpsc::Sender<Result<GrpcCommand, Status>>,
@@ -165,7 +166,7 @@ impl CommandFlowServerImpl {
                     match notification {
                         Ok(ChannelNotification::Command(cmd)) => {
                             tracing::info!("Notification is a command notification: {:?}", cmd);
-                            Self::process_notification(cmd, db.clone(), stream_sender.clone()).await?
+                            dbg!(Self::process_notification(cmd, db.clone(), stream_sender.clone()).await)?
                         }
                         Ok(_) => tracing::error!("received non Command notification"),
                         Err(e) => {
@@ -180,7 +181,7 @@ impl CommandFlowServerImpl {
         }
 
         // Connection broke
-        Host::toggle_online(host_id, false, &db.clone()).await?;
+        // Host::toggle_online(host_id, false, &db.clone()).await?;
         Ok(())
     }
 }
@@ -194,12 +195,12 @@ impl CommandFlow for CommandFlowServerImpl {
         request: Request<Streaming<InfoUpdate>>,
     ) -> Result<Response<Self::CommandsStream>, Status> {
         // DB token must be added by middleware beforehand
-        let db_token = request.extensions().get::<Token>().unwrap();
-        let host_id = Token::get_host_for_token(&db_token.token, TokenType::Login, &self.db)
+        let db_token = try_get_token(&request)?.token;
+        let host_id = models::Token::get_host_for_token(&db_token, TokenType::Login, &self.db)
             .await?
             .id;
 
-        // Host::toggle_online(host_id, true, &self.db).await?;
+        Host::toggle_online(host_id, true, &self.db).await?;
 
         let (tx, rx) = mpsc::channel(self.buffer_size);
 
@@ -227,7 +228,7 @@ impl CommandFlow for CommandFlowServerImpl {
                 .map_err(|_| Status::internal("Channel error"))?;
 
             // Connection broke or closed
-            match Host::toggle_online(host_id, false, &db.clone()).await {
+            match Host::toggle_online(host_id, false, &db).await {
                 Ok(_) => Ok(()),
                 Err(e) => Err(Status::from(e)),
             }
@@ -238,7 +239,7 @@ impl CommandFlow for CommandFlowServerImpl {
         let notifier = self.notifier.commands_receiver();
 
         // Create task handling incoming notifications
-        let notification_task = Self::handle_notifications(host_id, db, notifier, sender, stop_rx);
+        let notification_task = Self::handle_notifications(db, notifier, sender, stop_rx);
         tokio::spawn(notification_task);
 
         let commands_stream = ReceiverStream::new(rx);

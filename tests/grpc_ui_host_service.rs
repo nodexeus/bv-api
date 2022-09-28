@@ -234,7 +234,7 @@ async fn responds_ok_with_host_for_update() {
         pagination: None,
     };
     let user = get_admin_user(&db.clone()).await;
-    let host = GrpcHost::from(get_test_host(&db).await);
+    let host = get_test_host(&db).await.try_into().unwrap();
     let token = user.get_token(&db).await.unwrap();
     let inner = UpdateHostRequest {
         meta: Some(request_meta),

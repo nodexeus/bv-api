@@ -1,6 +1,7 @@
 use super::node_type::*;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
+use crate::grpc::helpers::{internal, required};
 use crate::models::{validator::Validator, UpdateInfo};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -162,7 +163,7 @@ pub struct Node {
 }
 
 impl Node {
-    pub async fn find_by_id(id: &Uuid, db: &PgPool) -> Result<Node> {
+    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Node> {
         sqlx::query_as::<_, Node>("SELECT * FROM nodes where id = $1")
             .bind(id)
             .fetch_one(db)
@@ -311,8 +312,8 @@ impl Node {
 #[tonic::async_trait]
 impl UpdateInfo<GrpcNodeInfo, Node> for Node {
     async fn update_info(info: GrpcNodeInfo, db: &PgPool) -> Result<Node> {
-        let req: NodeUpdateRequest = info.into();
-        let node = sqlx::query_as::<_, Node>(
+        let req: NodeUpdateRequest = info.try_into()?;
+        let node: Node = sqlx::query_as(
             r##"UPDATE nodes SET
                          name = COALESCE($1, name),
                          ip_addr = COALESCE($2, ip_addr),
@@ -326,11 +327,11 @@ impl UpdateInfo<GrpcNodeInfo, Node> for Node {
         )
         .bind(req.name)
         .bind(req.ip_addr)
-        .bind(req.chain_status.unwrap())
-        .bind(req.sync_status.unwrap())
-        .bind(req.staking_status.unwrap())
+        .bind(req.chain_status)
+        .bind(req.sync_status)
+        .bind(req.staking_status)
         .bind(req.block_height)
-        .bind(req.id.unwrap())
+        .bind(req.id)
         .fetch_one(db)
         .await?;
 
@@ -365,7 +366,7 @@ pub struct NodeCreateRequest {
 }
 
 pub struct NodeUpdateRequest {
-    pub id: Option<Uuid>,
+    pub id: Uuid,
     pub name: Option<String>,
     pub ip_addr: Option<String>,
     pub chain_status: Option<NodeChainStatus>,
@@ -374,17 +375,21 @@ pub struct NodeUpdateRequest {
     pub block_height: Option<i64>,
 }
 
-impl From<GrpcNodeInfo> for NodeUpdateRequest {
-    fn from(info: GrpcNodeInfo) -> Self {
-        Self {
-            id: info.id.map(Into::into),
+impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
+    type Error = ApiError;
+
+    fn try_from(info: GrpcNodeInfo) -> Result<Self> {
+        let id = info.id.as_ref().ok_or_else(required("id"))?.try_into()?;
+        let req = Self {
+            id,
             name: info.name,
             ip_addr: info.ip,
             chain_status: info.app_status.map(Into::into),
             sync_status: info.sync_status.map(Into::into),
             staking_status: info.staking_status.map(Into::into),
             block_height: info.block_height,
-        }
+        };
+        Ok(req)
     }
 }
 
@@ -420,7 +425,11 @@ impl NodeGroup {
 
     pub async fn find_by_id(db: &PgPool, id: Uuid) -> Result<NodeGroup> {
         let validators = Validator::find_all_by_user(id, db).await?;
-        let name = validators.first().unwrap().name.clone();
+        let name = validators
+            .first()
+            .ok_or_else(|| internal("No validators found for this user"))?
+            .name
+            .clone();
         Ok(NodeGroup {
             id,
             name,

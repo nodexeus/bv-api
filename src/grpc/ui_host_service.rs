@@ -1,4 +1,6 @@
+use super::blockjoy_ui::ResponseMeta;
 use crate::auth::{FindableById, TokenType};
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::host_service_server::HostService;
 use crate::grpc::blockjoy_ui::{
     get_hosts_request, CreateHostRequest, CreateHostResponse, DeleteHostRequest,
@@ -9,9 +11,6 @@ use crate::grpc::helpers::{pagination_parameters, required};
 use crate::models::{Host, HostRequest, HostSelectiveUpdate, Token};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
-
-use super::blockjoy_ui::ResponseMeta;
 
 pub struct HostServiceImpl {
     db: DbPool,
@@ -37,34 +36,27 @@ impl HostService for HostServiceImpl {
         use get_hosts_request::Param;
 
         let inner = request.into_inner();
-        let meta = inner.meta.unwrap();
+        let meta = inner.meta.ok_or_else(required("meta"))?;
         let request_id = meta.id;
-        let (limit, offset) = match pagination_parameters(meta.pagination) {
-            Ok((limit, offset)) => (limit, offset),
-            Err(e) => return Err(e),
-        };
-
-        if inner.param.is_none() {
-            return Err(Status::not_found("None of ID, OrgID, Token was provided"));
-        }
-
-        let (hosts, response_meta) = match inner.param.ok_or_else(required("param"))? {
+        let (limit, offset) = pagination_parameters(meta.pagination)?;
+        let param = inner.param.ok_or_else(required("param"))?;
+        let (hosts, response_meta) = match param {
             Param::Id(id) => (
-                vec![Host::find_by_id(id.into(), &self.db).await?.into()],
+                vec![Host::find_by_id(id.try_into()?, &self.db)
+                    .await?
+                    .try_into()?],
                 ResponseMeta::new(request_id),
             ),
             Param::OrgId(org_id) => {
-                let hosts = Host::find_by_org_paginated(org_id.into(), limit, offset, &self.db)
-                    .await?
-                    .iter()
-                    .map(GrpcHost::from)
-                    .collect();
-                (hosts, ResponseMeta::new(request_id).with_pagination())
+                let org_id = org_id.try_into()?;
+                let hosts = Host::find_by_org_paginated(org_id, limit, offset, &self.db).await?;
+                let hosts: Result<_, ApiError> = hosts.iter().map(GrpcHost::try_from).collect();
+                (hosts?, ResponseMeta::new(request_id).with_pagination())
             }
             Param::Token(ref token) => (
                 vec![Token::get_host_for_token(token, TokenType::Login, &self.db)
                     .await?
-                    .into()],
+                    .try_into()?],
                 ResponseMeta::new(request_id),
             ),
         };
@@ -85,8 +77,8 @@ impl HostService for HostServiceImpl {
         request: Request<CreateHostRequest>,
     ) -> Result<Response<CreateHostResponse>, Status> {
         let inner = request.into_inner();
-        let host = inner.host.unwrap();
-        let fields: HostRequest = host.into();
+        let host = inner.host.ok_or_else(required("host"))?;
+        let fields: HostRequest = host.try_into()?;
 
         Host::create(fields, &self.db).await?;
         let response = CreateHostResponse {
@@ -101,11 +93,15 @@ impl HostService for HostServiceImpl {
         request: Request<UpdateHostRequest>,
     ) -> Result<Response<UpdateHostResponse>, Status> {
         let inner = request.into_inner();
-        let host = inner.host.unwrap();
-        let host_id = host.id.clone().unwrap();
-        let fields: HostSelectiveUpdate = host.into();
+        let host = inner.host.ok_or_else(required("host"))?;
+        let host_id = host
+            .id
+            .as_ref()
+            .ok_or_else(required("host.param"))?
+            .try_into()?;
+        let fields: HostSelectiveUpdate = host.try_into()?;
 
-        Host::update_all(Uuid::from(host_id), fields, &self.db).await?;
+        Host::update_all(host_id, fields, &self.db).await?;
         let response = UpdateHostResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
         };
@@ -117,9 +113,8 @@ impl HostService for HostServiceImpl {
         request: Request<DeleteHostRequest>,
     ) -> Result<Response<DeleteHostResponse>, Status> {
         let inner = request.into_inner();
-        let host_id = inner.id.unwrap();
-
-        Host::delete(Uuid::from(host_id), &self.db).await?;
+        let host_id = inner.id.ok_or_else(required("id"))?;
+        Host::delete(host_id.try_into()?, &self.db).await?;
         let response = DeleteHostResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
         };
