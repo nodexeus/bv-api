@@ -107,6 +107,8 @@ pub mod from {
         let nanos = datetime.timestamp_nanos();
         let timestamp = Timestamp {
             seconds: nanos / NANOS_PER_SEC,
+            // This _should_ never fail because 1_000_000_000 fits into an i32, but using `as` was
+            // hiding this bug in the first place. Therefore I have left the `try_into` call here.
             nanos: (nanos % NANOS_PER_SEC).try_into()?,
         };
         Ok(timestamp)
