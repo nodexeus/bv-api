@@ -103,9 +103,11 @@ pub mod from {
     /// Private function to convert the datetimes from the database into the API representation of
     /// a timestamp.
     fn try_dt_to_ts(datetime: chrono::DateTime<chrono::Utc>) -> Result<Timestamp, ApiError> {
+        const NANOS_PER_SEC: i64 = 1_000_000_000;
+        let nanos = datetime.timestamp_nanos();
         let timestamp = Timestamp {
-            seconds: datetime.timestamp(),
-            nanos: datetime.timestamp_nanos().try_into()?,
+            seconds: nanos / NANOS_PER_SEC,
+            nanos: (nanos % NANOS_PER_SEC).try_into()?,
         };
         Ok(timestamp)
     }
