@@ -509,7 +509,6 @@ pub mod from {
                 NodeChainStatus::Broadcasting => GrpcNodeStatus::Broadcasting,
                 NodeChainStatus::Cancelled => GrpcNodeStatus::Cancelled,
                 // TODO
-                NodeChainStatus::Consensus => GrpcNodeStatus::UndefinedApplicationStatus,
                 NodeChainStatus::Delegating => GrpcNodeStatus::Delegating,
                 NodeChainStatus::Delinquent => GrpcNodeStatus::Delinquent,
                 NodeChainStatus::Disabled => GrpcNodeStatus::Disabled,
@@ -518,7 +517,6 @@ pub mod from {
                 NodeChainStatus::Electing => GrpcNodeStatus::Electing,
                 NodeChainStatus::Exporting => GrpcNodeStatus::Exporting,
                 // TODO
-                NodeChainStatus::Follower => GrpcNodeStatus::UndefinedApplicationStatus,
                 NodeChainStatus::Ingesting => GrpcNodeStatus::Ingesting,
                 NodeChainStatus::Mining => GrpcNodeStatus::Mining,
                 NodeChainStatus::Minting => GrpcNodeStatus::Minting,
@@ -526,12 +524,6 @@ pub mod from {
                 NodeChainStatus::Relaying => GrpcNodeStatus::Relaying,
                 NodeChainStatus::Removed => GrpcNodeStatus::Removed,
                 NodeChainStatus::Removing => GrpcNodeStatus::Removing,
-                // TODO
-                NodeChainStatus::Staked => GrpcNodeStatus::UndefinedApplicationStatus,
-                // TODO
-                NodeChainStatus::Staking => GrpcNodeStatus::UndefinedApplicationStatus,
-                // TODO
-                NodeChainStatus::Validating => GrpcNodeStatus::UndefinedApplicationStatus,
             }
         }
     }
