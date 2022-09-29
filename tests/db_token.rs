@@ -12,8 +12,8 @@ use test_macros::*;
 #[tokio::test]
 async fn can_create_host_token() {
     let db = _before_values.await;
-    let host = get_test_host(&db).await;
-    let token = host.get_token(&db).await.unwrap();
+    let host = get_test_host(&db.pool).await;
+    let token = host.get_token(&db.pool).await.unwrap();
     let token_str = AuthToken::new(host.id, token.expires_at.timestamp(), TokenHolderType::Host)
         .encode()
         .unwrap();
@@ -25,13 +25,13 @@ async fn can_create_host_token() {
 #[tokio::test]
 async fn can_refresh_host_token() {
     let db = _before_values.await;
-    let host = get_test_host(&db).await;
-    let token = host.get_token(&db).await.unwrap();
+    let host = get_test_host(&db.pool).await;
+    let token = host.get_token(&db.pool).await.unwrap();
 
     // sleep 1 sec so the expiration REALLY changes
     sleep(Duration::from_secs(1));
 
-    match Token::refresh(&token.token, &db).await {
+    match Token::refresh(&token.token, &db.pool).await {
         Ok(_) => println!("All good"),
         Err(e) => panic!("error at refresh: {}", e),
     }
@@ -41,8 +41,8 @@ async fn can_refresh_host_token() {
 #[tokio::test]
 async fn can_create_user_token() {
     let db = _before_values.await;
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let token_str = AuthToken::new(user.id, token.expires_at.timestamp(), TokenHolderType::User)
         .encode()
         .unwrap();
@@ -54,13 +54,13 @@ async fn can_create_user_token() {
 #[tokio::test]
 async fn can_refresh_user_token() {
     let db = _before_values.await;
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let token = user.get_token(&db.pool).await.unwrap();
 
     // sleep 1 sec so the expiration REALLY changes
     sleep(Duration::from_secs(1));
 
-    match Token::refresh(&token.token, &db).await {
+    match Token::refresh(&token.token, &db.pool).await {
         Ok(_) => println!("All good"),
         Err(e) => panic!("error at refresh: {}", e),
     }

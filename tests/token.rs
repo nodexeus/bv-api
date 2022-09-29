@@ -2,7 +2,6 @@ use api::auth::token::*;
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
-use std::env;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use test_macros::*;
@@ -13,8 +12,6 @@ struct TestData {
 }
 
 fn setup() -> TestData {
-    env::set_var("JWT_SECRET", "923f3090//§");
-
     let start = SystemTime::now();
 
     TestData {
@@ -28,62 +25,72 @@ fn setup() -> TestData {
 #[before(call = "setup")]
 #[test]
 fn should_encode_token() -> anyhow::Result<()> {
-    let id = Uuid::new_v4();
-    let token = AuthToken::new(id, 123123, TokenHolderType::User);
-    let secret = env::var("JWT_SECRET").expect("Secret not available in env");
-    let header = Header::new(Algorithm::HS512);
+    let test_secret = "123456";
+    temp_env::with_var("JWT_SECRET", Some(test_secret), || {
+        let id = Uuid::new_v4();
+        let token = AuthToken::new(id, 123123, TokenHolderType::User);
+        let header = Header::new(Algorithm::HS512);
 
-    match jsonwebtoken::encode(&header, &token, &EncodingKey::from_secret(secret.as_ref())) {
-        Ok(token_str) => assert_eq!(token_str, token.encode().unwrap()),
-        Err(e) => panic!("encoding failed: {}", e),
-    }
+        match jsonwebtoken::encode(
+            &header,
+            &token,
+            &EncodingKey::from_secret(test_secret.as_ref()),
+        ) {
+            Ok(token_str) => assert_eq!(token_str, token.encode().unwrap()),
+            Err(e) => panic!("encoding failed: {}", e),
+        }
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[before(call = "setup")]
 #[test]
 fn should_decode_valid_token() -> anyhow::Result<()> {
-    let id = Uuid::new_v4();
-    let secret = env::var("JWT_SECRET").expect("Secret not available in env");
-    let token = AuthToken::new(id, _before_values.now, TokenHolderType::User);
-    let token_str = token.encode().unwrap();
-    let mut validation = Validation::new(Algorithm::HS512);
+    let test_secret = "123456";
+    temp_env::with_var("JWT_SECRET", Some(test_secret), || {
+        let id = Uuid::new_v4();
+        let token = AuthToken::new(id, _before_values.now, TokenHolderType::User);
+        let token_str = token.encode().unwrap();
+        let mut validation = Validation::new(Algorithm::HS512);
 
-    validation.validate_exp = true;
+        validation.validate_exp = true;
 
-    match jsonwebtoken::decode::<AuthToken>(
-        token_str.as_str(),
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &validation,
-    ) {
-        Ok(decoded_data) => assert_eq!(decoded_data.claims.get_id(), id),
-        Err(e) => panic!("decoding failed: {}", e),
-    }
+        match jsonwebtoken::decode::<AuthToken>(
+            token_str.as_str(),
+            &DecodingKey::from_secret(test_secret.as_bytes()),
+            &validation,
+        ) {
+            Ok(decoded_data) => assert_eq!(decoded_data.claims.get_id(), id),
+            Err(e) => panic!("decoding failed: {}", e),
+        }
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[before(call = "setup")]
 #[test]
 fn should_panic_on_decode_expired_token() {
-    let id = Uuid::new_v4();
-    let secret = env::var("JWT_SECRET").expect("Secret not available in env");
-    let token = AuthToken::new(id, 123123, TokenHolderType::User);
-    let token_str = token.encode().unwrap();
-    let mut validation = Validation::new(Algorithm::HS512);
+    let test_secret = "123456";
+    temp_env::with_var("JWT_SECRET", Some(test_secret), || {
+        let id = Uuid::new_v4();
+        let token = AuthToken::new(id, 123123, TokenHolderType::User);
+        let token_str = token.encode().unwrap();
+        let mut validation = Validation::new(Algorithm::HS512);
 
-    validation.validate_exp = true;
+        validation.validate_exp = true;
 
-    match jsonwebtoken::decode::<AuthToken>(
-        token_str.as_str(),
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &validation,
-    ) {
-        Err(e) => assert_eq!(format!("{}", e), "ExpiredSignature"),
-        // assert_eq!(e.into_kind().type_name(), jsonwebtoken::errors::ErrorKind::ExpiredSignature),
-        _ => panic!("it worked, but it shouldn't"),
-    }
+        match jsonwebtoken::decode::<AuthToken>(
+            token_str.as_str(),
+            &DecodingKey::from_secret(test_secret.as_bytes()),
+            &validation,
+        ) {
+            Err(e) => assert_eq!(format!("{}", e), "ExpiredSignature"),
+            // assert_eq!(e.into_kind().type_name(), jsonwebtoken::errors::ErrorKind::ExpiredSignature),
+            _ => panic!("it worked, but it shouldn't"),
+        };
+    });
 }
 
 #[before(call = "setup")]
@@ -132,14 +139,13 @@ fn should_get_valid_token() -> anyhow::Result<()> {
 }
 
 #[test]
+#[should_panic]
 fn should_panic_encode_without_secret_in_envs() {
-    env::remove_var("JWT_SECRET");
-
-    assert!(
+    temp_env::with_var_unset("JWT_SECRET", || {
         AuthToken::new(Uuid::new_v4(), 12312123, TokenHolderType::User)
             .encode()
-            .is_err()
-    );
+            .unwrap()
+    });
 }
 
 #[test]
@@ -150,17 +156,17 @@ fn should_not_decode_without_secret_in_envs() {
 #[test]
 #[should_panic]
 fn should_panic_on_encode_with_empty_secret_in_envs() {
-    env::set_var("JWT_SECRET", "");
+    temp_env::with_var("JWT_SECRET", Some(""), || {
+        let token = AuthToken::new(Uuid::new_v4(), 12312123, TokenHolderType::User);
 
-    let token = AuthToken::new(Uuid::new_v4(), 12312123, TokenHolderType::User);
-
-    assert!(token.encode().is_err());
+        assert!(token.encode().is_err());
+    });
 }
 
 #[test]
 #[should_panic]
 fn should_panic_on_decode_with_empty_secret_in_envs() {
-    env::set_var("JWT_SECRET", "");
-
-    assert!(AuthToken::from_str("asf.asdfasdfasdfasdfsadfasdfasdf.asdfasfasdf").is_err());
+    temp_env::with_var("JWT_SECRET", Some(""), || {
+        assert!(AuthToken::from_str("asf.asdfasdfasdfasdfsadfasdfasdf.asdfasfasdf").is_err());
+    });
 }

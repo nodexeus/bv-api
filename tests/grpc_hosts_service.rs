@@ -7,7 +7,7 @@ use api::grpc::blockjoy::{
     hosts_client::HostsClient, DeleteHostRequest, HostInfoUpdateRequest, ProvisionHostRequest,
 };
 use api::models::{Host, HostProvision, HostProvisionRequest, HostSelectiveUpdate};
-use setup::{get_test_host, server_and_client_stub, setup};
+use setup::{get_test_host, setup};
 use std::sync::Arc;
 use test_macros::*;
 use tonic::transport::Channel;
@@ -17,8 +17,8 @@ use uuid::Uuid;
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_unauthenticated_without_valid_token_for_info_update() {
-    let db = Arc::new(_before_values.await);
-    let hosts = Host::find_all(&db).await.unwrap();
+    let db = _before_values.await;
+    let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
     let b_uuid = blockjoy::Uuid::from(host.id);
     let host_info = blockjoy::HostInfo {
@@ -49,8 +49,8 @@ async fn responds_unauthenticated_without_valid_token_for_info_update() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_unauthenticated_without_token_for_info_update() {
-    let db = Arc::new(_before_values.await);
-    let hosts = Host::find_all(&db).await.unwrap();
+    let db = _before_values.await;
+    let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
     let b_uuid = blockjoy::Uuid::from(host.id);
 
@@ -77,8 +77,8 @@ async fn responds_unauthenticated_without_token_for_info_update() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_unauthenticated_with_token_for_info_update() {
-    let db = Arc::new(_before_values.await);
-    let host = get_test_host(&db).await;
+    let db = _before_values.await;
+    let host = get_test_host(&db.pool).await;
     let b_uuid = blockjoy::Uuid::from(host.id);
 
     let host_info = blockjoy::HostInfo {
@@ -109,9 +109,9 @@ async fn responds_unauthenticated_with_token_for_info_update() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_permission_denied_with_token_ownership_for_info_update() {
-    let db = Arc::new(_before_values.await);
-    let hosts = Host::find_all(&db).await.unwrap();
-    let request_token = hosts.first().unwrap().get_token(&db).await.unwrap();
+    let db = _before_values.await;
+    let hosts = Host::find_all(&db.pool).await.unwrap();
+    let request_token = hosts.first().unwrap().get_token(&db.pool).await.unwrap();
     let resource_host = hosts.last().unwrap();
     let b_uuid = blockjoy::Uuid::from(resource_host.id);
     let host_info = blockjoy::HostInfo {
@@ -145,7 +145,7 @@ async fn responds_permission_denied_with_token_ownership_for_info_update() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_not_found_for_provision() {
-    let db = Arc::new(_before_values.await);
+    let db = _before_values.await;
     let b_uuid = blockjoy::Uuid::from(Uuid::new_v4());
     let host_info = blockjoy::HostInfo {
         id: Some(b_uuid),
@@ -175,8 +175,8 @@ async fn responds_not_found_for_provision() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_for_provision() {
-    let db = Arc::new(_before_values.await);
-    let mut tx = db.begin().await.unwrap();
+    let db = _before_values.await;
+    let mut tx = db.pool.begin().await.unwrap();
     let org: (Uuid,) = sqlx::query_as("select id from orgs")
         .fetch_one(&mut tx)
         .await
@@ -187,7 +187,7 @@ async fn responds_ok_for_provision() {
         org_id: org.0,
         nodes: None,
     };
-    let host_provision = HostProvision::create(host_provision_request, &db)
+    let host_provision = HostProvision::create(host_provision_request, &db.pool)
         .await
         .unwrap();
     let host_info = blockjoy::HostInfo {
@@ -218,10 +218,10 @@ async fn responds_ok_for_provision() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_for_info_update() {
-    let db = Arc::new(_before_values.await);
-    let hosts = Host::find_all(&db).await.unwrap();
+    let db = _before_values.await;
+    let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
-    let token = host.get_token(&db).await.unwrap();
+    let token = host.get_token(&db.pool).await.unwrap();
     let b_uuid = blockjoy::Uuid::from(host.id);
     let host_info = blockjoy::HostInfo {
         id: Some(b_uuid.clone()),
@@ -252,10 +252,10 @@ async fn responds_ok_for_info_update() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_for_delete() {
-    let db = Arc::new(_before_values.await);
-    let hosts = Host::find_all(&db).await.unwrap();
+    let db = _before_values.await;
+    let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
-    let token = host.get_token(&db).await.unwrap();
+    let token = host.get_token(&db.pool).await.unwrap();
     let b_uuid = blockjoy::Uuid::from(host.id);
     let inner = DeleteHostRequest {
         request_id: Some(blockjoy::Uuid::from(Uuid::new_v4())),
@@ -274,8 +274,8 @@ async fn responds_ok_for_delete() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_unauthenticated_without_valid_token_for_delete() {
-    let db = Arc::new(_before_values.await);
-    let hosts = Host::find_all(&db).await.unwrap();
+    let db = _before_values.await;
+    let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
     let b_uuid = blockjoy::Uuid::from(host.id);
     let inner = DeleteHostRequest {
@@ -289,11 +289,11 @@ async fn responds_unauthenticated_without_valid_token_for_delete() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_permission_denied_for_delete() {
-    let db = Arc::new(_before_values.await);
-    let hosts = Host::find_all(&db).await.unwrap();
+    let db = _before_values.await;
+    let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
     let request_host = hosts.last().unwrap();
-    let token = request_host.get_token(&db).await.unwrap();
+    let token = request_host.get_token(&db.pool).await.unwrap();
     let b_uuid = blockjoy::Uuid::from(host.id);
     let inner = DeleteHostRequest {
         request_id: Some(blockjoy::Uuid::from(Uuid::new_v4())),
@@ -312,8 +312,8 @@ async fn responds_permission_denied_for_delete() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn can_update_host_info() {
-    let db = Arc::new(_before_values.await);
-    let host = get_test_host(&db).await;
+    let db = _before_values.await;
+    let host = get_test_host(&db.pool).await;
     let host_info = blockjoy::HostInfo {
         id: Some(blockjoy::Uuid::from(host.id)),
         name: Some("tester".to_string()),
@@ -329,12 +329,15 @@ async fn can_update_host_info() {
     let fields = HostSelectiveUpdate::from(host_info);
 
     assert_eq!(
-        Host::update_all(host.id, fields, &db).await.unwrap().name,
+        Host::update_all(host.id, fields, &db.pool)
+            .await
+            .unwrap()
+            .name,
         "tester".to_string()
     );
 
     // Fetch host after update to see if it really worked as expected
-    let mut tx = db.begin().await.unwrap();
+    let mut tx = db.pool.begin().await.unwrap();
     let row = sqlx::query(r#"SELECT * from hosts where ID = $1"#)
         .bind(host.id)
         .fetch_one(&mut tx)

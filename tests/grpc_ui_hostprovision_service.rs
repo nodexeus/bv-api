@@ -9,7 +9,7 @@ use api::grpc::blockjoy_ui::{
     RequestMeta, Uuid as GrpcUuid,
 };
 use api::models::{HostProvision, HostProvisionRequest};
-use setup::{server_and_client_stub, setup};
+use setup::setup;
 use sqlx::postgres::PgRow;
 use sqlx::Row;
 use std::sync::Arc;
@@ -28,8 +28,8 @@ async fn responds_not_found_without_valid_id_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetHostProvisionRequest {
         meta: Some(request_meta),
         id: Some("foo-bar1".to_string()),
@@ -54,8 +54,8 @@ async fn responds_ok_with_valid_id_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db).await;
-    let mut tx = db.begin().await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let mut tx = db.pool.begin().await.unwrap();
     let org_id = sqlx::query("select org_id from orgs_users where user_id = $1 limit 1")
         .bind(user.id)
         .fetch_one(&mut tx)
@@ -64,12 +64,12 @@ async fn responds_ok_with_valid_id_for_get() {
         .unwrap();
     tx.commit().await.unwrap();
 
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let req = HostProvisionRequest {
         org_id: org_id.get::<Uuid, usize>(0),
         nodes: None,
     };
-    let provision = HostProvision::create(req, &db).await.unwrap();
+    let provision = HostProvision::create(req, &db.pool).await.unwrap();
 
     let inner = GetHostProvisionRequest {
         meta: Some(request_meta),
@@ -95,8 +95,8 @@ async fn responds_error_with_invalid_provision_for_create() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = CreateHostProvisionRequest {
         meta: Some(request_meta),
         host_provision: None,
@@ -121,8 +121,8 @@ async fn responds_ok_with_valid_provision_for_create() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db).await;
-    let mut tx = db.begin().await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let mut tx = db.pool.begin().await.unwrap();
     let org_id = sqlx::query("select org_id from orgs_users where user_id = $1 limit 1")
         .bind(user.id)
         .fetch_one(&mut tx)
@@ -131,7 +131,7 @@ async fn responds_ok_with_valid_provision_for_create() {
         .unwrap();
     tx.commit().await.unwrap();
 
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let provision = GrpcHostProvision {
         org_id: Some(GrpcUuid::from(org_id.get::<Uuid, usize>(0))),
         ..Default::default()

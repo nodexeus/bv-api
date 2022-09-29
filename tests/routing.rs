@@ -23,7 +23,7 @@ async fn test_possible_routes() -> anyhow::Result<()> {
 
     let db = Arc::new(_before_values.await);
     let routes = possible_routes();
-    let app = api::http::server(db).await;
+    let app = api::http::server(std::sync::Arc::new(db.pool.clone())).await;
 
     let mut cnt = 1;
 

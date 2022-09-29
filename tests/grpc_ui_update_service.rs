@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use crate::setup::{server_and_client_stub, setup};
+use crate::setup::setup;
 use api::grpc::blockjoy_ui::update_service_client::UpdateServiceClient;
 use api::grpc::blockjoy_ui::{GetUpdatesRequest, RequestMeta, Uuid as GrpcUuid};
 use std::sync::Arc;

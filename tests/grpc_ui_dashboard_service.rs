@@ -44,8 +44,8 @@ async fn responds_ok_with_valid_token_for_metrics() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = DashboardMetricsRequest {
         meta: Some(request_meta),
     };
@@ -69,8 +69,8 @@ async fn responds_valid_values_for_metrics() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = DashboardMetricsRequest {
         meta: Some(request_meta),
     };
@@ -81,8 +81,9 @@ async fn responds_valid_values_for_metrics() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
+    let pool = std::sync::Arc::new(db.pool.clone());
     let (serve_future, mut client) =
-        server_and_client_stub::<DashboardServiceClient<Channel>>(db).await;
+        server_and_client_stub::<DashboardServiceClient<Channel>>(pool).await;
 
     let request_future = async {
         match client.metrics(request).await {

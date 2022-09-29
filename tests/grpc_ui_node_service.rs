@@ -12,7 +12,7 @@ use api::models::{
     ContainerStatus, Node, NodeChainStatus, NodeCreateRequest, NodeSyncStatus, NodeType,
     NodeTypeKey, Org,
 };
-use setup::{server_and_client_stub, setup};
+use setup::setup;
 use sqlx::types::Json;
 use std::sync::Arc;
 use test_macros::*;
@@ -30,8 +30,8 @@ async fn responds_not_found_without_any_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetNodeRequest {
         meta: Some(request_meta),
         id: Some(Uuid::new_v4().into()),
@@ -56,10 +56,10 @@ async fn responds_ok_with_id_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let blockchain = get_blockchain(&db).await;
-    let host = get_test_host(&db).await;
-    let user = get_admin_user(&db).await;
-    let org_id = Org::find_all_by_user(user.id, &db)
+    let blockchain = get_blockchain(&db.pool).await;
+    let host = get_test_host(&db.pool).await;
+    let user = get_admin_user(&db.pool).await;
+    let org_id = Org::find_all_by_user(user.id, &db.pool)
         .await
         .unwrap()
         .first()
@@ -83,9 +83,9 @@ async fn responds_ok_with_id_for_get() {
         version: None,
         staking_status: None,
     };
-    let node = Node::create(&req, &db).await.unwrap();
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let node = Node::create(&req, &db.pool).await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetNodeRequest {
         meta: Some(request_meta),
         id: Some(GrpcUuid::from(node.id)),
@@ -110,10 +110,10 @@ async fn responds_ok_with_valid_data_for_create() {
         fields: vec![],
         pagination: None,
     };
-    let blockchain = get_blockchain(&db).await;
-    let host = get_test_host(&db).await;
-    let user = get_admin_user(&db).await;
-    let org_id = Org::find_all_by_user(user.id, &db)
+    let blockchain = get_blockchain(&db.pool).await;
+    let host = get_test_host(&db.pool).await;
+    let user = get_admin_user(&db.pool).await;
+    let org_id = Org::find_all_by_user(user.id, &db.pool)
         .await
         .unwrap()
         .first()
@@ -137,7 +137,7 @@ async fn responds_ok_with_valid_data_for_create() {
         updated_at: None,
         groups: vec![],
     };
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = CreateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -181,8 +181,8 @@ async fn responds_internal_with_invalid_data_for_create() {
         updated_at: None,
         groups: vec![],
     };
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let user = get_admin_user(&db.pool).await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = CreateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -207,10 +207,10 @@ async fn responds_ok_with_valid_data_for_update() {
         fields: vec![],
         pagination: None,
     };
-    let blockchain = get_blockchain(&db).await;
-    let host = get_test_host(&db).await;
-    let user = get_admin_user(&db).await;
-    let org_id = Org::find_all_by_user(user.id, &db)
+    let blockchain = get_blockchain(&db.pool).await;
+    let host = get_test_host(&db.pool).await;
+    let user = get_admin_user(&db.pool).await;
+    let org_id = Org::find_all_by_user(user.id, &db.pool)
         .await
         .unwrap()
         .first()
@@ -234,13 +234,13 @@ async fn responds_ok_with_valid_data_for_update() {
         version: None,
         staking_status: None,
     };
-    let db_node = Node::create(&req, &db).await.unwrap();
+    let db_node = Node::create(&req, &db.pool).await.unwrap();
     let node = GrpcNode {
         id: Some(GrpcUuid::from(db_node.id)),
         name: Some("stri-bu".to_string()),
         ..Default::default()
     };
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = UpdateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -265,10 +265,10 @@ async fn responds_internal_with_invalid_data_for_update() {
         fields: vec![],
         pagination: None,
     };
-    let blockchain = get_blockchain(&db).await;
-    let host = get_test_host(&db).await;
-    let user = get_admin_user(&db).await;
-    let org_id = Org::find_all_by_user(user.id, &db)
+    let blockchain = get_blockchain(&db.pool).await;
+    let host = get_test_host(&db.pool).await;
+    let user = get_admin_user(&db.pool).await;
+    let org_id = Org::find_all_by_user(user.id, &db.pool)
         .await
         .unwrap()
         .first()
@@ -292,7 +292,7 @@ async fn responds_internal_with_invalid_data_for_update() {
         version: None,
         staking_status: None,
     };
-    let db_node = Node::create(&req, &db).await.unwrap();
+    let db_node = Node::create(&req, &db.pool).await.unwrap();
     let node = GrpcNode {
         id: Some(GrpcUuid::from(db_node.id)),
         name: Some("stri-bu".to_string()),
@@ -300,7 +300,7 @@ async fn responds_internal_with_invalid_data_for_update() {
         blockchain_id: None,
         ..Default::default()
     };
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = UpdateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -325,13 +325,13 @@ async fn responds_not_found_with_invalid_id_for_update() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db).await;
+    let user = get_admin_user(&db.pool).await;
     let node = GrpcNode {
         // This should cause an error
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         ..Default::default()
     };
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = UpdateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),

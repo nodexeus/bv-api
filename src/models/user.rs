@@ -17,7 +17,7 @@ use argon2::{
     Argon2,
 };
 use chrono::{DateTime, Utc};
-use rand_core::OsRng;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;

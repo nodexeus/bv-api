@@ -7,12 +7,11 @@ use api::grpc::blockjoy::info_update::Info;
 use api::grpc::blockjoy::{self, NodeInfo};
 use api::models::{Host, Node};
 use setup::server_and_client_stub;
-use std::sync::Arc;
 use test_macros::*;
 use tonic::transport::Channel;
 use tonic::Request;
 
-async fn setup() -> (Arc<sqlx::PgPool>, Node) {
+async fn setup() -> (api::TestDb, Node) {
     let db = setup::setup().await;
     let node: Node = sqlx::query_as(
         r#"INSERT INTO
@@ -21,19 +20,19 @@ async fn setup() -> (Arc<sqlx::PgPool>, Node) {
                 ((SELECT id FROM orgs LIMIT 1), (SELECT id FROM hosts LIMIT 1), '{"id":404}', (SELECT id FROM blockchains LIMIT 1))
             RETURNING *;"#,
     )
-    .fetch_one(&db)
+    .fetch_one(&db.pool)
     .await
     .unwrap();
-    (Arc::new(db), node)
+    (db, node)
 }
 
 #[before(call = "setup")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_command_flow_works() {
     let (db, node) = _before_values.await;
-    let hosts = Host::find_all(&db).await.unwrap();
+    let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
-    let token = host.get_token(&db).await.unwrap();
+    let token = host.get_token(&db.pool).await.unwrap();
     // let node: Node = sqlx::query_as("INSERT INTO nodes VALUES (")
     let req = blockjoy::InfoUpdate {
         info: Some(Info::Node(NodeInfo {
@@ -55,7 +54,9 @@ async fn test_command_flow_works() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
-    let (serve_future, mut client) = server_and_client_stub::<CommandFlowClient<Channel>>(db).await;
+    let pool = std::sync::Arc::new(db.pool.clone());
+    let (serve_future, mut client) =
+        server_and_client_stub::<CommandFlowClient<Channel>>(pool).await;
 
     let request_future = async {
         let response = client.commands(req).await.unwrap();
