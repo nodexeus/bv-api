@@ -515,7 +515,8 @@ pub mod from {
                 NodeChainStatus::Earning => GrpcNodeStatus::Earning,
                 NodeChainStatus::Elected => GrpcNodeStatus::Elected,
                 NodeChainStatus::Electing => GrpcNodeStatus::Electing,
-                NodeChainStatus::Exporting => GrpcNodeStatus::Exporting,
+                // TODO Thomas please rename this to exported in the api or to exporting in the database
+                NodeChainStatus::Exported => GrpcNodeStatus::Exporting,
                 // TODO
                 NodeChainStatus::Ingesting => GrpcNodeStatus::Ingesting,
                 NodeChainStatus::Mining => GrpcNodeStatus::Mining,
