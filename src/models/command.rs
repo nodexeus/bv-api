@@ -5,7 +5,7 @@ use crate::models::UpdateInfo;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
-use std::convert::From;
+use std::convert::{From, TryInto};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -107,14 +107,14 @@ impl Command {
 
 #[tonic::async_trait]
 impl UpdateInfo<CommandInfo, Command> for Command {
-    async fn update_info(info: CommandInfo, db: &sqlx::PgPool) -> Result<Command> {
-        let id: uuid::Uuid = info.id.as_ref().ok_or_else(required("id"))?.try_into()?;
+    async fn update_info(info: CommandInfo, db: &PgPool) -> Result<Command> {
+        let id: Uuid = info.id.as_ref().ok_or_else(required("id"))?.try_into()?;
         let mut tx = db.begin().await?;
         let cmd = sqlx::query_as::<_, Command>(
-            r##"UPDATE hosts SET
+            r##"UPDATE commands SET
                          response = COALESCE($1, response),
-                         exit_status = COALESCE($2, exit_status),
-                WHERE id = $2
+                         exit_status = COALESCE($2, exit_status)
+                WHERE id = $3
                 RETURNING *
             "##,
         )
