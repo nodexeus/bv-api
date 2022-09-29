@@ -1,3 +1,4 @@
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationService;
 use crate::grpc::blockjoy_ui::{
     CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
@@ -6,10 +7,11 @@ use crate::grpc::blockjoy_ui::{
     UpdateOrganizationResponse, User as GrpcUiUser,
 };
 use crate::grpc::helpers::pagination_parameters;
-use crate::models::{Org, OrgRequest, Token};
+use crate::models::{Org, OrgRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
+
+use super::helpers::{required, try_get_token};
 
 pub struct OrganizationServiceImpl {
     db: DbPool,
@@ -27,17 +29,15 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<GetOrganizationsRequest>,
     ) -> Result<Response<GetOrganizationsResponse>, Status> {
-        let db_token = request.extensions().get::<Token>().unwrap();
-        let user_id = db_token.user_id.unwrap();
+        let db_token = try_get_token(&request)?;
+        let user_id = db_token.try_user_id()?;
         let inner = request.into_inner();
-        let organizations: Vec<Organization> = Org::find_all_by_user(user_id, &self.db)
-            .await?
-            .iter()
-            .map(Organization::from)
-            .collect();
+        let organizations: Vec<Org> = Org::find_all_by_user(user_id, &self.db).await?;
+        let organizations: Result<_, ApiError> =
+            organizations.iter().map(Organization::try_from).collect();
         let inner = GetOrganizationsResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            organizations,
+            organizations: organizations?,
         };
 
         Ok(Response::new(inner))
@@ -47,39 +47,34 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<CreateOrganizationRequest>,
     ) -> Result<Response<CreateOrganizationResponse>, Status> {
-        let db_token = request.extensions().get::<Token>().unwrap();
-        let user_id = db_token.user_id.unwrap();
+        let db_token = try_get_token(&request)?;
+        let user_id = db_token.try_user_id()?;
         let inner = request.into_inner();
-        let org_request = OrgRequest {
-            name: inner.organization.unwrap().name.unwrap(),
+        let org = inner.organization.ok_or_else(required("organization"))?;
+        let name = org.name.ok_or_else(required("organization.name"))?;
+        let org_request = OrgRequest { name };
+        let org = Org::create(&org_request, &user_id, &self.db).await?;
+        let response_meta = ResponseMeta::from_meta(inner.meta).with_message(org.id);
+        let inner = CreateOrganizationResponse {
+            meta: Some(response_meta),
         };
-
-        match Org::create(&org_request, &user_id, &self.db).await {
-            Ok(new_org) => {
-                let response_meta = ResponseMeta::from_meta(inner.meta).with_message(new_org.id);
-                let inner = CreateOrganizationResponse {
-                    meta: Some(response_meta),
-                };
-
-                Ok(Response::new(inner))
-            }
-            Err(e) => Err(Status::from(e)),
-        }
+        Ok(Response::new(inner))
     }
 
     async fn update(
         &self,
         request: Request<UpdateOrganizationRequest>,
     ) -> Result<Response<UpdateOrganizationResponse>, Status> {
-        let db_token = request.extensions().get::<Token>().unwrap();
-        let user_id = db_token.user_id.unwrap();
+        let db_token = try_get_token(&request)?;
+        let user_id = db_token.try_user_id()?;
         let inner = request.into_inner();
-        let org = inner.organization.unwrap();
+        let org = inner.organization.ok_or_else(required("organization"))?;
+        let org_id = org.id.ok_or_else(required("organization.id"))?.try_into()?;
         let update = OrgRequest {
-            name: org.name.unwrap(),
+            name: org.name.ok_or_else(required("organization.name"))?,
         };
 
-        match Org::update(Uuid::from(org.id.unwrap()), update, &user_id, &self.db).await {
+        match Org::update(org_id, update, &user_id, &self.db).await {
             Ok(_) => {
                 let meta = ResponseMeta::from_meta(inner.meta);
                 let inner = UpdateOrganizationResponse { meta: Some(meta) };
@@ -93,10 +88,10 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<DeleteOrganizationRequest>,
     ) -> Result<Response<DeleteOrganizationResponse>, Status> {
-        let db_token = request.extensions().get::<Token>().unwrap();
-        let user_id = db_token.user_id.unwrap();
+        let db_token = try_get_token(&request)?;
+        let user_id = db_token.try_user_id()?;
         let inner = request.into_inner();
-        let org_id = Uuid::from(inner.id.unwrap());
+        let org_id = inner.id.ok_or_else(required("id"))?.try_into()?;
 
         if !Org::is_member(&user_id, &org_id, &self.db).await? {
             let msg = "User is not member of given organization";
@@ -113,18 +108,15 @@ impl OrganizationService for OrganizationServiceImpl {
         request: Request<OrganizationMemberRequest>,
     ) -> Result<Response<OrganizationMemberResponse>, Status> {
         let inner = request.into_inner();
-        let meta = inner.meta.unwrap();
-        let org_id = Uuid::from(inner.id.unwrap());
+        let meta = inner.meta.ok_or_else(required("meta"))?;
+        let org_id = inner.id.ok_or_else(required("id"))?.try_into()?;
 
         let (limit, offset) = pagination_parameters(meta.pagination.clone())?;
-        let users = Org::find_all_member_users_paginated(&org_id, limit, offset, &self.db)
-            .await?
-            .iter()
-            .map(GrpcUiUser::from)
-            .collect();
+        let users = Org::find_all_member_users_paginated(&org_id, limit, offset, &self.db).await?;
+        let users: Result<_, ApiError> = users.iter().map(GrpcUiUser::try_from).collect();
         let inner = OrganizationMemberResponse {
             meta: Some(ResponseMeta::from_meta(meta).with_pagination()),
-            users,
+            users: users?,
         };
 
         Ok(Response::new(inner))

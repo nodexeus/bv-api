@@ -1,6 +1,6 @@
 [package]
 authors = ["Chris Bruce <chris@lumeo.com>"]
-edition = "2018"
+edition = "2021"
 name = "api"
 publish = false
 resolver = "2"

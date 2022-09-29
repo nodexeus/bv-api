@@ -11,13 +11,13 @@ pub async fn start() -> anyhow::Result<()> {
     let db_url = std::env::var("DATABASE_URL").expect("Missing DATABASE_URL");
 
     let db_max_conn: u32 = std::env::var("DB_MAX_CONN")
-        .unwrap_or_else(|_| "10".to_string())
-        .parse()
-        .unwrap();
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
     let db_min_conn: u32 = std::env::var("DB_MIN_CONN")
-        .unwrap_or_else(|_| "2".to_string())
-        .parse()
-        .unwrap();
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(2);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let bind_ip = std::env::var("BIND_IP").unwrap_or_else(|_| "0.0.0.0".to_string());

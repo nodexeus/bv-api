@@ -9,7 +9,7 @@ use crate::models::{Token, TokenRole, User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 
-use super::helpers::required;
+use super::helpers::{required, try_get_token};
 
 pub struct UserServiceImpl {
     db: DbPool,
@@ -27,12 +27,12 @@ impl UserService for UserServiceImpl {
         &self,
         request: Request<GetUserRequest>,
     ) -> Result<Response<GetUserResponse>, Status> {
-        let token = request.extensions().get::<Token>().unwrap().token.clone();
+        let token = try_get_token(&request)?.token;
         let inner = request.into_inner();
         let user = Token::get_user_for_token(token, TokenType::Login, &self.db).await?;
         let response = GetUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            user: Some(GrpcUser::from(user)),
+            user: Some(GrpcUser::try_from(user)?),
         };
 
         Ok(Response::new(response))

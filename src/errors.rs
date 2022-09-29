@@ -1,6 +1,7 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use std::num::TryFromIntError;
 
 pub type Result<T> = std::result::Result<T, ApiError>;
 
@@ -24,8 +25,20 @@ pub enum ApiError {
     #[error("Error processing JWT")]
     JWTError(#[from] jsonwebtoken::errors::Error),
 
+    #[error("Error related to JSON parsing or serialization: {0}")]
+    JsonError(#[from] serde_json::Error),
+
+    #[error("Error converting to integer sizes: {0}")]
+    IntegerError(#[from] TryFromIntError),
+
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
+}
+
+impl ApiError {
+    pub fn validation(msg: impl std::fmt::Display) -> Self {
+        Self::ValidationError(msg.to_string())
+    }
 }
 
 impl std::fmt::Debug for ApiError {

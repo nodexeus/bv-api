@@ -22,7 +22,8 @@ impl MailClient {
         use auth::TokenType::*;
         const TEMPLATES: &str = include_str!("../mails/reset_password.toml");
         // SAFETY: assume we can write toml and also protected by test
-        let templates = toml::from_str(TEMPLATES).unwrap();
+        let templates = toml::from_str(TEMPLATES)
+            .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
         let login_token = models::Token::get::<models::User>(user.id, Login, db).await?;
         let token = models::Token::create_for(user, login_token.role, PwdReset, db).await?;
         models::UserToken::new(user.id, token.id, PwdReset)

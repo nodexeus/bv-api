@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgHasArrayType;
 
+use crate::{errors::ApiError, grpc::helpers::required};
+
 pub enum NodeTypeKey {
     Unknown = 0,
     Miner = 1,
@@ -78,53 +80,55 @@ impl PgHasArrayType for NodeType {
     }
 }
 
-impl From<String> for NodeType {
-    fn from(json: String) -> Self {
-        serde_json::from_str::<Self>(json.as_str()).unwrap()
+impl TryFrom<String> for NodeType {
+    type Error = ApiError;
+
+    fn try_from(json: String) -> Result<Self, Self::Error> {
+        serde_json::from_str(&json).map_err(Into::into)
     }
 }
 
 impl NodeTypeProperty {
-    pub fn to_json(&self) -> String {
-        format!(
+    pub fn to_json(&self) -> Result<String, ApiError> {
+        let json_str = format!(
             "{{ \"name\": \"{}\", \"label\": \"{}\", \"default\": \"{}\", \"type:\": \"{}\" }}",
-            self.name.clone(),
-            self.label.clone(),
-            self.default.clone().unwrap(),
-            self.r#type.clone()
-        )
+            self.name,
+            self.label,
+            self.default.as_ref().ok_or_else(required("default"))?,
+            self.r#type
+        );
+        Ok(json_str)
     }
 
-    pub fn get_name(&self) -> String {
-        self.name.clone()
+    pub fn get_name(&self) -> &str {
+        &self.name
     }
 
-    pub fn get_label(&self) -> String {
-        self.label.clone()
+    pub fn get_label(&self) -> &str {
+        &self.label
     }
 
-    pub fn get_default(&self) -> Option<String> {
-        self.default.clone()
+    pub fn get_default(&self) -> Option<&str> {
+        self.default.as_deref()
     }
 
-    pub fn get_property_type(&self) -> String {
-        self.r#type.clone()
+    pub fn get_property_type(&self) -> &str {
+        &self.r#type
     }
 }
 
 impl NodeType {
-    pub fn to_json(&self) -> String {
-        format!(
-            "{{ \"id\": {}, \"properties\": [{}] }}",
-            self.id,
-            self.properties
-                .clone()
-                .ok_or("")
-                .unwrap()
-                .iter()
-                .map(|p| { p.to_json() })
-                .collect::<String>()
-        )
+    pub fn to_json(&self) -> Result<String, ApiError> {
+        let empty = Vec::new();
+        let props: Result<String, ApiError> = self
+            .properties
+            .as_ref()
+            .unwrap_or(&empty)
+            .iter()
+            .map(|p| p.to_json())
+            .collect();
+        let json_str = format!("{{ \"id\": {}, \"properties\": [{}] }}", self.id, props?);
+        Ok(json_str)
     }
 
     pub fn special_type(id: NodeTypeKey) -> Self {
@@ -138,8 +142,8 @@ impl NodeType {
         self.id
     }
 
-    pub fn get_properties(&self) -> Option<Vec<NodeTypeProperty>> {
-        self.properties.clone()
+    pub fn get_properties(&self) -> Option<&[NodeTypeProperty]> {
+        self.properties.as_deref()
     }
 }
 

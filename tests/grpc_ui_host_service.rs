@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_without_any_for_get() {
+async fn responds_invalid_argument_without_any_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
@@ -40,7 +40,7 @@ async fn responds_not_found_without_any_for_get() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
-    assert_grpc_request! { get, request, tonic::Code::NotFound, db, HostServiceClient<Channel> };
+    assert_grpc_request! { get, request, tonic::Code::InvalidArgument, db, HostServiceClient<Channel> };
 }
 
 #[before(call = "setup")]
@@ -234,7 +234,7 @@ async fn responds_ok_with_host_for_update() {
         pagination: None,
     };
     let user = get_admin_user(&db.clone()).await;
-    let host = GrpcHost::from(get_test_host(&db).await);
+    let host = get_test_host(&db).await.try_into().unwrap();
     let token = user.get_token(&db).await.unwrap();
     let inner = UpdateHostRequest {
         meta: Some(request_meta),

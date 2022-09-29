@@ -295,12 +295,10 @@ impl User {
             bal = 0;
         }
 
-        if user_summary.pay_address.is_some() {
+        if let Some(pay_address) = user_summary.pay_address.as_ref() {
             let hnt = bal as f64 / 100000000.00;
             return Ok(format!(
-                r#"{{"type":"payment","address":"{}","amount":{:.8}}}"#,
-                user_summary.pay_address.as_ref().unwrap(),
-                hnt
+                r#"{{"type":"payment","address":"{pay_address}","amount":{hnt:.8}}}"#,
             ));
         }
 
@@ -308,7 +306,7 @@ impl User {
     }
 
     pub async fn update_all(id: Uuid, fields: UserSelectiveUpdate, db: &PgPool) -> Result<Self> {
-        let mut tx = db.begin().await.unwrap();
+        let mut tx = db.begin().await?;
         let user = sqlx::query_as::<_, User>(
             r#"UPDATE users SET 
                     email = COALESCE($1, email),
@@ -323,7 +321,7 @@ impl User {
         .fetch_one(&mut tx)
         .await?;
 
-        tx.commit().await.unwrap();
+        tx.commit().await?;
 
         Ok(user)
     }

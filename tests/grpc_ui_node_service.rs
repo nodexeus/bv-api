@@ -127,7 +127,7 @@ async fn responds_ok_with_valid_data_for_create() {
         name: None,
         status: Some(node::NodeStatus::UndefinedApplicationStatus as i32),
         address: None,
-        r#type: Some(NodeType::special_type(NodeTypeKey::Api).to_json()),
+        r#type: Some(NodeType::special_type(NodeTypeKey::Api).to_json().unwrap()),
         version: None,
         wallet_address: None,
         block_height: None,
@@ -165,12 +165,13 @@ async fn responds_internal_with_invalid_data_for_create() {
     let node = GrpcNode {
         id: None,
         host_id: None,
+        // This is required so the test should fail:
         org_id: None,
         blockchain_id: None,
         name: None,
         status: Some(node::NodeStatus::UndefinedApplicationStatus as i32),
         address: None,
-        r#type: Some(NodeType::special_type(NodeTypeKey::Api).to_json()),
+        r#type: Some(NodeType::special_type(NodeTypeKey::Api).to_json().unwrap()),
         version: None,
         wallet_address: None,
         block_height: None,
@@ -193,7 +194,7 @@ async fn responds_internal_with_invalid_data_for_create() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
-    assert_grpc_request! { create, request, tonic::Code::Internal, db, NodeServiceClient<Channel> };
+    assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, NodeServiceClient<Channel> };
 }
 
 #[before(call = "setup")]

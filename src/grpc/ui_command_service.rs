@@ -65,7 +65,7 @@ macro_rules! create_command {
             .id
             .ok_or_else(|| Status::not_found("No host ID provided"))?;
         let cmd = $obj
-            .create_command(Uuid::from(host_id), $cmd, $sub_cmd, inner.params)
+            .create_command(host_id.try_into()?, $cmd, $sub_cmd, inner.params)
             .await?;
 
         let notification = ChannelNotification::Command(NotificationPayload::new(cmd.id));

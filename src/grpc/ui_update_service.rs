@@ -40,16 +40,18 @@ impl UpdateServiceImpl {
         Host::find_by_id(id, &db)
             .await
             .map_err(|e| tracing::error!("Host ID {id} not found: {e}"))
-            .map(|h| Notification::Host(h.into()))
             .ok()
+            .and_then(|h| h.try_into().ok())
+            .map(Notification::Host)
     }
 
     pub async fn node_payload(id: Uuid, db: DbPool) -> Option<Notification> {
-        Node::find_by_id(&id, &db)
+        Node::find_by_id(id, &db)
             .await
             .map_err(|e| tracing::error!("Node ID {id} not found: {e}"))
-            .map(|n| Notification::Node(n.into()))
             .ok()
+            .and_then(|n| n.try_into().ok())
+            .map(Notification::Node)
     }
 }
 

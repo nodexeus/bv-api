@@ -1,3 +1,5 @@
+use super::helpers::{internal, required};
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
     CreateNodeRequest, CreateNodeResponse, GetNodeRequest, GetNodeResponse, ListNodesRequest,
@@ -8,9 +10,6 @@ use crate::models::{Command, CommandRequest, HostCmd, Node, NodeInfo};
 use crate::server::DbPool;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
-
-use super::helpers::{internal, required};
 
 pub struct NodeServiceImpl {
     db: DbPool,
@@ -31,10 +30,10 @@ impl NodeService for NodeServiceImpl {
     ) -> Result<Response<GetNodeResponse>, Status> {
         let inner = request.into_inner();
         let node_id = inner.id.ok_or_else(required("id"))?;
-        let node = Node::find_by_id(&node_id.into(), &self.db).await?;
+        let node = Node::find_by_id(node_id.try_into()?, &self.db).await?;
         let response = GetNodeResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            node: Some(GrpcNode::from(node)),
+            node: Some(node.try_into()?),
         };
         Ok(Response::new(response))
     }
@@ -44,20 +43,13 @@ impl NodeService for NodeServiceImpl {
         request: Request<ListNodesRequest>,
     ) -> Result<Response<ListNodesResponse>, Status> {
         let inner = request.into_inner();
-        let org_id = inner
-            .org_id
-            .ok_or_else(|| Status::internal("Missing org ID"))
-            .unwrap();
-        let mut response = ListNodesResponse {
+        let org_id = inner.org_id.ok_or_else(|| internal("Missing org ID"))?;
+        let nodes = Node::find_all_by_org(org_id.try_into()?, &self.db).await?;
+        let nodes: Result<_, ApiError> = nodes.iter().map(GrpcNode::try_from).collect();
+        let response = ListNodesResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            nodes: vec![],
+            nodes: nodes?,
         };
-
-        response.nodes = match Node::find_all_by_org(Uuid::from(org_id), &self.db).await {
-            Ok(nodes) => nodes.iter().map(GrpcNode::from).collect(),
-            Err(_) => vec![],
-        };
-
         Ok(Response::new(response))
     }
 
@@ -66,8 +58,7 @@ impl NodeService for NodeServiceImpl {
         request: Request<CreateNodeRequest>,
     ) -> Result<Response<CreateNodeResponse>, Status> {
         let inner = request.into_inner();
-        let fields = inner.node.unwrap().into();
-
+        let fields = inner.node.ok_or_else(required("node"))?.try_into()?;
         let node = Node::create(&fields, &self.db).await?;
         let req = CommandRequest {
             cmd: HostCmd::CreateNode,
@@ -104,9 +95,13 @@ impl NodeService for NodeServiceImpl {
         request: Request<UpdateNodeRequest>,
     ) -> Result<Response<UpdateNodeResponse>, Status> {
         let inner = request.into_inner();
-        let node = inner.node.unwrap();
-        let node_id = Uuid::from(node.id.clone().unwrap());
-        let fields: NodeInfo = node.into();
+        let node = inner.node.ok_or_else(required("node"))?;
+        let node_id = node
+            .id
+            .as_ref()
+            .ok_or_else(required("node.id"))?
+            .try_into()?;
+        let fields: NodeInfo = node.try_into()?;
 
         Node::update_info(&node_id, &fields, &self.db).await?;
         let response = UpdateNodeResponse {

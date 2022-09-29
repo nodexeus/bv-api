@@ -11,6 +11,7 @@ use super::blockjoy_ui::{
     ResetPasswordRequest, ResetPasswordResponse, ResponseMeta, UpdatePasswordRequest,
     UpdatePasswordResponse,
 };
+use super::helpers::{required, try_get_token};
 
 pub struct AuthenticationServiceImpl {
     db: DbPool,
@@ -46,14 +47,16 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<RefreshTokenRequest>,
     ) -> Result<Response<RefreshTokenResponse>, Status> {
-        let db_token = request.extensions().get::<Token>().unwrap().token.clone();
+        let db_token = try_get_token(&request)?.token;
         let inner = request.into_inner();
-        let old_token = inner.meta.clone().unwrap().token.unwrap().value;
-        let request_id = inner.meta.unwrap().id;
+        let meta = inner.meta.as_ref().ok_or_else(required("meta"))?;
+        let req_token = meta.token.as_ref().ok_or_else(required("meta.token"))?;
+        let req_token = req_token.value.as_str();
+        let request_id = meta.id.clone();
 
-        if db_token == old_token {
+        if db_token == req_token {
             let new_token = ApiToken {
-                value: Token::refresh(db_token, &self.db).await?.token,
+                value: Token::refresh(&db_token, &self.db).await?.token,
             };
             let response = RefreshTokenResponse {
                 meta: Some(ResponseMeta::new(request_id)),
@@ -90,8 +93,8 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: tonic::Request<UpdatePasswordRequest>,
     ) -> Result<tonic::Response<UpdatePasswordResponse>, tonic::Status> {
-        let db_token = request.extensions().get::<Token>().unwrap();
-        let user_id = db_token.user_id.unwrap();
+        let db_token = try_get_token(&request)?;
+        let user_id = db_token.try_user_id()?;
         let cur_user = models::User::find_by_id(user_id, &self.db).await?;
         let request = request.into_inner();
         let _cur_user = cur_user

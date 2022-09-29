@@ -34,10 +34,16 @@ impl AuthorizationService {
         Self { enforcer }
     }
 
-    pub fn is_unauthenticated_request<B>(&self, request: &Request<B>) -> bool {
-        let unauth_paths = request.extensions().get::<UnauthenticatedPaths>().unwrap();
-
-        unauth_paths.is_unauthenticated(request.uri().path())
+    pub fn is_unauthenticated_request<B: Debug>(&self, request: &Request<B>) -> bool {
+        if let Some(unauth_paths) = request.extensions().get::<UnauthenticatedPaths>() {
+            unauth_paths.is_unauthenticated(request.uri().path())
+        } else {
+            tracing::error!(
+                "Request {request:?} did not contain `UnauthenicatedPaths` extension! \
+                Blockvisor-api is misconfigured!"
+            );
+            false
+        }
     }
 }
 
@@ -70,8 +76,9 @@ where
                 AnyToken::Auth(auth) => auth.encode().map_err(cant_parse)?,
                 AnyToken::PwdReset(pwd_reset) => pwd_reset.encode().map_err(cant_parse)?,
             };
-            // TODO: maybe not unwrap here?
-            let db_token = Token::find_by_token(&encoded, db).await.unwrap();
+            let db_token = Token::find_by_token(&encoded, db)
+                .await
+                .map_err(|_| unauthenticated_response("Token not found"))?;
             let auth_data = AuthorizationData {
                 subject: db_token.role.to_string(),
                 object: request.uri().path().to_string(),

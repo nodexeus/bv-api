@@ -12,7 +12,7 @@ test:
 	@sqlx migrate run
 	@cargo test -- --test-threads=1
 	@docker-compose down
-	
+
 # docker-build:
 #	@docker build . -t ${IMAGE_NAME}
 

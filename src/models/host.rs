@@ -4,6 +4,7 @@ use super::{
 use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable, TokenType};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
+use crate::grpc::helpers::required;
 use crate::models::UpdateInfo;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -95,7 +96,7 @@ impl Host {
             ConnectionStatus::Offline
         };
 
-        sqlx::query("UPDATE hosts set status = $1 where id = $2")
+        sqlx::query("UPDATE hosts SET status = $1 WHERE id = $2 RETURNING *;")
             .bind(status)
             .bind(id)
             .fetch_one(db)
@@ -202,7 +203,7 @@ impl Host {
 
     #[deprecated(since = "0.2.0", note = "deprecated in favor of 'update_all'")]
     pub async fn update(id: Uuid, host: HostRequest, db: &PgPool) -> Result<Self> {
-        let mut tx = db.begin().await.unwrap();
+        let mut tx = db.begin().await?;
         let host = sqlx::query(
             r#"UPDATE hosts SET name = $1, version = $2, location = $3, ip_addr = $4, status = $6, org_id = $7, cpu_count = $8, mem_size = $9, disk_size = $10, os = $11, os_version = $12 WHERE id = $13 RETURNING *"#
         )
@@ -224,12 +225,12 @@ impl Host {
         .fetch_one(&mut tx)
         .await?;
 
-        tx.commit().await.unwrap();
+        tx.commit().await?;
         Ok(host)
     }
 
     pub async fn update_all(id: Uuid, fields: HostSelectiveUpdate, db: &PgPool) -> Result<Self> {
-        let mut tx = db.begin().await.unwrap();
+        let mut tx = db.begin().await?;
         let host = sqlx::query(
             r#"UPDATE hosts SET 
                     org_id = COALESCE($1, org_id),
@@ -263,13 +264,13 @@ impl Host {
         .fetch_one(&mut tx)
         .await?;
 
-        tx.commit().await.unwrap();
+        tx.commit().await?;
 
         Ok(host)
     }
 
     pub async fn update_status(id: Uuid, host: HostStatusRequest, db: &PgPool) -> Result<Self> {
-        let mut tx = db.begin().await.unwrap();
+        let mut tx = db.begin().await?;
         let host =
             sqlx::query(r#"UPDATE hosts SET version = $1, status = $2  WHERE id = $3 RETURNING *"#)
                 .bind(host.version)
@@ -279,7 +280,7 @@ impl Host {
                 .fetch_one(&mut tx)
                 .await?;
 
-        tx.commit().await.unwrap();
+        tx.commit().await?;
         Ok(host)
     }
 
@@ -362,7 +363,7 @@ impl Owned<Host, ()> for Host {
 #[tonic::async_trait]
 impl UpdateInfo<HostInfo, Host> for Host {
     async fn update_info(info: HostInfo, db: &PgPool) -> Result<Host> {
-        let id = Uuid::from(info.id.unwrap());
+        let id: uuid::Uuid = info.id.as_ref().ok_or_else(required("id"))?.try_into()?;
         let mut tx = db.begin().await?;
         let host = sqlx::query(
             r##"UPDATE hosts SET
@@ -469,13 +470,14 @@ impl From<HostInfo> for HostSelectiveUpdate {
     }
 }
 
-impl From<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest {
-    fn from(request: crate::grpc::blockjoy::ProvisionHostRequest) -> Self {
-        let host_info = request.info.unwrap();
+impl TryFrom<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest {
+    type Error = ApiError;
 
-        Self {
+    fn try_from(request: crate::grpc::blockjoy::ProvisionHostRequest) -> Result<Self> {
+        let host_info = request.info.ok_or_else(required("info"))?;
+        let req = Self {
             org_id: None,
-            name: host_info.name.unwrap(),
+            name: host_info.name.ok_or_else(required("info.name"))?,
             version: host_info.version,
             location: host_info.location,
             cpu_count: host_info.cpu_count,
@@ -483,9 +485,10 @@ impl From<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest {
             disk_size: host_info.disk_size,
             os: host_info.os,
             os_version: host_info.os_version,
-            ip_addr: host_info.ip.unwrap(),
+            ip_addr: host_info.ip.ok_or_else(required("info.ip"))?,
             val_ip_addrs: Some(request.validator_ips.join(",")),
-        }
+        };
+        Ok(req)
     }
 }
 
@@ -560,7 +563,7 @@ impl HostProvision {
         request: crate::grpc::blockjoy::ProvisionHostRequest,
         db: &PgPool,
     ) -> Result<Host> {
-        let request = HostCreateRequest::from(request);
+        let request = HostCreateRequest::try_from(request)?;
 
         HostProvision::claim(otp, request, db).await
     }

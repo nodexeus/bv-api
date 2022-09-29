@@ -101,6 +101,7 @@ struct UnknownToken {
     token_type: TokenType,
 }
 
+/// A token whose `token_type` is not known.
 pub enum AnyToken {
     Auth(AuthToken),
     PwdReset(PwdResetToken),
