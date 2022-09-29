@@ -31,6 +31,7 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:10891/stakejoy
+      DATABASE_URL_NAKED: postgres://postgres:postgres@localhost:10891
       CASBIN_MODEL: ./conf/model.conf
       CASBIN_POLICIES: ./conf/policies.csv
       BIDI_BUFFER_SIZE: 128

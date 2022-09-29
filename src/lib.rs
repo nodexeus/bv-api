@@ -42,14 +42,9 @@ mod test {
                 .execute(&mut conn)
                 .await
                 .unwrap();
-            // sqlx::query(&format!(
-            //     "GRANT ALL PRIVILEGES ON DATABASE {db_name} TO blockvisor;"
-            // ))
-            // .execute(&mut conn)
-            // .await
-            // .unwrap();
 
-            let db_url_prefix = std::env::var("DATABASE_URL_NAKED").expect("Missing DATABASE_URL");
+            let db_url_prefix =
+                std::env::var("DATABASE_URL_NAKED").expect("Missing DATABASE_URL_NAKED");
             let db_url = dbg!(format!("{db_url_prefix}/{db_name}"));
             /*if db_url.contains("digitalocean") {
                 panic!("Attempting to use production db?");
