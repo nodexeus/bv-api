@@ -1,7 +1,6 @@
 #[allow(dead_code)]
 mod setup;
 
-use crate::setup::{get_admin_user, get_test_host};
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::command_service_client::CommandServiceClient;
 use api::grpc::blockjoy_ui::{CommandRequest as GrpcCommandRequest, RequestMeta, Uuid as GrpcUuid};
@@ -20,8 +19,8 @@ macro_rules! test_response_ok {
             fields: vec![],
             pagination: None,
         };
-        let host = get_test_host(&$db.pool).await;
-        let user = get_admin_user(&$db.pool).await;
+        let host = $db.test_host().await;
+        let user = $db.admin_user().await;
         let token = user.get_token(&$db.pool).await.unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
@@ -47,8 +46,8 @@ macro_rules! test_response_internal {
             fields: vec![],
             pagination: None,
         };
-        let host = get_test_host(&$db.pool).await;
-        let user = get_admin_user(&$db.pool).await;
+        let host = $db.test_host().await;
+        let user = $db.admin_user().await;
         let token = user.get_token(&$db.pool).await.unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
@@ -74,7 +73,7 @@ macro_rules! test_response_not_found {
             fields: vec![],
             pagination: None,
         };
-        let user = get_admin_user(&$db.pool).await;
+        let user = $db.admin_user().await;
         let token = user.get_token(&$db.pool).await.unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),

@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use crate::setup::{get_admin_user, setup};
+use crate::setup::setup;
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::user_service_client::UserServiceClient;
 use api::grpc::blockjoy_ui::{
@@ -23,7 +23,7 @@ async fn responds_ok_with_valid_token_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
+    let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetUserRequest {
         meta: Some(request_meta),
@@ -101,7 +101,7 @@ async fn responds_error_with_existing_email_for_create() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool.clone()).await;
+    let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let grpc_user = GrpcUser {
         id: None,
@@ -137,7 +137,7 @@ async fn responds_error_with_different_pwds_for_create() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool.clone()).await;
+    let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let grpc_user = GrpcUser {
         id: None,

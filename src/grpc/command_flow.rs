@@ -310,14 +310,6 @@ mod tests {
         (serve_future, client)
     }
 
-    pub async fn get_test_host(db: &PgPool) -> Host {
-        sqlx::query("select h.*, t.token, t.role from hosts h right join tokens t on h.id = t.host_id where name = 'Host-1'")
-            .map(Host::from)
-            .fetch_one(db)
-            .await
-            .unwrap()
-    }
-
     fn node_info_requests_iter() -> impl Stream<Item = InfoUpdate> {
         tokio_stream::iter(1..=10).map(|i| InfoUpdate {
             info: Some(Info::Node(NodeInfo {
@@ -344,7 +336,7 @@ mod tests {
     async fn responds_ok_with_valid_token_for_node_command() {
         let db = Arc::new(_before_values.await);
         let (serve_future, mut client) = server_and_client_stub(Arc::new(db.pool.clone())).await;
-        let host = get_test_host(&db.pool).await;
+        let host = db.test_host().await;
         let token = host.get_token(&db.pool).await.unwrap();
 
         let request_future = async move {

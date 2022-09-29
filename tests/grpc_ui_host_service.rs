@@ -1,7 +1,6 @@
 #[allow(dead_code)]
 mod setup;
 
-use crate::setup::{get_admin_user, get_test_host};
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
 use api::grpc::blockjoy_ui::{
@@ -27,7 +26,7 @@ async fn responds_invalid_argument_without_any_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
+    let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
@@ -53,8 +52,8 @@ async fn responds_ok_with_id_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
-    let host_id = GrpcUuid::from(get_test_host(&db.pool).await.id);
+    let user = db.admin_user().await;
+    let host_id = GrpcUuid::from(db.test_host().await.id);
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
@@ -80,8 +79,8 @@ async fn responds_ok_with_org_id_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
-    let host = get_test_host(&db.pool).await;
+    let user = db.admin_user().await;
+    let host = db.test_host().await;
 
     if host.org_id.is_none() {
         println!("NO ORG_ID SET ON HOST");
@@ -119,7 +118,7 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
         fields: vec![],
         pagination: Some(pagination),
     };
-    let user = get_admin_user(&db.pool).await;
+    let user = db.admin_user().await;
     let orgs = Org::find_all_by_user(user.id, &db.pool).await.unwrap();
     let org = orgs.first().unwrap();
     let org_id = GrpcUuid::from(org.id);
@@ -180,8 +179,8 @@ async fn responds_ok_with_token_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
-    let host = get_test_host(&db.pool).await;
+    let user = db.admin_user().await;
+    let host = db.test_host().await;
     let host_token = host.get_token(&db.pool).await.unwrap().token;
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetHostsRequest {
@@ -208,8 +207,8 @@ async fn responds_ok_with_id_for_delete() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
-    let host = get_test_host(&db.pool).await;
+    let user = db.admin_user().await;
+    let host = db.test_host().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = DeleteHostRequest {
         meta: Some(request_meta),
@@ -235,8 +234,8 @@ async fn responds_ok_with_host_for_update() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
-    let host = get_test_host(&db.pool).await.try_into().unwrap();
+    let user = db.admin_user().await;
+    let host = db.test_host().await.try_into().unwrap();
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = UpdateHostRequest {
         meta: Some(request_meta),
@@ -267,7 +266,7 @@ async fn responds_ok_with_host_for_create() {
         ip: Some("127.0.0.1".to_string()),
         ..Default::default()
     };
-    let user = get_admin_user(&db.pool).await;
+    let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = CreateHostRequest {
         meta: Some(request_meta),

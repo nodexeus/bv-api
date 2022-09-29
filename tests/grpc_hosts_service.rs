@@ -7,7 +7,7 @@ use api::grpc::blockjoy::{
     hosts_client::HostsClient, DeleteHostRequest, HostInfoUpdateRequest, ProvisionHostRequest,
 };
 use api::models::{Host, HostProvision, HostProvisionRequest, HostSelectiveUpdate};
-use setup::{get_test_host, setup};
+use setup::setup;
 use std::sync::Arc;
 use test_macros::*;
 use tonic::transport::Channel;
@@ -78,7 +78,7 @@ async fn responds_unauthenticated_without_token_for_info_update() {
 #[tokio::test]
 async fn responds_unauthenticated_with_token_for_info_update() {
     let db = _before_values.await;
-    let host = get_test_host(&db.pool).await;
+    let host = db.test_host().await;
     let b_uuid = blockjoy::Uuid::from(host.id);
 
     let host_info = blockjoy::HostInfo {
@@ -313,7 +313,7 @@ async fn responds_permission_denied_for_delete() {
 #[tokio::test]
 async fn can_update_host_info() {
     let db = _before_values.await;
-    let host = get_test_host(&db.pool).await;
+    let host = db.test_host().await;
     let host_info = blockjoy::HostInfo {
         id: Some(blockjoy::Uuid::from(host.id)),
         name: Some("tester".to_string()),

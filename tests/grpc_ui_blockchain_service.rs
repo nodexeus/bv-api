@@ -4,18 +4,17 @@ mod setup;
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::blockchain_service_client::BlockchainServiceClient;
 use api::grpc::blockjoy_ui::{GetBlockchainRequest, ListBlockchainsRequest, RequestMeta};
-use setup::{get_admin_user, setup};
-use sqlx::{Pool, Postgres};
+use setup::setup;
 use std::sync::Arc;
 use test_macros::*;
 use tonic::transport::Channel;
 use tonic::{Request, Status};
 use uuid::Uuid;
 
-async fn with_auth<T>(inner: T, db: &Pool<Postgres>) -> Request<T> {
+async fn with_auth<T>(inner: T, db: &api::TestDb) -> Request<T> {
     let mut request = Request::new(inner);
-    let user = get_admin_user(db).await;
-    let token = user.get_token(db).await.unwrap();
+    let user = db.admin_user().await;
+    let token = user.get_token(&db.pool).await.unwrap();
     request.metadata_mut().insert(
         "authorization",
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
@@ -38,7 +37,7 @@ async fn responds_ok_for_get_existing() {
         meta: Some(request_meta),
         id: Some(uuid.into()),
     };
-    let req = with_auth(inner, &db.pool).await;
+    let req = with_auth(inner, &db).await;
     assert_grpc_request! { get, req, tonic::Code::Ok, db, BlockchainServiceClient<Channel> };
 }
 
@@ -58,7 +57,7 @@ async fn responds_not_found_for_get_nonexisting() {
         meta: Some(request_meta),
         id: Some(uuid.into()),
     };
-    let req = with_auth(inner, &db.pool).await;
+    let req = with_auth(inner, &db).await;
     assert_grpc_request! { get, req, tonic::Code::NotFound, db, BlockchainServiceClient<Channel> };
 }
 
@@ -78,7 +77,7 @@ async fn responds_not_found_for_get_deleted() {
         meta: Some(request_meta),
         id: Some(uuid.into()),
     };
-    let req = with_auth(inner, &db.pool).await;
+    let req = with_auth(inner, &db).await;
     assert_grpc_request! { get, req, tonic::Code::NotFound, db, BlockchainServiceClient<Channel> };
 }
 
@@ -95,6 +94,6 @@ async fn can_list_blockchains() {
     let inner = ListBlockchainsRequest {
         meta: Some(request_meta),
     };
-    let req = with_auth(inner, &db.pool).await;
+    let req = with_auth(inner, &db).await;
     assert_grpc_request! { list, req, tonic::Code::Ok, db, BlockchainServiceClient<Channel> };
 }

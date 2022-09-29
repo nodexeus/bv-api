@@ -1,7 +1,6 @@
 #[allow(dead_code)]
 mod setup;
 
-use crate::setup::get_admin_user;
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::host_provision_service_client::HostProvisionServiceClient;
 use api::grpc::blockjoy_ui::{
@@ -28,7 +27,7 @@ async fn responds_not_found_without_valid_id_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
+    let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetHostProvisionRequest {
         meta: Some(request_meta),
@@ -54,7 +53,7 @@ async fn responds_ok_with_valid_id_for_get() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
+    let user = db.admin_user().await;
     let mut tx = db.pool.begin().await.unwrap();
     let org_id = sqlx::query("select org_id from orgs_users where user_id = $1 limit 1")
         .bind(user.id)
@@ -95,7 +94,7 @@ async fn responds_error_with_invalid_provision_for_create() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
+    let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = CreateHostProvisionRequest {
         meta: Some(request_meta),
@@ -121,7 +120,7 @@ async fn responds_ok_with_valid_provision_for_create() {
         fields: vec![],
         pagination: None,
     };
-    let user = get_admin_user(&db.pool).await;
+    let user = db.admin_user().await;
     let mut tx = db.pool.begin().await.unwrap();
     let org_id = sqlx::query("select org_id from orgs_users where user_id = $1 limit 1")
         .bind(user.id)

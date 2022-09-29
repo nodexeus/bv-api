@@ -254,5 +254,30 @@ mod test {
                 .expect("Error updating validator stake status in db during setup.");
             }
         }
+
+        pub async fn test_host(&self) -> models::Host {
+            sqlx::query("select h.*, t.token, t.role from hosts h right join tokens t on h.id = t.host_id where name = 'Host-1'")
+                .map(models::Host::from)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap()
+        }
+
+        pub async fn admin_user(&self) -> models::User {
+            models::User::find_by_email("admin@here.com", &self.pool)
+                .await
+                .expect("Could not get admin test user from db.")
+        }
+
+        #[allow(dead_code)]
+        pub async fn blockchain(&self) -> models::Blockchain {
+            let chains = models::Blockchain::find_all(&self.pool)
+                .await
+                .expect("To have at least one blockchain");
+            chains
+                .first()
+                .expect("To have a test blockchain")
+                .to_owned()
+        }
     }
 }

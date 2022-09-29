@@ -1,6 +1,5 @@
 mod helper_traits;
 
-use api::models::{Blockchain, Host, User};
 use api::TestDb;
 use helper_traits::GrpcClient;
 use sqlx::PgPool;
@@ -85,29 +84,4 @@ where
     let client = Client::create(channel);
 
     (serve_future, client)
-}
-
-pub async fn get_test_host(db: &PgPool) -> Host {
-    sqlx::query("select h.*, t.token, t.role from hosts h right join tokens t on h.id = t.host_id where name = 'Host-1'")
-        .map(Host::from)
-        .fetch_one(db)
-        .await
-        .unwrap()
-}
-
-pub async fn get_admin_user(db: &PgPool) -> User {
-    User::find_by_email("admin@here.com", db)
-        .await
-        .expect("Could not get admin test user from db.")
-}
-
-#[allow(dead_code)]
-pub async fn get_blockchain(db: &PgPool) -> Blockchain {
-    let chains = Blockchain::find_all(db)
-        .await
-        .expect("To have at least one blockchain");
-    chains
-        .first()
-        .expect("To have a test blockchain")
-        .to_owned()
 }
