@@ -509,16 +509,15 @@ pub mod from {
                 NodeChainStatus::Broadcasting => GrpcNodeStatus::Broadcasting,
                 NodeChainStatus::Cancelled => GrpcNodeStatus::Cancelled,
                 // TODO
-                NodeChainStatus::Consensus => GrpcNodeStatus::UndefinedApplicationStatus,
                 NodeChainStatus::Delegating => GrpcNodeStatus::Delegating,
                 NodeChainStatus::Delinquent => GrpcNodeStatus::Delinquent,
                 NodeChainStatus::Disabled => GrpcNodeStatus::Disabled,
                 NodeChainStatus::Earning => GrpcNodeStatus::Earning,
                 NodeChainStatus::Elected => GrpcNodeStatus::Elected,
                 NodeChainStatus::Electing => GrpcNodeStatus::Electing,
-                NodeChainStatus::Exporting => GrpcNodeStatus::Exporting,
+                // TODO Thomas please rename this to exported in the api or to exporting in the database
+                NodeChainStatus::Exported => GrpcNodeStatus::Exporting,
                 // TODO
-                NodeChainStatus::Follower => GrpcNodeStatus::UndefinedApplicationStatus,
                 NodeChainStatus::Ingesting => GrpcNodeStatus::Ingesting,
                 NodeChainStatus::Mining => GrpcNodeStatus::Mining,
                 NodeChainStatus::Minting => GrpcNodeStatus::Minting,
@@ -526,12 +525,6 @@ pub mod from {
                 NodeChainStatus::Relaying => GrpcNodeStatus::Relaying,
                 NodeChainStatus::Removed => GrpcNodeStatus::Removed,
                 NodeChainStatus::Removing => GrpcNodeStatus::Removing,
-                // TODO
-                NodeChainStatus::Staked => GrpcNodeStatus::UndefinedApplicationStatus,
-                // TODO
-                NodeChainStatus::Staking => GrpcNodeStatus::UndefinedApplicationStatus,
-                // TODO
-                NodeChainStatus::Validating => GrpcNodeStatus::UndefinedApplicationStatus,
             }
         }
     }
