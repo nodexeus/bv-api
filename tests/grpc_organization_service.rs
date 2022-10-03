@@ -1,7 +1,6 @@
 #[allow(dead_code)]
 mod setup;
 
-use crate::setup::get_admin_user;
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::organization_service_client::OrganizationServiceClient;
 use api::grpc::blockjoy_ui::{
@@ -22,8 +21,8 @@ use uuid::Uuid;
 #[tokio::test]
 async fn responds_ok_for_create() {
     let db = Arc::new(_before_values.await);
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let user = db.admin_user().await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
@@ -56,8 +55,8 @@ async fn responds_ok_for_create() {
 #[tokio::test]
 async fn responds_ok_for_get() {
     let db = Arc::new(_before_values.await);
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let user = db.admin_user().await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
@@ -81,16 +80,16 @@ async fn responds_ok_for_get() {
 #[tokio::test]
 async fn responds_ok_for_update() {
     let db = Arc::new(_before_values.await);
-    let user = get_admin_user(&db).await;
+    let user = db.admin_user().await;
     let org_id = GrpcUuid::from(
-        Org::find_all_by_user(user.id, &db)
+        Org::find_all_by_user(user.id, &db.pool)
             .await
             .unwrap()
             .first()
             .unwrap()
             .id,
     );
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
@@ -123,16 +122,16 @@ async fn responds_ok_for_update() {
 #[tokio::test]
 async fn responds_ok_for_delete() {
     let db = Arc::new(_before_values.await);
-    let user = get_admin_user(&db).await;
+    let user = db.admin_user().await;
     let org_id = GrpcUuid::from(
-        Org::find_all_by_user(user.id, &db)
+        Org::find_all_by_user(user.id, &db.pool)
             .await
             .unwrap()
             .first()
             .unwrap()
             .id,
     );
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
@@ -157,16 +156,16 @@ async fn responds_ok_for_delete() {
 #[tokio::test]
 async fn responds_ok_for_members() {
     let db = Arc::new(_before_values.await);
-    let user = get_admin_user(&db).await;
+    let user = db.admin_user().await;
     let org_id = GrpcUuid::from(
-        Org::find_all_by_user(user.id, &db)
+        Org::find_all_by_user(user.id, &db.pool)
             .await
             .unwrap()
             .first()
             .unwrap()
             .id,
     );
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
@@ -202,11 +201,11 @@ async fn responds_ok_with_pagination_for_members() {
         fields: vec![],
         pagination: Some(pagination),
     };
-    let user = get_admin_user(&db.clone()).await;
-    let orgs = Org::find_all_by_user(user.id, &db).await.unwrap();
+    let user = db.admin_user().await;
+    let orgs = Org::find_all_by_user(user.id, &db.pool).await.unwrap();
     let org = orgs.first().unwrap();
     let org_id = GrpcUuid::from(org.id);
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let inner = OrganizationMemberRequest {
         meta: Some(request_meta),
         id: Some(org_id),
@@ -222,8 +221,9 @@ async fn responds_ok_with_pagination_for_members() {
         format!("Bearer {}", token.to_base64()).parse().unwrap(),
     );
 
+    let pool = std::sync::Arc::new(db.pool.clone());
     let (serve_future, mut client) =
-        server_and_client_stub::<OrganizationServiceClient<Channel>>(db).await;
+        server_and_client_stub::<OrganizationServiceClient<Channel>>(pool).await;
 
     let request_future = async {
         match client.members(request).await {

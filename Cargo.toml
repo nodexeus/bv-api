@@ -34,7 +34,7 @@ pin-project = "1.0.11"
 prost = "0.10.4"
 prost-types = "0.10.1"
 qrcode-generator = "4.1.1"
-rand_core = {version = "0.6", features = ["std"]}
+rand = "0.8.5"
 random-string = "1.0.0"
 sendgrid = {version = "0.17.4", default-features = false, features = ["rustls", "async"]}
 serde = {version = "1.0.125", features = ["derive"]}
@@ -54,6 +54,7 @@ validator = {version = "0.13.0", features = ["derive"]}
 
 [dev-dependencies]
 hyper = {version = "0.14.18", features = ["full"]}
+temp-env = "0.3.1"
 tempfile = "3.3.0"
 test_macros = {git = "https://github.com/blockjoy/test-macros/"}
 

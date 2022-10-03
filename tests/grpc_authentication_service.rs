@@ -1,14 +1,13 @@
 #[allow(dead_code)]
 mod setup;
 
-use crate::setup::get_admin_user;
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
 use api::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, RefreshTokenRequest, RequestMeta, Uuid as GrpcUuid,
 };
 use base64::encode as base64_encode;
-use setup::{server_and_client_stub, setup};
+use setup::setup;
 use std::sync::Arc;
 use test_macros::*;
 use tonic::transport::Channel;
@@ -18,7 +17,7 @@ use uuid::Uuid;
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_with_valid_credentials_for_login() {
-    let db = Arc::new(_before_values.await);
+    let db = _before_values.await;
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
@@ -37,7 +36,7 @@ async fn responds_ok_with_valid_credentials_for_login() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_error_with_invalid_credentials_for_login() {
-    let db = Arc::new(_before_values.await);
+    let db = _before_values.await;
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: None,
@@ -56,9 +55,9 @@ async fn responds_error_with_invalid_credentials_for_login() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_with_valid_credentials_for_refresh() {
-    let db = Arc::new(_before_values.await);
-    let user = get_admin_user(&db).await;
-    let token = user.get_token(&db).await.unwrap();
+    let db = _before_values.await;
+    let user = db.admin_user().await;
+    let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: Some(ApiToken {
@@ -83,10 +82,10 @@ async fn responds_ok_with_valid_credentials_for_refresh() {
 #[before(call = "setup")]
 #[tokio::test]
 async fn responds_unauthenticated_with_invalid_credentials_for_refresh() {
-    let db = Arc::new(_before_values.await);
-    let user = get_admin_user(&db).await;
+    let db = _before_values.await;
+    let user = db.admin_user().await;
     let invalid_token = base64_encode("asdf.asdfasdfasdfasdfasdf.asfasdfasdfasdfaf");
-    let token = user.get_token(&db).await.unwrap();
+    let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
         id: Some(GrpcUuid::from(Uuid::new_v4())),
         token: Some(ApiToken {
