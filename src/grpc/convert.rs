@@ -7,7 +7,7 @@ use crate::grpc::helpers::{image_url_from_node, pb_current_timestamp};
 use crate::models::{Blockchain, Command, HostCmd, Node};
 use crate::server::DbPool;
 
-pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<GrpcCommand> {
+pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<GrpcCommand> {
     let meta = Some(CommandMeta {
         api_command_id: Some(GrpcUuid::from(cmd.id)),
         created_at: Some(pb_current_timestamp()),
@@ -80,7 +80,7 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<G
 
 pub mod from {
     use crate::errors::ApiError;
-    use crate::grpc::blockjoy::{HostInfo, Uuid as GrpcUuid};
+    use crate::grpc::blockjoy::{self, HostInfo, Uuid as GrpcUuid};
     use crate::grpc::blockjoy_ui::{
         self, node::NodeStatus as GrpcNodeStatus, Host as GrpcHost,
         HostProvision as GrpcHostProvision, Node as GrpcNode, Organization, User as GrpcUiUser,
@@ -147,6 +147,18 @@ pub mod from {
         type Error = ApiError;
 
         fn try_from(id: blockjoy_ui::Uuid) -> Result<Self, Self::Error> {
+            let id = id
+                .value
+                .parse()
+                .map_err(|e| anyhow!("Could not parse provided uuid: {e:?}"))?;
+            Ok(id)
+        }
+    }
+
+    impl TryFrom<blockjoy::Uuid> for uuid::Uuid {
+        type Error = ApiError;
+
+        fn try_from(id: blockjoy::Uuid) -> Result<Self, Self::Error> {
             let id = id
                 .value
                 .parse()

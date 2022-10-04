@@ -1,249 +1,58 @@
-use super::helpers::required;
 use crate::auth::TokenType;
-use crate::errors::{ApiError, Result as ApiResult};
-use crate::grpc::blockjoy::{
-    command_flow_server::CommandFlow, info_update::Info as GrpcInfo, Command as GrpcCommand,
-    CommandInfo, HostInfo, InfoUpdate, NodeInfo,
-};
-use crate::grpc::convert::db_command_to_grpc_command;
+use crate::errors::Result;
+use crate::grpc::blockjoy::{command_flow_server::CommandFlow, Command as GrpcCommand, InfoUpdate};
 use crate::grpc::helpers::try_get_token;
-use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
-use crate::models::{self, Command as DbCommand, Host, Node, UpdateInfo};
+use crate::grpc::notification::ChannelNotifier;
+use crate::models;
 use crate::server::DbPool;
-use anyhow::anyhow;
-use sqlx::PgPool;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::{env, error::Error};
-use tokio::sync::{broadcast, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
-use tokio_stream::StreamExt;
 use tonic::codegen::futures_core::Stream;
 use tonic::{Request, Response, Status, Streaming};
 
-#[allow(dead_code)]
-fn match_for_io_error(err_status: &Status) -> Option<&std::io::Error> {
-    let mut err: &(dyn Error + 'static) = err_status;
-
-    loop {
-        if let Some(io_err) = err.downcast_ref() {
-            return Some(io_err);
-        }
-
-        // h2::Error do not expose std::io::Error with `source()`
-        // https://github.com/hyperium/h2/pull/462
-        if let Some(h2_err) = err.downcast_ref::<h2::Error>() {
-            if let Some(io_err) = h2_err.get_io() {
-                return Some(io_err);
-            }
-        }
-
-        err = match err.source() {
-            Some(err) => err,
-            None => return None,
-        };
-    }
-}
+mod listener;
 
 pub struct CommandFlowServerImpl {
     db: DbPool,
-    buffer_size: usize,
     notifier: Arc<ChannelNotifier>,
 }
 
 impl CommandFlowServerImpl {
     pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
-        let buffer_size: usize = env::var("BIDI_BUFFER_SIZE")
-            .ok()
-            .and_then(|bs| bs.parse().ok())
-            .unwrap_or(128);
-
-        Self {
-            db,
-            buffer_size,
-            notifier,
-        }
-    }
-
-    /// Actually perform info update on an identified resource
-    async fn handle_info_update<T, R>(info: T, db: DbPool) -> ApiResult<R>
-    where
-        R: UpdateInfo<T, R>,
-    {
-        // TODO: check ownership
-        R::update_info(info, &db).await
-    }
-
-    async fn process_info_update(
-        db: Arc<PgPool>,
-        update_sender: mpsc::Sender<Result<GrpcCommand, Status>>,
-        update: InfoUpdate,
-    ) -> ApiResult<()> {
-        let info = update.info.ok_or_else(required("update.info"))?;
-        match info {
-            GrpcInfo::Command(cmd_info) => {
-                match Self::handle_info_update::<CommandInfo, DbCommand>(cmd_info, db).await {
-                    Ok(_) => Ok(()),
-                    Err(e) => match update_sender.send(Err(Status::from(e))).await {
-                        Ok(_) => Ok(()),
-                        Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
-                    },
-                }
-            }
-            GrpcInfo::Host(host_info) => {
-                match Self::handle_info_update::<HostInfo, Host>(host_info, db).await {
-                    Ok(_) => Ok(()),
-                    Err(e) => match update_sender.send(Err(Status::from(e))).await {
-                        Ok(_) => Ok(()),
-                        Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
-                    },
-                }
-            }
-            GrpcInfo::Node(node_info) => {
-                match Self::handle_info_update::<NodeInfo, Node>(node_info, db).await {
-                    Ok(_) => Ok(()),
-                    Err(e) => match update_sender.send(Err(Status::from(e))).await {
-                        Ok(_) => Ok(()),
-                        Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
-                    },
-                }
-            }
-        }
-    }
-
-    /// Received notification about new command row, sending corresponding message
-    async fn process_notification(
-        notification: NotificationPayload,
-        db: DbPool,
-        sender: mpsc::Sender<Result<GrpcCommand, Status>>,
-    ) -> ApiResult<()> {
-        let cmd_id = notification.get_id();
-        let command = DbCommand::find_by_id(cmd_id, &db).await;
-
-        tracing::info!("Testing for command with ID {}", cmd_id);
-
-        match command {
-            Ok(command) => {
-                tracing::info!("Command found");
-                let msg = db_command_to_grpc_command(command, db.clone()).await?;
-                match sender.send(Ok(msg)).await {
-                    Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
-                    _ => {
-                        tracing::info!("Sent channel notification");
-                        Ok(())
-                    } // just return unit type if all went well
-                }
-            }
-            Err(e) => {
-                tracing::info!("Command with ID {} NOT found", cmd_id);
-
-                let msg = Status::from(e);
-
-                match sender.send(Err(msg)).await {
-                    Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {}", e))),
-                    _ => {
-                        tracing::info!("Sent channel notification");
-                        Ok(())
-                    } // just return unit type if all went well
-                }
-            }
-        }
-    }
-
-    async fn handle_notifications(
-        host_id: uuid::Uuid,
-        db: Arc<PgPool>,
-        mut notifications: broadcast::Receiver<ChannelNotification>,
-        stream_sender: mpsc::Sender<Result<GrpcCommand, Status>>,
-        mut stop_tx: mpsc::Receiver<()>,
-    ) -> Result<(), Status> {
-        tracing::info!("Starting handling channel notifications");
-
-        loop {
-            tokio::select! {
-                notification = notifications.recv() => {
-                    tracing::info!("Received notification");
-                    match notification {
-                        Ok(ChannelNotification::Command(cmd)) => {
-                            tracing::info!("Notification is a command notification: {:?}", cmd);
-                            Self::process_notification(cmd, db.clone(), stream_sender.clone()).await?
-                        }
-                        Ok(_) => tracing::error!("received non Command notification"),
-                        Err(e) => {
-                            tracing::error!("Channel returned error: {e:?}");
-                            break;
-                        }
-                    }
-                },
-                // When we receive a stop message, we break the loop
-                _ = stop_tx.recv() => break,
-            }
-        }
-
-        // Connection broke
-        Host::toggle_online(host_id, false, &db).await?;
-        Ok(())
+        Self { db, notifier }
     }
 }
 
+type CommandsStream = Pin<Box<dyn Stream<Item = Result<GrpcCommand, Status>> + Send + 'static>>;
+
 #[tonic::async_trait]
 impl CommandFlow for CommandFlowServerImpl {
-    type CommandsStream = Pin<Box<dyn Stream<Item = Result<GrpcCommand, Status>> + Send + 'static>>;
+    type CommandsStream = CommandsStream;
 
+    /// This endpoint acts as a bidirectional stream. This means that we are both processing
+    /// messages that the user sends to the server, as well as events that happen in the server
+    /// itself. Since the setup for this is quite involved, it is implemented with two listener
+    /// objects, one listening for messages from the user and one listening for events happening in
+    /// the server. The can be found in `mod listener`.
     async fn commands(
         &self,
         request: Request<Streaming<InfoUpdate>>,
     ) -> Result<Response<Self::CommandsStream>, Status> {
         // DB token must be added by middleware beforehand
         let db_token = try_get_token(&request)?.token;
+        // Get the host that the user wants to listen to from the current login token.
         let host_id = models::Token::get_host_for_token(&db_token, TokenType::Login, &self.db)
             .await?
             .id;
-
-        Host::toggle_online(host_id, true, &self.db).await?;
-
-        let (tx, rx) = mpsc::channel(self.buffer_size);
-
-        // We will use this channel to signal to our event listener to stop when the user closes it
-        // stream.
-        let (stop_tx, stop_rx) = mpsc::channel(1);
-        let mut update_stream = request.into_inner();
-
-        // Clones intended to be moved inside async closures
-        let db = self.db.clone();
-        let sender = tx.clone();
-
-        // Create task handling incoming updates
-        tokio::spawn(async move {
-            tracing::debug!("Started waiting for InfoUpdates");
-            while let Some(Ok(update)) = update_stream.next().await {
-                Self::process_info_update(db.clone(), sender.clone(), update).await?
-            }
-
-            tracing::debug!("Stopped waiting for InfoUpdates");
-            // Since we are done, we should instruct the other task to also stop.
-            stop_tx
-                .send(())
-                .await
-                .map_err(|_| Status::internal("Channel error"))?;
-
-            // Connection broke or closed
-            match Host::toggle_online(host_id, false, &db).await {
-                Ok(_) => Ok(()),
-                Err(e) => Err(Status::from(e)),
-            }
-        });
-
-        let db = self.db.clone();
-        let sender = tx;
-        let notifier = self.notifier.commands_receiver();
-
-        // Create task handling incoming notifications
-        let notification_task = Self::handle_notifications(host_id, db, notifier, sender, stop_rx);
-        tokio::spawn(notification_task);
-
+        // Set the host as online.
+        models::Host::toggle_online(host_id, true, &self.db).await?;
+        let update_stream = request.into_inner();
+        let (rx, host_listener, user_listener) =
+            listener::split(host_id, self.notifier.commands_receiver(), self.db.clone());
+        tokio::spawn(user_listener.recv(update_stream));
+        tokio::spawn(host_listener.recv());
         let commands_stream = ReceiverStream::new(rx);
-
         Ok(Response::new(Box::pin(commands_stream)))
     }
 }

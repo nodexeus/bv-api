@@ -113,6 +113,15 @@ impl Host {
             .map_err(ApiError::from)
     }
 
+    pub async fn find_by_node(node_id: Uuid, db: &PgPool) -> Result<Self> {
+        sqlx::query("SELECT hosts.* FROM nodes INNER JOIN hosts ON nodes.host_id = hosts.id WHERE nodes.id = $1")
+            .bind(node_id)
+            .fetch_one(db)
+            .await
+            .map(From::from)
+            .map_err(Into::into)
+    }
+
     pub async fn find_by_org(org_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
         let hosts = sqlx::query("SELECT * FROM hosts where org_id = $1 order by lower(name)")
             .bind(org_id)
