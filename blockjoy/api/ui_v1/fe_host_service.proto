@@ -8,8 +8,8 @@ message GetHostsRequest {
   RequestMeta meta = 1;
 
   oneof param {
-    Uuid id = 2;
-    Uuid org_id = 3;
+    string id = 2;
+    string org_id = 3;
     string token = 4;
   }
 }
@@ -39,7 +39,7 @@ message UpdateHostResponse {
 
 message DeleteHostRequest {
   RequestMeta meta = 1;
-  Uuid id = 2;
+  string id = 2;
 }
 
 message DeleteHostResponse {

@@ -6,7 +6,7 @@ import "common.proto";
 
 message GetBlockchainRequest {
   RequestMeta meta = 1;
-  Uuid id = 2;
+  string id = 2;
 }
 
 message GetBlockchainResponse {

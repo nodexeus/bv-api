@@ -11,7 +11,7 @@ enum ConnectionStatus {
 }
 
 message HostInfo {
-    Uuid id = 1;
+    string id = 1;
     optional string name = 2;
     optional string version = 3;
     optional string location = 4;
@@ -24,39 +24,39 @@ message HostInfo {
 }
 
 message DeleteHostRequest {
-    Uuid request_id = 1;
-    Uuid host_id = 2;
+    string request_id = 1;
+    string host_id = 2;
 }
 
 message DeleteHostResponse {
     repeated string messages = 1;
-    optional Uuid origin_request_id = 2;
+    optional string origin_request_id = 2;
 }
 
 message ProvisionHostRequest {
-    Uuid request_id = 1;
+    string request_id = 1;
     string otp = 2;
-    Uuid org_id = 3;
+    string org_id = 3;
     HostInfo info = 4;
     repeated string validator_ips = 5;
     ConnectionStatus status = 7;
 }
 
 message ProvisionHostResponse {
-    Uuid host_id = 1;
+    string host_id = 1;
     string token = 2;
     repeated string messages = 3;
-    optional Uuid origin_request_id = 4;
+    optional string origin_request_id = 4;
 }
 
 message HostInfoUpdateRequest {
-    Uuid request_id = 1;
+    string request_id = 1;
     HostInfo info = 2;
 }
 
 message HostInfoUpdateResponse {
     repeated string messages = 1;
-    optional Uuid origin_request_id = 2;
+    optional string origin_request_id = 2;
 }
 
 // @see https://github.com/blockjoy/stakejoy-api/blob/86ee17643d02af81221ee2fa6403fc34155fe087/src/models/mod.rs#L54
@@ -77,7 +77,7 @@ message HostGenericCommand {
 message HostInfoGet {}
 
 message HostCommand {
-    Uuid id = 1;
+    string id = 1;
     CommandMeta meta = 2;
 
     oneof command {

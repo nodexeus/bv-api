@@ -5,7 +5,7 @@ package blockjoy.api.v1;
 import "messages.proto";
 
 message CommandInfo {
-  Uuid id = 1;
+  string id = 1;
   optional string response = 2;
   optional int32 exit_code = 3;
 }
