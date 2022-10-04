@@ -58,25 +58,26 @@ message NodeInfo {
     enum ApplicationStatus {
         UndefinedApplicationStatus = 0;
         // General chain states
-        Broadcasting = 1;
-        Cancelled = 2;
-        Delegating = 3;
-        Delinquent = 4;
-        Disabled = 5;
-        Earning = 6;
-        Electing = 7;
-        Elected = 8;
-        Exporting = 9;
-        Ingesting = 10;
-        Mining = 11;
-        Minting = 12;
-        Processing = 13;
-        Relaying = 14;
-        Removed = 15;
-        Removing = 16;
+        Provisioning = 1;
+        Broadcasting = 2;
+        Cancelled = 3;
+        Delegating = 4;
+        Delinquent = 5;
+        Disabled = 6;
+        Earning = 7;
+        Electing = 8;
+        Elected = 9;
+        Exporting = 10;
+        Ingesting = 11;
+        Mining = 12;
+        Minting = 13;
+        Processing = 14;
+        Relaying = 15;
+        Removed = 16;
+        Removing = 17;
     }
 
-    Uuid id = 1;
+    string id = 1;
     optional string name = 2;
     optional string ip = 3;
     optional int64 block_height = 6;
@@ -117,7 +118,7 @@ message NodeCreate {
 message NodeDelete {}
 
 message NodeCommand {
-    Uuid id = 1;
+    string id = 1;
     CommandMeta meta = 2;
 
     oneof command {
