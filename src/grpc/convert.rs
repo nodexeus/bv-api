@@ -1,7 +1,7 @@
 use crate::errors::Result as ApiResult;
 use crate::grpc::blockjoy::{
     command, node_command, Command as GrpcCommand, CommandMeta, ContainerImage, NodeCommand,
-    NodeCreate, NodeDelete, NodeInfoGet, NodeRestart, NodeStop, Uuid as GrpcUuid,
+    NodeCreate, NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
 };
 use crate::grpc::helpers::{image_url_from_node, pb_current_timestamp};
 use crate::models::{Blockchain, Command, HostCmd, Node};
@@ -9,11 +9,11 @@ use crate::server::DbPool;
 
 pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<GrpcCommand> {
     let meta = Some(CommandMeta {
-        api_command_id: Some(GrpcUuid::from(cmd.id)),
+        api_command_id: cmd.id.to_string(),
         created_at: Some(pb_current_timestamp()),
     });
     let mut node_cmd = NodeCommand {
-        id: Some(GrpcUuid::from(cmd.resource_id)),
+        id: cmd.resource_id.to_string(),
         command: None,
         meta,
     };
@@ -80,11 +80,10 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<G
 
 pub mod from {
     use crate::errors::ApiError;
-    use crate::grpc::blockjoy::{HostInfo, Uuid as GrpcUuid};
+    use crate::grpc::blockjoy::HostInfo;
     use crate::grpc::blockjoy_ui::{
         self, node::NodeStatus as GrpcNodeStatus, Host as GrpcHost,
         HostProvision as GrpcHostProvision, Node as GrpcNode, Organization, User as GrpcUiUser,
-        Uuid as GrpcUiUuid,
     };
     use crate::grpc::helpers::required;
     use crate::models::{
@@ -114,22 +113,10 @@ pub mod from {
         Ok(timestamp)
     }
 
-    impl FromStr for GrpcUuid {
-        type Err = ApiError;
-
-        fn from_str(s: &str) -> Result<Self, Self::Err> {
-            // Assuming 's' is some UUID
-            match Uuid::parse_str(s) {
-                Ok(_) => Ok(Self { value: s.into() }),
-                Err(e) => Err(ApiError::UnexpectedError(anyhow!(e))),
-            }
-        }
-    }
-
     impl From<HostSelectiveUpdate> for HostInfo {
         fn from(update: HostSelectiveUpdate) -> Self {
             Self {
-                id: None,
+                id: "".to_string(),
                 name: update.name,
                 version: update.version,
                 location: update.location,
@@ -143,24 +130,15 @@ pub mod from {
         }
     }
 
-    impl TryFrom<blockjoy_ui::Uuid> for uuid::Uuid {
-        type Error = ApiError;
-
-        fn try_from(id: blockjoy_ui::Uuid) -> Result<Self, Self::Error> {
-            let id = id
-                .value
-                .parse()
-                .map_err(|e| anyhow!("Could not parse provided uuid: {e:?}"))?;
-            Ok(id)
-        }
-    }
-
     impl TryFrom<GrpcHost> for HostSelectiveUpdate {
         type Error = ApiError;
 
         fn try_from(host: GrpcHost) -> Result<Self, Self::Error> {
             let updater = Self {
-                org_id: host.org_id.map(uuid::Uuid::try_from).transpose()?,
+                org_id: host
+                    .org_id
+                    .map(|id| Uuid::from_str(id.as_str()))
+                    .transpose()?,
                 name: host.name,
                 version: host.version,
                 location: host.location,
@@ -183,8 +161,8 @@ pub mod from {
         fn try_from(hp: HostProvision) -> Result<Self, Self::Error> {
             let hp = Self {
                 id: Some(hp.id),
-                org_id: Some(GrpcUiUuid::from(hp.org_id)),
-                host_id: hp.host_id.map(GrpcUiUuid::from),
+                org_id: Some(hp.org_id.to_string()),
+                host_id: hp.host_id.map(|id| id.to_string()),
                 created_at: Some(try_dt_to_ts(hp.created_at)?),
                 claimed_at: hp.claimed_at.map(try_dt_to_ts).transpose()?,
                 install_cmd: hp.install_cmd.map(String::from),
@@ -198,7 +176,10 @@ pub mod from {
 
         fn try_from(host: GrpcHost) -> Result<Self, Self::Error> {
             let req = Self {
-                org_id: host.org_id.map(uuid::Uuid::try_from).transpose()?,
+                org_id: host
+                    .org_id
+                    .map(|id| Uuid::from_str(id.as_str()))
+                    .transpose()?,
                 name: host.name.ok_or_else(required("host.name"))?,
                 version: host.version,
                 location: host.location,
@@ -215,46 +196,12 @@ pub mod from {
         }
     }
 
-    impl TryFrom<&GrpcUuid> for Uuid {
-        type Error = ApiError;
-
-        fn try_from(id: &GrpcUuid) -> Result<Self, Self::Error> {
-            let id = Uuid::parse_str(&id.value).map_err(|e| anyhow!("Uuid parsing failed: {e}"))?;
-            Ok(id)
-        }
-    }
-
-    impl From<Uuid> for GrpcUiUuid {
-        fn from(id: Uuid) -> Self {
-            Self {
-                value: id.to_string(),
-            }
-        }
-    }
-
-    impl From<Uuid> for GrpcUuid {
-        fn from(id: Uuid) -> Self {
-            Self {
-                value: id.to_string(),
-            }
-        }
-    }
-
-    impl TryFrom<&GrpcUiUuid> for Uuid {
-        type Error = ApiError;
-
-        fn try_from(id: &GrpcUiUuid) -> Result<Self, Self::Error> {
-            let id = Uuid::parse_str(&id.value).map_err(|e| anyhow!("Uuid parsing failed: {e}"))?;
-            Ok(id)
-        }
-    }
-
     impl TryFrom<&User> for GrpcUiUser {
         type Error = ApiError;
 
         fn try_from(user: &User) -> Result<Self, Self::Error> {
             let user = Self {
-                id: Some(GrpcUiUuid::from(user.id)),
+                id: Some(user.id.to_string()),
                 email: Some(user.email.clone()),
                 first_name: Some(user.first_name.clone()),
                 last_name: Some(user.last_name.clone()),
@@ -297,7 +244,7 @@ pub mod from {
 
         fn try_from(user: User) -> Result<Self, Self::Error> {
             let user = Self {
-                id: Some(GrpcUiUuid::from(user.id)),
+                id: Some(user.id.to_string()),
                 email: Some(user.email),
                 first_name: Some(user.first_name),
                 last_name: Some(user.last_name),
@@ -321,7 +268,7 @@ pub mod from {
 
         fn try_from(org: &Org) -> Result<Self, Self::Error> {
             let org = Self {
-                id: Some(GrpcUiUuid::from(org.id)),
+                id: Some(org.id.to_string()),
                 name: Some(org.name.clone()),
                 personal: Some(org.is_personal),
                 member_count: org.member_count,
@@ -349,8 +296,8 @@ pub mod from {
             let nodes: Result<_, ApiError> = nodes.iter().map(GrpcNode::try_from).collect();
 
             let grpc_host = Self {
-                id: Some(GrpcUiUuid::from(host.id)),
-                org_id: host.org_id.map(GrpcUiUuid::from),
+                id: Some(host.id.to_string()),
+                org_id: host.org_id.map(|id| id.to_string()),
                 name: Some(host.name.clone()),
                 version: host.version.clone().map(String::from),
                 location: host.location.clone().map(String::from),
@@ -381,10 +328,10 @@ pub mod from {
 
         fn try_from(node: &Node) -> Result<Self, Self::Error> {
             let grpc_node = Self {
-                id: Some(GrpcUiUuid::from(node.id)),
-                org_id: Some(GrpcUiUuid::from(node.org_id)),
-                host_id: Some(GrpcUiUuid::from(node.host_id)),
-                blockchain_id: Some(GrpcUiUuid::from(node.blockchain_id)),
+                id: Some(node.id.to_string()),
+                org_id: Some(node.org_id.to_string()),
+                host_id: Some(node.host_id.to_string()),
+                blockchain_id: Some(node.blockchain_id.to_string()),
                 name: node.name.clone(),
                 // TODO: get node groups
                 groups: vec![],
@@ -413,9 +360,9 @@ pub mod from {
             })?;
             let node = Self {
                 id: None,
-                org_id: Some(GrpcUiUuid::from(req.org_id)),
-                host_id: Some(GrpcUiUuid::from(req.host_id)),
-                blockchain_id: Some(GrpcUiUuid::from(req.blockchain_id)),
+                org_id: Some(req.org_id.to_string()),
+                host_id: Some(req.host_id.to_string()),
+                blockchain_id: Some(req.blockchain_id.to_string()),
                 name: Some(petname::petname(3, "_")),
                 // TODO
                 groups: vec![],
@@ -540,7 +487,7 @@ pub mod from {
             tracing::info!("sending json: {}", json);
 
             let blockchain = Self {
-                id: Some(model.id.into()),
+                id: model.id.to_string(),
                 name: model.name,
                 description: model.description,
                 status: model.status as i32,
@@ -564,17 +511,11 @@ pub mod into {
     use crate::{
         errors::ApiError,
         grpc::{
-            blockjoy::{HostInfo, HostInfoUpdateRequest, Uuid as GrpcUuid},
+            blockjoy::{HostInfo, HostInfoUpdateRequest},
             helpers::required,
         },
     };
     use tonic::Request;
-
-    impl ToString for GrpcUuid {
-        fn to_string(&self) -> String {
-            self.value.clone()
-        }
-    }
 
     pub trait IntoData<R, T> {
         type Error;
@@ -582,14 +523,14 @@ pub mod into {
         fn into_data(self) -> Result<T, Self::Error>;
     }
 
-    impl IntoData<Request<HostInfoUpdateRequest>, (GrpcUuid, HostInfo)>
+    impl IntoData<Request<HostInfoUpdateRequest>, (String, HostInfo)>
         for Request<HostInfoUpdateRequest>
     {
         type Error = ApiError;
 
-        fn into_data(self) -> Result<(GrpcUuid, HostInfo), Self::Error> {
+        fn into_data(self) -> Result<(String, HostInfo), Self::Error> {
             let inner = self.into_inner();
-            let id = inner.request_id.ok_or_else(required("request_id"))?;
+            let id = inner.request_id;
             let info = inner.info.ok_or_else(required("info"))?;
 
             Ok((id, info))
