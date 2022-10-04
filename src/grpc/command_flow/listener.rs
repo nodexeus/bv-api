@@ -20,7 +20,7 @@ type Message = Result<blockjoy::Command, tonic::Status>;
 /// 3. Since we are listening to updates sent by the host, our host-listening-task will never
 ///    finish. Therefore we need to give a shutdown message to make our host listener stop whenever
 ///    our user listener stops listening.
-pub fn split(
+pub fn channels(
     host_id: uuid::Uuid,
     host_messages: broadcast::Receiver<notification::ChannelNotification>,
     db: sync::Arc<sqlx::PgPool>,
@@ -132,7 +132,7 @@ impl HostListener {
                 match self.sender.send(Err(e.into())).await {
                     Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {e}"))),
                     _ => {
-                        tracing::info!("Sent channel notification");
+                        tracing::info!("Sent channel error notification");
                         Ok(())
                     } // just return unit type if all went well
                 }
@@ -225,7 +225,7 @@ impl UserListener {
     where
         R: models::UpdateInfo<T, R>,
     {
-        R::update_info(info, &db).await
+        R::update_info(info, db).await
     }
 
     /// This function is used by `process_info_update` to send messages about failures to the user.

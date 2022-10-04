@@ -48,8 +48,8 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
         }
         // The following should be HostCommands
         HostCmd::CreateNode => {
-            let node = Node::find_by_id(cmd.resource_id, &db).await?;
-            let blockchain = Blockchain::find_by_id(node.blockchain_id, &db).await?;
+            let node = Node::find_by_id(cmd.resource_id, db).await?;
+            let blockchain = Blockchain::find_by_id(node.blockchain_id, db).await?;
             let image = ContainerImage {
                 url: image_url_from_node(&node, blockchain.name),
             };

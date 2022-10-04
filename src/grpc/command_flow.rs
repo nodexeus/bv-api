@@ -49,7 +49,7 @@ impl CommandFlow for CommandFlowServerImpl {
         models::Host::toggle_online(host_id, true, &self.db).await?;
         let update_stream = request.into_inner();
         let (rx, host_listener, user_listener) =
-            listener::split(host_id, self.notifier.commands_receiver(), self.db.clone());
+            listener::channels(host_id, self.notifier.commands_receiver(), self.db.clone());
         tokio::spawn(user_listener.recv(update_stream));
         tokio::spawn(host_listener.recv());
         let commands_stream = ReceiverStream::new(rx);
