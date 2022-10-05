@@ -97,7 +97,8 @@ impl NodeService for NodeServiceImpl {
     ) -> Result<Response<UpdateNodeResponse>, Status> {
         let inner = request.into_inner();
         let node = inner.node.ok_or_else(required("node"))?;
-        let node_id = Uuid::parse_str(node.id.ok_or_else(required("node.id"))?.as_str())
+        let node_id = node.id.clone();
+        let node_id = Uuid::parse_str(node_id.ok_or_else(required("node.id"))?.as_str())
             .map_err(ApiError::from)?;
         let fields: NodeInfo = node.try_into()?;
 

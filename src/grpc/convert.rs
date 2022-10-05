@@ -347,8 +347,8 @@ pub mod from {
                 created_at: Some(try_dt_to_ts(node.created_at)?),
                 updated_at: Some(try_dt_to_ts(node.updated_at)?),
                 status: Some(GrpcNodeStatus::from(node.chain_status).into()),
-                staking_status: Some(GrpcStakingStatus::from(node.staking_status).try_into()?),
-                sync_status: Some(GrpcSyncStatus::from(node.staking_status).try_into()?),
+                staking_status: Some(GrpcStakingStatus::from(node.staking_status).into()),
+                sync_status: Some(GrpcSyncStatus::from(node.sync_status).into()),
             };
             Ok(grpc_node)
         }
@@ -379,7 +379,12 @@ pub mod from {
                 created_at: None,
                 updated_at: None,
                 status: Some(GrpcNodeStatus::from(req.chain_status).into()),
-                staking_status: Some(GrpcStakingStatus::from(req.staking_status).into()),
+                staking_status: Some(
+                    GrpcStakingStatus::from(
+                        req.staking_status.unwrap_or(NodeStakingStatus::Unknown),
+                    )
+                    .into(),
+                ),
                 sync_status: Some(GrpcSyncStatus::from(req.sync_status).into()),
             };
             Ok(node)
