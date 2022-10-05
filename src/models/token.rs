@@ -268,19 +268,19 @@ impl Token {
     fn get_expiration_period(holder_type: TokenHolderType, token_type: TokenType) -> i64 {
         use {TokenHolderType::*, TokenType::*};
 
-        let name = match (holder_type, token_type) {
-            (User, Login) => "TOKEN_EXPIRATION_DAYS_USER",
-            (User, Refresh) => "REFRESH_TOKEN_EXPIRATION_DAYS_USER",
-            (User, PwdReset) => "PWD_RESET_TOKEN_EXPIRATION_DAYS_USER",
-            (Host, Login) => "TOKEN_EXPIRATION_DAYS_HOST",
-            (Host, Refresh) => "REFRESH_EXPIRATION_DAYS_HOST",
+        let (name, default) = match (holder_type, token_type) {
+            (User, Login) => ("TOKEN_EXPIRATION_DAYS_USER", 10),
+            (User, Refresh) => ("REFRESH_TOKEN_EXPIRATION_DAYS_USER", 11),
+            (User, PwdReset) => ("PWD_RESET_TOKEN_EXPIRATION_DAYS_USER", 12),
+            (Host, Login) => ("TOKEN_EXPIRATION_DAYS_HOST", 13),
+            (Host, Refresh) => ("REFRESH_EXPIRATION_DAYS_HOST", 14),
             (Host, PwdReset) => panic!("Host machines cannot request a password reset mail"),
         };
 
         env::var(name)
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(1)
+            .unwrap_or(default)
     }
 }
 
