@@ -1,4 +1,5 @@
 use super::helpers::required;
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::host_provision_service_server::HostProvisionService;
 use crate::grpc::blockjoy_ui::{
     CreateHostProvisionRequest, CreateHostProvisionResponse, GetHostProvisionRequest,
@@ -7,6 +8,7 @@ use crate::grpc::blockjoy_ui::{
 use crate::models::{HostProvision, HostProvisionRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 pub struct HostProvisionServiceImpl {
     db: DbPool,
@@ -46,7 +48,7 @@ impl HostProvisionService for HostProvisionServiceImpl {
             .org_id
             .ok_or_else(required("host_provision.org_id"))?;
         let req = HostProvisionRequest {
-            org_id: org_id.try_into()?,
+            org_id: Uuid::parse_str(org_id.as_str()).map_err(ApiError::from)?,
             nodes: None,
         };
 

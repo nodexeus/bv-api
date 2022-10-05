@@ -15,7 +15,7 @@ message CreateNodeResponse {
 
 message GetNodeRequest {
   RequestMeta meta = 1;
-  Uuid id = 2;
+  string id = 2;
 }
 
 message GetNodeResponse {
@@ -25,7 +25,7 @@ message GetNodeResponse {
 
 message ListNodesRequest {
   RequestMeta meta = 1;
-  Uuid org_id = 2;
+  string org_id = 2;
 }
 
 message ListNodesResponse {

@@ -122,6 +122,7 @@ fn should_not_work_with_empty_token() {
 #[before(call = "setup")]
 #[test]
 fn should_get_valid_token() -> anyhow::Result<()> {
+    dotenv::dotenv().ok();
     let id = Uuid::new_v4();
     let exp = _before_values.now + 60 * 60 * 24;
     let token = AuthToken::new(id, exp, TokenHolderType::User);

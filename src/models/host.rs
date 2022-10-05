@@ -363,7 +363,7 @@ impl Owned<Host, ()> for Host {
 #[tonic::async_trait]
 impl UpdateInfo<HostInfo, Host> for Host {
     async fn update_info(info: HostInfo, db: &PgPool) -> Result<Host> {
-        let id: uuid::Uuid = info.id.as_ref().ok_or_else(required("id"))?.try_into()?;
+        let id = Uuid::parse_str(info.id.as_str())?;
         let mut tx = db.begin().await?;
         let host = sqlx::query(
             r##"UPDATE hosts SET

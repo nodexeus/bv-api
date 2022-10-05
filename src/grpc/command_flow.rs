@@ -259,8 +259,8 @@ mod tests {
     use std::sync::Arc;
 
     use crate::auth::TokenIdentifyable;
+    use crate::grpc::blockjoy::command_flow_client::CommandFlowClient;
     use crate::grpc::blockjoy::info_update::Info;
-    use crate::grpc::blockjoy::{command_flow_client::CommandFlowClient, Uuid as GrpcUuid};
     use crate::grpc::blockjoy::{InfoUpdate, NodeInfo};
     use tempfile::NamedTempFile;
     use test_macros::before;
@@ -313,7 +313,7 @@ mod tests {
     fn node_info_requests_iter() -> impl Stream<Item = InfoUpdate> {
         tokio_stream::iter(1..=10).map(|i| InfoUpdate {
             info: Some(Info::Node(NodeInfo {
-                id: Some(GrpcUuid::from(Uuid::new_v4())),
+                id: Uuid::new_v4().to_string(),
                 name: Some("strizzi".into()),
                 ip: Some("123.456.789.0".into()),
                 block_height: Some(i.into()),

@@ -27,7 +27,7 @@ async fn with_auth<T>(inner: T, db: &api::TestDb) -> Request<T> {
 async fn responds_ok_for_get_existing() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().into()),
+        id: Uuid::new_v4().to_string(),
         token: None,
         fields: vec![],
         pagination: None,
@@ -35,7 +35,7 @@ async fn responds_ok_for_get_existing() {
     let uuid: uuid::Uuid = "1fdbf4c3-ff16-489a-8d3d-87c8620b963c".parse().unwrap();
     let inner = GetBlockchainRequest {
         meta: Some(request_meta),
-        id: Some(uuid.into()),
+        id: uuid.to_string(),
     };
     let req = with_auth(inner, &db).await;
     assert_grpc_request! { get, req, tonic::Code::Ok, db, BlockchainServiceClient<Channel> };
@@ -46,7 +46,7 @@ async fn responds_ok_for_get_existing() {
 async fn responds_not_found_for_get_nonexisting() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().into()),
+        id: Uuid::new_v4().to_string(),
         token: None,
         fields: vec![],
         pagination: None,
@@ -55,7 +55,7 @@ async fn responds_not_found_for_get_nonexisting() {
 
     let inner = GetBlockchainRequest {
         meta: Some(request_meta),
-        id: Some(uuid.into()),
+        id: uuid.to_string(),
     };
     let req = with_auth(inner, &db).await;
     assert_grpc_request! { get, req, tonic::Code::NotFound, db, BlockchainServiceClient<Channel> };
@@ -66,7 +66,7 @@ async fn responds_not_found_for_get_nonexisting() {
 async fn responds_not_found_for_get_deleted() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().into()),
+        id: Uuid::new_v4().to_string(),
         token: None,
         fields: vec![],
         pagination: None,
@@ -75,7 +75,7 @@ async fn responds_not_found_for_get_deleted() {
     let uuid: uuid::Uuid = "13f25489-bf9b-4667-9f18-f8caa32fa4a9".parse().unwrap();
     let inner = GetBlockchainRequest {
         meta: Some(request_meta),
-        id: Some(uuid.into()),
+        id: uuid.to_string(),
     };
     let req = with_auth(inner, &db).await;
     assert_grpc_request! { get, req, tonic::Code::NotFound, db, BlockchainServiceClient<Channel> };
@@ -86,7 +86,7 @@ async fn responds_not_found_for_get_deleted() {
 async fn can_list_blockchains() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().into()),
+        id: Uuid::new_v4().to_string(),
         token: None,
         fields: vec![],
         pagination: None,

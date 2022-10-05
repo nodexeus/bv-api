@@ -1,7 +1,7 @@
 use super::node_type::*;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
-use crate::grpc::helpers::{internal, required};
+use crate::grpc::helpers::internal;
 use crate::models::{validator::Validator, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
@@ -93,6 +93,7 @@ impl TryFrom<i32> for NodeStakingStatus {
 #[sqlx(type_name = "enum_node_chain_status", rename_all = "snake_case")]
 pub enum NodeChainStatus {
     Unknown,
+    Provisioning,
     Broadcasting,
     Cancelled,
     Delegating,
@@ -117,22 +118,23 @@ impl TryFrom<i32> for NodeChainStatus {
     fn try_from(n: i32) -> Result<Self> {
         match n {
             0 => Ok(Self::Unknown),
-            1 => Ok(Self::Broadcasting),
-            2 => Ok(Self::Cancelled),
-            3 => Ok(Self::Delegating),
-            4 => Ok(Self::Delinquent),
-            5 => Ok(Self::Disabled),
-            6 => Ok(Self::Earning),
-            7 => Ok(Self::Electing),
-            8 => Ok(Self::Elected),
-            9 => Ok(Self::Exported),
-            10 => Ok(Self::Ingesting),
-            11 => Ok(Self::Mining),
-            12 => Ok(Self::Minting),
-            13 => Ok(Self::Processing),
-            14 => Ok(Self::Relaying),
-            15 => Ok(Self::Removed),
-            16 => Ok(Self::Removing),
+            1 => Ok(Self::Provisioning),
+            2 => Ok(Self::Broadcasting),
+            3 => Ok(Self::Cancelled),
+            4 => Ok(Self::Delegating),
+            5 => Ok(Self::Delinquent),
+            6 => Ok(Self::Disabled),
+            7 => Ok(Self::Earning),
+            8 => Ok(Self::Electing),
+            9 => Ok(Self::Elected),
+            10 => Ok(Self::Exported),
+            11 => Ok(Self::Ingesting),
+            12 => Ok(Self::Mining),
+            13 => Ok(Self::Minting),
+            14 => Ok(Self::Processing),
+            15 => Ok(Self::Relaying),
+            16 => Ok(Self::Removed),
+            17 => Ok(Self::Removing),
             _ => Err(ApiError::UnexpectedError(anyhow!(
                 "Cannot convert {n} to NodeChainStatus"
             ))),
@@ -263,6 +265,7 @@ impl Node {
             r#"select count(id)::int from nodes where chain_status in
                                  (
                                   'broadcasting'::enum_node_chain_status,
+                                  'provisioning'::enum_node_chain_status,
                                   'cancelled'::enum_node_chain_status,
                                   'delegating'::enum_node_chain_status,
                                   'delinquent'::enum_node_chain_status,
@@ -380,7 +383,7 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
     type Error = ApiError;
 
     fn try_from(info: GrpcNodeInfo) -> Result<Self> {
-        let id = info.id.as_ref().ok_or_else(required("id"))?.try_into()?;
+        let id = Uuid::parse_str(info.id.as_str())?;
         let req = Self {
             id,
             name: info.name,
