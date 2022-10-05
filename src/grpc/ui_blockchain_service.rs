@@ -1,9 +1,9 @@
-use uuid::Uuid;
 use super::blockjoy_ui::{self, ResponseMeta};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::blockchain_service_server::BlockchainService;
 use crate::models;
 use crate::server::DbPool;
+use uuid::Uuid;
 
 type Result<T, E = tonic::Status> = std::result::Result<T, E>;
 

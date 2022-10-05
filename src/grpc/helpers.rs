@@ -72,7 +72,7 @@ impl ResponseMeta {
     /// response with extracted request id, if there was one.
     pub fn from_meta(meta: impl Into<Option<RequestMeta>>) -> Self {
         let meta = meta.into();
-        Self::new(meta.and_then(|m| Some(m.id)).unwrap_or(String::from("")))
+        Self::new(meta.map(|m| m.id).unwrap_or_else(|| String::from("")))
     }
 
     /// Sets the status of self to the provided value.

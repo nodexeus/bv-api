@@ -33,7 +33,7 @@ pub enum ApiError {
 
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
-    
+
     #[error("UUID parse error: {0}")]
     UuidParseError(#[from] uuid::Error),
 }
