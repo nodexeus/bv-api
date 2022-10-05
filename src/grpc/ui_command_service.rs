@@ -1,4 +1,5 @@
 use super::helpers::internal;
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
 use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, Parameter, ResponseMeta};
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
@@ -63,7 +64,7 @@ macro_rules! create_command {
         let host_id = inner.id;
         let cmd = $obj
             .create_command(
-                Uuid::parse_str(host_id.as_str())?,
+                Uuid::parse_str(host_id.as_str()).map_err(ApiError::from)?,
                 $cmd,
                 $sub_cmd,
                 inner.params,

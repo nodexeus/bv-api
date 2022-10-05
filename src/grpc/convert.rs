@@ -347,8 +347,8 @@ pub mod from {
                 created_at: Some(try_dt_to_ts(node.created_at)?),
                 updated_at: Some(try_dt_to_ts(node.updated_at)?),
                 status: Some(GrpcNodeStatus::from(node.chain_status).into()),
-                staking_status: Some(GrpcStakingStatus::from(node.staking_status).into()),
-                sync_status: Some(GrpcSyncStatus::from(node.staking_status).into()),
+                staking_status: Some(GrpcStakingStatus::from(node.staking_status).try_into()?),
+                sync_status: Some(GrpcSyncStatus::from(node.staking_status).try_into()?),
             };
             Ok(grpc_node)
         }
@@ -461,6 +461,7 @@ pub mod from {
         fn from(ncs: NodeChainStatus) -> Self {
             match ncs {
                 NodeChainStatus::Unknown => GrpcNodeStatus::UndefinedApplicationStatus,
+                NodeChainStatus::Provisioning => GrpcNodeStatus::Provisioning,
                 NodeChainStatus::Broadcasting => GrpcNodeStatus::Broadcasting,
                 NodeChainStatus::Cancelled => GrpcNodeStatus::Cancelled,
                 // TODO
@@ -471,7 +472,7 @@ pub mod from {
                 NodeChainStatus::Elected => GrpcNodeStatus::Elected,
                 NodeChainStatus::Electing => GrpcNodeStatus::Electing,
                 // TODO Thomas please rename this to exported in the api or to exporting in the database
-                NodeChainStatus::Exported => GrpcNodeStatus::Exporting,
+                NodeChainStatus::Exported => GrpcNodeStatus::Exported,
                 // TODO
                 NodeChainStatus::Ingesting => GrpcNodeStatus::Ingesting,
                 NodeChainStatus::Mining => GrpcNodeStatus::Mining,
@@ -480,6 +481,30 @@ pub mod from {
                 NodeChainStatus::Relaying => GrpcNodeStatus::Relaying,
                 NodeChainStatus::Removed => GrpcNodeStatus::Removed,
                 NodeChainStatus::Removing => GrpcNodeStatus::Removing,
+            }
+        }
+    }
+
+    impl From<NodeSyncStatus> for GrpcSyncStatus {
+        fn from(nss: NodeSyncStatus) -> Self {
+            match nss {
+                NodeSyncStatus::Unknown => GrpcSyncStatus::UndefinedSyncStatus,
+                NodeSyncStatus::Synced => GrpcSyncStatus::Synced,
+                NodeSyncStatus::Syncing => GrpcSyncStatus::Syncing,
+            }
+        }
+    }
+
+    impl From<NodeStakingStatus> for GrpcStakingStatus {
+        fn from(nss: NodeStakingStatus) -> Self {
+            match nss {
+                NodeStakingStatus::Unknown => GrpcStakingStatus::UndefinedStakingStatus,
+                NodeStakingStatus::Staked => GrpcStakingStatus::Staked,
+                NodeStakingStatus::Staking => GrpcStakingStatus::Staking,
+                NodeStakingStatus::Validating => GrpcStakingStatus::Validating,
+                NodeStakingStatus::Follower => GrpcStakingStatus::Follower,
+                NodeStakingStatus::Consensus => GrpcStakingStatus::Consensus,
+                NodeStakingStatus::Unstaked => GrpcStakingStatus::Unstaked,
             }
         }
     }

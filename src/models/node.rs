@@ -93,6 +93,7 @@ impl TryFrom<i32> for NodeStakingStatus {
 #[sqlx(type_name = "enum_node_chain_status", rename_all = "snake_case")]
 pub enum NodeChainStatus {
     Unknown,
+    Provisioning,
     Broadcasting,
     Cancelled,
     Delegating,
