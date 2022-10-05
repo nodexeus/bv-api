@@ -469,16 +469,13 @@ pub mod from {
                 NodeChainStatus::Provisioning => GrpcNodeStatus::Provisioning,
                 NodeChainStatus::Broadcasting => GrpcNodeStatus::Broadcasting,
                 NodeChainStatus::Cancelled => GrpcNodeStatus::Cancelled,
-                // TODO
                 NodeChainStatus::Delegating => GrpcNodeStatus::Delegating,
                 NodeChainStatus::Delinquent => GrpcNodeStatus::Delinquent,
                 NodeChainStatus::Disabled => GrpcNodeStatus::Disabled,
                 NodeChainStatus::Earning => GrpcNodeStatus::Earning,
                 NodeChainStatus::Elected => GrpcNodeStatus::Elected,
                 NodeChainStatus::Electing => GrpcNodeStatus::Electing,
-                // TODO Thomas please rename this to exported in the api or to exporting in the database
                 NodeChainStatus::Exported => GrpcNodeStatus::Exported,
-                // TODO
                 NodeChainStatus::Ingesting => GrpcNodeStatus::Ingesting,
                 NodeChainStatus::Mining => GrpcNodeStatus::Mining,
                 NodeChainStatus::Minting => GrpcNodeStatus::Minting,
