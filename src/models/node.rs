@@ -265,6 +265,7 @@ impl Node {
             r#"select count(id)::int from nodes where chain_status in
                                  (
                                   'broadcasting'::enum_node_chain_status,
+                                  'provisioning'::enum_node_chain_status,
                                   'cancelled'::enum_node_chain_status,
                                   'delegating'::enum_node_chain_status,
                                   'delinquent'::enum_node_chain_status,
