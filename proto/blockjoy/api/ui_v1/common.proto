@@ -122,7 +122,7 @@ message Node {
     Earning = 7;
     Electing = 8;
     Elected = 9;
-    Exporting = 10;
+    Exported = 10;
     Ingesting = 11;
     Mining = 12;
     Minting = 13;
