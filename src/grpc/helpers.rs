@@ -1,5 +1,5 @@
 use crate::errors::ApiError;
-use crate::grpc::blockjoy_ui::{response_meta, Pagination, ResponseMeta, Uuid};
+use crate::grpc::blockjoy_ui::{response_meta, Pagination, ResponseMeta};
 use crate::models::{self, Node, NodeTypeKey};
 use heck::ToLowerCamelCase;
 use prost_types::Timestamp;
@@ -59,7 +59,7 @@ pub fn try_get_token<T>(req: &tonic::Request<T>) -> Result<models::Token, ApiErr
 
 impl ResponseMeta {
     /// Creates a new `ResponseMeta` with the provided request id and the status `Success`.
-    pub fn new(request_id: Option<Uuid>) -> Self {
+    pub fn new(request_id: String) -> Self {
         Self {
             status: response_meta::Status::Success.into(),
             origin_request_id: request_id,

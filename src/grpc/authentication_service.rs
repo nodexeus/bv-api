@@ -84,7 +84,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
             let _ = user.email_reset_password(&self.db).await;
         }
 
-        let meta = ResponseMeta::new(None);
+        let meta = ResponseMeta::new(String::from(""));
         let response = ResetPasswordResponse { meta: Some(meta) };
         Ok(Response::new(response))
     }

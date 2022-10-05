@@ -1,11 +1,10 @@
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::CommandInfo;
-use crate::grpc::helpers::required;
 use crate::models::UpdateInfo;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
-use std::convert::{From, TryInto};
+use std::convert::From;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -108,7 +107,7 @@ impl Command {
 #[tonic::async_trait]
 impl UpdateInfo<CommandInfo, Command> for Command {
     async fn update_info(info: CommandInfo, db: &PgPool) -> Result<Command> {
-        let id: Uuid = info.id.as_ref().ok_or_else(required("id"))?.try_into()?;
+        let id = Uuid::parse_str(info.id.as_str())?;
         let mut tx = db.begin().await?;
         let cmd = sqlx::query_as::<_, Command>(
             r##"UPDATE commands SET

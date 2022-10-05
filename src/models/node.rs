@@ -1,7 +1,7 @@
 use super::node_type::*;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
-use crate::grpc::helpers::{internal, required};
+use crate::grpc::helpers::internal;
 use crate::models::{validator::Validator, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
@@ -380,7 +380,7 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
     type Error = ApiError;
 
     fn try_from(info: GrpcNodeInfo) -> Result<Self> {
-        let id = info.id.as_ref().ok_or_else(required("id"))?.try_into()?;
+        let id = Uuid::parse_str(info.id.as_str())?;
         let req = Self {
             id,
             name: info.name,

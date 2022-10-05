@@ -82,8 +82,9 @@ pub mod from {
     use crate::errors::ApiError;
     use crate::grpc::blockjoy::HostInfo;
     use crate::grpc::blockjoy_ui::{
-        self, node::NodeStatus as GrpcNodeStatus, Host as GrpcHost,
-        HostProvision as GrpcHostProvision, Node as GrpcNode, Organization, User as GrpcUiUser,
+        self, node::NodeStatus as GrpcNodeStatus, node::StakingStatus as GrpcStakingStatus,
+        node::SyncStatus as GrpcSyncStatus, Host as GrpcHost, HostProvision as GrpcHostProvision,
+        Node as GrpcNode, Organization, User as GrpcUiUser,
     };
     use crate::grpc::helpers::required;
     use crate::models::{
@@ -95,7 +96,6 @@ pub mod from {
     use prost_types::Timestamp;
     use serde_json::Value;
     use std::i64;
-    use std::str::FromStr;
     use tonic::{Code, Status};
     use uuid::Uuid;
 
@@ -137,7 +137,7 @@ pub mod from {
             let updater = Self {
                 org_id: host
                     .org_id
-                    .map(|id| Uuid::from_str(id.as_str()))
+                    .map(|id| Uuid::parse_str(id.as_str()))
                     .transpose()?,
                 name: host.name,
                 version: host.version,
@@ -178,7 +178,7 @@ pub mod from {
             let req = Self {
                 org_id: host
                     .org_id
-                    .map(|id| Uuid::from_str(id.as_str()))
+                    .map(|id| Uuid::parse_str(id.as_str()))
                     .transpose()?,
                 name: host.name.ok_or_else(required("host.name"))?,
                 version: host.version,
@@ -222,6 +222,7 @@ pub mod from {
                 ApiError::DuplicateResource => Status::invalid_argument(msg),
                 ApiError::InvalidAuthentication(_) => Status::unauthenticated(msg),
                 ApiError::InsufficientPermissionsError => Status::permission_denied(msg),
+                ApiError::UuidParseError(_) => Status::invalid_argument(msg),
                 _ => Status::internal(msg),
             }
         }
@@ -346,6 +347,8 @@ pub mod from {
                 created_at: Some(try_dt_to_ts(node.created_at)?),
                 updated_at: Some(try_dt_to_ts(node.updated_at)?),
                 status: Some(GrpcNodeStatus::from(node.chain_status).into()),
+                staking_status: Some(GrpcStakingStatus::from(node.staking_status).into()),
+                sync_status: Some(GrpcSyncStatus::from(node.staking_status).into()),
             };
             Ok(grpc_node)
         }
@@ -376,6 +379,8 @@ pub mod from {
                 created_at: None,
                 updated_at: None,
                 status: Some(GrpcNodeStatus::from(req.chain_status).into()),
+                staking_status: Some(GrpcStakingStatus::from(req.staking_status).into()),
+                sync_status: Some(GrpcSyncStatus::from(req.sync_status).into()),
             };
             Ok(node)
         }
@@ -394,22 +399,25 @@ pub mod from {
 
         fn try_from(node: GrpcNode) -> Result<Self, Self::Error> {
             let req = Self {
-                org_id: node
-                    .org_id
-                    .ok_or_else(|| ApiError::validation("GrpcNode.org_id is required"))?
-                    .try_into()?,
-                host_id: node
-                    .host_id
-                    .ok_or_else(|| ApiError::validation("GrpcNode.host_id is required"))?
-                    .try_into()?,
+                org_id: Uuid::parse_str(
+                    node.org_id
+                        .ok_or_else(|| ApiError::validation("GrpcNode.org_id is required"))?
+                        .as_str(),
+                )?,
+                host_id: Uuid::parse_str(
+                    node.host_id
+                        .ok_or_else(|| ApiError::validation("GrpcNode.host_id is required"))?
+                        .as_str(),
+                )?,
                 name: Some(petname::petname(3, "_")),
                 groups: Some(node.groups.join(",")),
                 version: node.version.map(String::from),
                 ip_addr: node.ip.map(String::from),
-                blockchain_id: node
-                    .blockchain_id
-                    .ok_or_else(|| ApiError::validation("GrpcNode.blockchain_id is required"))?
-                    .try_into()?,
+                blockchain_id: Uuid::parse_str(
+                    node.blockchain_id
+                        .ok_or_else(|| ApiError::validation("GrpcNode.blockchain_id is required"))?
+                        .as_str(),
+                )?,
                 node_type: node
                     .r#type
                     .ok_or_else(required("node.type"))?

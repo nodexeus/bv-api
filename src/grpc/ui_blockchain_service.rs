@@ -1,3 +1,4 @@
+use uuid::Uuid;
 use super::blockjoy_ui::{self, ResponseMeta};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::blockchain_service_server::BlockchainService;
@@ -23,10 +24,7 @@ impl BlockchainService for BlockchainServiceImpl {
         request: tonic::Request<blockjoy_ui::GetBlockchainRequest>,
     ) -> Result<tonic::Response<blockjoy_ui::GetBlockchainResponse>> {
         let inner = request.into_inner();
-        let id = inner
-            .id
-            .ok_or_else(|| tonic::Status::invalid_argument("The `id` field is required"))?
-            .try_into()?;
+        let id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
         let blockchain = models::Blockchain::find_by_id(id, &self.db)
             .await
             .map_err(|_| tonic::Status::not_found("No such blockchain"))?;

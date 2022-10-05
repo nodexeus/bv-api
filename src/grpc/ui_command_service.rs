@@ -1,4 +1,4 @@
-use super::helpers::{internal, required};
+use super::helpers::internal;
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
 use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, Parameter, ResponseMeta};
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
@@ -52,8 +52,7 @@ impl CommandServiceImpl {
             .into_iter()
             .find(|p| p.name == "resource_id")
             .ok_or_else(|| Status::internal("Resource ID not available"))
-            .and_then(|val| val.value.ok_or_else(required("val.value")))
-            .and_then(|val| Uuid::from_slice(val.value.as_slice()).map_err(bad_uuid))
+            .and_then(|val| Uuid::parse_str(val.value.as_str()).map_err(bad_uuid))
     }
 }
 
@@ -61,11 +60,14 @@ macro_rules! create_command {
     ($obj:expr, $req:expr, $cmd:expr, $sub_cmd:expr) => {{
         let inner = $req.into_inner();
 
-        let host_id = inner
-            .id
-            .ok_or_else(|| Status::not_found("No host ID provided"))?;
+        let host_id = inner.id;
         let cmd = $obj
-            .create_command(host_id.try_into()?, $cmd, $sub_cmd, inner.params)
+            .create_command(
+                Uuid::parse_str(host_id.as_str())?,
+                $cmd,
+                $sub_cmd,
+                inner.params,
+            )
             .await?;
 
         let notification = ChannelNotification::Command(NotificationPayload::new(cmd.id));
