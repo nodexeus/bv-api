@@ -26,7 +26,7 @@ message Pagination {
 /* General request meta data */
 message RequestMeta {
   /* Request ID. Should be generated when constructing the request */
-  string id = 1;
+  optional string id = 1;
   /* The user issuing this request, identified by it's API token */
   optional ApiToken token = 2;
   /* Optionally pass in an array of field names expected to be returned. */
@@ -96,7 +96,7 @@ message Host {
 /* HostProvision entity */
 message HostProvision {
   optional string id = 1;
-  optional string org_id = 2;
+  string org_id = 2;
   optional string host_id = 3;
   optional google.protobuf.Timestamp created_at = 4;
   optional google.protobuf.Timestamp claimed_at = 5;
@@ -255,8 +255,8 @@ message Blockchain {
     Deleted = 5;
   }
 
-  string id = 1;
-  string name = 2;
+  optional string id = 1;
+  optional string name = 2;
   optional string description = 3;
   BlockchainStatus status = 4;
   optional string project_url = 5;
