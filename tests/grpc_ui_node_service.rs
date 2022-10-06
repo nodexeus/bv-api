@@ -23,7 +23,7 @@ use uuid::Uuid;
 async fn responds_not_found_without_any_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -49,7 +49,7 @@ async fn responds_not_found_without_any_for_get() {
 async fn responds_ok_with_id_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -103,7 +103,7 @@ async fn responds_ok_with_id_for_get() {
 async fn responds_ok_with_valid_data_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -158,7 +158,7 @@ async fn responds_ok_with_valid_data_for_create() {
 async fn responds_internal_with_invalid_data_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -205,7 +205,7 @@ async fn responds_internal_with_invalid_data_for_create() {
 async fn responds_ok_with_valid_data_for_update() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -263,7 +263,7 @@ async fn responds_ok_with_valid_data_for_update() {
 async fn responds_internal_with_invalid_data_for_update() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -323,7 +323,7 @@ async fn responds_internal_with_invalid_data_for_update() {
 async fn responds_not_found_with_invalid_id_for_update() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,

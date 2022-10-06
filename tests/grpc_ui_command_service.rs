@@ -14,7 +14,7 @@ use uuid::Uuid;
 macro_rules! test_response_ok {
     ($func:tt, $db: expr) => {{
         let request_meta = RequestMeta {
-            id: Uuid::new_v4().to_string(),
+            id: Some(Uuid::new_v4().to_string()),
             token: None,
             fields: vec![],
             pagination: None,
@@ -41,7 +41,7 @@ macro_rules! test_response_ok {
 macro_rules! test_response_internal {
     ($func:tt, $db: expr) => {{
         let request_meta = RequestMeta {
-            id: Uuid::new_v4().to_string(),
+            id: Some(Uuid::new_v4().to_string()),
             token: None,
             fields: vec![],
             pagination: None,
@@ -68,7 +68,7 @@ macro_rules! test_response_internal {
 macro_rules! test_response_invalid_argument {
     ($func:tt, $db: expr) => {{
         let request_meta = RequestMeta {
-            id: Uuid::new_v4().to_string(),
+            id: Some(Uuid::new_v4().to_string()),
             token: None,
             fields: vec![],
             pagination: None,

@@ -16,7 +16,7 @@ use uuid::Uuid;
 async fn responds_ok_with_valid_token_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -41,7 +41,7 @@ async fn responds_ok_with_valid_token_for_get() {
 async fn responds_unauthenticated_without_valid_token_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -65,7 +65,7 @@ async fn responds_unauthenticated_without_valid_token_for_get() {
 async fn responds_ok_without_token_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -94,7 +94,7 @@ async fn responds_ok_without_token_for_create() {
 async fn responds_error_with_existing_email_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -130,7 +130,7 @@ async fn responds_error_with_existing_email_for_create() {
 async fn responds_error_with_different_pwds_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,

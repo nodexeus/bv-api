@@ -39,7 +39,7 @@ impl Hosts for HostsServiceImpl {
             host_id: host.id.to_string(),
             token: db_token,
             messages: vec!["All good".into()],
-            origin_request_id: Some(request_id),
+            origin_request_id: request_id,
         };
         Ok(Response::new(result))
     }
@@ -49,7 +49,8 @@ impl Hosts for HostsServiceImpl {
         request: Request<HostInfoUpdateRequest>,
     ) -> Result<Response<HostInfoUpdateResponse>, Status> {
         let (request_id, info) = request.into_data()?;
-        let request_host_id = Uuid::parse_str(info.id.as_str()).map_err(ApiError::from)?;
+        let request_host_id = Uuid::parse_str(info.id.clone().unwrap_or_default().as_str())
+            .map_err(ApiError::from)?;
         let host = Host::find_by_id(request_host_id, &self.db).await?;
         Host::update_all(host.id, HostSelectiveUpdate::from(info), &self.db)
             .await
@@ -75,7 +76,7 @@ impl Hosts for HostsServiceImpl {
         Host::delete(host_id, &self.db).await?;
         let response = DeleteHostResponse {
             messages: vec![],
-            origin_request_id: Some(inner.request_id),
+            origin_request_id: inner.request_id,
         };
         Ok(Response::new(response))
     }

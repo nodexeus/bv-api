@@ -44,11 +44,8 @@ impl HostProvisionService for HostProvisionServiceImpl {
         let provision = inner
             .host_provision
             .ok_or_else(required("host_provision"))?;
-        let org_id = provision
-            .org_id
-            .ok_or_else(required("host_provision.org_id"))?;
         let req = HostProvisionRequest {
-            org_id: Uuid::parse_str(org_id.as_str()).map_err(ApiError::from)?,
+            org_id: Uuid::parse_str(provision.org_id.as_str()).map_err(ApiError::from)?,
             nodes: None,
         };
 

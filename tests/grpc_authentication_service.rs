@@ -17,7 +17,7 @@ use uuid::Uuid;
 async fn responds_ok_with_valid_credentials_for_login() {
     let db = _before_values.await;
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -36,7 +36,7 @@ async fn responds_ok_with_valid_credentials_for_login() {
 async fn responds_error_with_invalid_credentials_for_login() {
     let db = _before_values.await;
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -57,7 +57,7 @@ async fn responds_ok_with_valid_credentials_for_refresh() {
     let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: Some(ApiToken {
             value: token.token.clone(),
         }),
@@ -85,7 +85,7 @@ async fn responds_unauthenticated_with_invalid_credentials_for_refresh() {
     let invalid_token = base64_encode("asdf.asdfasdfasdfasdfasdf.asfasdfasdfasdfaf");
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: Some(ApiToken {
             value: token.token.clone(),
         }),

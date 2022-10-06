@@ -1,21 +1,18 @@
 use crate::errors::Result as ApiResult;
 use crate::grpc::blockjoy::{
-    command, node_command, Command as GrpcCommand, CommandMeta, ContainerImage, NodeCommand,
-    NodeCreate, NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
+    command, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
+    NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
 };
-use crate::grpc::helpers::{image_url_from_node, pb_current_timestamp};
+use crate::grpc::helpers::image_url_from_node;
 use crate::models::{Blockchain, Command, HostCmd, Node};
 use crate::server::DbPool;
 
 pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<GrpcCommand> {
-    let meta = Some(CommandMeta {
-        api_command_id: cmd.id.to_string(),
-        created_at: Some(pb_current_timestamp()),
-    });
     let mut node_cmd = NodeCommand {
         id: cmd.resource_id.to_string(),
         command: None,
-        meta,
+        api_command_id: cmd.id.to_string(),
+        created_at: None,
     };
 
     node_cmd.command = match cmd.cmd {
@@ -116,7 +113,7 @@ pub mod from {
     impl From<HostSelectiveUpdate> for HostInfo {
         fn from(update: HostSelectiveUpdate) -> Self {
             Self {
-                id: "".to_string(),
+                id: None,
                 name: update.name,
                 version: update.version,
                 location: update.location,
@@ -161,7 +158,7 @@ pub mod from {
         fn try_from(hp: HostProvision) -> Result<Self, Self::Error> {
             let hp = Self {
                 id: Some(hp.id),
-                org_id: Some(hp.org_id.to_string()),
+                org_id: hp.org_id.to_string(),
                 host_id: hp.host_id.map(|id| id.to_string()),
                 created_at: Some(try_dt_to_ts(hp.created_at)?),
                 claimed_at: hp.claimed_at.map(try_dt_to_ts).transpose()?,
@@ -522,8 +519,8 @@ pub mod from {
             tracing::info!("sending json: {}", json);
 
             let blockchain = Self {
-                id: model.id.to_string(),
-                name: model.name,
+                id: Some(model.id.to_string()),
+                name: Some(model.name),
                 description: model.description,
                 status: model.status as i32,
                 project_url: model.project_url,
@@ -565,7 +562,7 @@ pub mod into {
 
         fn into_data(self) -> Result<(String, HostInfo), Self::Error> {
             let inner = self.into_inner();
-            let id = inner.request_id;
+            let id = inner.request_id.unwrap_or_default();
             let info = inner.info.ok_or_else(required("info"))?;
 
             Ok((id, info))

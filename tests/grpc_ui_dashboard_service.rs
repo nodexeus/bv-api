@@ -15,7 +15,7 @@ use uuid::Uuid;
 async fn responds_unauthenticated_with_invalid_token_for_metrics() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -38,7 +38,7 @@ async fn responds_unauthenticated_with_invalid_token_for_metrics() {
 async fn responds_ok_with_valid_token_for_metrics() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -63,7 +63,7 @@ async fn responds_ok_with_valid_token_for_metrics() {
 async fn responds_valid_values_for_metrics() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,

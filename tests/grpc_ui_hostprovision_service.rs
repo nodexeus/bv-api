@@ -22,7 +22,7 @@ use uuid::Uuid;
 async fn responds_not_found_without_valid_id_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -48,7 +48,7 @@ async fn responds_not_found_without_valid_id_for_get() {
 async fn responds_ok_with_valid_id_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -89,7 +89,7 @@ async fn responds_ok_with_valid_id_for_get() {
 async fn responds_error_with_invalid_provision_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -115,7 +115,7 @@ async fn responds_error_with_invalid_provision_for_create() {
 async fn responds_ok_with_valid_provision_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -132,7 +132,7 @@ async fn responds_ok_with_valid_provision_for_create() {
 
     let token = user.get_token(&db.pool).await.unwrap();
     let provision = GrpcHostProvision {
-        org_id: Some(org_id.get::<Uuid, usize>(0).to_string()),
+        org_id: org_id.get::<Uuid, usize>(0).to_string(),
         ..Default::default()
     };
     let inner = CreateHostProvisionRequest {
