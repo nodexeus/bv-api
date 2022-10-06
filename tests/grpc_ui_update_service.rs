@@ -14,7 +14,7 @@ use uuid::Uuid;
 async fn responds_unauthenticated_with_invalid_token_for_update() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,

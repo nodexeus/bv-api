@@ -22,7 +22,7 @@ async fn responds_unauthenticated_without_valid_token_for_info_update() {
     let host = hosts.first().unwrap();
     let b_uuid = host.id.to_string();
     let host_info = blockjoy::HostInfo {
-        id: b_uuid.clone(),
+        id: Some(b_uuid.clone()),
         name: Some("tester".into()),
         version: None,
         location: None,
@@ -34,7 +34,7 @@ async fn responds_unauthenticated_without_valid_token_for_info_update() {
         ip: Some("123.456.789.0".into()),
     };
     let inner = HostInfoUpdateRequest {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: Some(Uuid::new_v4().to_string()),
         info: Some(host_info),
     };
     let mut request = Request::new(inner);
@@ -55,7 +55,7 @@ async fn responds_unauthenticated_without_token_for_info_update() {
     let b_uuid = host.id.to_string();
 
     let host_info = blockjoy::HostInfo {
-        id: b_uuid.clone(),
+        id: Some(b_uuid.clone()),
         name: Some("tester".into()),
         version: None,
         location: None,
@@ -67,7 +67,7 @@ async fn responds_unauthenticated_without_token_for_info_update() {
         ip: Some("123.456.789.0".into()),
     };
     let inner = HostInfoUpdateRequest {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: Some(Uuid::new_v4().to_string()),
         info: Some(host_info),
     };
 
@@ -82,7 +82,7 @@ async fn responds_unauthenticated_with_token_for_info_update() {
     let b_uuid = host.id.to_string();
 
     let host_info = blockjoy::HostInfo {
-        id: b_uuid.clone(),
+        id: Some(b_uuid.clone()),
         name: Some("tester".into()),
         version: None,
         location: None,
@@ -94,7 +94,7 @@ async fn responds_unauthenticated_with_token_for_info_update() {
         ip: Some("123.456.789.0".into()),
     };
     let inner = HostInfoUpdateRequest {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: Some(Uuid::new_v4().to_string()),
         info: Some(host_info),
     };
     let mut request = Request::new(inner);
@@ -115,7 +115,7 @@ async fn responds_permission_denied_with_token_ownership_for_info_update() {
     let resource_host = hosts.last().unwrap();
     let b_uuid = resource_host.id.to_string();
     let host_info = blockjoy::HostInfo {
-        id: b_uuid.clone(),
+        id: Some(b_uuid.clone()),
         name: Some("tester".into()),
         version: None,
         location: None,
@@ -127,7 +127,7 @@ async fn responds_permission_denied_with_token_ownership_for_info_update() {
         ip: Some("123.456.789.0".into()),
     };
     let inner = HostInfoUpdateRequest {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: Some(Uuid::new_v4().to_string()),
         info: Some(host_info),
     };
     let mut request = Request::new(inner);
@@ -148,7 +148,7 @@ async fn responds_not_found_for_provision() {
     let db = _before_values.await;
     let b_uuid = Uuid::new_v4().to_string();
     let host_info = blockjoy::HostInfo {
-        id: b_uuid,
+        id: Some(b_uuid),
         name: Some("tester".into()),
         version: None,
         location: None,
@@ -160,11 +160,9 @@ async fn responds_not_found_for_provision() {
         ip: Some("123.456.789.0".into()),
     };
     let inner = ProvisionHostRequest {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: Some(Uuid::new_v4().to_string()),
         otp: "unknown-otp".into(),
         info: Some(host_info),
-        validator_ips: vec![],
-        org_id: "".to_string(),
         status: 0,
     };
     let request = Request::new(inner);
@@ -191,7 +189,7 @@ async fn responds_ok_for_provision() {
         .await
         .unwrap();
     let host_info = blockjoy::HostInfo {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         name: Some("tester".into()),
         version: None,
         location: None,
@@ -203,11 +201,9 @@ async fn responds_ok_for_provision() {
         ip: Some("123.456.789.0".into()),
     };
     let inner = ProvisionHostRequest {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: Some(Uuid::new_v4().to_string()),
         otp: host_provision.id,
         info: Some(host_info),
-        validator_ips: vec![],
-        org_id: "".to_string(),
         status: 0,
     };
     let request = Request::new(inner);
@@ -224,7 +220,7 @@ async fn responds_ok_for_info_update() {
     let token = host.get_token(&db.pool).await.unwrap();
     let b_uuid = host.id.to_string();
     let host_info = blockjoy::HostInfo {
-        id: b_uuid.clone(),
+        id: Some(b_uuid.clone()),
         name: Some("tester".into()),
         version: None,
         location: None,
@@ -236,7 +232,7 @@ async fn responds_ok_for_info_update() {
         ip: Some("123.456.789.0".into()),
     };
     let inner = HostInfoUpdateRequest {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: Some(Uuid::new_v4().to_string()),
         info: Some(host_info),
     };
     let mut request = Request::new(inner);
@@ -258,7 +254,7 @@ async fn responds_ok_for_delete() {
     let token = host.get_token(&db.pool).await.unwrap();
     let b_uuid = host.id.to_string();
     let inner = DeleteHostRequest {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: Some(Uuid::new_v4().to_string()),
         host_id: b_uuid,
     };
     let mut request = Request::new(inner);
@@ -279,7 +275,7 @@ async fn responds_unauthenticated_without_valid_token_for_delete() {
     let host = hosts.first().unwrap();
     let b_uuid = host.id.to_string();
     let inner = DeleteHostRequest {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: Some(Uuid::new_v4().to_string()),
         host_id: b_uuid,
     };
 
@@ -296,7 +292,7 @@ async fn responds_permission_denied_for_delete() {
     let token = request_host.get_token(&db.pool).await.unwrap();
     let b_uuid = host.id.to_string();
     let inner = DeleteHostRequest {
-        request_id: Uuid::new_v4().to_string(),
+        request_id: Some(Uuid::new_v4().to_string()),
         host_id: b_uuid,
     };
     let mut request = Request::new(inner);
@@ -315,7 +311,7 @@ async fn can_update_host_info() {
     let db = _before_values.await;
     let host = db.test_host().await;
     let host_info = blockjoy::HostInfo {
-        id: host.id.to_string(),
+        id: Some(host.id.to_string()),
         name: Some("tester".to_string()),
         version: None,
         location: None,

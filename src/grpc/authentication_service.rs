@@ -59,7 +59,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
                 value: Token::refresh(&db_token, &self.db).await?.token,
             };
             let response = RefreshTokenResponse {
-                meta: Some(ResponseMeta::new(request_id)),
+                meta: Some(ResponseMeta::new(request_id.unwrap_or_default())),
                 token: Some(new_token),
             };
             Ok(Response::new(response))

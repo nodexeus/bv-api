@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package blockjoy.api.v1;
 
+import "google/protobuf/timestamp.proto";
 import "messages.proto";
 
 enum ConnectionStatus {
@@ -11,7 +12,7 @@ enum ConnectionStatus {
 }
 
 message HostInfo {
-    string id = 1;
+    optional string id = 1;
     optional string name = 2;
     optional string version = 3;
     optional string location = 4;
@@ -24,7 +25,7 @@ message HostInfo {
 }
 
 message DeleteHostRequest {
-    string request_id = 1;
+    optional string request_id = 1;
     string host_id = 2;
 }
 
@@ -34,12 +35,10 @@ message DeleteHostResponse {
 }
 
 message ProvisionHostRequest {
-    string request_id = 1;
+    optional string request_id = 1;
     string otp = 2;
-    string org_id = 3;
-    HostInfo info = 4;
-    repeated string validator_ips = 5;
-    ConnectionStatus status = 7;
+    HostInfo info = 3;
+    ConnectionStatus status = 4;
 }
 
 message ProvisionHostResponse {
@@ -50,7 +49,7 @@ message ProvisionHostResponse {
 }
 
 message HostInfoUpdateRequest {
-    string request_id = 1;
+    optional string request_id = 1;
     HostInfo info = 2;
 }
 
@@ -78,13 +77,14 @@ message HostInfoGet {}
 
 message HostCommand {
     string id = 1;
-    CommandMeta meta = 2;
+    string api_command_id = 2;
+    google.protobuf.Timestamp created_at = 3;
 
     oneof command {
-        HostGenericCommand generic = 3;
-        HostInfoGet info_get = 4;
-        HostUpdateBVS update_bvs = 5;
-        HostRestartBVS restart_bvs = 6;
-        HostRemoveBVS remove_bvs = 7;
+        HostGenericCommand generic = 4;
+        HostInfoGet info_get = 5;
+        HostUpdateBVS update_bvs = 6;
+        HostRestartBVS restart_bvs = 7;
+        HostRemoveBVS remove_bvs = 8;
     }
 }

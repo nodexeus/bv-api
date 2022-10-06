@@ -21,7 +21,7 @@ use uuid::Uuid;
 async fn responds_invalid_argument_without_any_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -47,7 +47,7 @@ async fn responds_invalid_argument_without_any_for_get() {
 async fn responds_ok_with_id_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -74,7 +74,7 @@ async fn responds_ok_with_id_for_get() {
 async fn responds_ok_with_org_id_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -113,7 +113,7 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
         total_items: None,
     };
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: Some(pagination),
@@ -174,7 +174,7 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
 async fn responds_ok_with_token_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -202,7 +202,7 @@ async fn responds_ok_with_token_for_get() {
 async fn responds_ok_with_id_for_delete() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -229,7 +229,7 @@ async fn responds_ok_with_id_for_delete() {
 async fn responds_ok_with_host_for_update() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -256,7 +256,7 @@ async fn responds_ok_with_host_for_update() {
 async fn responds_ok_with_host_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,

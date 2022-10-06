@@ -49,20 +49,23 @@ impl HostService for HostServiceImpl {
                 )
                 .await?
                 .try_into()?],
-                ResponseMeta::new(request_id),
+                ResponseMeta::new(request_id.unwrap_or_default()),
             ),
             Param::OrgId(org_id) => {
                 let org_id = Uuid::parse_str(org_id.as_str()).map_err(ApiError::from)?;
                 let hosts = Host::find_by_org_paginated(org_id, limit, offset, &self.db).await?;
                 let hosts: Result<_, ApiError> = hosts.iter().map(GrpcHost::try_from).collect();
 
-                (hosts?, ResponseMeta::new(request_id).with_pagination())
+                (
+                    hosts?,
+                    ResponseMeta::new(request_id.unwrap_or_default()).with_pagination(),
+                )
             }
             Param::Token(ref token) => (
                 vec![Token::get_host_for_token(token, TokenType::Login, &self.db)
                     .await?
                     .try_into()?],
-                ResponseMeta::new(request_id),
+                ResponseMeta::new(request_id.unwrap_or_default()),
             ),
         };
 

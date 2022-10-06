@@ -23,7 +23,7 @@ async fn responds_ok_for_create() {
     let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -57,7 +57,7 @@ async fn responds_ok_for_get() {
     let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -89,7 +89,7 @@ async fn responds_ok_for_update() {
         .to_string();
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -130,7 +130,7 @@ async fn responds_ok_for_delete() {
         .to_string();
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -163,7 +163,7 @@ async fn responds_ok_for_members() {
         .to_string();
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -192,7 +192,7 @@ async fn responds_ok_with_pagination_for_members() {
         total_items: None,
     };
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: Some(pagination),

@@ -27,7 +27,7 @@ async fn with_auth<T>(inner: T, db: &api::TestDb) -> Request<T> {
 async fn responds_ok_for_get_existing() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -46,7 +46,7 @@ async fn responds_ok_for_get_existing() {
 async fn responds_not_found_for_get_nonexisting() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -66,7 +66,7 @@ async fn responds_not_found_for_get_nonexisting() {
 async fn responds_not_found_for_get_deleted() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -86,7 +86,7 @@ async fn responds_not_found_for_get_deleted() {
 async fn can_list_blockchains() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Uuid::new_v4().to_string(),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
