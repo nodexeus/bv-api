@@ -2,14 +2,6 @@ syntax = "proto3";
 
 package blockjoy.api.v1;
 
-import "google/protobuf/timestamp.proto";
-
-// Common message types
-message CommandMeta {
-    string api_command_id = 1;
-    google.protobuf.Timestamp created_at = 2;
-}
-
 message Parameter {
     string name = 1;
     string value = 2;
