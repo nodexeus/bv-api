@@ -3,7 +3,9 @@ mod setup;
 
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
-use api::grpc::blockjoy_ui::{ApiToken, LoginUserRequest, RefreshTokenRequest, RequestMeta};
+use api::grpc::blockjoy_ui::{
+    ApiToken, LoginUserRequest, RefreshTokenRequest, RequestMeta, UpdateUiPasswordRequest,
+};
 use base64::encode as base64_encode;
 use setup::setup;
 use std::sync::Arc;
@@ -103,4 +105,88 @@ async fn responds_unauthenticated_with_invalid_credentials_for_refresh() {
     );
 
     assert_grpc_request! { refresh, request, tonic::Code::Unauthenticated, db, AuthenticationServiceClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_ok_with_valid_pwds_for_update_ui_pwd() {
+    let db = _before_values.await;
+    let request_meta = RequestMeta {
+        id: Some(Uuid::new_v4().to_string()),
+        token: None,
+        fields: vec![],
+        pagination: None,
+    };
+    let user = db.admin_user().await;
+    let token = user.get_token(&db.pool).await.unwrap();
+    let inner = UpdateUiPasswordRequest {
+        meta: Some(request_meta),
+        new_pwd: "hugo-boss".to_string(),
+        new_pwd_confirmation: "hugo-boss".to_string(),
+        old_pwd: "abc12345".to_string(),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+    );
+
+    assert_grpc_request! { update_ui_password, request, tonic::Code::Ok, db, AuthenticationServiceClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_unauthenticated_with_invalid_old_pwd_for_update_ui_pwd() {
+    let db = _before_values.await;
+    let request_meta = RequestMeta {
+        id: Some(Uuid::new_v4().to_string()),
+        token: None,
+        fields: vec![],
+        pagination: None,
+    };
+    let user = db.admin_user().await;
+    let token = user.get_token(&db.pool).await.unwrap();
+    let inner = UpdateUiPasswordRequest {
+        meta: Some(request_meta),
+        new_pwd: "hugo-boss".to_string(),
+        new_pwd_confirmation: "hugo-boss".to_string(),
+        old_pwd: "some-wrong-pwd".to_string(),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+    );
+
+    assert_grpc_request! { update_ui_password, request, tonic::Code::Unauthenticated, db, AuthenticationServiceClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_invalid_argument_with_invalid_pwd_confirmation_for_update_ui_pwd() {
+    let db = _before_values.await;
+    let request_meta = RequestMeta {
+        id: Some(Uuid::new_v4().to_string()),
+        token: None,
+        fields: vec![],
+        pagination: None,
+    };
+    let user = db.admin_user().await;
+    let token = user.get_token(&db.pool).await.unwrap();
+    let inner = UpdateUiPasswordRequest {
+        meta: Some(request_meta),
+        new_pwd: "hugo-boss".to_string(),
+        new_pwd_confirmation: "hugo-employee".to_string(),
+        old_pwd: "abc12345".to_string(),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+    );
+
+    assert_grpc_request! { update_ui_password, request, tonic::Code::InvalidArgument, db, AuthenticationServiceClient<Channel> };
 }
