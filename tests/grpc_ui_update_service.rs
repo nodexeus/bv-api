@@ -3,7 +3,7 @@ mod setup;
 
 use crate::setup::setup;
 use api::grpc::blockjoy_ui::update_service_client::UpdateServiceClient;
-use api::grpc::blockjoy_ui::{GetUpdatesRequest, RequestMeta, Uuid as GrpcUuid};
+use api::grpc::blockjoy_ui::{GetUpdatesRequest, RequestMeta};
 use std::sync::Arc;
 use test_macros::before;
 use tonic::{transport::Channel, Request, Status};
@@ -14,7 +14,7 @@ use uuid::Uuid;
 async fn responds_unauthenticated_with_invalid_token_for_update() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,

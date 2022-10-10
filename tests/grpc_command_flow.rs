@@ -36,7 +36,7 @@ async fn test_command_flow_works() {
     // let node: Node = sqlx::query_as("INSERT INTO nodes VALUES (")
     let req = blockjoy::InfoUpdate {
         info: Some(Info::Node(NodeInfo {
-            id: Some(node.id.into()),
+            id: node.id.to_string(),
             name: None,
             ip: None,
             block_height: None,

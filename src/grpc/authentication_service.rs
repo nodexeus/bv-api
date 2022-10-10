@@ -2,6 +2,7 @@ use crate::auth::{FindableById, TokenIdentifyable};
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
+    UpdateUiPasswordRequest, UpdateUiPasswordResponse,
 };
 use crate::models::{self, Token, User};
 use crate::server::DbPool;
@@ -59,7 +60,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
                 value: Token::refresh(&db_token, &self.db).await?.token,
             };
             let response = RefreshTokenResponse {
-                meta: Some(ResponseMeta::new(request_id)),
+                meta: Some(ResponseMeta::new(request_id.unwrap_or_default())),
                 token: Some(new_token),
             };
             Ok(Response::new(response))
@@ -84,7 +85,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
             let _ = user.email_reset_password(&self.db).await;
         }
 
-        let meta = ResponseMeta::new(None);
+        let meta = ResponseMeta::new(String::from(""));
         let response = ResetPasswordResponse { meta: Some(meta) };
         Ok(Response::new(response))
     }
@@ -101,7 +102,44 @@ impl AuthenticationService for AuthenticationServiceImpl {
             .update_password(&request.password, &self.db)
             .await?;
         let meta = ResponseMeta::from_meta(request.meta);
-        let response = UpdatePasswordResponse { meta: Some(meta) };
+        let response = UpdatePasswordResponse {
+            meta: Some(meta),
+            token: Some(ApiToken {
+                value: db_token.token,
+            }),
+        };
         Ok(Response::new(response))
+    }
+
+    async fn update_ui_password(
+        &self,
+        request: Request<UpdateUiPasswordRequest>,
+    ) -> Result<Response<UpdateUiPasswordResponse>, Status> {
+        let db_token = try_get_token(&request)?;
+        let inner = request.into_inner();
+        let user = User::find_by_id(db_token.try_user_id()?, &self.db).await?;
+
+        match user.verify_password(inner.old_pwd.as_str()) {
+            Ok(_) => {
+                if inner.new_pwd.as_str() == inner.new_pwd_confirmation.as_str() {
+                    user.update_password(inner.new_pwd.as_str(), &self.db)
+                        .await?;
+
+                    let response = UpdateUiPasswordResponse {
+                        meta: None,
+                        token: Some(ApiToken {
+                            value: db_token.token,
+                        }),
+                    };
+
+                    Ok(Response::new(response))
+                } else {
+                    Err(Status::invalid_argument(
+                        "Password and password confirmation don't match",
+                    ))
+                }
+            }
+            Err(e) => Err(Status::from(e)),
+        }
     }
 }

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package blockjoy.api.v1;
 
+import "google/protobuf/timestamp.proto";
 import "messages.proto";
 
 enum ConnectionStatus {
@@ -11,7 +12,7 @@ enum ConnectionStatus {
 }
 
 message HostInfo {
-    Uuid id = 1;
+    optional string id = 1;
     optional string name = 2;
     optional string version = 3;
     optional string location = 4;
@@ -24,39 +25,37 @@ message HostInfo {
 }
 
 message DeleteHostRequest {
-    Uuid request_id = 1;
-    Uuid host_id = 2;
+    optional string request_id = 1;
+    string host_id = 2;
 }
 
 message DeleteHostResponse {
     repeated string messages = 1;
-    optional Uuid origin_request_id = 2;
+    optional string origin_request_id = 2;
 }
 
 message ProvisionHostRequest {
-    Uuid request_id = 1;
+    optional string request_id = 1;
     string otp = 2;
-    Uuid org_id = 3;
-    HostInfo info = 4;
-    repeated string validator_ips = 5;
-    ConnectionStatus status = 7;
+    HostInfo info = 3;
+    ConnectionStatus status = 4;
 }
 
 message ProvisionHostResponse {
-    Uuid host_id = 1;
+    string host_id = 1;
     string token = 2;
     repeated string messages = 3;
-    optional Uuid origin_request_id = 4;
+    optional string origin_request_id = 4;
 }
 
 message HostInfoUpdateRequest {
-    Uuid request_id = 1;
+    optional string request_id = 1;
     HostInfo info = 2;
 }
 
 message HostInfoUpdateResponse {
     repeated string messages = 1;
-    optional Uuid origin_request_id = 2;
+    optional string origin_request_id = 2;
 }
 
 // @see https://github.com/blockjoy/stakejoy-api/blob/86ee17643d02af81221ee2fa6403fc34155fe087/src/models/mod.rs#L54
@@ -77,14 +76,15 @@ message HostGenericCommand {
 message HostInfoGet {}
 
 message HostCommand {
-    Uuid id = 1;
-    CommandMeta meta = 2;
+    string id = 1;
+    string api_command_id = 2;
+    google.protobuf.Timestamp created_at = 3;
 
     oneof command {
-        HostGenericCommand generic = 3;
-        HostInfoGet info_get = 4;
-        HostUpdateBVS update_bvs = 5;
-        HostRestartBVS restart_bvs = 6;
-        HostRemoveBVS remove_bvs = 7;
+        HostGenericCommand generic = 4;
+        HostInfoGet info_get = 5;
+        HostUpdateBVS update_bvs = 6;
+        HostRestartBVS restart_bvs = 7;
+        HostRemoveBVS remove_bvs = 8;
     }
 }

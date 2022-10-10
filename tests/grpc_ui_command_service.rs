@@ -3,7 +3,7 @@ mod setup;
 
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::command_service_client::CommandServiceClient;
-use api::grpc::blockjoy_ui::{CommandRequest as GrpcCommandRequest, RequestMeta, Uuid as GrpcUuid};
+use api::grpc::blockjoy_ui::{CommandRequest as GrpcCommandRequest, RequestMeta};
 use setup::setup;
 use std::sync::Arc;
 use test_macros::*;
@@ -14,7 +14,7 @@ use uuid::Uuid;
 macro_rules! test_response_ok {
     ($func:tt, $db: expr) => {{
         let request_meta = RequestMeta {
-            id: Some(GrpcUuid::from(Uuid::new_v4())),
+            id: Some(Uuid::new_v4().to_string()),
             token: None,
             fields: vec![],
             pagination: None,
@@ -24,7 +24,7 @@ macro_rules! test_response_ok {
         let token = user.get_token(&$db.pool).await.unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
-            id: Some(GrpcUuid::from(host.id)),
+            id: host.id.to_string(),
             params: vec![],
         };
         let mut request = Request::new(inner);
@@ -41,7 +41,7 @@ macro_rules! test_response_ok {
 macro_rules! test_response_internal {
     ($func:tt, $db: expr) => {{
         let request_meta = RequestMeta {
-            id: Some(GrpcUuid::from(Uuid::new_v4())),
+            id: Some(Uuid::new_v4().to_string()),
             token: None,
             fields: vec![],
             pagination: None,
@@ -51,7 +51,7 @@ macro_rules! test_response_internal {
         let token = user.get_token(&$db.pool).await.unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
-            id: Some(GrpcUuid::from(host.id)),
+            id: host.id.to_string(),
             params: vec![],
         };
         let mut request = Request::new(inner);
@@ -65,10 +65,10 @@ macro_rules! test_response_internal {
     }}
 }
 
-macro_rules! test_response_not_found {
+macro_rules! test_response_invalid_argument {
     ($func:tt, $db: expr) => {{
         let request_meta = RequestMeta {
-            id: Some(GrpcUuid::from(Uuid::new_v4())),
+            id: Some(Uuid::new_v4().to_string()),
             token: None,
             fields: vec![],
             pagination: None,
@@ -77,7 +77,7 @@ macro_rules! test_response_not_found {
         let token = user.get_token(&$db.pool).await.unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
-            id: None,
+            id: "".to_string(),
             params: vec![],
         };
         let mut request = Request::new(inner);
@@ -87,7 +87,7 @@ macro_rules! test_response_not_found {
             format!("Bearer {}", token.to_base64()).parse().unwrap(),
         );
 
-        assert_grpc_request! { $func, request, tonic::Code::NotFound, $db, CommandServiceClient<Channel> };
+        assert_grpc_request! { $func, request, tonic::Code::InvalidArgument, $db, CommandServiceClient<Channel> };
     }}
 }
 
@@ -110,7 +110,7 @@ async fn responds_internal_for_create_node() {
 #[tokio::test]
 async fn responds_not_found_for_create_node() {
     let db = Arc::new(_before_values.await);
-    test_response_not_found! { create_node, db }
+    test_response_invalid_argument! { create_node, db }
 }
 
 #[before(call = "setup")]
@@ -132,7 +132,7 @@ async fn responds_internal_for_delete_node() {
 #[tokio::test]
 async fn responds_not_found_for_delete_node() {
     let db = Arc::new(_before_values.await);
-    test_response_not_found! { delete_node, db }
+    test_response_invalid_argument! { delete_node, db }
 }
 
 #[before(call = "setup")]
@@ -154,7 +154,7 @@ async fn responds_internal_for_start_node() {
 #[tokio::test]
 async fn responds_not_found_for_start_node() {
     let db = Arc::new(_before_values.await);
-    test_response_not_found! { start_node, db }
+    test_response_invalid_argument! { start_node, db }
 }
 
 #[before(call = "setup")]
@@ -176,7 +176,7 @@ async fn responds_internal_for_stop_node() {
 #[tokio::test]
 async fn responds_not_found_for_stop_node() {
     let db = Arc::new(_before_values.await);
-    test_response_not_found! { stop_node, db }
+    test_response_invalid_argument! { stop_node, db }
 }
 
 #[before(call = "setup")]
@@ -198,7 +198,7 @@ async fn responds_internal_for_restart_node() {
 #[tokio::test]
 async fn responds_not_found_for_restart_node() {
     let db = Arc::new(_before_values.await);
-    test_response_not_found! { restart_node, db }
+    test_response_invalid_argument! { restart_node, db }
 }
 
 #[before(call = "setup")]
@@ -220,7 +220,7 @@ async fn responds_internal_for_create_host() {
 #[tokio::test]
 async fn responds_not_found_for_create_host() {
     let db = Arc::new(_before_values.await);
-    test_response_not_found! { create_host, db }
+    test_response_invalid_argument! { create_host, db }
 }
 
 #[before(call = "setup")]
@@ -242,7 +242,7 @@ async fn responds_internal_for_delete_host() {
 #[tokio::test]
 async fn responds_not_found_for_delete_host() {
     let db = Arc::new(_before_values.await);
-    test_response_not_found! { delete_host, db }
+    test_response_invalid_argument! { delete_host, db }
 }
 
 #[before(call = "setup")]
@@ -264,7 +264,7 @@ async fn responds_internal_for_start_host() {
 #[tokio::test]
 async fn responds_not_found_for_start_host() {
     let db = Arc::new(_before_values.await);
-    test_response_not_found! { start_host, db }
+    test_response_invalid_argument! { start_host, db }
 }
 
 #[before(call = "setup")]
@@ -286,7 +286,7 @@ async fn responds_internal_for_stop_host() {
 #[tokio::test]
 async fn responds_not_found_for_stop_host() {
     let db = Arc::new(_before_values.await);
-    test_response_not_found! { stop_host, db }
+    test_response_invalid_argument! { stop_host, db }
 }
 
 #[before(call = "setup")]
@@ -308,5 +308,5 @@ async fn responds_internal_for_restart_host() {
 #[tokio::test]
 async fn responds_not_found_for_restart_host() {
     let db = Arc::new(_before_values.await);
-    test_response_not_found! { restart_host, db }
+    test_response_invalid_argument! { restart_host, db }
 }

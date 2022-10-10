@@ -372,7 +372,7 @@ impl Owned<Host, ()> for Host {
 #[tonic::async_trait]
 impl UpdateInfo<HostInfo, Host> for Host {
     async fn update_info(info: HostInfo, db: &PgPool) -> Result<Host> {
-        let id: uuid::Uuid = info.id.as_ref().ok_or_else(required("id"))?.try_into()?;
+        let id = Uuid::parse_str(info.id.unwrap_or_default().as_str())?;
         let mut tx = db.begin().await?;
         let host = sqlx::query(
             r##"UPDATE hosts SET
@@ -495,7 +495,7 @@ impl TryFrom<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest 
             os: host_info.os,
             os_version: host_info.os_version,
             ip_addr: host_info.ip.ok_or_else(required("info.ip"))?,
-            val_ip_addrs: Some(request.validator_ips.join(",")),
+            val_ip_addrs: None,
         };
         Ok(req)
     }

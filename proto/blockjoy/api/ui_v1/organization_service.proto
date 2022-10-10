@@ -33,7 +33,7 @@ message UpdateOrganizationResponse {
 
 message DeleteOrganizationRequest {
   RequestMeta meta = 1;
-  Uuid id = 2;
+  string id = 2;
 }
 
 message DeleteOrganizationResponse {
@@ -42,7 +42,7 @@ message DeleteOrganizationResponse {
 
 message OrganizationMemberRequest {
   RequestMeta meta = 1;
-  Uuid id = 2;
+  string id = 2;
 }
 
 message OrganizationMemberResponse {

@@ -153,9 +153,9 @@ impl HostListener {
             return Ok(false);
         };
         let host_id: uuid::Uuid = match content {
-            Host(cmd) => cmd.id.as_ref().ok_or_else(required("id"))?.try_into()?,
+            Host(cmd) => cmd.id.parse()?,
             Node(cmd) => {
-                let node_id = cmd.id.as_ref().ok_or_else(required("id"))?.try_into()?;
+                let node_id = cmd.id.parse()?;
                 models::Host::find_by_node(node_id, &self.db).await?.id
             }
         };

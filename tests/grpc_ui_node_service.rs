@@ -5,7 +5,6 @@ use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::node_service_client::NodeServiceClient;
 use api::grpc::blockjoy_ui::{
     node, CreateNodeRequest, GetNodeRequest, Node as GrpcNode, RequestMeta, UpdateNodeRequest,
-    Uuid as GrpcUuid,
 };
 use api::models::{
     ContainerStatus, Node, NodeChainStatus, NodeCreateRequest, NodeSyncStatus, NodeType,
@@ -24,7 +23,7 @@ use uuid::Uuid;
 async fn responds_not_found_without_any_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -33,7 +32,7 @@ async fn responds_not_found_without_any_for_get() {
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetNodeRequest {
         meta: Some(request_meta),
-        id: Some(Uuid::new_v4().into()),
+        id: Uuid::new_v4().to_string(),
     };
     let mut request = Request::new(inner);
 
@@ -50,7 +49,7 @@ async fn responds_not_found_without_any_for_get() {
 async fn responds_ok_with_id_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -87,7 +86,7 @@ async fn responds_ok_with_id_for_get() {
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetNodeRequest {
         meta: Some(request_meta),
-        id: Some(GrpcUuid::from(node.id)),
+        id: node.id.to_string(),
     };
     let mut request = Request::new(inner);
 
@@ -104,7 +103,7 @@ async fn responds_ok_with_id_for_get() {
 async fn responds_ok_with_valid_data_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -117,12 +116,13 @@ async fn responds_ok_with_valid_data_for_create() {
         .unwrap()
         .first()
         .unwrap()
-        .id;
+        .id
+        .to_string();
     let node = GrpcNode {
         id: None,
-        host_id: Some(GrpcUuid::from(host.id)),
-        org_id: Some(GrpcUuid::from(org_id)),
-        blockchain_id: Some(GrpcUuid::from(blockchain.id)),
+        host_id: Some(host.id.to_string()),
+        org_id: Some(org_id),
+        blockchain_id: Some(blockchain.id.to_string()),
         name: None,
         status: Some(node::NodeStatus::UndefinedApplicationStatus as i32),
         address: None,
@@ -135,6 +135,8 @@ async fn responds_ok_with_valid_data_for_create() {
         created_at: None,
         updated_at: None,
         groups: vec![],
+        staking_status: None,
+        sync_status: Some(NodeSyncStatus::Unknown as i32),
     };
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = CreateNodeRequest {
@@ -156,7 +158,7 @@ async fn responds_ok_with_valid_data_for_create() {
 async fn responds_internal_with_invalid_data_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -179,6 +181,8 @@ async fn responds_internal_with_invalid_data_for_create() {
         created_at: None,
         updated_at: None,
         groups: vec![],
+        staking_status: None,
+        sync_status: Some(NodeSyncStatus::Unknown as i32),
     };
     let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
@@ -201,7 +205,7 @@ async fn responds_internal_with_invalid_data_for_create() {
 async fn responds_ok_with_valid_data_for_update() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -235,7 +239,7 @@ async fn responds_ok_with_valid_data_for_update() {
     };
     let db_node = Node::create(&req, &db.pool).await.unwrap();
     let node = GrpcNode {
-        id: Some(GrpcUuid::from(db_node.id)),
+        id: Some(db_node.id.to_string()),
         name: Some("stri-bu".to_string()),
         ..Default::default()
     };
@@ -259,7 +263,7 @@ async fn responds_ok_with_valid_data_for_update() {
 async fn responds_internal_with_invalid_data_for_update() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -293,7 +297,7 @@ async fn responds_internal_with_invalid_data_for_update() {
     };
     let db_node = Node::create(&req, &db.pool).await.unwrap();
     let node = GrpcNode {
-        id: Some(GrpcUuid::from(db_node.id)),
+        id: Some(db_node.id.to_string()),
         name: Some("stri-bu".to_string()),
         // This should cause an error
         blockchain_id: None,
@@ -319,7 +323,7 @@ async fn responds_internal_with_invalid_data_for_update() {
 async fn responds_not_found_with_invalid_id_for_update() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -327,7 +331,7 @@ async fn responds_not_found_with_invalid_id_for_update() {
     let user = db.admin_user().await;
     let node = GrpcNode {
         // This should cause an error
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         ..Default::default()
     };
     let token = user.get_token(&db.pool).await.unwrap();

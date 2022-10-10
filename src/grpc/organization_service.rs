@@ -10,6 +10,7 @@ use crate::grpc::helpers::pagination_parameters;
 use crate::models::{Org, OrgRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 use super::helpers::{required, try_get_token};
 
@@ -69,7 +70,8 @@ impl OrganizationService for OrganizationServiceImpl {
         let user_id = db_token.try_user_id()?;
         let inner = request.into_inner();
         let org = inner.organization.ok_or_else(required("organization"))?;
-        let org_id = org.id.ok_or_else(required("organization.id"))?.try_into()?;
+        let org_id = Uuid::parse_str(org.id.ok_or_else(required("organization.id"))?.as_str())
+            .map_err(ApiError::from)?;
         let update = OrgRequest {
             name: org.name.ok_or_else(required("organization.name"))?,
         };
@@ -91,7 +93,7 @@ impl OrganizationService for OrganizationServiceImpl {
         let db_token = try_get_token(&request)?;
         let user_id = db_token.try_user_id()?;
         let inner = request.into_inner();
-        let org_id = inner.id.ok_or_else(required("id"))?.try_into()?;
+        let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
 
         if !Org::is_member(&user_id, &org_id, &self.db).await? {
             let msg = "User is not member of given organization";
@@ -109,7 +111,7 @@ impl OrganizationService for OrganizationServiceImpl {
     ) -> Result<Response<OrganizationMemberResponse>, Status> {
         let inner = request.into_inner();
         let meta = inner.meta.ok_or_else(required("meta"))?;
-        let org_id = inner.id.ok_or_else(required("id"))?.try_into()?;
+        let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
 
         let (limit, offset) = pagination_parameters(meta.pagination.clone())?;
         let users = Org::find_all_member_users_paginated(&org_id, limit, offset, &self.db).await?;

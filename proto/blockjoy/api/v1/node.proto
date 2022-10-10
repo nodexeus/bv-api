@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package blockjoy.api.v1;
 
+import "google/protobuf/timestamp.proto";
 import "messages.proto";
 
 message NodeInfo {
@@ -58,25 +59,26 @@ message NodeInfo {
     enum ApplicationStatus {
         UndefinedApplicationStatus = 0;
         // General chain states
-        Broadcasting = 1;
-        Cancelled = 2;
-        Delegating = 3;
-        Delinquent = 4;
-        Disabled = 5;
-        Earning = 6;
-        Electing = 7;
-        Elected = 8;
-        Exporting = 9;
-        Ingesting = 10;
-        Mining = 11;
-        Minting = 12;
-        Processing = 13;
-        Relaying = 14;
-        Removed = 15;
-        Removing = 16;
+        Provisioning = 1;
+        Broadcasting = 2;
+        Cancelled = 3;
+        Delegating = 4;
+        Delinquent = 5;
+        Disabled = 6;
+        Earning = 7;
+        Electing = 8;
+        Elected = 9;
+        Exported = 10;
+        Ingesting = 11;
+        Mining = 12;
+        Minting = 13;
+        Processing = 14;
+        Relaying = 15;
+        Removed = 16;
+        Removing = 17;
     }
 
-    Uuid id = 1;
+    string id = 1;
     optional string name = 2;
     optional string ip = 3;
     optional int64 block_height = 6;
@@ -117,18 +119,19 @@ message NodeCreate {
 message NodeDelete {}
 
 message NodeCommand {
-    Uuid id = 1;
-    CommandMeta meta = 2;
+    string id = 1;
+    string api_command_id = 2;
+    google.protobuf.Timestamp created_at = 3;
 
     oneof command {
-        NodeGenericCommand generic = 3;
-        NodeStart start = 4;
-        NodeStop stop = 5;
-        NodeRestart restart = 6;
-        NodeUpgrade upgrade = 7;
-        NodeInfoUpdate update = 8;
-        NodeInfoGet info_get = 9;
-        NodeCreate create = 10;
-        NodeDelete delete = 11;
+        NodeGenericCommand generic = 4;
+        NodeStart start = 5;
+        NodeStop stop = 6;
+        NodeRestart restart = 7;
+        NodeUpgrade upgrade = 8;
+        NodeInfoUpdate update = 9;
+        NodeInfoGet info_get = 10;
+        NodeCreate create = 11;
+        NodeDelete delete = 12;
     };
 }

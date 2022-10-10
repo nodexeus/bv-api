@@ -5,7 +5,7 @@ use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
 use api::grpc::blockjoy_ui::{
     get_hosts_request, CreateHostRequest, DeleteHostRequest, GetHostsRequest, Host as GrpcHost,
-    Pagination, RequestMeta, UpdateHostRequest, Uuid as GrpcUuid,
+    Pagination, RequestMeta, UpdateHostRequest,
 };
 use api::models::Org;
 use setup::{server_and_client_stub, setup};
@@ -21,7 +21,7 @@ use uuid::Uuid;
 async fn responds_invalid_argument_without_any_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -47,13 +47,13 @@ async fn responds_invalid_argument_without_any_for_get() {
 async fn responds_ok_with_id_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
     };
     let user = db.admin_user().await;
-    let host_id = GrpcUuid::from(db.test_host().await.id);
+    let host_id = db.test_host().await.id.to_string();
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
@@ -74,7 +74,7 @@ async fn responds_ok_with_id_for_get() {
 async fn responds_ok_with_org_id_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -87,7 +87,7 @@ async fn responds_ok_with_org_id_for_get() {
         return;
     }
 
-    let org_id = GrpcUuid::from(host.org_id.unwrap());
+    let org_id = host.org_id.unwrap().to_string();
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
@@ -113,7 +113,7 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
         total_items: None,
     };
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: Some(pagination),
@@ -121,7 +121,7 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
     let user = db.admin_user().await;
     let orgs = Org::find_all_by_user(user.id, &db.pool).await.unwrap();
     let org = orgs.first().unwrap();
-    let org_id = GrpcUuid::from(org.id);
+    let org_id = org.id.to_string();
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
@@ -174,7 +174,7 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
 async fn responds_ok_with_token_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -202,7 +202,7 @@ async fn responds_ok_with_token_for_get() {
 async fn responds_ok_with_id_for_delete() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -212,7 +212,7 @@ async fn responds_ok_with_id_for_delete() {
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = DeleteHostRequest {
         meta: Some(request_meta),
-        id: Some(GrpcUuid::from(host.id)),
+        id: host.id.to_string(),
     };
     let mut request = Request::new(inner);
 
@@ -229,7 +229,7 @@ async fn responds_ok_with_id_for_delete() {
 async fn responds_ok_with_host_for_update() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -256,7 +256,7 @@ async fn responds_ok_with_host_for_update() {
 async fn responds_ok_with_host_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,

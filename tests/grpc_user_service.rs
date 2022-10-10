@@ -4,9 +4,7 @@ mod setup;
 use crate::setup::setup;
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::user_service_client::UserServiceClient;
-use api::grpc::blockjoy_ui::{
-    CreateUserRequest, GetUserRequest, RequestMeta, User as GrpcUser, Uuid as GrpcUuid,
-};
+use api::grpc::blockjoy_ui::{CreateUserRequest, GetUserRequest, RequestMeta, User as GrpcUser};
 use base64::encode;
 use std::sync::Arc;
 use test_macros::before;
@@ -18,7 +16,7 @@ use uuid::Uuid;
 async fn responds_ok_with_valid_token_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -43,7 +41,7 @@ async fn responds_ok_with_valid_token_for_get() {
 async fn responds_unauthenticated_without_valid_token_for_get() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -67,7 +65,7 @@ async fn responds_unauthenticated_without_valid_token_for_get() {
 async fn responds_ok_without_token_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -96,7 +94,7 @@ async fn responds_ok_without_token_for_create() {
 async fn responds_error_with_existing_email_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -132,7 +130,7 @@ async fn responds_error_with_existing_email_for_create() {
 async fn responds_error_with_different_pwds_for_create() {
     let db = Arc::new(_before_values.await);
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,

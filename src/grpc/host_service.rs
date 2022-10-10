@@ -1,14 +1,16 @@
-use super::helpers::{required, try_get_token};
+use super::helpers::try_get_token;
 use crate::auth::{FindableById, TokenIdentifyable};
+use crate::errors::ApiError;
 use crate::grpc::blockjoy::hosts_server::Hosts;
 use crate::grpc::blockjoy::{
     DeleteHostRequest, DeleteHostResponse, HostInfoUpdateRequest, HostInfoUpdateResponse,
-    ProvisionHostRequest, ProvisionHostResponse, Uuid as GrpcUuid,
+    ProvisionHostRequest, ProvisionHostResponse,
 };
 use crate::grpc::convert::into::IntoData;
 use crate::models::{Host, HostProvision, HostSelectiveUpdate};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 pub struct HostsServiceImpl {
     db: DbPool,
@@ -34,7 +36,7 @@ impl Hosts for HostsServiceImpl {
             .map_err(|e| Status::not_found(format!("Host provision not found: {e:?}")))?;
         let db_token = host.get_token(&self.db).await?.token;
         let result = ProvisionHostResponse {
-            host_id: Some(GrpcUuid::from(host.id)),
+            host_id: host.id.to_string(),
             token: db_token,
             messages: vec!["All good".into()],
             origin_request_id: request_id,
@@ -47,11 +49,8 @@ impl Hosts for HostsServiceImpl {
         request: Request<HostInfoUpdateRequest>,
     ) -> Result<Response<HostInfoUpdateResponse>, Status> {
         let (request_id, info) = request.into_data()?;
-        let request_host_id = info
-            .id
-            .as_ref()
-            .ok_or_else(required("info.id"))?
-            .try_into()?;
+        let request_host_id = Uuid::parse_str(info.id.clone().unwrap_or_default().as_str())
+            .map_err(ApiError::from)?;
         let host = Host::find_by_id(request_host_id, &self.db).await?;
         Host::update_all(host.id, HostSelectiveUpdate::from(info), &self.db)
             .await
@@ -69,11 +68,7 @@ impl Hosts for HostsServiceImpl {
     ) -> Result<Response<DeleteHostResponse>, Status> {
         let host_token_id = try_get_token(&request)?.host_id;
         let inner = request.into_inner();
-        let host_id = inner
-            .host_id
-            .as_ref()
-            .ok_or_else(required("host_id"))?
-            .try_into()?;
+        let host_id = Uuid::parse_str(inner.host_id.as_str()).map_err(ApiError::from)?;
         if host_token_id != Some(host_id) {
             let msg = format!("Not allowed to delete host '{host_id}'");
             return Err(Status::permission_denied(msg));

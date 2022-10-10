@@ -6,7 +6,6 @@ use api::grpc::blockjoy_ui::organization_service_client::OrganizationServiceClie
 use api::grpc::blockjoy_ui::{
     CreateOrganizationRequest, DeleteOrganizationRequest, GetOrganizationsRequest, Organization,
     OrganizationMemberRequest, Pagination, RequestMeta, UpdateOrganizationRequest,
-    Uuid as GrpcUuid,
 };
 use api::models::Org;
 use setup::{server_and_client_stub, setup};
@@ -24,7 +23,7 @@ async fn responds_ok_for_create() {
     let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -58,7 +57,7 @@ async fn responds_ok_for_get() {
     let user = db.admin_user().await;
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -81,17 +80,16 @@ async fn responds_ok_for_get() {
 async fn responds_ok_for_update() {
     let db = Arc::new(_before_values.await);
     let user = db.admin_user().await;
-    let org_id = GrpcUuid::from(
-        Org::find_all_by_user(user.id, &db.pool)
-            .await
-            .unwrap()
-            .first()
-            .unwrap()
-            .id,
-    );
+    let org_id = Org::find_all_by_user(user.id, &db.pool)
+        .await
+        .unwrap()
+        .first()
+        .unwrap()
+        .id
+        .to_string();
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
@@ -123,24 +121,23 @@ async fn responds_ok_for_update() {
 async fn responds_ok_for_delete() {
     let db = Arc::new(_before_values.await);
     let user = db.admin_user().await;
-    let org_id = GrpcUuid::from(
-        Org::find_all_by_user(user.id, &db.pool)
-            .await
-            .unwrap()
-            .first()
-            .unwrap()
-            .id,
-    );
+    let org_id = Org::find_all_by_user(user.id, &db.pool)
+        .await
+        .unwrap()
+        .first()
+        .unwrap()
+        .id
+        .to_string();
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
     };
     let inner = DeleteOrganizationRequest {
         meta: Some(request_meta),
-        id: Some(org_id),
+        id: org_id,
     };
     let mut request = Request::new(inner);
 
@@ -157,24 +154,23 @@ async fn responds_ok_for_delete() {
 async fn responds_ok_for_members() {
     let db = Arc::new(_before_values.await);
     let user = db.admin_user().await;
-    let org_id = GrpcUuid::from(
-        Org::find_all_by_user(user.id, &db.pool)
-            .await
-            .unwrap()
-            .first()
-            .unwrap()
-            .id,
-    );
+    let org_id = Org::find_all_by_user(user.id, &db.pool)
+        .await
+        .unwrap()
+        .first()
+        .unwrap()
+        .id
+        .to_string();
     let token = user.get_token(&db.pool).await.unwrap();
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: None,
     };
     let inner = OrganizationMemberRequest {
         meta: Some(request_meta),
-        id: Some(org_id),
+        id: org_id,
     };
     let mut request = Request::new(inner);
 
@@ -196,7 +192,7 @@ async fn responds_ok_with_pagination_for_members() {
         total_items: None,
     };
     let request_meta = RequestMeta {
-        id: Some(GrpcUuid::from(Uuid::new_v4())),
+        id: Some(Uuid::new_v4().to_string()),
         token: None,
         fields: vec![],
         pagination: Some(pagination),
@@ -204,11 +200,11 @@ async fn responds_ok_with_pagination_for_members() {
     let user = db.admin_user().await;
     let orgs = Org::find_all_by_user(user.id, &db.pool).await.unwrap();
     let org = orgs.first().unwrap();
-    let org_id = GrpcUuid::from(org.id);
+    let org_id = org.id.to_string();
     let token = user.get_token(&db.pool).await.unwrap();
     let inner = OrganizationMemberRequest {
         meta: Some(request_meta),
-        id: Some(org_id),
+        id: org_id,
     };
     let mut request = Request::new(inner);
     let max_items = env::var("PAGINATION_MAX_ITEMS")

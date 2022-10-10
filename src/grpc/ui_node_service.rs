@@ -10,6 +10,7 @@ use crate::models::{Command, CommandRequest, HostCmd, Node, NodeInfo};
 use crate::server::DbPool;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 pub struct NodeServiceImpl {
     db: DbPool,
@@ -29,8 +30,8 @@ impl NodeService for NodeServiceImpl {
         request: Request<GetNodeRequest>,
     ) -> Result<Response<GetNodeResponse>, Status> {
         let inner = request.into_inner();
-        let node_id = inner.id.ok_or_else(required("id"))?;
-        let node = Node::find_by_id(node_id.try_into()?, &self.db).await?;
+        let node_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
+        let node = Node::find_by_id(node_id, &self.db).await?;
         let response = GetNodeResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             node: Some(node.try_into()?),
@@ -43,8 +44,8 @@ impl NodeService for NodeServiceImpl {
         request: Request<ListNodesRequest>,
     ) -> Result<Response<ListNodesResponse>, Status> {
         let inner = request.into_inner();
-        let org_id = inner.org_id.ok_or_else(|| internal("Missing org ID"))?;
-        let nodes = Node::find_all_by_org(org_id.try_into()?, &self.db).await?;
+        let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
+        let nodes = Node::find_all_by_org(org_id, &self.db).await?;
         let nodes: Result<_, ApiError> = nodes.iter().map(GrpcNode::try_from).collect();
         let response = ListNodesResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
@@ -96,11 +97,9 @@ impl NodeService for NodeServiceImpl {
     ) -> Result<Response<UpdateNodeResponse>, Status> {
         let inner = request.into_inner();
         let node = inner.node.ok_or_else(required("node"))?;
-        let node_id = node
-            .id
-            .as_ref()
-            .ok_or_else(required("node.id"))?
-            .try_into()?;
+        let node_id = node.id.clone();
+        let node_id = Uuid::parse_str(node_id.ok_or_else(required("node.id"))?.as_str())
+            .map_err(ApiError::from)?;
         let fields: NodeInfo = node.try_into()?;
 
         Node::update_info(&node_id, &fields, &self.db).await?;
