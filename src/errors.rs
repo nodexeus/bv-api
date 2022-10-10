@@ -3,7 +3,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use std::num::TryFromIntError;
 
-pub type Result<T> = std::result::Result<T, ApiError>;
+pub type Result<T, E = ApiError> = std::result::Result<T, E>;
 
 #[derive(thiserror::Error)]
 pub enum ApiError {

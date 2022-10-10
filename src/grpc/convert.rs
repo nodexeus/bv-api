@@ -7,7 +7,7 @@ use crate::grpc::helpers::image_url_from_node;
 use crate::models::{Blockchain, Command, HostCmd, Node};
 use crate::server::DbPool;
 
-pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<GrpcCommand> {
+pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<GrpcCommand> {
     let mut node_cmd = NodeCommand {
         id: cmd.resource_id.to_string(),
         command: None,
@@ -45,8 +45,8 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: DbPool) -> ApiResult<G
         }
         // The following should be HostCommands
         HostCmd::CreateNode => {
-            let node = Node::find_by_id(cmd.resource_id, &db).await?;
-            let blockchain = Blockchain::find_by_id(node.blockchain_id, &db).await?;
+            let node = Node::find_by_id(cmd.resource_id, db).await?;
+            let blockchain = Blockchain::find_by_id(node.blockchain_id, db).await?;
             let image = ContainerImage {
                 url: image_url_from_node(&node, blockchain.name),
             };
