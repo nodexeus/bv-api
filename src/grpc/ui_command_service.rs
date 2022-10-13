@@ -62,15 +62,14 @@ macro_rules! create_command {
         let inner = $req.into_inner();
 
         let host_id = inner.id;
-        let cmd = dbg!(
-            $obj.create_command(
-                dbg!(Uuid::parse_str(host_id.as_str()).map_err(ApiError::from))?,
+        let cmd = $obj
+            .create_command(
+                Uuid::parse_str(host_id.as_str()).map_err(ApiError::from)?,
                 $cmd,
                 $sub_cmd,
                 inner.params,
             )
-            .await
-        )?;
+            .await?;
 
         let notification = ChannelNotification::Command(NotificationPayload::new(cmd.id));
 

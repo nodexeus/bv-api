@@ -71,7 +71,7 @@ mod test {
 
         async fn tear_down(test_db_name: String, main_db_url: String) {
             let mut conn = sqlx::PgConnection::connect(&main_db_url).await.unwrap();
-            sqlx::query(&dbg!(format!("DROP DATABASE {test_db_name}")))
+            sqlx::query(&format!("DROP DATABASE {test_db_name}"))
                 .execute(&mut conn)
                 .await
                 .unwrap();

@@ -99,7 +99,7 @@ mod tests {
                 .await;
 
             assert!(result.is_ok());
-            dbg!("Server is running");
+            println!("Server is running");
         };
 
         let socket = Arc::clone(&socket);
