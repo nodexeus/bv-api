@@ -4,25 +4,15 @@ use axum::http::Request;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
-use test_macros::*;
 use uuid::Uuid;
 
-struct TestData {
-    pub(crate) now: i64,
+fn now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs() as i64
 }
 
-fn setup() -> TestData {
-    let start = SystemTime::now();
-
-    TestData {
-        now: start
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs() as i64,
-    }
-}
-
-#[before(call = "setup")]
 #[test]
 fn should_encode_token() -> anyhow::Result<()> {
     let test_secret = "123456";
@@ -44,13 +34,12 @@ fn should_encode_token() -> anyhow::Result<()> {
     })
 }
 
-#[before(call = "setup")]
 #[test]
 fn should_decode_valid_token() -> anyhow::Result<()> {
     let test_secret = "123456";
     temp_env::with_var("JWT_SECRET", Some(test_secret), || {
         let id = Uuid::new_v4();
-        let token = AuthToken::new(id, _before_values.now, TokenHolderType::User);
+        let token = AuthToken::new(id, now(), TokenHolderType::User);
         let token_str = token.encode().unwrap();
         let mut validation = Validation::new(Algorithm::HS512);
 
@@ -69,7 +58,6 @@ fn should_decode_valid_token() -> anyhow::Result<()> {
     })
 }
 
-#[before(call = "setup")]
 #[test]
 fn should_panic_on_decode_expired_token() {
     let test_secret = "123456";
@@ -93,7 +81,6 @@ fn should_panic_on_decode_expired_token() {
     });
 }
 
-#[before(call = "setup")]
 #[test]
 #[should_panic]
 fn should_panic_with_invalid_token() {
@@ -106,7 +93,6 @@ fn should_panic_with_invalid_token() {
     let _ = AuthToken::from_request(&request).unwrap();
 }
 
-#[before(call = "setup")]
 #[test]
 fn should_not_work_with_empty_token() {
     let request = Request::builder()
@@ -119,24 +105,25 @@ fn should_not_work_with_empty_token() {
     assert!(AuthToken::from_request(&request).is_err());
 }
 
-#[before(call = "setup")]
 #[test]
 fn should_get_valid_token() -> anyhow::Result<()> {
-    dotenv::dotenv().ok();
-    let id = Uuid::new_v4();
-    let exp = _before_values.now + 60 * 60 * 24;
-    let token = AuthToken::new(id, exp, TokenHolderType::User);
-    let encoded = base64::encode(token.encode().unwrap());
-    let request = Request::builder()
-        .header(AUTHORIZATION, format!("Bearer {}", encoded))
-        .uri("/")
-        .method("GET")
-        .body(())?;
-    let token = AuthToken::from_request(&request).unwrap();
+    let test_secret = "123456";
+    temp_env::with_var("JWT_SECRET", Some(test_secret), || {
+        let id = Uuid::new_v4();
+        let exp = now() + 60 * 60 * 24;
+        let token = AuthToken::new(id, exp, TokenHolderType::User);
+        let encoded = base64::encode(token.encode().unwrap());
+        let request = Request::builder()
+            .header(AUTHORIZATION, format!("Bearer {}", encoded))
+            .uri("/")
+            .method("GET")
+            .body(())?;
+        let token = AuthToken::from_request(&request).unwrap();
 
-    assert_eq!(token.get_id(), id);
+        assert_eq!(token.get_id(), id);
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]

@@ -1,283 +1,113 @@
-#[allow(dead_code)]
 mod setup;
 
-use api::auth::TokenIdentifyable;
-use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
-use api::grpc::blockjoy_ui::{
-    get_hosts_request, CreateHostRequest, DeleteHostRequest, GetHostsRequest, Host as GrpcHost,
-    Pagination, RequestMeta, UpdateHostRequest,
-};
-use api::models::Org;
-use setup::{server_and_client_stub, setup};
-use std::env;
-use std::sync::Arc;
-use test_macros::*;
-use tonic::transport::Channel;
-use tonic::{Request, Status};
-use uuid::Uuid;
+use api::grpc::blockjoy_ui::{self, host_service_client};
+use tonic::transport;
 
-#[before(call = "setup")]
+type Service = host_service_client::HostServiceClient<transport::Channel>;
+
 #[tokio::test]
 async fn responds_invalid_argument_without_any_for_get() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
-    };
-    let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
-    let inner = GetHostsRequest {
-        meta: Some(request_meta),
+    let tester = setup::Tester::new().await;
+    let req = blockjoy_ui::GetHostsRequest {
+        meta: Some(tester.meta()),
         param: None,
     };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    assert_grpc_request! { get, request, tonic::Code::InvalidArgument, db, HostServiceClient<Channel> };
+    let status = tester.send_admin(Service::get, req).await.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_ok_with_id_for_get() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
+async fn responds_ok_with_host_id_for_get() {
+    let tester = setup::Tester::new().await;
+    let host_id = tester.host().await.id.to_string();
+    let req = blockjoy_ui::GetHostsRequest {
+        meta: Some(tester.meta()),
+        param: Some(blockjoy_ui::get_hosts_request::Param::Id(host_id)),
     };
-    let user = db.admin_user().await;
-    let host_id = db.test_host().await.id.to_string();
-    let token = user.get_token(&db.pool).await.unwrap();
-    let inner = GetHostsRequest {
-        meta: Some(request_meta),
-        param: Some(get_hosts_request::Param::Id(host_id)),
-    };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    assert_grpc_request! { get, request, tonic::Code::NotFound, db, HostServiceClient<Channel> };
+    tester.send_admin(Service::get, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_with_org_id_for_get() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
-    };
-    let user = db.admin_user().await;
-    let host = db.test_host().await;
-
-    if host.org_id.is_none() {
-        println!("NO ORG_ID SET ON HOST");
-        return;
-    }
-
+    let tester = setup::Tester::new().await;
+    let host = tester.host().await;
     let org_id = host.org_id.unwrap().to_string();
-    let token = user.get_token(&db.pool).await.unwrap();
-    let inner = GetHostsRequest {
-        meta: Some(request_meta),
-        param: Some(get_hosts_request::Param::OrgId(org_id)),
+    let req = blockjoy_ui::GetHostsRequest {
+        meta: Some(tester.meta()),
+        param: Some(blockjoy_ui::get_hosts_request::Param::OrgId(org_id)),
     };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    assert_grpc_request! { get, request, tonic::Code::NotFound, db, HostServiceClient<Channel> };
+    tester.send_admin(Service::get, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_with_pagination_with_org_id_for_get() {
-    let db = Arc::new(_before_values.await);
-    let pagination = Pagination {
-        current_page: 0,
-        items_per_page: 10,
-        total_items: None,
+    let tester = setup::Tester::new().await;
+    let user = tester.admin_user().await;
+    let org = tester.org_for(&user).await;
+    let req = blockjoy_ui::GetHostsRequest {
+        meta: Some(tester.meta().with_pagination(tester.pagination())),
+        param: Some(blockjoy_ui::get_hosts_request::Param::OrgId(
+            org.id.to_string(),
+        )),
     };
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: Some(pagination),
-    };
-    let user = db.admin_user().await;
-    let orgs = Org::find_all_by_user(user.id, &db.pool).await.unwrap();
-    let org = orgs.first().unwrap();
-    let org_id = org.id.to_string();
-    let token = user.get_token(&db.pool).await.unwrap();
-    let inner = GetHostsRequest {
-        meta: Some(request_meta),
-        param: Some(get_hosts_request::Param::OrgId(org_id)),
-    };
-    let mut request = Request::new(inner);
-    let max_items = env::var("PAGINATION_MAX_ITEMS")
-        .unwrap()
-        .parse::<i32>()
-        .expect("MAX ITEMS NOT SET");
+    let max_items: i32 = std::env::var("PAGINATION_MAX_ITEMS")
+        .expect("MAX ITEMS NOT SET")
+        .parse()
+        .expect("Could not parse max items");
 
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    let pool = std::sync::Arc::new(db.pool.clone());
-    let (serve_future, mut client) =
-        server_and_client_stub::<HostServiceClient<Channel>>(pool).await;
-
-    let request_future = async {
-        match client.get(request).await {
-            Ok(response) => {
-                let inner = response.into_inner();
-                let meta = inner.meta.unwrap();
-
-                assert!(meta.pagination.is_some());
-
-                let pagination = meta.pagination.unwrap();
-
-                assert_eq!(pagination.items_per_page, max_items);
-                assert_eq!(pagination.current_page, 0);
-                assert_eq!(pagination.total_items.unwrap(), 0);
-            }
-            Err(e) => {
-                panic!("got error: {:?}", e);
-            }
-        }
-    };
-
-    // Wait for completion, when the client request future completes
-    tokio::select! {
-        _ = serve_future => panic!("server returned first"),
-        _ = request_future => (),
-    }
+    let resp = tester.send_admin(Service::get, req).await.unwrap();
+    let meta = resp.meta.unwrap();
+    let pagination = meta.pagination.unwrap();
+    assert_eq!(pagination.items_per_page, max_items);
+    assert_eq!(pagination.current_page, 0);
+    assert_eq!(pagination.total_items.unwrap(), 0);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_with_token_for_get() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
+    let tester = setup::Tester::new().await;
+    let host = tester.host().await;
+    let host_token = tester.token_for(&host).await;
+    let req = blockjoy_ui::GetHostsRequest {
+        meta: Some(tester.meta()),
+        param: Some(blockjoy_ui::get_hosts_request::Param::Token(host_token)),
     };
-    let user = db.admin_user().await;
-    let host = db.test_host().await;
-    let host_token = host.get_token(&db.pool).await.unwrap().token;
-    let token = user.get_token(&db.pool).await.unwrap();
-    let inner = GetHostsRequest {
-        meta: Some(request_meta),
-        param: Some(get_hosts_request::Param::Token(host_token)),
-    };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    assert_grpc_request! { get, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
+    tester.send_admin(Service::get, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_with_id_for_delete() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
-    };
-    let user = db.admin_user().await;
-    let host = db.test_host().await;
-    let token = user.get_token(&db.pool).await.unwrap();
-    let inner = DeleteHostRequest {
-        meta: Some(request_meta),
+    let tester = setup::Tester::new().await;
+    let host = tester.host().await;
+    let req = blockjoy_ui::DeleteHostRequest {
+        meta: Some(tester.meta()),
         id: host.id.to_string(),
     };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    assert_grpc_request! { delete, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
+    tester.send_admin(Service::delete, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_with_host_for_update() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
+    let tester = setup::Tester::new().await;
+    let host = tester.host().await;
+    let req = blockjoy_ui::UpdateHostRequest {
+        meta: Some(tester.meta()),
+        host: Some(host.try_into().unwrap()),
     };
-    let user = db.admin_user().await;
-    let host = db.test_host().await.try_into().unwrap();
-    let token = user.get_token(&db.pool).await.unwrap();
-    let inner = UpdateHostRequest {
-        meta: Some(request_meta),
-        host: Some(host),
-    };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    assert_grpc_request! { update, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
+    tester.send_admin(Service::update, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_with_host_for_create() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
-    };
-    let host = GrpcHost {
+    let tester = setup::Tester::new().await;
+    let host = blockjoy_ui::Host {
         name: Some("burli-bua".to_string()),
         ip: Some("127.0.0.1".to_string()),
         ..Default::default()
     };
-    let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
-    let inner = CreateHostRequest {
-        meta: Some(request_meta),
+    let req = blockjoy_ui::CreateHostRequest {
+        meta: Some(tester.meta()),
         host: Some(host),
     };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    assert_grpc_request! { create, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
+    tester.send_admin(Service::create, req).await.unwrap();
 }

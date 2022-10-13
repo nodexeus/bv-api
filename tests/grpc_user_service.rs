@@ -1,76 +1,37 @@
-#[allow(dead_code)]
 mod setup;
 
-use crate::setup::setup;
-use api::auth::TokenIdentifyable;
-use api::grpc::blockjoy_ui::user_service_client::UserServiceClient;
-use api::grpc::blockjoy_ui::{CreateUserRequest, GetUserRequest, RequestMeta, User as GrpcUser};
-use base64::encode;
-use std::sync::Arc;
-use test_macros::before;
-use tonic::{transport::Channel, Request, Status};
-use uuid::Uuid;
+use api::grpc::blockjoy_ui::{self, user_service_client, GetUserRequest};
+use tonic::transport;
 
-#[before(call = "setup")]
+type Service = user_service_client::UserServiceClient<transport::Channel>;
+
 #[tokio::test]
 async fn responds_ok_with_valid_token_for_get() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
+    let tester = setup::Tester::new().await;
+    let req = blockjoy_ui::GetUserRequest {
+        meta: Some(tester.meta()),
     };
-    let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
-    let inner = GetUserRequest {
-        meta: Some(request_meta),
-    };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    assert_grpc_request! { get, request, tonic::Code::Ok, db, UserServiceClient<Channel> };
+    tester.send_admin(Service::get, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_unauthenticated_without_valid_token_for_get() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
+    let tester = setup::Tester::new().await;
+    let token = base64::encode("some-invalid-token");
+    let req = GetUserRequest {
+        meta: Some(tester.meta()),
     };
-    let token = encode("some-invalid-token");
-    let inner = GetUserRequest {
-        meta: Some(request_meta),
-    };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token).parse().unwrap(),
-    );
-
-    assert_grpc_request! { get, request, tonic::Code::Unauthenticated, db, UserServiceClient<Channel> };
+    let status = tester
+        .send_with(Service::get, req, token)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Unauthenticated);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_without_token_for_create() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
-    };
-    let grpc_user = GrpcUser {
+    let tester = setup::Tester::new().await;
+    let user = blockjoy_ui::User {
         id: None,
         email: Some("hugo@boss.com".to_string()),
         first_name: Some("Hugo".to_string()),
@@ -78,66 +39,39 @@ async fn responds_ok_without_token_for_create() {
         created_at: None,
         updated_at: None,
     };
-    let inner = CreateUserRequest {
-        meta: Some(request_meta),
+    let req = blockjoy_ui::CreateUserRequest {
+        meta: Some(tester.meta()),
         password: "abcde12345".to_string(),
         password_confirmation: "abcde12345".to_string(),
-        user: Some(grpc_user),
+        user: Some(user),
     };
-    let request = Request::new(inner);
-
-    assert_grpc_request! { create, request, tonic::Code::Ok, db, UserServiceClient<Channel> };
+    tester.send(Service::create, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_error_with_existing_email_for_create() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
-    };
-    let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
-    let grpc_user = GrpcUser {
-        id: None,
+    let tester = setup::Tester::new().await;
+    let user = tester.admin_user().await;
+    let grpc_user = blockjoy_ui::User {
         email: Some(user.email),
         first_name: Some(user.first_name),
         last_name: Some(user.last_name),
-        created_at: None,
-        updated_at: None,
+        ..Default::default()
     };
-    let inner = CreateUserRequest {
-        meta: Some(request_meta),
+    let req = blockjoy_ui::CreateUserRequest {
+        meta: Some(tester.meta()),
         password: "abcde12345".to_string(),
         password_confirmation: "abcde12345".to_string(),
         user: Some(grpc_user),
     };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, UserServiceClient<Channel> };
+    let status = tester.send_admin(Service::create, req).await.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_error_with_different_pwds_for_create() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
-    };
-    let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
-    let grpc_user = GrpcUser {
+    let tester = setup::Tester::new().await;
+    let user = blockjoy_ui::User {
         id: None,
         email: Some("hugo@boss.com".to_string()),
         first_name: Some("Hugo".to_string()),
@@ -145,18 +79,12 @@ async fn responds_error_with_different_pwds_for_create() {
         created_at: None,
         updated_at: None,
     };
-    let inner = CreateUserRequest {
-        meta: Some(request_meta),
+    let req = blockjoy_ui::CreateUserRequest {
+        meta: Some(tester.meta()),
         password: "abcde12345".to_string(),
         password_confirmation: "54321edcba".to_string(),
-        user: Some(grpc_user),
+        user: Some(user),
     };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
-    );
-
-    assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, UserServiceClient<Channel> };
+    let status = tester.send_admin(Service::create, req).await.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }

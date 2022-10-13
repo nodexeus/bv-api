@@ -78,7 +78,7 @@ impl HostListener {
             tokio::select! {
                 message = self.messages.recv() => {
                     tracing::info!("Received notification");
-                    match message {
+                    match dbg!(message) {
                         Ok(Command(cmd)) => self.process_notification(cmd).await?,
                         Ok(_) => tracing::error!("received non Command notification"),
                         Err(e) => {
@@ -113,12 +113,12 @@ impl HostListener {
         match command {
             Ok(command) => {
                 tracing::info!("Command found");
-                let msg = convert::db_command_to_grpc_command(command, &self.db).await?;
-                if !self.relevant(&msg).await? {
+                if !dbg!(self.relevant(&command).await)? {
                     // If the field was not relevant we are done and can just return Ok(())
                     return Ok(());
                 }
-                match self.sender.send(Ok(msg)).await {
+                let msg = dbg!(convert::db_command_to_grpc_command(command, &self.db).await)?;
+                match dbg!(self.sender.send(Ok(msg)).await) {
                     Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {e}"))),
                     _ => {
                         tracing::info!("Sent channel notification");
@@ -143,23 +143,8 @@ impl HostListener {
     /// Checks whether a command is relevant for the currently specified host. We use this for
     /// filtering messages before we send them to the user. If the command is relevant for the
     /// current channel, we return `true` from this function.
-    async fn relevant(&self, command: &blockjoy::Command) -> Result<bool> {
-        use blockjoy::command::Type::*;
-
-        let content = if let Some(content) = command.r#type.as_ref() {
-            content
-        } else {
-            // Do not send empty messages
-            return Ok(false);
-        };
-        let host_id: uuid::Uuid = match content {
-            Host(cmd) => cmd.id.parse()?,
-            Node(cmd) => {
-                let node_id = cmd.id.parse()?;
-                models::Host::find_by_node(node_id, &self.db).await?.id
-            }
-        };
-        Ok(host_id == self.host_id)
+    async fn relevant(&self, command: &models::Command) -> Result<bool> {
+        Ok(command.host_id == self.host_id)
     }
 }
 

@@ -28,6 +28,13 @@ pub struct Org {
 }
 
 impl Org {
+    pub async fn find_all(db: &PgPool) -> Result<Org> {
+        sqlx::query_as("SELECT * FROM orgs ORDER BY id LIMIT 1")
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
     pub async fn find_by_user(org_id: &Uuid, user_id: &Uuid, db: &PgPool) -> Result<Org> {
         sqlx::query_as::<_, Self>(
             r##"
