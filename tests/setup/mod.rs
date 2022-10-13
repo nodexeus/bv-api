@@ -198,7 +198,8 @@ impl Tester {
         self._send(f, req).await
     }
 
-    /// Sends a request with authentication as though the user were an admin.
+    /// Sends a request with authentication as though the user were an admin. This is the same as
+    /// creating an admin token manually and then calling `tester.send_with(_, _, admin_token)`.
     pub async fn send_admin<F, In, Req, Resp, Client>(
         &self,
         f: F,
@@ -235,26 +236,20 @@ impl Tester {
         Ok(resp.into_inner())
     }
 
-    pub async fn open_stream_admin<F, In, Req, Resp, Client, S>(
-        &self,
-        f: F,
-        req: Req,
-    ) -> Result<Streaming<Resp>, tonic::Status>
-    where
-        F: for<'any> TestableFunction<
-            'any,
-            In,
-            tonic::Request<S>,
-            Response<Streaming<Resp>>,
-            Client,
-        >,
-        Req: tonic::IntoStreamingRequest<Message = In, Stream = S>,
-        Client: GrpcClient<Channel> + Debug + 'static,
-    {
-        self.open_stream_with(f, req, self.admin_token().await)
-            .await
-    }
-
+    /// This endpoint is used to talk to streaming endpoints (which is only CommandFlow for now).
+    /// The types that are used here are a little different compared to the types for the normal
+    /// endpoints, because `tonic` uses different types too. The main difference in api is
+    /// illustrated by this example:
+    ///
+    /// ## Example
+    /// ```rs,ignore
+    /// let stream = tester
+    ///     .open_stream_with(Service::endpoint, tokio_stream::once(data), "token")
+    ///     .await
+    ///     .unwrap();
+    /// let data = stream.assert_receives().await;
+    /// assert_eq!(data, expected);
+    /// ```
     pub async fn open_stream_with<F, In, Req, Resp, Client, S, Token>(
         &self,
         f: F,
@@ -278,6 +273,35 @@ impl Tester {
         req.metadata_mut()
             .insert("authorization", token.parse().unwrap());
         self._open_stream(f, req).await
+    }
+
+    /// This endpoint is used to talk to streaming endpoints (which is only CommandFlow for now).
+    /// The types that are used here are a little different compared to the types for the normal
+    /// endpoints, because `tonic` uses different types too. The main difference in api is
+    /// illustrated by this example:
+    ///
+    /// ## Example
+    /// ```rs,ignore
+    ///
+    /// ```
+    pub async fn open_stream_admin<F, In, Req, Resp, Client, S>(
+        &self,
+        f: F,
+        req: Req,
+    ) -> Result<Streaming<Resp>, tonic::Status>
+    where
+        F: for<'any> TestableFunction<
+            'any,
+            In,
+            tonic::Request<S>,
+            Response<Streaming<Resp>>,
+            Client,
+        >,
+        Req: tonic::IntoStreamingRequest<Message = In, Stream = S>,
+        Client: GrpcClient<Channel> + Debug + 'static,
+    {
+        self.open_stream_with(f, req, self.admin_token().await)
+            .await
     }
 
     pub async fn _open_stream<F, In, S, Resp, Client>(
@@ -373,9 +397,8 @@ pub trait TestStream: Stream {
     {
         tokio::select! {
             elem = self.next() => {
-                match elem {
-                    Some(elem) => panic!("Stream received data! `{elem:?}`"),
-                    None => {},
+                if let Some(elem) = elem {
+                    panic!("Stream received data! `{elem:?}`");
                 }
             },
             _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => { },

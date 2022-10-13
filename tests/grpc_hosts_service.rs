@@ -244,7 +244,7 @@ async fn responds_permission_denied_for_delete() {
 
     let other_host = tester.host2().await;
     // now we generate a token for the wrong host.
-    let token = other_host.get_token(&tester.db.pool).await.unwrap().token;
+    let token = tester.token_for(&other_host).await;
 
     let status = tester
         .send_with(Service::delete, req, token)

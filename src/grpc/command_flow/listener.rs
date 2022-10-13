@@ -78,7 +78,7 @@ impl HostListener {
             tokio::select! {
                 message = self.messages.recv() => {
                     tracing::info!("Received notification");
-                    match dbg!(message) {
+                    match message {
                         Ok(Command(cmd)) => self.process_notification(cmd).await?,
                         Ok(_) => tracing::error!("received non Command notification"),
                         Err(e) => {
@@ -113,12 +113,12 @@ impl HostListener {
         match command {
             Ok(command) => {
                 tracing::info!("Command found");
-                if !dbg!(self.relevant(&command).await)? {
+                if !self.relevant(&command).await? {
                     // If the field was not relevant we are done and can just return Ok(())
                     return Ok(());
                 }
-                let msg = dbg!(convert::db_command_to_grpc_command(command, &self.db).await)?;
-                match dbg!(self.sender.send(Ok(msg)).await) {
+                let msg = convert::db_command_to_grpc_command(command, &self.db).await?;
+                match self.sender.send(Ok(msg)).await {
                     Err(e) => Err(ApiError::UnexpectedError(anyhow!("Sender error: {e}"))),
                     _ => {
                         tracing::info!("Sent channel notification");
