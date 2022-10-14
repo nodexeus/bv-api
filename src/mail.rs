@@ -51,7 +51,7 @@ impl MailClient {
         };
         let mail = sendgrid::Mail {
             to: vec![to],
-            from: "hello@blockjoy.com",
+            from: "no-reply@blockjoy.com",
             subject: "Password Reset",
             html: &html,
             text: &text,
