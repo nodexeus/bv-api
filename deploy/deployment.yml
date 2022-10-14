@@ -139,6 +139,7 @@ data:
   INTERNAL_BUFFER_SIZE: "128"
   PAGINATION_MAX_ITEMS: "10"
   REQUEST_CONCURRENCY_LIMIT: "128"
+  SENDGRID_API_KEY: "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"
 ---
 apiVersion: apps/v1
 kind: Deployment
