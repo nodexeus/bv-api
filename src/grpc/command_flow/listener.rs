@@ -113,7 +113,7 @@ impl HostListener {
         match command {
             Ok(command) => {
                 tracing::info!("Command found");
-                if !self.relevant(&command).await? {
+                if !self.relevant(&command) {
                     // If the field was not relevant we are done and can just return Ok(())
                     return Ok(());
                 }
@@ -143,8 +143,8 @@ impl HostListener {
     /// Checks whether a command is relevant for the currently specified host. We use this for
     /// filtering messages before we send them to the user. If the command is relevant for the
     /// current channel, we return `true` from this function.
-    async fn relevant(&self, command: &models::Command) -> Result<bool> {
-        Ok(command.host_id == self.host_id)
+    fn relevant(&self, command: &models::Command) -> bool {
+        command.host_id == self.host_id
     }
 }
 

@@ -20,7 +20,7 @@ async fn command_flow_works() {
             ip: None,
             block_height: None,
             onchain_name: None,
-            app_status: Some(8),
+            app_status: Some(blockjoy::node_info::ApplicationStatus::Electing as i32),
             container_status: None,
             sync_status: Some(1),
             staking_status: Some(1),

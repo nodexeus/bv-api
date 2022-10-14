@@ -87,11 +87,15 @@ impl Tester {
     }
 
     pub async fn host2(&self) -> models::Host {
-        self.hosts().await.last().unwrap().clone()
+        self.hosts().await.pop().unwrap()
     }
 
     pub async fn org(&self) -> models::Org {
-        models::Org::find_all(&self.db.pool).await.unwrap()
+        models::Org::find_all(&self.db.pool)
+            .await
+            .unwrap()
+            .pop()
+            .unwrap()
     }
 
     pub async fn org_for(&self, user: &models::User) -> models::Org {
