@@ -1,4 +1,5 @@
 use crate::auth::TokenType;
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::user_service_server::UserService;
 use crate::grpc::blockjoy_ui::{
     CreateUserRequest, CreateUserResponse, GetConfigurationRequest, GetConfigurationResponse,
@@ -8,6 +9,7 @@ use crate::grpc::blockjoy_ui::{
 use crate::models::{Token, TokenRole, User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 use super::helpers::{required, try_get_token};
 
@@ -60,9 +62,33 @@ impl UserService for UserServiceImpl {
 
     async fn update(
         &self,
-        _request: Request<UpdateUserRequest>,
+        request: Request<UpdateUserRequest>,
     ) -> Result<Response<UpdateUserResponse>, Status> {
-        Err(Status::unimplemented(""))
+        let token = request
+            .extensions()
+            .get::<Token>()
+            .ok_or_else(required("db token"))?;
+        let user_id = token.user_id.ok_or_else(required("db token"))?;
+        let inner = request.into_inner();
+        let user = inner.user.ok_or_else(required("user"))?;
+
+        // Check if current user is the same as the one to be updated
+        if user_id == Uuid::parse_str(user.id()).map_err(ApiError::from)? {
+            let user: GrpcUser = User::update_all(user_id, user.into(), &self.db)
+                .await?
+                .try_into()?;
+            let response_meta = ResponseMeta::from_meta(inner.meta);
+            let response = UpdateUserResponse {
+                meta: Some(response_meta),
+                user: Some(user),
+            };
+
+            Ok(Response::new(response))
+        } else {
+            Err(Status::permission_denied(
+                "You are not allowed to update this user",
+            ))
+        }
     }
 
     async fn upsert_configuration(

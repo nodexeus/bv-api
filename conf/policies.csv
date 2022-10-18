@@ -5,6 +5,7 @@ p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/Refresh, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/UpdatePassword, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/UpdateUIPassword, POST
 p, master_admin, /blockjoy.api.ui_v1.UserService/Get, POST
+p, master_admin, /blockjoy.api.ui_v1.UserService/Update, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Update, POST
@@ -38,6 +39,7 @@ p, master_admin, /blockjoy.api.ui_v1.BlockchainService/Get, POST
 
 
 g, admin, master_admin
+g, user, master_admin
 g, reset_role, master_admin
 g, guest, outbound
 g, service, master_admin

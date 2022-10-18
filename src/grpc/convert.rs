@@ -87,6 +87,7 @@ pub mod from {
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
         NodeCreateRequest, NodeInfo, NodeStakingStatus, NodeSyncStatus, Org, User,
+        UserSelectiveUpdate,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
@@ -108,6 +109,17 @@ pub mod from {
             nanos: (nanos % NANOS_PER_SEC).try_into()?,
         };
         Ok(timestamp)
+    }
+
+    impl From<GrpcUiUser> for UserSelectiveUpdate {
+        fn from(user: GrpcUiUser) -> Self {
+            Self {
+                first_name: user.first_name,
+                last_name: user.last_name,
+                fee_bps: None,
+                staking_quota: None,
+            }
+        }
     }
 
     impl From<HostSelectiveUpdate> for HostInfo {
