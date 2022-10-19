@@ -137,6 +137,9 @@ impl AuthenticationService for AuthenticationServiceImpl {
                         }),
                     };
 
+                    // Send notification mail
+                    MailClient::new().update_password(&user).await?;
+
                     Ok(Response::new(response))
                 } else {
                     Err(Status::invalid_argument(
