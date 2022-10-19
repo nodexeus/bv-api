@@ -262,7 +262,7 @@ impl Node {
 
     pub async fn running_nodes_count(org_id: &Uuid, db: &PgPool) -> Result<i32> {
         match sqlx::query(
-            r#"select count(id)::int from nodes where chain_status in
+            r#"select COALESCE(count(id)::int, 0) from nodes where chain_status in
                                  (
                                   'broadcasting'::enum_node_chain_status,
                                   'provisioning'::enum_node_chain_status,
@@ -278,7 +278,7 @@ impl Node {
                                   'minting'::enum_node_chain_status,
                                   'processing'::enum_node_chain_status,
                                   'relaying'::enum_node_chain_status
-                                 ); and org_id = $1;"#,
+                                 ) and org_id = $1;"#,
         )
         .bind(org_id)
         .fetch_one(db)
@@ -287,14 +287,14 @@ impl Node {
             Ok(row) => Ok(row.get(0)),
             Err(e) => {
                 tracing::error!("Got error while retrieving number of running hosts: {}", e);
-                Ok(0)
+                Err(ApiError::from(e))
             }
         }
     }
 
     pub async fn halted_nodes_count(org_id: &Uuid, db: &PgPool) -> Result<i32> {
         match sqlx::query(
-            r#"select count(id)::int from nodes where chain_status in
+            r#"select COALESCE(count(id)::int, 0) from nodes where chain_status in
                                  (
                                   'unknown'::enum_node_chain_status,
                                   'disabled'::enum_node_chain_status,
@@ -309,7 +309,7 @@ impl Node {
             Ok(row) => Ok(row.get(0)),
             Err(e) => {
                 tracing::error!("Got error while retrieving number of running hosts: {}", e);
-                Ok(0)
+                Err(ApiError::from(e))
             }
         }
     }
