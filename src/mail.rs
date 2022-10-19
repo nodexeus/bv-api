@@ -10,7 +10,15 @@ pub struct MailClient {
 
 impl MailClient {
     pub fn new() -> Self {
-        let sg_api_key = dotenv::var("SENDGRID_API_KEY").expect("No `SENDGRID_API_KEY` provided!");
+        // Don't fail if API key wasn't found
+        let sg_api_key = match dotenv::var("SENDGRID_API_KEY") {
+            Ok(key) => key,
+            Err(e) => {
+                tracing::error!("Couldn't read SENDGRID_API_KEY env var: {}", e);
+                String::default()
+            }
+        };
+
         Self {
             client: sendgrid::SGClient::new(sg_api_key),
         }
@@ -70,10 +78,12 @@ impl MailClient {
             date: &chrono::Utc::now().to_rfc2822(),
             ..Default::default()
         };
-        self.client
-            .send(mail)
-            .await
-            .map_err(|e| anyhow!("Failure to send email {e}"))?;
+
+        // Don't fail if mail couldn't be sent
+        if let Err(e) = self.client.send(mail).await {
+            tracing::error!("Failure to send email {e}");
+        }
+
         Ok(())
     }
 }
