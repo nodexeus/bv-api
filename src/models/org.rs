@@ -101,6 +101,31 @@ impl Org {
         .map_err(ApiError::from)
     }
 
+    pub async fn find_personal_org(user_id: Uuid, db: &PgPool) -> Result<Org> {
+        sqlx::query_as::<_, Self>(
+            r##"
+            SELECT
+                orgs.*,
+                orgs_users.role,
+                (SELECT count(*) from orgs_users where orgs_users.org_id = orgs.id) as member_count
+            FROM
+                orgs
+            INNER JOIN
+                orgs_users
+            ON
+                orgs.id = orgs_users.org_id
+            WHERE
+                orgs_users.user_id = $1 and is_personal = true
+            ORDER BY
+                lower(orgs.name)
+            "##,
+        )
+        .bind(user_id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
+    }
+
     /// Returns the users of an organization
     pub async fn find_all_member_users_paginated(
         org_id: &Uuid,
