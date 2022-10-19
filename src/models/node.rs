@@ -260,7 +260,7 @@ impl Node {
             .map_err(ApiError::from)
     }
 
-    pub async fn running_nodes_count(db: &PgPool) -> Result<i32> {
+    pub async fn running_nodes_count(org_id: &Uuid, db: &PgPool) -> Result<i32> {
         match sqlx::query(
             r#"select count(id)::int from nodes where chain_status in
                                  (
@@ -278,20 +278,21 @@ impl Node {
                                   'minting'::enum_node_chain_status,
                                   'processing'::enum_node_chain_status,
                                   'relaying'::enum_node_chain_status
-                                 );"#,
+                                 ); and org_id = $1;"#,
         )
+        .bind(org_id)
         .fetch_one(db)
         .await
         {
             Ok(row) => Ok(row.get(0)),
             Err(e) => {
                 tracing::error!("Got error while retrieving number of running hosts: {}", e);
-                Err(ApiError::from(e))
+                Ok(0)
             }
         }
     }
 
-    pub async fn halted_nodes_count(db: &PgPool) -> Result<i32> {
+    pub async fn halted_nodes_count(org_id: &Uuid, db: &PgPool) -> Result<i32> {
         match sqlx::query(
             r#"select count(id)::int from nodes where chain_status in
                                  (
@@ -299,15 +300,16 @@ impl Node {
                                   'disabled'::enum_node_chain_status,
                                   'removed'::enum_node_chain_status,
                                   'removing'::enum_node_chain_status
-                                 );"#,
+                                 ) and org_id = $1;"#,
         )
+        .bind(org_id)
         .fetch_one(db)
         .await
         {
             Ok(row) => Ok(row.get(0)),
             Err(e) => {
                 tracing::error!("Got error while retrieving number of running hosts: {}", e);
-                Err(ApiError::from(e))
+                Ok(0)
             }
         }
     }
