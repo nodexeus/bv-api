@@ -4,7 +4,8 @@ use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
     UpdateUiPasswordRequest, UpdateUiPasswordResponse,
 };
-use crate::models::{self, Token, User};
+use crate::mail::MailClient;
+use crate::models::{Token, User};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 
@@ -80,7 +81,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         // are not going to return an error. This hides whether or not a user is registered with
         // us to the caller of the api, because this info may be sensitive and this endpoint is not
         // protected by any authentication.
-        let user = models::User::find_by_email(&request.email, &self.db).await;
+        let user = User::find_by_email(&request.email, &self.db).await;
         if let Ok(user) = user {
             let _ = user.email_reset_password(&self.db).await;
         }
@@ -92,11 +93,11 @@ impl AuthenticationService for AuthenticationServiceImpl {
 
     async fn update_password(
         &self,
-        request: tonic::Request<UpdatePasswordRequest>,
-    ) -> Result<tonic::Response<UpdatePasswordResponse>, tonic::Status> {
+        request: Request<UpdatePasswordRequest>,
+    ) -> Result<Response<UpdatePasswordResponse>, Status> {
         let db_token = try_get_token(&request)?;
         let user_id = db_token.try_user_id()?;
-        let cur_user = models::User::find_by_id(user_id, &self.db).await?;
+        let cur_user = User::find_by_id(user_id, &self.db).await?;
         let request = request.into_inner();
         let _cur_user = cur_user
             .update_password(&request.password, &self.db)
@@ -108,6 +109,10 @@ impl AuthenticationService for AuthenticationServiceImpl {
                 value: db_token.token,
             }),
         };
+
+        // Send notification mail
+        MailClient::new().update_password(&cur_user).await?;
+
         Ok(Response::new(response))
     }
 

@@ -16,6 +16,16 @@ impl MailClient {
         }
     }
 
+    /// Sends a notification if the user has updated his password
+    pub async fn update_password(&self, user: &models::User) -> errors::Result<()> {
+        const TEMPLATES: &str = include_str!("../mails/update_password.toml");
+        // SAFETY: assume we can write toml and also protected by test
+        let templates = toml::from_str(TEMPLATES)
+            .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
+
+        self.send_mail(&templates, user, None).await
+    }
+
     /// Sends a password reset email to the specified user, containing a JWT that they can use to
     /// authenticate themselves to reset their password.
     pub async fn reset_password(&self, user: &models::User, db: &PgPool) -> errors::Result<()> {
@@ -31,7 +41,7 @@ impl MailClient {
             .await?;
         let mut context = HashMap::new();
         context.insert("token".to_owned(), token.token);
-        self.send_mail(&templates, user, context).await
+        self.send_mail(&templates, user, Some(context)).await
     }
 
     async fn send_mail(
@@ -40,8 +50,9 @@ impl MailClient {
         to: &models::User,
         // Can't use 'static str for the keys or the values here, see:
         // https://stackoverflow.com/questions/68591843
-        context: HashMap<String, String>,
+        context: Option<HashMap<String, String>>,
     ) -> errors::Result<()> {
+        let context = context.unwrap_or_default();
         let template = templates.by_lang(to.preferred_language());
         let (html, text) = template.render(context)?;
 
