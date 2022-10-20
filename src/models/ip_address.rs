@@ -125,4 +125,21 @@ impl IpAddress {
 
         Self::update(fields, db).await
     }
+
+    pub fn in_range(ip: IpAddr, from: IpAddr, to: IpAddr) -> ApiResult<bool> {
+        let start_range = Ipv4Addr::from_str(from.to_string().as_str())
+            .map_err(|e| ApiError::UnexpectedError(anyhow!(e)))?;
+        let stop_range = Ipv4Addr::from_str(to.to_string().as_str())
+            .map_err(|e| ApiError::UnexpectedError(anyhow!(e)))?;
+        let ip_addrs = IpAddrRange::from(Ipv4AddrRange::new(start_range, stop_range));
+
+        // TS: For some reason, ::contains() doesn't exist
+        for addr in ip_addrs {
+            if ip == addr {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
 }

@@ -11,7 +11,7 @@ pub mod server;
 pub use test::TestDb;
 // #[cfg(test)]
 mod test {
-    use crate::models::{self, validator};
+    use crate::models::{self, validator, IpAddress, IpAddressRangeRequest};
     use rand::Rng;
     use sqlx::Connection;
     use std::net::IpAddr;
@@ -238,6 +238,15 @@ mod test {
                 .await
                 .expect("Could not create test host in db.");
 
+            let req = IpAddressRangeRequest {
+                from: IpAddr::from_str("192.168.0.10").unwrap(),
+                to: IpAddr::from_str("192.168.0.20").unwrap(),
+                host_provision_id: None,
+                host_id: Some(host.id),
+            };
+            IpAddress::create_range(req, &self.pool)
+                .await
+                .expect("Couldn't create IP range");
             let status = validator::ValidatorStatusRequest {
                 version: None,
                 block_height: None,

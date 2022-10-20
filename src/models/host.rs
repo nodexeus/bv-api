@@ -5,7 +5,7 @@ use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable, Token
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
 use crate::grpc::helpers::required;
-use crate::models::UpdateInfo;
+use crate::models::{IpAddress, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -185,6 +185,11 @@ impl Host {
     }
 
     pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
+        // Ensure gateway IP is not amongst the ones created in the IP range
+        if IpAddress::in_range(req.ip_gateway, req.ip_range_from, req.ip_range_to)? {
+            return Err(ApiError::DuplicateResource);
+        }
+
         let mut tx = db.begin().await?;
         let mut host = sqlx::query(
             r#"INSERT INTO hosts 
