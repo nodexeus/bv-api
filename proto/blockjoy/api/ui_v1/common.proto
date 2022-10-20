@@ -91,6 +91,9 @@ message Host {
   optional HostStatus status = 12;
   repeated Node nodes = 13;
   optional google.protobuf.Timestamp created_at = 14;
+  optional string ip_range_from = 15;
+  optional string ip_range_to = 16;
+  optional string ip_gateway = 17;
 }
 
 /* HostProvision entity */
