@@ -6,6 +6,7 @@ use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
 use crate::grpc::helpers::required;
 use crate::models::UpdateInfo;
+use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -185,7 +186,10 @@ impl Host {
 
     pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
         let mut tx = db.begin().await?;
-        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, status, org_id, cpu_count, mem_size, disk_size, os, os_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *")
+        let mut host = sqlx::query(r#"INSERT INTO hosts 
+            (name, version, location, ip_addr, val_ip_addrs, status, org_id, cpu_count, mem_size, disk_size, os, os_version) 
+            VALUES 
+            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *"#)
         .bind(req.name)
         .bind(req.version)
         .bind(req.location)
@@ -198,6 +202,9 @@ impl Host {
         .bind(req.disk_size)
         .bind(req.os)
         .bind(req.os_version)
+        .bind(req.ip_range_from)
+        .bind(req.ip_range_to)
+        .bind(req.ip_gateway)
         .map(|row: PgRow| {
             Self::from(row)
         })
@@ -590,11 +597,15 @@ impl HostProvision {
             .map_err(|_| ApiError::from(anyhow::anyhow!("Couldn't parse nodes")))?;
 
         let mut host_provision = sqlx::query_as::<_, HostProvision>(
-            "INSERT INTO host_provisions (id, org_id, nodes) values ($1, $2, $3) RETURNING *",
+            r#"INSERT INTO host_provisions (id, org_id, nodes, ip_range_from, ip_range_to, ip_gateway) 
+                   values ($1, $2, $3, $4, $5, $6) RETURNING *"#,
         )
         .bind(Self::generate_token())
         .bind(req.org_id)
         .bind(nodes_str)
+        .bind(req.ip_range_from)
+        .bind(req.ip_range_to)
+        .bind(req.ip_gateway)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)?;
@@ -640,6 +651,15 @@ impl HostProvision {
 
         req.org_id = Some(host_provision.org_id);
         req.val_ip_addrs = None;
+        req.ip_range_from = host_provision
+            .ip_range_from
+            .ok_or_else(|| anyhow!("No FROM in ip range"))?;
+        req.ip_range_to = host_provision
+            .ip_range_to
+            .ok_or_else(|| anyhow!("No TO in ip range"))?;
+        req.ip_gateway = host_provision
+            .ip_gateway
+            .ok_or_else(|| anyhow!("No IP gateway"))?;
 
         //TODO: transaction this
         let mut host = Host::create(req.into(), db).await?;
@@ -676,4 +696,7 @@ impl HostProvision {
 pub struct HostProvisionRequest {
     pub org_id: Uuid,
     pub nodes: Option<Vec<NodeProvision>>,
+    pub ip_range_from: IpAddr,
+    pub ip_range_to: IpAddr,
+    pub ip_gateway: IpAddr,
 }

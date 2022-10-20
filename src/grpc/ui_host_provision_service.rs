@@ -7,6 +7,8 @@ use crate::grpc::blockjoy_ui::{
 };
 use crate::models::{HostProvision, HostProvisionRequest};
 use crate::server::DbPool;
+use anyhow::anyhow;
+use std::net::AddrParseError;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -47,6 +49,18 @@ impl HostProvisionService for HostProvisionServiceImpl {
         let req = HostProvisionRequest {
             org_id: Uuid::parse_str(provision.org_id.as_str()).map_err(ApiError::from)?,
             nodes: None,
+            ip_range_from: provision
+                .ip_range_from
+                .parse()
+                .map_err(|err: AddrParseError| ApiError::UnexpectedError(anyhow!(err)))?,
+            ip_range_to: provision
+                .ip_range_to
+                .parse()
+                .map_err(|err: AddrParseError| ApiError::UnexpectedError(anyhow!(err)))?,
+            ip_gateway: provision
+                .ip_gateway
+                .parse()
+                .map_err(|err: AddrParseError| ApiError::UnexpectedError(anyhow!(err)))?,
         };
 
         let provision = HostProvision::create(req, &self.db).await?;
