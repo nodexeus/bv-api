@@ -527,6 +527,22 @@ impl From<HostCreateRequest> for HostRequest {
 
 impl From<HostInfo> for HostSelectiveUpdate {
     fn from(info: HostInfo) -> Self {
+        let from = if info.ip_range_from.is_some() {
+            info.ip_range_from.unwrap().parse::<IpAddr>().ok()
+        } else {
+            None
+        };
+        let to = if info.ip_range_to.is_some() {
+            info.ip_range_to.unwrap().parse::<IpAddr>().ok()
+        } else {
+            None
+        };
+        let gateway = if info.ip_gateway.is_some() {
+            info.ip_gateway.unwrap().parse::<IpAddr>().ok()
+        } else {
+            None
+        };
+
         Self {
             org_id: None,
             name: info.name,
@@ -540,15 +556,9 @@ impl From<HostInfo> for HostSelectiveUpdate {
             ip_addr: info.ip,
             val_ip_addrs: None,
             status: None,
-            ip_range_from: info
-                .ip_range_from
-                .map(|v| IpAddr::from_str(v.as_str()).expect("Couldn't parse IP address")),
-            ip_range_to: info
-                .ip_range_to
-                .map(|v| IpAddr::from_str(v.as_str()).expect("Couldn't parse IP address")),
-            ip_gateway: info
-                .ip_gateway
-                .map(|v| IpAddr::from_str(v.as_str()).expect("Couldn't parse IP address")),
+            ip_range_from: from,
+            ip_range_to: to,
+            ip_gateway: gateway,
         }
     }
 }

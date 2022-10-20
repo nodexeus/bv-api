@@ -167,21 +167,21 @@ pub mod from {
                 status: None,
                 ip_range_from: Some(
                     host.ip_range_from
-                        .unwrap_or_default()
+                        .ok_or_else(required("host.ip_range_from"))?
                         .parse()
-                        .map_err(|e: AddrParseError| anyhow!(e))?,
+                        .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
                 ),
                 ip_range_to: Some(
                     host.ip_range_to
-                        .unwrap_or_default()
+                        .ok_or_else(required("host.ip_range_from"))?
                         .parse()
-                        .map_err(|e: AddrParseError| anyhow!(e))?,
+                        .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
                 ),
                 ip_gateway: Some(
                     host.ip_gateway
-                        .unwrap_or_default()
+                        .ok_or_else(required("host.ip_range_from"))?
                         .parse()
-                        .map_err(|e: AddrParseError| anyhow!(e))?,
+                        .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
                 ),
             };
             Ok(updater)
