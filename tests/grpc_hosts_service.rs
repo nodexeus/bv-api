@@ -8,6 +8,8 @@ use api::grpc::blockjoy::{
 };
 use api::models::{Host, HostProvision, HostProvisionRequest, HostSelectiveUpdate};
 use setup::setup;
+use std::net::IpAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use test_macros::*;
 use tonic::transport::Channel;
@@ -32,6 +34,9 @@ async fn responds_unauthenticated_without_valid_token_for_info_update() {
         os: None,
         os_version: None,
         ip: Some("123.456.789.0".into()),
+        ip_gateway: Some("192.168.0.1".into()),
+        ip_range_from: Some("192.168.0.10".into()),
+        ip_range_to: Some("192.168.0.20".into()),
     };
     let inner = HostInfoUpdateRequest {
         request_id: Some(Uuid::new_v4().to_string()),
@@ -65,6 +70,9 @@ async fn responds_unauthenticated_without_token_for_info_update() {
         os: None,
         os_version: None,
         ip: Some("123.456.789.0".into()),
+        ip_gateway: Some("192.168.0.1".into()),
+        ip_range_from: Some("192.168.0.10".into()),
+        ip_range_to: Some("192.168.0.20".into()),
     };
     let inner = HostInfoUpdateRequest {
         request_id: Some(Uuid::new_v4().to_string()),
@@ -92,6 +100,9 @@ async fn responds_unauthenticated_with_token_for_info_update() {
         os: None,
         os_version: None,
         ip: Some("123.456.789.0".into()),
+        ip_gateway: Some("192.168.0.1".into()),
+        ip_range_from: Some("192.168.0.10".into()),
+        ip_range_to: Some("192.168.0.20".into()),
     };
     let inner = HostInfoUpdateRequest {
         request_id: Some(Uuid::new_v4().to_string()),
@@ -125,6 +136,9 @@ async fn responds_permission_denied_with_token_ownership_for_info_update() {
         os: None,
         os_version: None,
         ip: Some("123.456.789.0".into()),
+        ip_gateway: Some("192.168.0.1".into()),
+        ip_range_from: Some("192.168.0.10".into()),
+        ip_range_to: Some("192.168.0.20".into()),
     };
     let inner = HostInfoUpdateRequest {
         request_id: Some(Uuid::new_v4().to_string()),
@@ -158,6 +172,9 @@ async fn responds_not_found_for_provision() {
         os: None,
         os_version: None,
         ip: Some("123.456.789.0".into()),
+        ip_gateway: Some("192.168.0.1".into()),
+        ip_range_from: Some("192.168.0.10".into()),
+        ip_range_to: Some("192.168.0.20".into()),
     };
     let inner = ProvisionHostRequest {
         request_id: Some(Uuid::new_v4().to_string()),
@@ -184,6 +201,9 @@ async fn responds_ok_for_provision() {
     let host_provision_request = HostProvisionRequest {
         org_id: org.0,
         nodes: None,
+        ip_gateway: IpAddr::from_str("192.168.0.1").unwrap(),
+        ip_range_from: IpAddr::from_str("192.168.0.10").unwrap(),
+        ip_range_to: IpAddr::from_str("192.168.0.100").unwrap(),
     };
     let host_provision = HostProvision::create(host_provision_request, &db.pool)
         .await
@@ -199,6 +219,9 @@ async fn responds_ok_for_provision() {
         os: None,
         os_version: None,
         ip: Some("123.456.789.0".into()),
+        ip_gateway: Some("192.168.0.1".into()),
+        ip_range_from: Some("192.168.0.10".into()),
+        ip_range_to: Some("192.168.0.20".into()),
     };
     let inner = ProvisionHostRequest {
         request_id: Some(Uuid::new_v4().to_string()),
@@ -230,6 +253,9 @@ async fn responds_ok_for_info_update() {
         os: None,
         os_version: None,
         ip: Some("123.456.789.0".into()),
+        ip_gateway: Some("192.168.0.1".into()),
+        ip_range_from: Some("192.168.0.10".into()),
+        ip_range_to: Some("192.168.0.20".into()),
     };
     let inner = HostInfoUpdateRequest {
         request_id: Some(Uuid::new_v4().to_string()),
@@ -321,6 +347,9 @@ async fn can_update_host_info() {
         os: None,
         os_version: None,
         ip: None,
+        ip_gateway: Some("192.168.0.1".into()),
+        ip_range_from: Some("192.168.0.10".into()),
+        ip_range_to: Some("192.168.0.20".into()),
     };
     let fields = HostSelectiveUpdate::from(host_info);
 

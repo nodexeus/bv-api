@@ -38,7 +38,7 @@ pub enum ApiError {
     UuidParseError(#[from] uuid::Error),
 
     #[error("No free IP available: {0}")]
-    IpAssignmentError(#[from] ApiError),
+    IpAssignmentError(sqlx::Error),
 }
 
 impl ApiError {

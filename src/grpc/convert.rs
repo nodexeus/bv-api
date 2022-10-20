@@ -399,6 +399,7 @@ pub mod from {
                 groups: vec![],
                 version: node.version.clone(),
                 ip: node.ip_addr.clone(),
+                ip_gateway: node.ip_gateway.clone(),
                 r#type: Some(node.node_type.to_json()?),
                 address: node.address.clone(),
                 wallet_address: node.wallet_address.clone(),
@@ -432,6 +433,7 @@ pub mod from {
                 groups: vec![],
                 version: req.version.clone(),
                 ip: req.ip_addr.clone(),
+                ip_gateway: req.ip_gateway.clone(),
                 r#type: Some(r#type),
                 address: req.address.clone(),
                 wallet_address: req.wallet_address.clone(),
@@ -479,6 +481,7 @@ pub mod from {
                 groups: Some(node.groups.join(",")),
                 version: node.version.map(String::from),
                 ip_addr: node.ip.map(String::from),
+                ip_gateway: node.ip_gateway.map(String::from),
                 blockchain_id: Uuid::parse_str(
                     node.blockchain_id
                         .ok_or_else(|| ApiError::validation("GrpcNode.blockchain_id is required"))?

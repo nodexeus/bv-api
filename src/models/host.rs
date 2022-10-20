@@ -186,10 +186,28 @@ impl Host {
 
     pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
         let mut tx = db.begin().await?;
-        let mut host = sqlx::query(r#"INSERT INTO hosts 
-            (name, version, location, ip_addr, val_ip_addrs, status, org_id, cpu_count, mem_size, disk_size, os, os_version) 
+        let mut host = sqlx::query(
+            r#"INSERT INTO hosts 
+            (
+                name,
+                version,
+                location,
+                ip_addr,
+                val_ip_addrs,
+                status,
+                org_id,
+                cpu_count,
+                mem_size,
+                disk_size,
+                os,
+                os_version,
+                ip_gateway,
+                ip_range_from,
+                ip_range_to
+            ) 
             VALUES 
-            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *"#)
+            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *"#,
+        )
         .bind(req.name)
         .bind(req.version)
         .bind(req.location)
@@ -202,12 +220,10 @@ impl Host {
         .bind(req.disk_size)
         .bind(req.os)
         .bind(req.os_version)
+        .bind(req.ip_gateway)
         .bind(req.ip_range_from)
         .bind(req.ip_range_to)
-        .bind(req.ip_gateway)
-        .map(|row: PgRow| {
-            Self::from(row)
-        })
+        .map(Self::from)
         .fetch_one(&mut tx)
         .await?;
 
