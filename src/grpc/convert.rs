@@ -1,4 +1,4 @@
-use crate::errors::{ApiError, Result as ApiResult};
+use crate::errors::Result as ApiResult;
 use crate::grpc::blockjoy::{
     command, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
     NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
@@ -96,6 +96,8 @@ pub mod from {
     use prost_types::Timestamp;
     use serde_json::Value;
     use std::i64;
+    use std::net::{AddrParseError, IpAddr};
+    use std::str::FromStr;
     use tonic::{Code, Status};
     use uuid::Uuid;
 
@@ -164,6 +166,24 @@ pub mod from {
                 ip_addr: host.ip,
                 val_ip_addrs: None,
                 status: None,
+                ip_range_from: Some(
+                    host.ip_range_from
+                        .unwrap_or_default()
+                        .parse()
+                        .map_err(|e: AddrParseError| anyhow!(e))?,
+                ),
+                ip_range_to: Some(
+                    host.ip_range_to
+                        .unwrap_or_default()
+                        .parse()
+                        .map_err(|e: AddrParseError| anyhow!(e))?,
+                ),
+                ip_gateway: Some(
+                    host.ip_gateway
+                        .unwrap_or_default()
+                        .parse()
+                        .map_err(|e: AddrParseError| anyhow!(e))?,
+                ),
             };
             Ok(updater)
         }
@@ -217,6 +237,18 @@ pub mod from {
                 ip_addr: host.ip.ok_or_else(required("host.ip"))?,
                 val_ip_addrs: None,
                 status: ConnectionStatus::Online,
+                ip_range_from: host
+                    .ip_range_from
+                    .map(|ip| IpAddr::from_str(ip.as_str()).expect("IP can't be parsed"))
+                    .ok_or_else(required("host.ip_range_from"))?,
+                ip_range_to: host
+                    .ip_range_to
+                    .map(|ip| IpAddr::from_str(ip.as_str()).expect("IP can't be parsed"))
+                    .ok_or_else(required("host.ip_range_to"))?,
+                ip_gateway: host
+                    .ip_gateway
+                    .map(|ip| IpAddr::from_str(ip.as_str()).expect("IP can't be parsed"))
+                    .ok_or_else(required("host.ip_gateway"))?,
             };
             Ok(req)
         }
@@ -337,6 +369,9 @@ pub mod from {
                 status: None,
                 nodes: nodes?,
                 created_at: Some(try_dt_to_ts(host.created_at)?),
+                ip_range_from: host.ip_range_from.map(|ip| ip.to_string()),
+                ip_range_to: host.ip_range_to.map(|ip| ip.to_string()),
+                ip_gateway: host.ip_gateway.map(|ip| ip.to_string()),
             };
             Ok(grpc_host)
         }

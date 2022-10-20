@@ -498,6 +498,15 @@ impl From<HostInfo> for HostSelectiveUpdate {
             ip_addr: info.ip,
             val_ip_addrs: None,
             status: None,
+            ip_range_from: info
+                .ip_range_from
+                .map(|v| IpAddr::from_str(v.as_str()).expect("Couldn't parse IP address")),
+            ip_range_to: info
+                .ip_range_to
+                .map(|v| IpAddr::from_str(v.as_str()).expect("Couldn't parse IP address")),
+            ip_gateway: info
+                .ip_gateway
+                .map(|v| IpAddr::from_str(v.as_str()).expect("Couldn't parse IP address")),
         }
     }
 }
