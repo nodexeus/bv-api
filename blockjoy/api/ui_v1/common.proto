@@ -182,6 +182,7 @@ message Node {
   optional NodeStatus status = 16;
   optional SyncStatus sync_status = 17;
   optional StakingStatus staking_status = 18;
+  optional string ip_gateway = 19;
 }
 
 /* Organization representation */
