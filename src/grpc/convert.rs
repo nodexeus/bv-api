@@ -96,8 +96,7 @@ pub mod from {
     use prost_types::Timestamp;
     use serde_json::Value;
     use std::i64;
-    use std::net::{AddrParseError, IpAddr};
-    use std::str::FromStr;
+    use std::net::AddrParseError;
     use tonic::{Code, Status};
     use uuid::Uuid;
 
@@ -239,16 +238,19 @@ pub mod from {
                 status: ConnectionStatus::Online,
                 ip_range_from: host
                     .ip_range_from
-                    .map(|ip| IpAddr::from_str(ip.as_str()).expect("IP can't be parsed"))
-                    .ok_or_else(required("host.ip_range_from"))?,
+                    .ok_or_else(required("host.ip_range_from"))?
+                    .parse()
+                    .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
                 ip_range_to: host
                     .ip_range_to
-                    .map(|ip| IpAddr::from_str(ip.as_str()).expect("IP can't be parsed"))
-                    .ok_or_else(required("host.ip_range_to"))?,
+                    .ok_or_else(required("host.ip_range_to"))?
+                    .parse()
+                    .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
                 ip_gateway: host
                     .ip_gateway
-                    .map(|ip| IpAddr::from_str(ip.as_str()).expect("IP can't be parsed"))
-                    .ok_or_else(required("host.ip_gateway"))?,
+                    .ok_or_else(required("host.ip_gateway"))?
+                    .parse()
+                    .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
             };
             Ok(req)
         }

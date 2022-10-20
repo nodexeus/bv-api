@@ -13,49 +13,35 @@ pub struct IpAddress {
     pub(crate) id: Uuid,
     // Type IpAddr is required by sqlx
     pub(crate) ip: IpAddr,
-    pub(crate) host_provision_id: Option<String>,
     pub(crate) host_id: Option<Uuid>,
     pub(crate) is_assigned: bool,
 }
 
 pub struct IpAddressRequest {
     pub(crate) ip: IpAddr,
-    pub(crate) host_provision_id: Option<String>,
     pub(crate) host_id: Option<Uuid>,
 }
 
 pub struct IpAddressRangeRequest {
     pub(crate) from: IpAddr,
     pub(crate) to: IpAddr,
-    pub(crate) host_provision_id: Option<String>,
     pub(crate) host_id: Option<Uuid>,
 }
 
 impl IpAddressRangeRequest {
-    pub fn try_new(
-        from: IpAddr,
-        to: IpAddr,
-        host_provision_id: Option<String>,
-        host_id: Option<Uuid>,
-    ) -> ApiResult<Self> {
+    pub fn try_new(from: IpAddr, to: IpAddr, host_id: Option<Uuid>) -> ApiResult<Self> {
         if to < from {
             Err(ApiError::UnexpectedError(anyhow!(
                 "TO IP can't be smaller as FROM IP"
             )))
         } else {
-            Ok(Self {
-                from,
-                to,
-                host_provision_id,
-                host_id,
-            })
+            Ok(Self { from, to, host_id })
         }
     }
 }
 
 pub struct IpAddressSelectiveUpdate {
     pub(crate) id: Uuid,
-    pub(crate) host_provision_id: Option<String>,
     pub(crate) host_id: Option<Uuid>,
     pub(crate) assigned: Option<bool>,
 }
@@ -63,11 +49,10 @@ pub struct IpAddressSelectiveUpdate {
 impl IpAddress {
     pub async fn create(req: IpAddressRequest, db: &PgPool) -> ApiResult<Self> {
         sqlx::query_as::<_, Self>(
-            r#"INSERT INTO ip_addresses (ip, host_provision_id, host_id) 
+            r#"INSERT INTO ip_addresses (ip, host_id) 
                    values ($1, $2, $3) RETURNING *"#,
         )
         .bind(req.ip)
-        .bind(req.host_provision_id)
         .bind(req.host_id)
         .fetch_one(db)
         .await
@@ -89,11 +74,10 @@ impl IpAddress {
 
             created.push(
                 sqlx::query_as::<_, Self>(
-                    r#"INSERT INTO ip_addresses (ip, host_provision_id, host_id) 
-                   values ($1, $2, $3) RETURNING *"#,
+                    r#"INSERT INTO ip_addresses (ip, host_id) 
+                   values ($1, $2) RETURNING *"#,
                 )
                 .bind(ip)
-                .bind(req.host_provision_id.clone())
                 .bind(req.host_id)
                 .fetch_one(&mut tx)
                 .await
@@ -109,12 +93,10 @@ impl IpAddress {
     pub async fn update(update: IpAddressSelectiveUpdate, db: &PgPool) -> ApiResult<Self> {
         sqlx::query_as::<_, Self>(
             r#"UPDATE ip_addresses SET 
-                    host_provision_id = COALESCE($1, host_provision_id),
-                    host_id = COALESCE($2, host_id),
-                    is_assigned = COALESCE($3, is_assigned)
-                WHERE id = $4 RETURNING *"#,
+                    host_id = COALESCE($1, host_id),
+                    is_assigned = COALESCE($2, is_assigned)
+                WHERE id = $3 RETURNING *"#,
         )
-        .bind(update.host_provision_id)
         .bind(update.host_id)
         .bind(update.assigned)
         .bind(update.id)
@@ -142,7 +124,6 @@ impl IpAddress {
     pub async fn assign(id: Uuid, host_id: Uuid, db: &PgPool) -> ApiResult<Self> {
         let fields = IpAddressSelectiveUpdate {
             id,
-            host_provision_id: None,
             host_id: Some(host_id),
             assigned: Some(true),
         };
@@ -150,20 +131,20 @@ impl IpAddress {
         Self::update(fields, db).await
     }
 
-    pub fn in_range(ip: IpAddr, from: IpAddr, to: IpAddr) -> ApiResult<bool> {
-        let start_range = Ipv4Addr::from_str(from.to_string().as_str())
-            .map_err(|e| ApiError::UnexpectedError(anyhow!(e)))?;
-        let stop_range = Ipv4Addr::from_str(to.to_string().as_str())
-            .map_err(|e| ApiError::UnexpectedError(anyhow!(e)))?;
-        let ip_addrs = IpAddrRange::from(Ipv4AddrRange::new(start_range, stop_range));
+    pub fn in_range(ip: IpAddr, from: IpAddr, to: IpAddr) -> bool {
+        !(ip < from || ip > to)
+    }
 
-        // TS: For some reason, ::contains() doesn't exist
-        for addr in ip_addrs {
-            if ip == addr {
-                return Ok(true);
-            }
-        }
+    pub async fn assigned(ip: IpAddr, db: &PgPool) -> ApiResult<bool> {
+        let ip_count: i32 = sqlx::query_scalar(
+            r#"SELECT count(id)::int from ip_addresses
+                    WHERE ip = $1"#,
+        )
+        .bind(ip)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)?;
 
-        Ok(false)
+        Ok(ip_count > 0)
     }
 }

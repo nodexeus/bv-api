@@ -14,7 +14,6 @@ async fn should_create_ip_range() -> anyhow::Result<()> {
     let req = IpAddressRangeRequest::try_new(
         IpAddr::from_str("192.129.0.10").unwrap(),
         IpAddr::from_str("192.129.0.20").unwrap(),
-        None,
         Some(host.id),
     )?;
     let range = IpAddress::create_range(req, &db.pool).await?;
@@ -32,7 +31,6 @@ async fn should_fail_creating_ip_range() -> anyhow::Result<()> {
     match IpAddressRangeRequest::try_new(
         IpAddr::from_str("192.129.0.20").unwrap(),
         IpAddr::from_str("192.129.0.10").unwrap(),
-        None,
         Some(host.id),
     ) {
         Ok(_) => panic!("This should error"),
@@ -48,5 +46,5 @@ fn should_fail_if_ip_in_range() {
     let from_ip = IpAddr::from_str("192.168.0.10").unwrap();
     let to_ip = IpAddr::from_str("192.168.0.10").unwrap();
 
-    assert!(!IpAddress::in_range(ref_ip, from_ip, to_ip).unwrap());
+    assert!(!IpAddress::in_range(ref_ip, from_ip, to_ip));
 }

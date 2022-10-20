@@ -186,7 +186,7 @@ impl Host {
 
     pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
         // Ensure gateway IP is not amongst the ones created in the IP range
-        if IpAddress::in_range(req.ip_gateway, req.ip_range_from, req.ip_range_to)? {
+        if IpAddress::in_range(req.ip_gateway, req.ip_range_from, req.ip_range_to) {
             return Err(ApiError::IpGatewayError(anyhow!(
                 "{} is in range {} - {}",
                 req.ip_gateway,
@@ -259,7 +259,6 @@ impl Host {
         let req = IpAddressRangeRequest::try_new(
             host.ip_range_from.ok_or_else(required("ip.range.from"))?,
             host.ip_range_to.ok_or_else(required("ip.range.to"))?,
-            None,
             Some(host.id),
         )?;
         IpAddress::create_range(req, db).await?;
