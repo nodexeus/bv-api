@@ -192,8 +192,9 @@ impl Node {
                     block_height, 
                     node_data,
                     chain_status,
-                    sync_status
-                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *"#,
+                    sync_status,
+                    ip_gateway
+                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *"#,
         )
         .bind(&req.org_id)
         .bind(&req.host_id)
@@ -209,6 +210,7 @@ impl Node {
         .bind(&req.node_data)
         .bind(&req.chain_status)
         .bind(&req.sync_status)
+        .bind(&req.ip_gateway)
         .fetch_one(&mut tx)
         .await
         //.map_err(ApiError::from)?;
@@ -360,6 +362,7 @@ pub struct NodeCreateRequest {
     pub groups: Option<String>,
     pub version: Option<String>,
     pub ip_addr: Option<String>,
+    pub ip_gateway: Option<String>,
     pub blockchain_id: Uuid,
     pub node_type: Json<NodeType>,
     pub address: Option<String>,

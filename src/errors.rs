@@ -36,6 +36,9 @@ pub enum ApiError {
 
     #[error("UUID parse error: {0}")]
     UuidParseError(#[from] uuid::Error),
+
+    #[error("No free IP available: {0}")]
+    IpAssignmentError(#[from] ApiError),
 }
 
 impl ApiError {
