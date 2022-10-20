@@ -114,6 +114,8 @@ message NodeCreate {
     string blockchain = 2;
     ContainerImage image = 3;
     string type = 4;
+    string ip = 5;
+    string gateway = 6;
 }
 
 message NodeDelete {}
