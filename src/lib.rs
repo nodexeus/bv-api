@@ -11,7 +11,7 @@ pub mod server;
 pub use test::TestDb;
 // #[cfg(test)]
 mod test {
-    use crate::models::{self, validator, IpAddress, IpAddressRangeRequest};
+    use crate::models::{self, validator};
     use rand::Rng;
     use sqlx::Connection;
     use std::net::IpAddr;
@@ -229,24 +229,15 @@ mod test {
                     "192.168.3.1, 192.168.3.2, 192.168.3.3, 192.168.3.4, 192.168.3.5".into(),
                 ),
                 status: models::ConnectionStatus::Online,
-                ip_range_from: IpAddr::from_str("192.168.0.10").expect("invalid ip"),
-                ip_range_to: IpAddr::from_str("192.168.0.100").expect("invalid ip"),
-                ip_gateway: IpAddr::from_str("192.168.0.1").expect("invalid ip"),
+                ip_range_from: IpAddr::from_str("192.12.0.10").expect("invalid ip"),
+                ip_range_to: IpAddr::from_str("192.12.0.20").expect("invalid ip"),
+                ip_gateway: IpAddr::from_str("192.12.0.1").expect("invalid ip"),
             };
 
             let host = models::Host::create(host, &self.pool)
                 .await
                 .expect("Could not create test host in db.");
 
-            let req = IpAddressRangeRequest {
-                from: IpAddr::from_str("192.168.0.10").unwrap(),
-                to: IpAddr::from_str("192.168.0.20").unwrap(),
-                host_provision_id: None,
-                host_id: Some(host.id),
-            };
-            IpAddress::create_range(req, &self.pool)
-                .await
-                .expect("Couldn't create IP range");
             let status = validator::ValidatorStatusRequest {
                 version: None,
                 block_height: None,

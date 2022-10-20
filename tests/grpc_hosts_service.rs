@@ -201,9 +201,9 @@ async fn responds_ok_for_provision() {
     let host_provision_request = HostProvisionRequest {
         org_id: org.0,
         nodes: None,
-        ip_gateway: IpAddr::from_str("192.168.0.1").unwrap(),
-        ip_range_from: IpAddr::from_str("192.168.0.10").unwrap(),
-        ip_range_to: IpAddr::from_str("192.168.0.100").unwrap(),
+        ip_gateway: IpAddr::from_str("172.168.0.1").unwrap(),
+        ip_range_from: IpAddr::from_str("172.168.0.10").unwrap(),
+        ip_range_to: IpAddr::from_str("172.168.0.100").unwrap(),
     };
     let host_provision = HostProvision::create(host_provision_request, &db.pool)
         .await
@@ -219,9 +219,9 @@ async fn responds_ok_for_provision() {
         os: None,
         os_version: None,
         ip: Some("123.456.789.0".into()),
-        ip_gateway: Some("192.168.0.1".into()),
-        ip_range_from: Some("192.168.0.10".into()),
-        ip_range_to: Some("192.168.0.20".into()),
+        ip_gateway: Some("127.18.0.1".into()),
+        ip_range_from: Some("127.18.0.10".into()),
+        ip_range_to: Some("127.18.0.20".into()),
     };
     let inner = ProvisionHostRequest {
         request_id: Some(Uuid::new_v4().to_string()),

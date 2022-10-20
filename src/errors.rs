@@ -39,6 +39,9 @@ pub enum ApiError {
 
     #[error("No free IP available: {0}")]
     IpAssignmentError(sqlx::Error),
+
+    #[error("Gateway IP mustn't be within the provided range: {0}")]
+    IpGatewayError(anyhow::Error),
 }
 
 impl ApiError {

@@ -31,6 +31,28 @@ pub struct IpAddressRangeRequest {
     pub(crate) host_id: Option<Uuid>,
 }
 
+impl IpAddressRangeRequest {
+    pub fn try_new(
+        from: IpAddr,
+        to: IpAddr,
+        host_provision_id: Option<String>,
+        host_id: Option<Uuid>,
+    ) -> ApiResult<Self> {
+        if to < from {
+            Err(ApiError::UnexpectedError(anyhow!(
+                "TO IP can't be smaller as FROM IP"
+            )))
+        } else {
+            Ok(Self {
+                from,
+                to,
+                host_provision_id,
+                host_id,
+            })
+        }
+    }
+}
+
 pub struct IpAddressSelectiveUpdate {
     pub(crate) id: Uuid,
     pub(crate) host_provision_id: Option<String>,
@@ -63,6 +85,8 @@ impl IpAddress {
         let mut tx = db.begin().await?;
 
         for ip in ip_addrs {
+            tracing::debug!("creating ip {} for host {:?}", ip, req.host_id);
+
             created.push(
                 sqlx::query_as::<_, Self>(
                     r#"INSERT INTO ip_addresses (ip, host_provision_id, host_id) 

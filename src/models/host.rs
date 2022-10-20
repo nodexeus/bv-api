@@ -5,7 +5,7 @@ use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable, Token
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
 use crate::grpc::helpers::required;
-use crate::models::{IpAddress, UpdateInfo};
+use crate::models::{IpAddress, IpAddressRangeRequest, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -187,7 +187,12 @@ impl Host {
     pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
         // Ensure gateway IP is not amongst the ones created in the IP range
         if IpAddress::in_range(req.ip_gateway, req.ip_range_from, req.ip_range_to)? {
-            return Err(ApiError::DuplicateResource);
+            return Err(ApiError::IpGatewayError(anyhow!(
+                "{} is in range {} - {}",
+                req.ip_gateway,
+                req.ip_range_from,
+                req.ip_range_to
+            )));
         }
 
         let mut tx = db.begin().await?;
@@ -247,7 +252,17 @@ impl Host {
 
         tx.commit().await?;
 
+        // Create token for new host
         Token::create_for::<Host>(&host, TokenRole::Service, TokenType::Login, db).await?;
+
+        // Create IP range for new host
+        let req = IpAddressRangeRequest::try_new(
+            host.ip_range_from.ok_or_else(required("ip.range.from"))?,
+            host.ip_range_to.ok_or_else(required("ip.range.to"))?,
+            None,
+            Some(host.id),
+        )?;
+        IpAddress::create_range(req, db).await?;
 
         Ok(host)
     }
