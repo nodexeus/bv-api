@@ -1,9 +1,9 @@
-use crate::errors::Result as ApiResult;
+use crate::errors::{ApiError, Result as ApiResult};
 use crate::grpc::blockjoy::{
     command, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
     NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
 };
-use crate::grpc::helpers::image_url_from_node;
+use crate::grpc::helpers::{image_url_from_node, required};
 use crate::models::{Blockchain, Command, HostCmd, Node};
 use crate::server::DbPool;
 
@@ -55,6 +55,8 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
                 blockchain: node.blockchain_id.to_string(),
                 image: Some(image),
                 r#type: node.node_type.to_json()?,
+                ip: node.ip_addr.ok_or_else(required("node.ip_addr"))?,
+                gateway: node.ip_gateway.ok_or_else(required("node.ip_gateway"))?,
             };
 
             Some(node_command::Command::Create(create_cmd))
@@ -135,6 +137,9 @@ pub mod from {
                 os: update.os,
                 os_version: update.os_version,
                 ip: None,
+                ip_range_from: update.ip_range_from.map(|v| v.to_string()),
+                ip_range_to: update.ip_range_to.map(|v| v.to_string()),
+                ip_gateway: update.ip_gateway.map(|v| v.to_string()),
             }
         }
     }
@@ -175,6 +180,18 @@ pub mod from {
                 created_at: Some(try_dt_to_ts(hp.created_at)?),
                 claimed_at: hp.claimed_at.map(try_dt_to_ts).transpose()?,
                 install_cmd: hp.install_cmd.map(String::from),
+                ip_range_from: hp
+                    .ip_range_from
+                    .map(|ip| ip.to_string())
+                    .ok_or_else(required("host_provision.ip_range_from"))?,
+                ip_range_to: hp
+                    .ip_range_to
+                    .map(|ip| ip.to_string())
+                    .ok_or_else(required("host_provision.ip_range_to"))?,
+                ip_gateway: hp
+                    .ip_gateway
+                    .map(|ip| ip.to_string())
+                    .ok_or_else(required("host_provision.ip_gateway"))?,
             };
             Ok(hp)
         }

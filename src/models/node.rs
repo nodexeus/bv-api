@@ -151,6 +151,7 @@ pub struct Node {
     pub groups: Option<String>,
     pub version: Option<String>,
     pub ip_addr: Option<String>,
+    pub ip_gateway: Option<String>,
     pub blockchain_id: Uuid,
     pub node_type: Json<NodeType>,
     pub address: Option<String>,

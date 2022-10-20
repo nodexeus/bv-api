@@ -12,6 +12,7 @@ use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Row};
 use std::convert::From;
 use std::net::IpAddr;
+use std::str::FromStr;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -455,6 +456,9 @@ pub struct HostSelectiveUpdate {
     pub ip_addr: Option<String>,
     pub val_ip_addrs: Option<String>,
     pub status: Option<ConnectionStatus>,
+    pub ip_range_from: Option<IpAddr>,
+    pub ip_range_to: Option<IpAddr>,
+    pub ip_gateway: Option<IpAddr>,
 }
 
 impl From<HostCreateRequest> for HostRequest {
@@ -515,6 +519,18 @@ impl TryFrom<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest 
             os_version: host_info.os_version,
             ip_addr: host_info.ip.ok_or_else(required("info.ip"))?,
             val_ip_addrs: None,
+            ip_range_from: host_info
+                .ip_range_from
+                .map(|v| IpAddr::from_str(v.as_str()).expect("IP address couldn't be parsed"))
+                .ok_or_else(required("info.ip_range_from"))?,
+            ip_range_to: host_info
+                .ip_range_to
+                .map(|v| IpAddr::from_str(v.as_str()).expect("IP address couldn't be parsed"))
+                .ok_or_else(required("info.ip_range_to"))?,
+            ip_gateway: host_info
+                .ip_gateway
+                .map(|v| IpAddr::from_str(v.as_str()).expect("IP address couldn't be parsed"))
+                .ok_or_else(required("info.ip_gateway"))?,
         };
         Ok(req)
     }
