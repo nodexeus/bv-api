@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Row};
 use std::convert::From;
+use std::net::IpAddr;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -39,6 +40,9 @@ pub struct Host {
     pub validators: Option<Vec<Validator>>,
     pub nodes: Option<Vec<Node>>,
     pub created_at: DateTime<Utc>,
+    pub ip_range_from: Option<IpAddr>,
+    pub ip_range_to: Option<IpAddr>,
+    pub ip_gateway: Option<IpAddr>,
 }
 
 impl From<PgRow> for Host {
@@ -84,6 +88,15 @@ impl From<PgRow> for Host {
             created_at: row
                 .try_get("created_at")
                 .expect("Couldn't try_get created_at for host."),
+            ip_range_from: row
+                .try_get("ip_range_from")
+                .expect("Couldn't try_get ip_range_from for host."),
+            ip_range_to: row
+                .try_get("ip_range_to")
+                .expect("Couldn't try_get ip_range_to for host."),
+            ip_gateway: row
+                .try_get("ip_gateway")
+                .expect("Couldn't try_get ip_gateway for host."),
         }
     }
 }
@@ -423,6 +436,9 @@ pub struct HostRequest {
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
     pub status: ConnectionStatus,
+    pub ip_range_from: IpAddr,
+    pub ip_range_to: IpAddr,
+    pub ip_gateway: IpAddr,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -456,6 +472,9 @@ impl From<HostCreateRequest> for HostRequest {
             ip_addr: host.ip_addr,
             val_ip_addrs: host.val_ip_addrs,
             status: ConnectionStatus::Offline,
+            ip_range_from: host.ip_range_from,
+            ip_range_to: host.ip_range_to,
+            ip_gateway: host.ip_gateway,
         }
     }
 }
@@ -514,6 +533,9 @@ pub struct HostCreateRequest {
     pub os_version: Option<String>,
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
+    pub ip_range_from: IpAddr,
+    pub ip_range_to: IpAddr,
+    pub ip_gateway: IpAddr,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -532,6 +554,9 @@ pub struct HostProvision {
     #[sqlx(default)]
     pub install_cmd: Option<String>,
     pub host_id: Option<Uuid>,
+    pub ip_range_from: Option<IpAddr>,
+    pub ip_range_to: Option<IpAddr>,
+    pub ip_gateway: Option<IpAddr>,
 }
 
 impl HostProvision {
