@@ -38,6 +38,7 @@ pub struct User {
     pub fee_bps: i64,
     pub staking_quota: i64,
     pub created_at: DateTime<Utc>,
+    pub confirmed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -328,17 +329,30 @@ impl User {
 
         Ok(user)
     }
-    
+
     pub async fn confirm(id: Uuid, db: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, User>(
             r#"UPDATE users SET 
                     confirmed_at = now()
-                WHERE id = $1 RETURNING *"#,
+                WHERE id = $1 and confirmed_at IS NULL RETURNING *"#,
         )
         .bind(id)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)
+    }
+
+    pub async fn is_confirmed(id: Uuid, db: &PgPool) -> Result<bool> {
+        let result: i32 = sqlx::query_scalar(
+            r#"SELECT count(*)::int 
+            FROM users WHERE id = $1 AND confirmed_at IS NOT NULL"#,
+        )
+        .bind(id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)?;
+
+        Ok(result == 1)
     }
 
     pub fn preferred_language(&self) -> &str {
