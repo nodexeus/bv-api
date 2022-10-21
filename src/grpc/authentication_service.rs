@@ -33,16 +33,23 @@ impl AuthenticationService for AuthenticationServiceImpl {
     ) -> Result<Response<LoginUserResponse>, Status> {
         let inner = request.into_inner();
         let user = User::login(inner.clone(), &self.db).await?;
-        let db_token = user.get_token(&self.db).await?;
-        let token = ApiToken {
-            value: db_token.token,
-        };
-        let response = LoginUserResponse {
-            meta: Some(ResponseMeta::from_meta(inner.meta)),
-            token: Some(token),
-        };
 
-        Ok(Response::new(response))
+        if User::is_confirmed(user.id, &self.db).await? {
+            let db_token = user.get_token(&self.db).await?;
+            let token = ApiToken {
+                value: db_token.token,
+            };
+            let response = LoginUserResponse {
+                meta: Some(ResponseMeta::from_meta(inner.meta)),
+                token: Some(token),
+            };
+
+            Ok(Response::new(response))
+        } else {
+            Err(Status::unauthenticated(
+                "User registration ist not confirmed",
+            ))
+        }
     }
 
     async fn refresh(

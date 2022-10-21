@@ -6,6 +6,7 @@ use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationService
 use api::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, RefreshTokenRequest, RequestMeta, UpdateUiPasswordRequest,
 };
+use api::models::User;
 use base64::encode as base64_encode;
 use setup::setup;
 use std::sync::Arc;
@@ -16,8 +17,11 @@ use uuid::Uuid;
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_ok_with_valid_credentials_for_login() {
+async fn responds_ok_with_valid_credentials_for_login() -> anyhow::Result<()> {
     let db = _before_values.await;
+    // confirm admin user, otherwise login would fail
+    User::confirm(db.admin_user().await.id, &db.pool).await?;
+
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: None,
@@ -31,6 +35,28 @@ async fn responds_ok_with_valid_credentials_for_login() {
     };
 
     assert_grpc_request! { login, Request::new(inner), tonic::Code::Ok, db, AuthenticationServiceClient<Channel> };
+    Ok(())
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_unauthenticated_with_valid_credentials_for_unconfirmed_user_login(
+) -> anyhow::Result<()> {
+    let db = _before_values.await;
+    let request_meta = RequestMeta {
+        id: Some(Uuid::new_v4().to_string()),
+        token: None,
+        fields: vec![],
+        pagination: None,
+    };
+    let inner = LoginUserRequest {
+        meta: Some(request_meta),
+        email: "admin@here.com".to_string(),
+        password: "abc12345".to_string(),
+    };
+
+    assert_grpc_request! { login, Request::new(inner), tonic::Code::Unauthenticated, db, AuthenticationServiceClient<Channel> };
+    Ok(())
 }
 
 #[before(call = "setup")]
