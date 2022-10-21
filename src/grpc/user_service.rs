@@ -6,6 +6,7 @@ use crate::grpc::blockjoy_ui::{
     GetUserRequest, GetUserResponse, ResponseMeta, UpdateUserRequest, UpdateUserResponse,
     UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
 };
+use crate::mail::MailClient;
 use crate::models::{Token, TokenRole, User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -57,6 +58,11 @@ impl UserService for UserServiceImpl {
         let new_user = User::create(user_request, &self.db, Some(TokenRole::User)).await?;
         let meta = ResponseMeta::from_meta(inner.meta).with_message(new_user.id);
         let response = CreateUserResponse { meta: Some(meta) };
+
+        MailClient::new()
+            .registration_confirmation(&new_user)
+            .await?;
+
         Ok(Response::new(response))
     }
 
