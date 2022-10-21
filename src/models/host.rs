@@ -159,9 +159,16 @@ impl Host {
 
     pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
         // Ensure gateway IP is not amongst the ones created in the IP range
-        if IpAddress::in_range(req.ip_gateway, req.ip_range_from, req.ip_range_to) {
+        if IpAddress::in_range(
+            req.ip_gateway
+                .ok_or_else(required("IP needed for in_range test"))?,
+            req.ip_range_from
+                .ok_or_else(required("IP range FROM needed for in_range test"))?,
+            req.ip_range_to
+                .ok_or_else(required("IP range TO for in_range test"))?,
+        ) {
             return Err(ApiError::IpGatewayError(anyhow!(
-                "{} is in range {} - {}",
+                "{:?} is in range {:?} - {:?}",
                 req.ip_gateway,
                 req.ip_range_from,
                 req.ip_range_to
@@ -450,9 +457,9 @@ pub struct HostRequest {
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
     pub status: ConnectionStatus,
-    pub ip_range_from: IpAddr,
-    pub ip_range_to: IpAddr,
-    pub ip_gateway: IpAddr,
+    pub ip_range_from: Option<IpAddr>,
+    pub ip_range_to: Option<IpAddr>,
+    pub ip_gateway: Option<IpAddr>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -540,52 +547,52 @@ impl TryFrom<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest 
     fn try_from(request: crate::grpc::blockjoy::ProvisionHostRequest) -> Result<Self> {
         let host_info = request.info.ok_or_else(required("info"))?;
         let ip_range_from = if host_info.ip_range_from.is_some() {
-            host_info
-                .ip_range_from
-                .unwrap()
-                .parse::<IpAddr>()
-                .map_err(|e| {
-                    ApiError::UnexpectedError(anyhow!(
-                        "IP range FROM required in HostCreateRequest::try_from: {}",
-                        e
-                    ))
-                })?
+            Some(
+                host_info
+                    .ip_range_from
+                    .unwrap()
+                    .parse::<IpAddr>()
+                    .map_err(|e| {
+                        ApiError::UnexpectedError(anyhow!(
+                            "IP range FROM required in HostCreateRequest::try_from: {}",
+                            e
+                        ))
+                    })?,
+            )
         } else {
-            return Err(ApiError::UnexpectedError(anyhow!(
-                "IP range FROM required in HostCreateRequest::try_from"
-            )));
+            None
         };
         let ip_range_to = if host_info.ip_range_to.is_some() {
-            host_info
-                .ip_range_to
-                .unwrap()
-                .parse::<IpAddr>()
-                .map_err(|e| {
-                    ApiError::UnexpectedError(anyhow!(
-                        "IP range TO required in HostCreateRequest::try_from: {}",
-                        e
-                    ))
-                })?
+            Some(
+                host_info
+                    .ip_range_to
+                    .unwrap()
+                    .parse::<IpAddr>()
+                    .map_err(|e| {
+                        ApiError::UnexpectedError(anyhow!(
+                            "IP range TO required in HostCreateRequest::try_from: {}",
+                            e
+                        ))
+                    })?,
+            )
         } else {
-            return Err(ApiError::UnexpectedError(anyhow!(
-                "IP range TO required in HostCreateRequest::try_from"
-            )));
+            None
         };
         let ip_gateway = if host_info.ip_gateway.is_some() {
-            host_info
-                .ip_gateway
-                .unwrap()
-                .parse::<IpAddr>()
-                .map_err(|e| {
-                    ApiError::UnexpectedError(anyhow!(
-                        "IP GATEWAY required in HostCreateRequest::try_from: {}",
-                        e
-                    ))
-                })?
+            Some(
+                host_info
+                    .ip_gateway
+                    .unwrap()
+                    .parse::<IpAddr>()
+                    .map_err(|e| {
+                        ApiError::UnexpectedError(anyhow!(
+                            "IP GATEWAY required in HostCreateRequest::try_from: {}",
+                            e
+                        ))
+                    })?,
+            )
         } else {
-            return Err(ApiError::UnexpectedError(anyhow!(
-                "IP GATEWAY required in HostCreateRequest::try_from"
-            )));
+            None
         };
         let req = Self {
             org_id: None,
@@ -620,9 +627,9 @@ pub struct HostCreateRequest {
     pub os_version: Option<String>,
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
-    pub ip_range_from: IpAddr,
-    pub ip_range_to: IpAddr,
-    pub ip_gateway: IpAddr,
+    pub ip_range_from: Option<IpAddr>,
+    pub ip_range_to: Option<IpAddr>,
+    pub ip_gateway: Option<IpAddr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -706,15 +713,21 @@ impl HostProvision {
 
         req.org_id = Some(host_provision.org_id);
         req.val_ip_addrs = None;
-        req.ip_range_from = host_provision
-            .ip_range_from
-            .ok_or_else(|| anyhow!("No FROM in ip range"))?;
-        req.ip_range_to = host_provision
-            .ip_range_to
-            .ok_or_else(|| anyhow!("No TO in ip range"))?;
-        req.ip_gateway = host_provision
-            .ip_gateway
-            .ok_or_else(|| anyhow!("No IP gateway"))?;
+        req.ip_range_from = Some(
+            host_provision
+                .ip_range_from
+                .ok_or_else(|| anyhow!("No FROM in ip range"))?,
+        );
+        req.ip_range_to = Some(
+            host_provision
+                .ip_range_to
+                .ok_or_else(|| anyhow!("No TO in ip range"))?,
+        );
+        req.ip_gateway = Some(
+            host_provision
+                .ip_gateway
+                .ok_or_else(|| anyhow!("No IP gateway"))?,
+        );
 
         //TODO: transaction this
         let mut host = Host::create(req.into(), db).await?;
