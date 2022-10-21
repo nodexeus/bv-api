@@ -11,6 +11,8 @@ use api::models::{HostProvision, HostProvisionRequest};
 use setup::setup;
 use sqlx::postgres::PgRow;
 use sqlx::Row;
+use std::net::IpAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use test_macros::*;
 use tonic::transport::Channel;
@@ -67,6 +69,9 @@ async fn responds_ok_with_valid_id_for_get() {
     let req = HostProvisionRequest {
         org_id: org_id.get::<Uuid, usize>(0),
         nodes: None,
+        ip_gateway: IpAddr::from_str("192.168.0.1").unwrap(),
+        ip_range_from: IpAddr::from_str("192.168.0.10").unwrap(),
+        ip_range_to: IpAddr::from_str("192.168.0.100").unwrap(),
     };
     let provision = HostProvision::create(req, &db.pool).await.unwrap();
 
@@ -133,6 +138,9 @@ async fn responds_ok_with_valid_provision_for_create() {
     let token = user.get_token(&db.pool).await.unwrap();
     let provision = GrpcHostProvision {
         org_id: org_id.get::<Uuid, usize>(0).to_string(),
+        ip_gateway: String::from("192.168.0.1"),
+        ip_range_from: String::from("192.168.0.10"),
+        ip_range_to: String::from("192.168.0.100"),
         ..Default::default()
     };
     let inner = CreateHostProvisionRequest {

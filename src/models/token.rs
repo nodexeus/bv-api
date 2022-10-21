@@ -248,7 +248,7 @@ impl Token {
         )
         .bind(token_str)
         .bind(token_type)
-        .map(Host::from)
+        .map(|row| Host::try_from(row).unwrap_or_default())
         .fetch_one(db)
         .await?;
 
@@ -286,14 +286,14 @@ impl Token {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct UserToken {
-    user_id: uuid::Uuid,
-    token_id: uuid::Uuid,
+    user_id: Uuid,
+    token_id: Uuid,
     token_type: TokenType,
 }
 
 impl UserToken {
     /// Creates a new `UserToken` in-memory, but does _not_ insert it into the database.
-    pub fn new(user_id: uuid::Uuid, token_id: uuid::Uuid, token_type: TokenType) -> Self {
+    pub fn new(user_id: Uuid, token_id: Uuid, token_type: TokenType) -> Self {
         Self {
             user_id,
             token_id,
@@ -336,11 +336,7 @@ impl UserToken {
         Ok(())
     }
 
-    pub async fn delete_by_user(
-        user_id: uuid::Uuid,
-        token_type: TokenType,
-        db: &PgPool,
-    ) -> Result<()> {
+    pub async fn delete_by_user(user_id: Uuid, token_type: TokenType, db: &PgPool) -> Result<()> {
         sqlx::query("DELETE FROM user_tokens WHERE user_id = $1 AND token_type = $2;")
             .bind(user_id)
             .bind(token_type)
@@ -352,14 +348,14 @@ impl UserToken {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct HostToken {
-    host_id: uuid::Uuid,
-    token_id: uuid::Uuid,
+    host_id: Uuid,
+    token_id: Uuid,
     token_type: TokenType,
 }
 
 impl HostToken {
     /// Creates a new `HostToken` in-memory, but does _not_ insert it into the database.
-    pub fn new(host_id: uuid::Uuid, token_id: uuid::Uuid, token_type: TokenType) -> Self {
+    pub fn new(host_id: Uuid, token_id: Uuid, token_type: TokenType) -> Self {
         Self {
             host_id,
             token_id,
@@ -402,11 +398,7 @@ impl HostToken {
         Ok(())
     }
 
-    pub async fn delete_by_host(
-        host_id: uuid::Uuid,
-        token_type: TokenType,
-        db: &PgPool,
-    ) -> Result<()> {
+    pub async fn delete_by_host(host_id: Uuid, token_type: TokenType, db: &PgPool) -> Result<()> {
         sqlx::query("DELETE FROM host_tokens WHERE host_id = $1 AND token_type = $2;")
             .bind(host_id)
             .bind(token_type)

@@ -36,6 +36,12 @@ pub enum ApiError {
 
     #[error("UUID parse error: {0}")]
     UuidParseError(#[from] uuid::Error),
+
+    #[error("No free IP available: {0}")]
+    IpAssignmentError(sqlx::Error),
+
+    #[error("Gateway IP mustn't be within the provided range: {0}")]
+    IpGatewayError(anyhow::Error),
 }
 
 impl ApiError {

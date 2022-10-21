@@ -14,6 +14,8 @@ mod test {
     use crate::models::{self, validator};
     use rand::Rng;
     use sqlx::Connection;
+    use std::net::IpAddr;
+    use std::str::FromStr;
 
     pub struct TestDb {
         pub pool: sqlx::PgPool,
@@ -184,6 +186,9 @@ mod test {
                     "192.168.0.1, 192.168.0.2, 192.168.0.3, 192.168.0.4, 192.168.0.5".into(),
                 ),
                 status: models::ConnectionStatus::Online,
+                ip_range_from: IpAddr::from_str("192.168.0.10").expect("invalid ip"),
+                ip_range_to: IpAddr::from_str("192.168.0.100").expect("invalid ip"),
+                ip_gateway: IpAddr::from_str("192.168.0.1").expect("invalid ip"),
             };
 
             let host = models::Host::create(host, &self.pool)
@@ -224,6 +229,9 @@ mod test {
                     "192.168.3.1, 192.168.3.2, 192.168.3.3, 192.168.3.4, 192.168.3.5".into(),
                 ),
                 status: models::ConnectionStatus::Online,
+                ip_range_from: IpAddr::from_str("192.12.0.10").expect("invalid ip"),
+                ip_range_to: IpAddr::from_str("192.12.0.20").expect("invalid ip"),
+                ip_gateway: IpAddr::from_str("192.12.0.1").expect("invalid ip"),
             };
 
             let host = models::Host::create(host, &self.pool)
@@ -252,7 +260,7 @@ mod test {
 
         pub async fn test_host(&self) -> models::Host {
             sqlx::query("select h.*, t.token, t.role from hosts h right join tokens t on h.id = t.host_id where name = 'Host-1'")
-                .map(models::Host::from)
+                .map(|row| models::Host::try_from(row).unwrap_or_default())
                 .fetch_one(&self.pool)
                 .await
                 .unwrap()

@@ -1,27 +1,29 @@
-use super::{
-    validator::Validator, validator::ValidatorRequest, Node, NodeProvision, Token, TokenRole,
-};
+use super::{validator::Validator, Node, NodeProvision, Token, TokenRole};
 use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable, TokenType};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
 use crate::grpc::helpers::required;
-use crate::models::UpdateInfo;
+use crate::models::validator::ValidatorRequest;
+use crate::models::{IpAddress, IpAddressRangeRequest, UpdateInfo};
+use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Row};
 use std::convert::From;
+use std::net::{AddrParseError, IpAddr};
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_conn_status", rename_all = "snake_case")]
 pub enum ConnectionStatus {
     Online,
+    #[default]
     Offline,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Host {
     pub id: Uuid,
     pub org_id: Option<Uuid>,
@@ -39,52 +41,38 @@ pub struct Host {
     pub validators: Option<Vec<Validator>>,
     pub nodes: Option<Vec<Node>>,
     pub created_at: DateTime<Utc>,
+    pub ip_range_from: Option<IpAddr>,
+    pub ip_range_to: Option<IpAddr>,
+    pub ip_gateway: Option<IpAddr>,
 }
 
-impl From<PgRow> for Host {
-    fn from(row: PgRow) -> Self {
-        Host {
-            id: row.try_get("id").expect("Couldn't try_get id for host."),
-            org_id: row
-                .try_get("org_id")
-                .expect("Couldn't try_get org_id for host."),
-            name: row
-                .try_get("name")
-                .expect("Couldn't try_get name for host."),
-            cpu_count: row
-                .try_get("cpu_count")
-                .expect("Couldn't try_get cpu_count for host."),
-            mem_size: row
-                .try_get("mem_size")
-                .expect("Couldn't try_get mem_size for host."),
-            disk_size: row
-                .try_get("disk_size")
-                .expect("Couldn't try_get cpu_count for host."),
-            os: row.try_get("os").expect("Couldn't try_get os for host."),
-            os_version: row
-                .try_get("os_version")
-                .expect("Couldn't try_get os_version for host."),
-            version: row
-                .try_get("version")
-                .expect("Couldn't try_get version for host."),
-            location: row
-                .try_get("location")
-                .expect("Couldn't try_get location for host."),
-            ip_addr: row
-                .try_get("ip_addr")
-                .expect("Couldn't try_get ip_addr for host."),
-            val_ip_addrs: row
-                .try_get("val_ip_addrs")
-                .expect("Couldn't try_get val_ip_addrs for host."),
-            status: row
-                .try_get("status")
-                .expect("Couldn't try_get status for host."),
+impl TryFrom<PgRow> for Host {
+    type Error = ApiError;
+
+    fn try_from(row: PgRow) -> Result<Self, ApiError> {
+        let host = Self {
+            id: row.try_get("id")?,
+            org_id: row.try_get("org_id")?,
+            name: row.try_get("name")?,
+            cpu_count: row.try_get("cpu_count")?,
+            mem_size: row.try_get("mem_size")?,
+            disk_size: row.try_get("disk_size")?,
+            os: row.try_get("os")?,
+            os_version: row.try_get("os_version")?,
+            version: row.try_get("version")?,
+            location: row.try_get("location")?,
+            ip_addr: row.try_get("ip_addr")?,
+            val_ip_addrs: row.try_get("val_ip_addrs")?,
+            status: row.try_get("status")?,
             validators: None,
             nodes: None,
-            created_at: row
-                .try_get("created_at")
-                .expect("Couldn't try_get created_at for host."),
-        }
+            created_at: row.try_get("created_at")?,
+            ip_range_from: row.try_get("ip_range_from")?,
+            ip_range_to: row.try_get("ip_range_to")?,
+            ip_gateway: row.try_get("ip_gateway")?,
+        };
+
+        Ok(host)
     }
 }
 
@@ -107,7 +95,7 @@ impl Host {
 
     pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query("SELECT * FROM hosts order by lower(name)")
-            .map(Self::from)
+            .map(|row| Self::try_from(row).unwrap_or_default())
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
@@ -118,14 +106,14 @@ impl Host {
             .bind(node_id)
             .fetch_one(db)
             .await
-            .map(From::from)
+            .map(|row| Self::try_from(row).unwrap_or_default())
             .map_err(Into::into)
     }
 
     pub async fn find_by_org(org_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
         let hosts = sqlx::query("SELECT * FROM hosts where org_id = $1 order by lower(name)")
             .bind(org_id)
-            .map(Self::from)
+            .map(|row| Self::try_from(row).unwrap_or_default())
             .fetch_all(db)
             .await
             .map_err(ApiError::from)?;
@@ -153,7 +141,7 @@ impl Host {
         .bind(org_id)
         .bind(limit)
         .bind(offset)
-        .map(Self::from)
+        .map(|row| Self::try_from(row).unwrap_or_default())
         .fetch_all(db)
         .await
         .map_err(ApiError::from)?;
@@ -170,8 +158,39 @@ impl Host {
     }
 
     pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
+        // Ensure gateway IP is not amongst the ones created in the IP range
+        if IpAddress::in_range(req.ip_gateway, req.ip_range_from, req.ip_range_to) {
+            return Err(ApiError::IpGatewayError(anyhow!(
+                "{} is in range {} - {}",
+                req.ip_gateway,
+                req.ip_range_from,
+                req.ip_range_to
+            )));
+        }
+
         let mut tx = db.begin().await?;
-        let mut host = sqlx::query("INSERT INTO hosts (name, version, location, ip_addr, val_ip_addrs, status, org_id, cpu_count, mem_size, disk_size, os, os_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *")
+        let mut host = sqlx::query(
+            r#"INSERT INTO hosts 
+            (
+                name,
+                version,
+                location,
+                ip_addr,
+                val_ip_addrs,
+                status,
+                org_id,
+                cpu_count,
+                mem_size,
+                disk_size,
+                os,
+                os_version,
+                ip_gateway,
+                ip_range_from,
+                ip_range_to
+            ) 
+            VALUES 
+            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *"#,
+        )
         .bind(req.name)
         .bind(req.version)
         .bind(req.location)
@@ -184,9 +203,10 @@ impl Host {
         .bind(req.disk_size)
         .bind(req.os)
         .bind(req.os_version)
-        .map(|row: PgRow| {
-            Self::from(row)
-        })
+        .bind(req.ip_gateway)
+        .bind(req.ip_range_from)
+        .bind(req.ip_range_to)
+        .map(|row| Self::try_from(row).unwrap_or_default())
         .fetch_one(&mut tx)
         .await?;
 
@@ -205,7 +225,16 @@ impl Host {
 
         tx.commit().await?;
 
+        // Create token for new host
         Token::create_for::<Host>(&host, TokenRole::Service, TokenType::Login, db).await?;
+
+        // Create IP range for new host
+        let req = IpAddressRangeRequest::try_new(
+            host.ip_range_from.ok_or_else(required("ip.range.from"))?,
+            host.ip_range_to.ok_or_else(required("ip.range.to"))?,
+            Some(host.id),
+        )?;
+        IpAddress::create_range(req, db).await?;
 
         Ok(host)
     }
@@ -228,9 +257,7 @@ impl Host {
         .bind(host.os)
         .bind(host.os_version)
         .bind(id)
-        .map(|row: PgRow| {
-            Self::from(row)
-        })
+        .map(|row| Self::try_from(row).unwrap_or_default())
         .fetch_one(&mut tx)
         .await?;
 
@@ -269,7 +296,7 @@ impl Host {
         .bind(fields.val_ip_addrs)
         .bind(fields.status)
         .bind(id)
-        .map(Self::from)
+        .map(|row| Self::try_from(row).unwrap_or_default())
         .fetch_one(&mut tx)
         .await?;
 
@@ -285,7 +312,7 @@ impl Host {
                 .bind(host.version)
                 .bind(host.status)
                 .bind(id)
-                .map(Self::from)
+                .map(|row| Self::try_from(row).unwrap_or_default())
                 .fetch_one(&mut tx)
                 .await?;
 
@@ -323,7 +350,7 @@ impl FindableById for Host {
     async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
         let mut host = sqlx::query("SELECT * FROM hosts WHERE id = $1")
             .bind(id)
-            .map(Self::from)
+            .map(|row| Self::try_from(row).unwrap_or_default())
             .fetch_one(db)
             .await?;
 
@@ -399,7 +426,7 @@ impl UpdateInfo<HostInfo, Host> for Host {
         .bind(info.os_version)
         .bind(info.ip)
         .bind(id)
-        .map(Self::from)
+        .map(|row| Self::try_from(row).unwrap_or_default())
         .fetch_one(&mut tx)
         .await?;
 
@@ -423,6 +450,9 @@ pub struct HostRequest {
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
     pub status: ConnectionStatus,
+    pub ip_range_from: IpAddr,
+    pub ip_range_to: IpAddr,
+    pub ip_gateway: IpAddr,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -439,6 +469,9 @@ pub struct HostSelectiveUpdate {
     pub ip_addr: Option<String>,
     pub val_ip_addrs: Option<String>,
     pub status: Option<ConnectionStatus>,
+    pub ip_range_from: Option<IpAddr>,
+    pub ip_range_to: Option<IpAddr>,
+    pub ip_gateway: Option<IpAddr>,
 }
 
 impl From<HostCreateRequest> for HostRequest {
@@ -456,12 +489,31 @@ impl From<HostCreateRequest> for HostRequest {
             ip_addr: host.ip_addr,
             val_ip_addrs: host.val_ip_addrs,
             status: ConnectionStatus::Offline,
+            ip_range_from: host.ip_range_from,
+            ip_range_to: host.ip_range_to,
+            ip_gateway: host.ip_gateway,
         }
     }
 }
 
 impl From<HostInfo> for HostSelectiveUpdate {
     fn from(info: HostInfo) -> Self {
+        let from = if info.ip_range_from.is_some() {
+            info.ip_range_from.unwrap().parse::<IpAddr>().ok()
+        } else {
+            None
+        };
+        let to = if info.ip_range_to.is_some() {
+            info.ip_range_to.unwrap().parse::<IpAddr>().ok()
+        } else {
+            None
+        };
+        let gateway = if info.ip_gateway.is_some() {
+            info.ip_gateway.unwrap().parse::<IpAddr>().ok()
+        } else {
+            None
+        };
+
         Self {
             org_id: None,
             name: info.name,
@@ -475,6 +527,9 @@ impl From<HostInfo> for HostSelectiveUpdate {
             ip_addr: info.ip,
             val_ip_addrs: None,
             status: None,
+            ip_range_from: from,
+            ip_range_to: to,
+            ip_gateway: gateway,
         }
     }
 }
@@ -496,6 +551,21 @@ impl TryFrom<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest 
             os_version: host_info.os_version,
             ip_addr: host_info.ip.ok_or_else(required("info.ip"))?,
             val_ip_addrs: None,
+            ip_range_from: host_info
+                .ip_range_from
+                .ok_or_else(required("host.ip_range_from"))?
+                .parse()
+                .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
+            ip_range_to: host_info
+                .ip_range_to
+                .ok_or_else(required("host.ip_range_to"))?
+                .parse()
+                .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
+            ip_gateway: host_info
+                .ip_gateway
+                .ok_or_else(required("host.ip_gateway"))?
+                .parse()
+                .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
         };
         Ok(req)
     }
@@ -514,6 +584,9 @@ pub struct HostCreateRequest {
     pub os_version: Option<String>,
     pub ip_addr: String,
     pub val_ip_addrs: Option<String>,
+    pub ip_range_from: IpAddr,
+    pub ip_range_to: IpAddr,
+    pub ip_gateway: IpAddr,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -532,6 +605,9 @@ pub struct HostProvision {
     #[sqlx(default)]
     pub install_cmd: Option<String>,
     pub host_id: Option<Uuid>,
+    pub ip_range_from: Option<IpAddr>,
+    pub ip_range_to: Option<IpAddr>,
+    pub ip_gateway: Option<IpAddr>,
 }
 
 impl HostProvision {
@@ -540,11 +616,15 @@ impl HostProvision {
             .map_err(|_| ApiError::from(anyhow::anyhow!("Couldn't parse nodes")))?;
 
         let mut host_provision = sqlx::query_as::<_, HostProvision>(
-            "INSERT INTO host_provisions (id, org_id, nodes) values ($1, $2, $3) RETURNING *",
+            r#"INSERT INTO host_provisions (id, org_id, nodes, ip_range_from, ip_range_to, ip_gateway) 
+                   values ($1, $2, $3, $4, $5, $6) RETURNING *"#,
         )
         .bind(Self::generate_token())
         .bind(req.org_id)
         .bind(nodes_str)
+        .bind(req.ip_range_from)
+        .bind(req.ip_range_to)
+        .bind(req.ip_gateway)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)?;
@@ -590,6 +670,15 @@ impl HostProvision {
 
         req.org_id = Some(host_provision.org_id);
         req.val_ip_addrs = None;
+        req.ip_range_from = host_provision
+            .ip_range_from
+            .ok_or_else(|| anyhow!("No FROM in ip range"))?;
+        req.ip_range_to = host_provision
+            .ip_range_to
+            .ok_or_else(|| anyhow!("No TO in ip range"))?;
+        req.ip_gateway = host_provision
+            .ip_gateway
+            .ok_or_else(|| anyhow!("No IP gateway"))?;
 
         //TODO: transaction this
         let mut host = Host::create(req.into(), db).await?;
@@ -626,4 +715,7 @@ impl HostProvision {
 pub struct HostProvisionRequest {
     pub org_id: Uuid,
     pub nodes: Option<Vec<NodeProvision>>,
+    pub ip_range_from: IpAddr,
+    pub ip_range_to: IpAddr,
+    pub ip_gateway: IpAddr,
 }

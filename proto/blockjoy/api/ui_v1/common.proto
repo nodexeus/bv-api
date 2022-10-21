@@ -91,6 +91,9 @@ message Host {
   optional HostStatus status = 12;
   repeated Node nodes = 13;
   optional google.protobuf.Timestamp created_at = 14;
+  optional string ip_range_from = 15;
+  optional string ip_range_to = 16;
+  optional string ip_gateway = 17;
 }
 
 /* HostProvision entity */
@@ -101,6 +104,9 @@ message HostProvision {
   optional google.protobuf.Timestamp created_at = 4;
   optional google.protobuf.Timestamp claimed_at = 5;
   optional string install_cmd = 6;
+  string ip_range_from = 7;
+  string ip_range_to = 8;
+  string ip_gateway = 9;
 }
 
 /* Blockchain node representation */
@@ -176,6 +182,7 @@ message Node {
   optional NodeStatus status = 16;
   optional SyncStatus sync_status = 17;
   optional StakingStatus staking_status = 18;
+  optional string ip_gateway = 19;
 }
 
 /* Organization representation */

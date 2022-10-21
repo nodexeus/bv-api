@@ -12,6 +12,7 @@ mod token;
 mod user;
 // needs to be brought into namespace like this because of
 // name ambiguities with another crate
+mod ip_address;
 mod node_type;
 pub mod validator;
 
@@ -22,6 +23,7 @@ pub use command::*;
 pub use host::*;
 pub use info::*;
 pub use invoice::*;
+pub use ip_address::*;
 pub use node::*;
 pub use node_type::*;
 pub use org::*;

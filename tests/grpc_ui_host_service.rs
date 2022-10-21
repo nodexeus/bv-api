@@ -264,6 +264,9 @@ async fn responds_ok_with_host_for_create() {
     let host = GrpcHost {
         name: Some("burli-bua".to_string()),
         ip: Some("127.0.0.1".to_string()),
+        ip_gateway: Some("128.168.0.1".to_string()),
+        ip_range_from: Some("128.168.0.10".to_string()),
+        ip_range_to: Some("128.168.0.100".to_string()),
         ..Default::default()
     };
     let user = db.admin_user().await;
