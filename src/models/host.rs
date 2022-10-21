@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::{FromRow, PgPool, Row};
 use std::convert::From;
-use std::net::{AddrParseError, IpAddr};
+use std::net::IpAddr;
 use uuid::Uuid;
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -539,6 +539,54 @@ impl TryFrom<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest 
 
     fn try_from(request: crate::grpc::blockjoy::ProvisionHostRequest) -> Result<Self> {
         let host_info = request.info.ok_or_else(required("info"))?;
+        let ip_range_from = if host_info.ip_range_from.is_some() {
+            host_info
+                .ip_range_from
+                .unwrap()
+                .parse::<IpAddr>()
+                .map_err(|e| {
+                    ApiError::UnexpectedError(anyhow!(
+                        "IP range FROM required in HostCreateRequest::try_from: {}",
+                        e
+                    ))
+                })?
+        } else {
+            return Err(ApiError::UnexpectedError(anyhow!(
+                "IP range FROM required in HostCreateRequest::try_from"
+            )));
+        };
+        let ip_range_to = if host_info.ip_range_to.is_some() {
+            host_info
+                .ip_range_to
+                .unwrap()
+                .parse::<IpAddr>()
+                .map_err(|e| {
+                    ApiError::UnexpectedError(anyhow!(
+                        "IP range TO required in HostCreateRequest::try_from: {}",
+                        e
+                    ))
+                })?
+        } else {
+            return Err(ApiError::UnexpectedError(anyhow!(
+                "IP range TO required in HostCreateRequest::try_from"
+            )));
+        };
+        let ip_gateway = if host_info.ip_gateway.is_some() {
+            host_info
+                .ip_gateway
+                .unwrap()
+                .parse::<IpAddr>()
+                .map_err(|e| {
+                    ApiError::UnexpectedError(anyhow!(
+                        "IP GATEWAY required in HostCreateRequest::try_from: {}",
+                        e
+                    ))
+                })?
+        } else {
+            return Err(ApiError::UnexpectedError(anyhow!(
+                "IP GATEWAY required in HostCreateRequest::try_from"
+            )));
+        };
         let req = Self {
             org_id: None,
             name: host_info.name.ok_or_else(required("info.name"))?,
@@ -551,21 +599,9 @@ impl TryFrom<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest 
             os_version: host_info.os_version,
             ip_addr: host_info.ip.ok_or_else(required("info.ip"))?,
             val_ip_addrs: None,
-            ip_range_from: host_info
-                .ip_range_from
-                .ok_or_else(required("host.ip_range_from"))?
-                .parse()
-                .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
-            ip_range_to: host_info
-                .ip_range_to
-                .ok_or_else(required("host.ip_range_to"))?
-                .parse()
-                .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
-            ip_gateway: host_info
-                .ip_gateway
-                .ok_or_else(required("host.ip_gateway"))?
-                .parse()
-                .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
+            ip_range_from,
+            ip_range_to,
+            ip_gateway,
         };
         Ok(req)
     }
