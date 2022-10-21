@@ -40,7 +40,8 @@ impl MailClient {
         let templates = toml::from_str(TEMPLATES)
             .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
         let confirmation_token = "3432423423";
-        let base_url = dotenv::var("UI_BASE_URL")?;
+        let base_url =
+            dotenv::var("UI_BASE_URL").map_err(|e| anyhow!("UI_BASE_URL can't be read: {e}"))?;
         let link = format!("{}/verified?token={}", base_url, confirmation_token);
         let mut context = HashMap::new();
         context.insert("link".to_owned(), link);
