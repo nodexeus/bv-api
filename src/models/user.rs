@@ -328,6 +328,18 @@ impl User {
 
         Ok(user)
     }
+    
+    pub async fn confirm(id: Uuid, db: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, User>(
+            r#"UPDATE users SET 
+                    confirmed_at = now()
+                WHERE id = $1 RETURNING *"#,
+        )
+        .bind(id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
+    }
 
     pub fn preferred_language(&self) -> &str {
         // Needs to be done later, but we want to have some stub in place so we keep our code aware
