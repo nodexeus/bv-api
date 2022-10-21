@@ -165,24 +165,9 @@ pub mod from {
                 ip_addr: host.ip,
                 val_ip_addrs: None,
                 status: None,
-                ip_range_from: Some(
-                    host.ip_range_from
-                        .ok_or_else(required("host.ip_range_from"))?
-                        .parse()
-                        .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
-                ),
-                ip_range_to: Some(
-                    host.ip_range_to
-                        .ok_or_else(required("host.ip_range_to"))?
-                        .parse()
-                        .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
-                ),
-                ip_gateway: Some(
-                    host.ip_gateway
-                        .ok_or_else(required("host.ip_gateway"))?
-                        .parse()
-                        .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
-                ),
+                ip_range_from: None,
+                ip_range_to: None,
+                ip_gateway: None,
             };
             Ok(updater)
         }
