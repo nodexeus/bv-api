@@ -260,7 +260,7 @@ mod test {
 
         pub async fn test_host(&self) -> models::Host {
             sqlx::query("select h.*, t.token, t.role from hosts h right join tokens t on h.id = t.host_id where name = 'Host-1'")
-                .map(models::Host::from)
+                .map(|row| models::Host::try_from(row).unwrap_or_default())
                 .fetch_one(&self.pool)
                 .await
                 .unwrap()

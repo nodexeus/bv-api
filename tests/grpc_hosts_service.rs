@@ -333,7 +333,7 @@ async fn responds_permission_denied_for_delete() {
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn can_update_host_info() {
+async fn can_update_host_info() -> anyhow::Result<()> {
     let db = _before_values.await;
     let host = db.test_host().await;
     let host_info = blockjoy::HostInfo {
@@ -371,11 +371,13 @@ async fn can_update_host_info() {
 
     match row {
         Ok(row) => {
-            let updated_host = Host::from(row);
+            let updated_host = Host::try_from(row)?;
 
             assert_eq!(updated_host.name, "tester".to_string());
             assert!(!updated_host.ip_addr.is_empty())
         }
         Err(e) => panic!("{:?}", e),
     }
+
+    Ok(())
 }
