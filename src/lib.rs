@@ -186,9 +186,9 @@ mod test {
                     "192.168.0.1, 192.168.0.2, 192.168.0.3, 192.168.0.4, 192.168.0.5".into(),
                 ),
                 status: models::ConnectionStatus::Online,
-                ip_range_from: IpAddr::from_str("192.168.0.10").expect("invalid ip"),
-                ip_range_to: IpAddr::from_str("192.168.0.100").expect("invalid ip"),
-                ip_gateway: IpAddr::from_str("192.168.0.1").expect("invalid ip"),
+                ip_range_from: Some(IpAddr::from_str("192.168.0.10").expect("invalid ip")),
+                ip_range_to: Some(IpAddr::from_str("192.168.0.100").expect("invalid ip")),
+                ip_gateway: Some(IpAddr::from_str("192.168.0.1").expect("invalid ip")),
             };
 
             let host = models::Host::create(host, &self.pool)
@@ -229,9 +229,9 @@ mod test {
                     "192.168.3.1, 192.168.3.2, 192.168.3.3, 192.168.3.4, 192.168.3.5".into(),
                 ),
                 status: models::ConnectionStatus::Online,
-                ip_range_from: IpAddr::from_str("192.12.0.10").expect("invalid ip"),
-                ip_range_to: IpAddr::from_str("192.12.0.20").expect("invalid ip"),
-                ip_gateway: IpAddr::from_str("192.12.0.1").expect("invalid ip"),
+                ip_range_from: Some(IpAddr::from_str("192.12.0.10").expect("invalid ip")),
+                ip_range_to: Some(IpAddr::from_str("192.12.0.20").expect("invalid ip")),
+                ip_gateway: Some(IpAddr::from_str("192.12.0.1").expect("invalid ip")),
             };
 
             let host = models::Host::create(host, &self.pool)
