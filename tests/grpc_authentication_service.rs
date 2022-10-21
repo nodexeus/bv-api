@@ -4,7 +4,8 @@ mod setup;
 use api::auth::TokenIdentifyable;
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
 use api::grpc::blockjoy_ui::{
-    ApiToken, LoginUserRequest, RefreshTokenRequest, RequestMeta, UpdateUiPasswordRequest,
+    ApiToken, ConfirmRegistrationRequest, LoginUserRequest, RefreshTokenRequest, RequestMeta,
+    UpdateUiPasswordRequest,
 };
 use api::models::User;
 use base64::encode as base64_encode;
@@ -76,6 +77,34 @@ async fn responds_error_with_invalid_credentials_for_login() {
     };
 
     assert_grpc_request! { login, Request::new(inner), tonic::Code::Unauthenticated, db, AuthenticationServiceClient<Channel> };
+}
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_ok_with_valid_credentials_for_confirm() -> anyhow::Result<()> {
+    let db = _before_values.await;
+    let user = db.admin_user().await;
+    let token = user.get_token(&db.pool).await.unwrap();
+    let request_meta = RequestMeta {
+        id: Some(Uuid::new_v4().to_string()),
+        token: None,
+        fields: vec![],
+        pagination: None,
+    };
+    let inner = ConfirmRegistrationRequest {
+        meta: Some(request_meta),
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+    );
+
+    assert_grpc_request! { confirm, request, tonic::Code::Ok, db, AuthenticationServiceClient<Channel> };
+    assert!(User::is_confirmed(db.admin_user().await.id, &db.pool).await?);
+
+    Ok(())
 }
 
 #[before(call = "setup")]

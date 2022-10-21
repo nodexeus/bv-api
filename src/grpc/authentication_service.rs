@@ -1,8 +1,9 @@
 use crate::auth::{FindableById, TokenIdentifyable};
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
-    ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
-    UpdateUiPasswordRequest, UpdateUiPasswordResponse,
+    ApiToken, ConfirmRegistrationRequest, ConfirmRegistrationResponse, LoginUserRequest,
+    LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse, UpdateUiPasswordRequest,
+    UpdateUiPasswordResponse,
 };
 use crate::mail::MailClient;
 use crate::models::{Token, User};
@@ -50,6 +51,29 @@ impl AuthenticationService for AuthenticationServiceImpl {
                 "User registration ist not confirmed",
             ))
         }
+    }
+
+    async fn confirm(
+        &self,
+        request: Request<ConfirmRegistrationRequest>,
+    ) -> Result<Response<ConfirmRegistrationResponse>, Status> {
+        let token = request
+            .extensions()
+            .get::<Token>()
+            .ok_or_else(required("Confirmation token extension"))?
+            .clone();
+        let user_id = token
+            .user_id
+            .ok_or_else(required("User ID for registration confirmation"))?;
+        let user = User::confirm(user_id, &self.db).await?;
+        let response = ConfirmRegistrationResponse {
+            meta: Some(ResponseMeta::from_meta(request.into_inner().meta)),
+            token: Some(ApiToken {
+                value: user.get_token(&self.db).await?.token,
+            }),
+        };
+
+        Ok(Response::new(response))
     }
 
     async fn refresh(
