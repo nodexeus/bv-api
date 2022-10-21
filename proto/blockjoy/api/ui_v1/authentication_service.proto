@@ -55,10 +55,21 @@ message UpdateUIPasswordResponse {
   ApiToken token = 2;
 }
 
+message ConfirmRegistrationRequest {
+  RequestMeta meta = 1;
+}
+
+message ConfirmRegistrationResponse {
+  ResponseMeta meta = 1;
+  ApiToken token = 2;
+}
+
 /* Retrieve and refresh API token */
 service AuthenticationService {
   /* Login user, i.e. retrieve token */
   rpc Login(LoginUserRequest) returns (LoginUserResponse) {}
+  /* Confirm user registration */
+  rpc Confirm(ConfirmRegistrationRequest) returns (ConfirmRegistrationResponse) {}
   /* Refresh API token. */
   rpc Refresh(RefreshTokenRequest) returns (RefreshTokenResponse) {}
   /* Send the reset password email out to this user. Intentionally returns nothing to hide whether
