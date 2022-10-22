@@ -50,6 +50,16 @@ message OrganizationMemberResponse {
   repeated User users = 2;
 }
 
+message RestoreOrganizationRequest {
+  RequestMeta meta = 1;
+  string id = 2;
+}
+
+message RestoreOrganizationResponse {
+  ResponseMeta meta = 1;
+  Organization organization = 2;
+}
+
 /* Manage organizations */
 service OrganizationService {
   /* Get all the organizations for a user. All users automatically get a private (internal) organization */
@@ -58,8 +68,10 @@ service OrganizationService {
   rpc Create(CreateOrganizationRequest) returns (CreateOrganizationResponse) {}
   /* Update a single organization */
   rpc Update(UpdateOrganizationRequest) returns (UpdateOrganizationResponse) {}
-  /* Delete a single organization */
+  /* Mark a single organization as deleted */
   rpc Delete(DeleteOrganizationRequest) returns (DeleteOrganizationResponse) {}
+  /* Restore a previously deleted organization */
+  rpc Restore(RestoreOrganizationRequest) returns (RestoreOrganizationResponse) {}
   /* Retrieve organization members */
   rpc Members(OrganizationMemberRequest) returns (OrganizationMemberResponse) {}
 }
