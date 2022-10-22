@@ -3,11 +3,12 @@ use crate::grpc::blockjoy_ui::organization_service_server::OrganizationService;
 use crate::grpc::blockjoy_ui::{
     CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
     DeleteOrganizationResponse, GetOrganizationsRequest, GetOrganizationsResponse, Organization,
-    OrganizationMemberRequest, OrganizationMemberResponse, ResponseMeta, UpdateOrganizationRequest,
+    OrganizationMemberRequest, OrganizationMemberResponse, ResponseMeta,
+    RestoreOrganizationRequest, RestoreOrganizationResponse, UpdateOrganizationRequest,
     UpdateOrganizationResponse, User as GrpcUiUser,
 };
 use crate::grpc::helpers::pagination_parameters;
-use crate::models::{Org, OrgRequest};
+use crate::models::{Org, OrgRequest, OrgRole};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -94,15 +95,50 @@ impl OrganizationService for OrganizationServiceImpl {
         let user_id = db_token.try_user_id()?;
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
+        let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
 
-        if !Org::is_member(&user_id, &org_id, &self.db).await? {
-            let msg = "User is not member of given organization";
-            return Err(Status::permission_denied(msg));
+        // Only owner or admins may delete orgs
+        if member.role == OrgRole::Member {
+            Err(Status::permission_denied(format!(
+                "User {} has no sufficient privileges to delete org {}",
+                user_id, org_id
+            )))
+        } else {
+            Org::delete(org_id, &self.db).await?;
+
+            let meta = ResponseMeta::from_meta(inner.meta);
+            let inner = DeleteOrganizationResponse { meta: Some(meta) };
+
+            Ok(Response::new(inner))
         }
-        Org::delete(org_id, &self.db).await?;
-        let meta = ResponseMeta::from_meta(inner.meta);
-        let inner = DeleteOrganizationResponse { meta: Some(meta) };
-        Ok(Response::new(inner))
+    }
+
+    async fn restore(
+        &self,
+        request: Request<RestoreOrganizationRequest>,
+    ) -> Result<Response<RestoreOrganizationResponse>, Status> {
+        let db_token = try_get_token(&request)?;
+        let user_id = db_token.try_user_id()?;
+        let inner = request.into_inner();
+        let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
+        let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
+
+        // Only owner or admins may restore orgs
+        if member.role == OrgRole::Member {
+            Err(Status::permission_denied(format!(
+                "User {} has no sufficient privileges to restore org {}",
+                user_id, org_id
+            )))
+        } else {
+            let org = Org::restore(org_id, &self.db).await?;
+            let meta = ResponseMeta::from_meta(inner.meta);
+            let inner = RestoreOrganizationResponse {
+                meta: Some(meta),
+                organization: Some(org.try_into()?),
+            };
+
+            Ok(Response::new(inner))
+        }
     }
 
     async fn members(
