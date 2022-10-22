@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use sqlx::PgPool;
 
+use crate::errors::ApiError;
 use crate::{auth, errors, models};
 use std::collections::HashMap;
 
@@ -47,8 +48,11 @@ impl MailClient {
         models::UserToken::new(user.id, token.id, PwdReset)
             .create_or_update(db)
             .await?;
+        let base_url = dotenv::var("UI_BASE_URL")
+            .map_err(|e| ApiError::UnexpectedError(anyhow!("UI_BASE_URL not found: {e}")))?;
+        let link = format!("{}/reset?token={}", base_url, token.token);
         let mut context = HashMap::new();
-        context.insert("token".to_owned(), token.token);
+        context.insert("link".to_owned(), link);
         self.send_mail(&templates, user, Some(context)).await
     }
 
