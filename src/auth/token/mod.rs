@@ -11,7 +11,13 @@ use uuid::Uuid;
 
 mod auth;
 mod pwd_reset;
-pub use {auth::AuthToken, pwd_reset::PwdResetToken};
+mod refresh_token;
+mod registration_confirmation;
+
+pub use {
+    auth::AuthToken, pwd_reset::PwdResetToken, refresh_token::*,
+    registration_confirmation::RegistrationConfirmationToken,
+};
 
 pub type TokenResult<T> = Result<T, TokenError>;
 
@@ -52,10 +58,21 @@ pub enum TokenType {
     /// This is a password reset token. It is issued as a part of the password forgot/reset email
     /// and may be used _only_ to reset the user's password.
     PwdReset,
+    /// This is the token used for confirming a new users registration
+    RegistrationConfirmation,
+}
+
+/// The claims of the tokens. Each claim is a key-value pair
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TokenClaim {
+    id: Uuid,
+    exp: i64,
+    holder_type: TokenHolderType,
+    token_type: TokenType,
 }
 
 /// The type of entity that is granted some permission through this token.
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
 pub enum TokenHolderType {
     /// This means that the token authenticates a host machine.
     Host,
@@ -73,7 +90,7 @@ impl TokenHolderType {
 }
 
 pub trait JwtToken: Sized + serde::Serialize {
-    fn new(id: Uuid, exp: i64, holder_type: TokenHolderType) -> Self;
+    fn new(claim: TokenClaim) -> Self;
 
     fn token_holder(&self) -> TokenHolderType;
 
@@ -82,7 +99,7 @@ pub trait JwtToken: Sized + serde::Serialize {
         let secret = Self::get_secret()?;
         let header = jwt::Header::new(jwt::Algorithm::HS512);
         let key = jwt::EncodingKey::from_secret(secret.as_ref());
-        jwt::encode(&header, self, &key).map_err(super::TokenError::EnDeCoding)
+        jwt::encode(&header, self, &key).map_err(TokenError::EnDeCoding)
     }
 
     /// Extract the JWT from given request
@@ -93,7 +110,7 @@ pub trait JwtToken: Sized + serde::Serialize {
         extract_token(request).and_then(|s| Self::from_str(&s))
     }
 
-    fn get_secret() -> super::TokenResult<String>;
+    fn get_secret() -> TokenResult<String>;
 }
 
 #[derive(serde::Deserialize)]
@@ -105,6 +122,7 @@ struct UnknownToken {
 pub enum AnyToken {
     Auth(AuthToken),
     PwdReset(PwdResetToken),
+    RegistrationConfirmation(RegistrationConfirmationToken),
 }
 
 impl AnyToken {
@@ -120,7 +138,9 @@ impl AnyToken {
             TokenType::Login => Auth(AuthToken::from_str(&token)?),
             TokenType::Refresh => PwdReset(PwdResetToken::from_str(&token)?),
             TokenType::PwdReset => todo!(),
+            TokenType::RegistrationConfirmation => todo!(),
         };
+
         Ok(token)
     }
 }
