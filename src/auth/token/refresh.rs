@@ -35,7 +35,8 @@ impl FromStr for RefreshToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        let secret = KeyProvider::get_secret(TokenType::Refresh)?.value();
+        let key = KeyProvider::get_secret(TokenType::Refresh)?;
+        let secret = key.value();
         let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
 
         validation.validate_exp = true;

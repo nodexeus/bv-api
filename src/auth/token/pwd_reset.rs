@@ -45,7 +45,8 @@ impl FromStr for PwdResetToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        let secret = KeyProvider::get_secret(TokenType::PwdReset)?.value();
+        let key = KeyProvider::get_secret(TokenType::PwdReset)?;
+        let secret = key.value();
         let validation = jwt::Validation::new(jwt::Algorithm::HS512);
         let key = jwt::DecodingKey::from_secret(secret.as_bytes());
 

@@ -1,11 +1,11 @@
-use crate::auth::{FindableById, TokenIdentifyable};
+use crate::auth::FindableById;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
     UpdateUiPasswordRequest, UpdateUiPasswordResponse,
 };
 use crate::mail::MailClient;
-use crate::models::{Token, User};
+use crate::models::User;
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 
@@ -25,49 +25,22 @@ impl AuthenticationServiceImpl {
     }
 }
 
+/// TODO: Move to HTTP endpoint
 #[tonic::async_trait]
 impl AuthenticationService for AuthenticationServiceImpl {
     async fn login(
         &self,
-        request: Request<LoginUserRequest>,
+        _request: Request<LoginUserRequest>,
     ) -> Result<Response<LoginUserResponse>, Status> {
-        let inner = request.into_inner();
-        let user = User::login(inner.clone(), &self.db).await?;
-        let db_token = user.get_token(&self.db).await?;
-        let token = ApiToken {
-            value: db_token.token,
-        };
-        let response = LoginUserResponse {
-            meta: Some(ResponseMeta::from_meta(inner.meta)),
-            token: Some(token),
-        };
-
-        Ok(Response::new(response))
+        Err(Status::unimplemented("To be moved to HTTP"))
     }
 
+    /// TODO: Move to HTTP endpoint
     async fn refresh(
         &self,
-        request: Request<RefreshTokenRequest>,
+        _request: Request<RefreshTokenRequest>,
     ) -> Result<Response<RefreshTokenResponse>, Status> {
-        let db_token = try_get_token(&request)?.token;
-        let inner = request.into_inner();
-        let meta = inner.meta.as_ref().ok_or_else(required("meta"))?;
-        let req_token = meta.token.as_ref().ok_or_else(required("meta.token"))?;
-        let req_token = req_token.value.as_str();
-        let request_id = meta.id.clone();
-
-        if db_token == req_token {
-            let new_token = ApiToken {
-                value: Token::refresh(&db_token, &self.db).await?.token,
-            };
-            let response = RefreshTokenResponse {
-                meta: Some(ResponseMeta::new(request_id.unwrap_or_default())),
-                token: Some(new_token),
-            };
-            Ok(Response::new(response))
-        } else {
-            Err(Status::permission_denied("Not allowed to modify token"))
-        }
+        Err(Status::unimplemented("To be moved to HTTP"))
     }
 
     /// This endpoint triggers the sending of the reset-password email. The actual resetting is

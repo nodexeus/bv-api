@@ -37,7 +37,8 @@ impl FromStr for AuthToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        let secret = KeyProvider::get_secret(TokenType::Login)?.value();
+        let key = KeyProvider::get_secret(TokenType::Login)?;
+        let secret = key.value();
         let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
 
         validation.validate_exp = true;

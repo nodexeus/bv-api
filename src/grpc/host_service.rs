@@ -1,5 +1,5 @@
 use super::helpers::try_get_token;
-use crate::auth::{FindableById, TokenIdentifyable};
+use crate::auth::FindableById;
 use crate::errors::ApiError;
 use crate::grpc::blockjoy::hosts_server::Hosts;
 use crate::grpc::blockjoy::{

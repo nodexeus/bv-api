@@ -1,16 +1,8 @@
-//! TODO: @tstaetter For now I've removed all JWT token related stuff, that needs to be reimplemented
-//!         using the new token respecting possible new workflows (eg magic link) TBD
-
-use crate::auth::{FindableById, TokenHolderType, TokenIdentifyable, TokenType};
+use crate::auth::FindableById;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::LoginUserRequest;
 use crate::mail::MailClient;
-use crate::models::{
-    org::Org,
-    token::{Token, TokenRole, UserToken},
-    validator::StakeStatus,
-    FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT,
-};
+use crate::models::{org::Org, validator::StakeStatus, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
 use anyhow::anyhow;
 use argon2::{
     password_hash::{PasswordHasher, SaltString},
@@ -263,10 +255,7 @@ impl User {
 
             tx.commit().await?;
 
-            let user = result?;
-            let role = role.unwrap_or(TokenRole::User);
-            Token::create_for::<User>(&user, role, TokenType::Login, db).await?;
-            Ok(user)
+            result
         } else {
             Err(ApiError::ValidationError("Invalid password.".to_string()))
         }
@@ -344,32 +333,6 @@ impl FindableById for User {
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
-    }
-}
-
-#[axum::async_trait]
-impl TokenIdentifyable for User {
-    async fn set_token(token_id: Uuid, user_id: Uuid, db: &PgPool) -> Result<()> {
-        let user_token = UserToken::new(user_id, token_id, TokenType::Login);
-        user_token.create_or_update(db).await?;
-        Ok(())
-    }
-
-    fn get_holder_type() -> TokenHolderType {
-        TokenHolderType::User
-    }
-
-    fn get_id(&self) -> Uuid {
-        self.id
-    }
-
-    async fn delete_token(user_id: Uuid, db: &PgPool) -> Result<()> {
-        UserToken::delete_by_user(user_id, TokenType::Login, db).await?;
-        Ok(())
-    }
-
-    async fn get_token(&self, db: &PgPool) -> Result<Token> {
-        Token::get::<User>(self.id, TokenType::Login, db).await
     }
 }
 

@@ -5,7 +5,6 @@
 use crate::auth::unauthenticated_paths::UnauthenticatedPaths;
 use crate::auth::JwtToken;
 use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
-use crate::models::Token;
 use crate::server::DbPool;
 use futures_util::future::BoxFuture;
 use hyper::{Request, Response};
@@ -75,6 +74,10 @@ where
             let encoded = match token {
                 AnyToken::Auth(auth) => auth.encode().map_err(cant_parse)?,
                 AnyToken::PwdReset(pwd_reset) => pwd_reset.encode().map_err(cant_parse)?,
+                AnyToken::Refresh(refresh) => refresh.encode().map_err(cant_parse)?,
+                AnyToken::RegistrationConfirmation(confirmation) => {
+                    confirmation.encode().map_err(cant_parse)?
+                }
             };
             let db_token = Token::find_by_token(&encoded, db)
                 .await

@@ -1,3 +1,4 @@
+use crate::auth::AuthToken;
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::{response_meta, Pagination, ResponseMeta};
 use crate::models::{self, Node, NodeTypeKey};
@@ -48,10 +49,10 @@ pub fn internal(error: impl std::fmt::Display) -> Status {
     Status::internal(error.to_string())
 }
 
-pub fn try_get_token<T>(req: &tonic::Request<T>) -> Result<models::Token, ApiError> {
+pub fn try_get_token<T>(req: &tonic::Request<T>) -> Result<AuthToken, ApiError> {
     let tkn = req
         .extensions()
-        .get::<models::Token>()
+        .get::<AuthToken>()
         .ok_or_else(|| Status::internal("Token lost!"))?
         .clone();
     Ok(tkn)

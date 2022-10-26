@@ -8,7 +8,7 @@ use crate::grpc::blockjoy_ui::{
     UpdateHostResponse,
 };
 use crate::grpc::helpers::{pagination_parameters, required};
-use crate::models::{Host, HostRequest, HostSelectiveUpdate, Token};
+use crate::models::{Host, HostRequest, HostSelectiveUpdate};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;

@@ -6,7 +6,7 @@ use crate::grpc::blockjoy_ui::{
     GetUserRequest, GetUserResponse, ResponseMeta, UpdateUserRequest, UpdateUserResponse,
     UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
 };
-use crate::models::{Token, TokenRole, User, UserRequest};
+use crate::models::{User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;

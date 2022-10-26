@@ -75,6 +75,17 @@ pub struct TokenClaim {
     token_type: TokenType,
 }
 
+impl TokenClaim {
+    pub fn new(id: Uuid, exp: i64, holder_type: TokenHolderType, token_type: TokenType) -> Self {
+        Self {
+            id,
+            exp,
+            holder_type,
+            token_type,
+        }
+    }
+}
+
 /// The type of entity that is granted some permission through this token.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
 pub enum TokenHolderType {
@@ -102,7 +113,8 @@ pub trait JwtToken: Sized + serde::Serialize {
 
     /// Encode this instance to a JWT token string
     fn encode(&self) -> TokenResult<String> {
-        let secret = KeyProvider::get_secret(self.token_type())?.value();
+        let key = KeyProvider::get_secret(self.token_type())?;
+        let secret = key.value();
         let header = jwt::Header::new(jwt::Algorithm::HS512);
         let key = jwt::EncodingKey::from_secret(secret.as_ref());
         jwt::encode(&header, self, &key).map_err(TokenError::EnDeCoding)
