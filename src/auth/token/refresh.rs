@@ -1,27 +1,24 @@
-use super::JwtToken;
 use crate::auth::key_provider::KeyProvider;
-use crate::auth::{OnetimeToken, TokenClaim, TokenResult, TokenType};
-use crate::server::DbPool;
+use crate::auth::{JwtToken, TokenClaim, TokenType};
 use jsonwebtoken as jwt;
-use std::str;
 use std::str::FromStr;
 
 /// The claims of the token to be stored (encrypted) on the client side.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
-pub struct PwdResetToken {
+pub struct RefreshToken {
     id: uuid::Uuid,
     exp: i64,
     holder_type: super::TokenHolderType,
     token_type: TokenType,
 }
 
-impl JwtToken for PwdResetToken {
+impl JwtToken for RefreshToken {
     fn new(claim: TokenClaim) -> Self {
         Self {
             id: claim.id,
             exp: claim.exp,
             holder_type: claim.holder_type,
-            token_type: TokenType::PwdReset,
+            token_type: TokenType::Refresh,
         }
     }
 
@@ -34,29 +31,27 @@ impl JwtToken for PwdResetToken {
     }
 }
 
-#[tonic::async_trait]
-impl OnetimeToken for PwdResetToken {
-    async fn blacklist(&self, _db: DbPool) -> TokenResult<bool> {
-        Ok(true)
-    }
-}
-
-impl FromStr for PwdResetToken {
+impl FromStr for RefreshToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        let secret = KeyProvider::get_secret(TokenType::PwdReset)?.value();
-        let validation = jwt::Validation::new(jwt::Algorithm::HS512);
-        let key = jwt::DecodingKey::from_secret(secret.as_bytes());
+        let secret = KeyProvider::get_secret(TokenType::Refresh)?.value();
+        let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
 
-        match jwt::decode(encoded, &key, &validation) {
+        validation.validate_exp = true;
+
+        match jwt::decode(
+            encoded,
+            &jwt::DecodingKey::from_secret(secret.as_bytes()),
+            &validation,
+        ) {
             Ok(token) => Ok(token.claims),
             Err(e) => Err(super::TokenError::EnDeCoding(e)),
         }
     }
 }
 
-impl super::Identifier for PwdResetToken {
+impl super::Identifier for RefreshToken {
     fn get_id(&self) -> uuid::Uuid {
         self.id
     }

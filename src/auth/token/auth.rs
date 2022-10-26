@@ -1,7 +1,9 @@
 use super::JwtToken;
+use crate::auth::key_provider::KeyProvider;
+use crate::auth::{TokenClaim, TokenType};
 use jsonwebtoken as jwt;
+use std::str;
 use std::str::FromStr;
-use std::{env, str};
 
 /// The claims of the token to be stored (encrypted) on the client side
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -9,16 +11,16 @@ pub struct AuthToken {
     id: uuid::Uuid,
     exp: i64,
     holder_type: super::TokenHolderType,
-    token_type: super::TokenType,
+    token_type: TokenType,
 }
 
 impl JwtToken for AuthToken {
-    fn new(id: uuid::Uuid, exp: i64, holder_type: super::TokenHolderType) -> Self {
+    fn new(claim: TokenClaim) -> Self {
         Self {
-            id,
-            exp,
-            holder_type,
-            token_type: super::TokenType::Login,
+            id: claim.id,
+            exp: claim.exp,
+            holder_type: claim.holder_type,
+            token_type: TokenType::Login,
         }
     }
 
@@ -26,12 +28,8 @@ impl JwtToken for AuthToken {
         self.holder_type
     }
 
-    fn get_secret() -> crate::auth::TokenResult<String> {
-        match env::var("JWT_SECRET") {
-            Ok(s) if s.is_empty() => panic!("`JWT_SECRET` parameter is empty"),
-            Ok(secret) => Ok(secret),
-            Err(e) => Err(super::TokenError::EnvVar(e)),
-        }
+    fn token_type(&self) -> TokenType {
+        self.token_type
     }
 }
 
@@ -39,7 +37,7 @@ impl FromStr for AuthToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        let secret = Self::get_secret()?;
+        let secret = KeyProvider::get_secret(TokenType::Login)?.value();
         let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
 
         validation.validate_exp = true;

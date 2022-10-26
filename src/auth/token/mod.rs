@@ -11,11 +11,13 @@ use uuid::Uuid;
 
 mod auth;
 mod pwd_reset;
-mod refresh_token;
+mod refresh;
 mod registration_confirmation;
 
+use crate::auth::key_provider::{KeyProvider, KeyProviderError};
+use crate::server::DbPool;
 pub use {
-    auth::AuthToken, pwd_reset::PwdResetToken, refresh_token::*,
+    auth::AuthToken, pwd_reset::PwdResetToken, refresh::*,
     registration_confirmation::RegistrationConfirmationToken,
 };
 
@@ -41,6 +43,8 @@ pub enum TokenError {
     Utf8(#[from] Utf8Error),
     #[error("JWT decoding error: {0:?}")]
     JwtDecoding(#[from] DecodeError),
+    #[error("Provided key is invalid: {0:?}")]
+    KeyError(#[from] KeyProviderError),
 }
 
 /// The type of token we are dealing with. We have various different types of token and they convey
@@ -94,9 +98,11 @@ pub trait JwtToken: Sized + serde::Serialize {
 
     fn token_holder(&self) -> TokenHolderType;
 
+    fn token_type(&self) -> TokenType;
+
     /// Encode this instance to a JWT token string
     fn encode(&self) -> TokenResult<String> {
-        let secret = Self::get_secret()?;
+        let secret = KeyProvider::get_secret(self.token_type())?.value();
         let header = jwt::Header::new(jwt::Algorithm::HS512);
         let key = jwt::EncodingKey::from_secret(secret.as_ref());
         jwt::encode(&header, self, &key).map_err(TokenError::EnDeCoding)
@@ -109,8 +115,6 @@ pub trait JwtToken: Sized + serde::Serialize {
     {
         extract_token(request).and_then(|s| Self::from_str(&s))
     }
-
-    fn get_secret() -> TokenResult<String>;
 }
 
 #[derive(serde::Deserialize)]
@@ -122,6 +126,7 @@ struct UnknownToken {
 pub enum AnyToken {
     Auth(AuthToken),
     PwdReset(PwdResetToken),
+    Refresh(RefreshToken),
     RegistrationConfirmation(RegistrationConfirmationToken),
 }
 
@@ -136,9 +141,11 @@ impl AnyToken {
         let json: UnknownToken = serde_json::from_slice(&decoded).or(Err(TokenError::Invalid))?;
         let token = match json.token_type {
             TokenType::Login => Auth(AuthToken::from_str(&token)?),
-            TokenType::Refresh => PwdReset(PwdResetToken::from_str(&token)?),
-            TokenType::PwdReset => todo!(),
-            TokenType::RegistrationConfirmation => todo!(),
+            TokenType::Refresh => Refresh(RefreshToken::from_str(&token)?),
+            TokenType::PwdReset => PwdReset(PwdResetToken::from_str(&token)?),
+            TokenType::RegistrationConfirmation => {
+                RegistrationConfirmation(RegistrationConfirmationToken::from_str(&token)?)
+            }
         };
 
         Ok(token)
@@ -156,4 +163,11 @@ fn extract_token<B>(req: &HttpRequest<B>) -> TokenResult<String> {
     let clear_token = base64::decode(token)?;
     let token = std::str::from_utf8(&clear_token)?;
     Ok(token.to_owned())
+}
+
+/// Indicates the impl token is subject to be blacklisted once used
+#[tonic::async_trait]
+pub trait OnetimeToken {
+    /// Method needs to be called after validation and use
+    async fn blacklist(&self, db: DbPool) -> TokenResult<bool>;
 }

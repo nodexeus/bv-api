@@ -1,5 +1,8 @@
-use crate::auth::{JwtToken, TokenClaim};
-use std::env;
+use crate::auth::key_provider::KeyProvider;
+use crate::auth::{JwtToken, OnetimeToken, TokenClaim, TokenResult, TokenType};
+use crate::server::DbPool;
+use jsonwebtoken as jwt;
+use std::str::FromStr;
 
 /// The claims of the token to be stored (encrypted) on the client side.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -7,7 +10,7 @@ pub struct RegistrationConfirmationToken {
     id: uuid::Uuid,
     exp: i64,
     holder_type: super::TokenHolderType,
-    token_type: super::TokenType,
+    token_type: TokenType,
 }
 
 impl JwtToken for RegistrationConfirmationToken {
@@ -16,7 +19,7 @@ impl JwtToken for RegistrationConfirmationToken {
             id: claim.id,
             exp: claim.exp,
             holder_type: claim.holder_type,
-            token_type: claim.token_type,
+            token_type: TokenType::RegistrationConfirmation,
         }
     }
 
@@ -24,12 +27,35 @@ impl JwtToken for RegistrationConfirmationToken {
         self.holder_type
     }
 
-    /// Get PWD_RESET_SECRET from env vars.
-    fn get_secret() -> crate::auth::TokenResult<String> {
-        match env::var("PWD_RESET_SECRET") {
-            Ok(s) if s.is_empty() => panic!("`PWD_RESET_SECRET` parameter is empty"),
-            Ok(secret) => Ok(secret),
-            Err(e) => Err(super::TokenError::EnvVar(e)),
+    fn token_type(&self) -> TokenType {
+        self.token_type
+    }
+}
+
+#[tonic::async_trait]
+impl OnetimeToken for RegistrationConfirmationToken {
+    async fn blacklist(&self, _db: DbPool) -> TokenResult<bool> {
+        Ok(true)
+    }
+}
+
+impl FromStr for RegistrationConfirmationToken {
+    type Err = super::TokenError;
+
+    fn from_str(encoded: &str) -> Result<Self, Self::Err> {
+        let secret = KeyProvider::get_secret(TokenType::RegistrationConfirmation)?.value();
+        let validation = jwt::Validation::new(jwt::Algorithm::HS512);
+        let key = jwt::DecodingKey::from_secret(secret.as_bytes());
+
+        match jwt::decode(encoded, &key, &validation) {
+            Ok(token) => Ok(token.claims),
+            Err(e) => Err(super::TokenError::EnDeCoding(e)),
         }
+    }
+}
+
+impl super::Identifier for RegistrationConfirmationToken {
+    fn get_id(&self) -> uuid::Uuid {
+        self.id
     }
 }

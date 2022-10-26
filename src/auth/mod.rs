@@ -1,3 +1,4 @@
+pub mod key_provider;
 pub mod middleware;
 pub mod token;
 pub mod unauthenticated_paths;
