@@ -189,7 +189,7 @@ async fn responds_not_found_for_provision() {
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_ok_for_provision() {
+async fn responds_ok_for_provision() -> anyhow::Result<()> {
     let db = _before_values.await;
     let mut tx = db.pool.begin().await.unwrap();
     let org: (Uuid,) = sqlx::query_as("select id from orgs")
@@ -232,6 +232,17 @@ async fn responds_ok_for_provision() {
     let request = Request::new(inner);
 
     assert_grpc_request! { provision, request, tonic::Code::Ok, db, HostsClient<Channel> };
+
+    let host = sqlx::query("SELECT * FROM hosts ORDER BY created_at DESC LIMIT 1")
+        .map(|row| Host::try_from(row).unwrap_or_default())
+        .fetch_one(&db.pool)
+        .await?;
+
+    println!("host name: {}", host.name);
+
+    assert_eq!(host.name.split('_').count(), 4);
+
+    Ok(())
 }
 
 #[before(call = "setup")]
