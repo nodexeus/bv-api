@@ -693,6 +693,7 @@ impl HostProvision {
                 .ip_gateway
                 .ok_or_else(|| anyhow!("No IP gateway"))?,
         );
+        req.name = petname::petname(4, "_");
 
         //TODO: transaction this
         let mut host = Host::create(req.into(), db).await?;
