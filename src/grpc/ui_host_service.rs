@@ -65,7 +65,7 @@ impl HostService for HostServiceImpl {
             Param::Token(token) => {
                 let token: AuthToken = from_encoded(token.as_str(), TokenType::Login)?;
                 let host = token
-                    .try_get_host(token.id().clone(), &self.db)
+                    .try_get_host(*token.id(), &self.db)
                     .await?
                     .try_into()?;
 

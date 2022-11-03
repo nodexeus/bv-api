@@ -1,9 +1,10 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::TokenIdentifyable;
+use api::auth::{AuthToken, JwtToken, TokenHolderType, TokenType};
 use api::grpc::blockjoy_ui::command_service_client::CommandServiceClient;
 use api::grpc::blockjoy_ui::{CommandRequest as GrpcCommandRequest, RequestMeta};
+use api::models::User;
 use setup::setup;
 use std::sync::Arc;
 use test_macros::*;
@@ -21,7 +22,7 @@ macro_rules! test_response_ok {
         };
         let host = $db.test_host().await;
         let user = $db.admin_user().await;
-        let token = user.get_token(&$db.pool).await.unwrap();
+        let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login).unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
             id: host.id.to_string(),
@@ -31,7 +32,7 @@ macro_rules! test_response_ok {
 
         request.metadata_mut().insert(
             "authorization",
-            format!("Bearer {}", token.to_base64()).parse().unwrap(),
+            format!("Bearer {}", token.to_base64().unwrap()).parse().unwrap(),
         );
 
         assert_grpc_request! { $func, request, tonic::Code::Ok, $db, CommandServiceClient<Channel> };
@@ -48,7 +49,7 @@ macro_rules! test_response_internal {
         };
         let host = $db.test_host().await;
         let user = $db.admin_user().await;
-        let token = user.get_token(&$db.pool).await.unwrap();
+        let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login).unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
             id: host.id.to_string(),
@@ -58,7 +59,7 @@ macro_rules! test_response_internal {
 
         request.metadata_mut().insert(
             "authorization",
-            format!("Bearer {}", token.to_base64()).parse().unwrap(),
+            format!("Bearer {}", token.to_base64().unwrap()).parse().unwrap(),
         );
 
         assert_grpc_request! { $func, request, tonic::Code::Internal, $db, CommandServiceClient<Channel> };
@@ -74,7 +75,7 @@ macro_rules! test_response_invalid_argument {
             pagination: None,
         };
         let user = $db.admin_user().await;
-        let token = user.get_token(&$db.pool).await.unwrap();
+        let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login).unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
             id: "".to_string(),
@@ -84,7 +85,7 @@ macro_rules! test_response_invalid_argument {
 
         request.metadata_mut().insert(
             "authorization",
-            format!("Bearer {}", token.to_base64()).parse().unwrap(),
+            format!("Bearer {}", token.to_base64().unwrap()).parse().unwrap(),
         );
 
         assert_grpc_request! { $func, request, tonic::Code::InvalidArgument, $db, CommandServiceClient<Channel> };

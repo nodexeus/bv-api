@@ -21,8 +21,8 @@ impl JwtToken for AuthToken {
     fn new(claim: TokenClaim) -> Self {
         let data = claim.data.unwrap_or_default();
         let def = &"user".to_string();
-        let role = TokenRole::from_str(data.get("role").unwrap_or_else(|| def))
-            .unwrap_or_else(|_| TokenRole::User);
+        let role = TokenRole::from_str(data.get("role").unwrap_or(def))
+            .unwrap_or(TokenRole::User);
 
         Self {
             id: claim.id,

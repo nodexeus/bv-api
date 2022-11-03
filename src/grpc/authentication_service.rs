@@ -68,8 +68,11 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<UpdatePasswordRequest>,
     ) -> Result<Response<UpdatePasswordResponse>, Status> {
-        let token = try_get_token(&request)?.clone();
-        let user_id = token.try_get_user(token.id().clone(), &self.db).await?.id;
+        let token = try_get_token(&request)?;
+        let encoded = token
+            .encode()
+            .map_err(|e| Status::internal(format!("Token encode error {e:?}")))?;
+        let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
         let cur_user = User::find_by_id(user_id, &self.db).await?;
         let request = request.into_inner();
         let _cur_user = cur_user
@@ -78,11 +81,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let meta = ResponseMeta::from_meta(request.meta);
         let response = UpdatePasswordResponse {
             meta: Some(meta),
-            token: Some(ApiToken {
-                value: token
-                    .encode()
-                    .map_err(|e| Status::internal(format!("Token encode error {e:?}")))?,
-            }),
+            token: Some(ApiToken { value: encoded }),
         };
 
         // Send notification mail
@@ -95,9 +94,12 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<UpdateUiPasswordRequest>,
     ) -> Result<Response<UpdateUiPasswordResponse>, Status> {
-        let token = try_get_token(&request)?.clone();
+        let token = try_get_token(&request)?;
+        let user = token.try_get_user(*token.id(), &self.db).await?;
+        let encoded = token
+            .encode()
+            .map_err(|e| Status::internal(format!("Token encode error {e:?}")))?;
         let inner = request.into_inner();
-        let user = token.try_get_user(token.id().clone(), &self.db).await?;
 
         match user.verify_password(inner.old_pwd.as_str()) {
             Ok(_) => {
@@ -107,11 +109,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
 
                     let response = UpdateUiPasswordResponse {
                         meta: None,
-                        token: Some(ApiToken {
-                            value: token.encode().map_err(|e| {
-                                Status::internal(format!("Token encode error {e:?}"))
-                            })?,
-                        }),
+                        token: Some(ApiToken { value: encoded }),
                     };
 
                     // Send notification mail

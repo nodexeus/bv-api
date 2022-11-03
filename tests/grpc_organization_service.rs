@@ -1,13 +1,13 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::TokenIdentifyable;
+use api::auth::{AuthToken, JwtToken, TokenHolderType, TokenType};
 use api::grpc::blockjoy_ui::organization_service_client::OrganizationServiceClient;
 use api::grpc::blockjoy_ui::{
     CreateOrganizationRequest, DeleteOrganizationRequest, GetOrganizationsRequest, Organization,
     OrganizationMemberRequest, Pagination, RequestMeta, UpdateOrganizationRequest,
 };
-use api::models::Org;
+use api::models::{Org, User};
 use setup::{server_and_client_stub, setup};
 use std::env;
 use std::sync::Arc;
@@ -21,7 +21,8 @@ use uuid::Uuid;
 async fn responds_ok_for_create() {
     let db = Arc::new(_before_values.await);
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: None,
@@ -44,7 +45,9 @@ async fn responds_ok_for_create() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::Ok, db, OrganizationServiceClient<Channel> };
@@ -55,7 +58,8 @@ async fn responds_ok_for_create() {
 async fn responds_ok_for_get() {
     let db = Arc::new(_before_values.await);
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: None,
@@ -69,7 +73,9 @@ async fn responds_ok_for_get() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, OrganizationServiceClient<Channel> };
@@ -87,7 +93,8 @@ async fn responds_ok_for_update() {
         .unwrap()
         .id
         .to_string();
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: None,
@@ -110,7 +117,9 @@ async fn responds_ok_for_update() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::Ok, db, OrganizationServiceClient<Channel> };
@@ -128,7 +137,8 @@ async fn responds_ok_for_delete() {
         .unwrap()
         .id
         .to_string();
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: None,
@@ -143,7 +153,9 @@ async fn responds_ok_for_delete() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { delete, request, tonic::Code::Ok, db, OrganizationServiceClient<Channel> };
@@ -161,7 +173,8 @@ async fn responds_ok_for_members() {
         .unwrap()
         .id
         .to_string();
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: None,
@@ -176,7 +189,9 @@ async fn responds_ok_for_members() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { members, request, tonic::Code::Ok, db, OrganizationServiceClient<Channel> };
@@ -201,7 +216,8 @@ async fn responds_ok_with_pagination_for_members() {
     let orgs = Org::find_all_by_user(user.id, &db.pool).await.unwrap();
     let org = orgs.first().unwrap();
     let org_id = org.id.to_string();
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = OrganizationMemberRequest {
         meta: Some(request_meta),
         id: org_id,
@@ -214,7 +230,9 @@ async fn responds_ok_with_pagination_for_members() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     let pool = std::sync::Arc::new(db.pool.clone());

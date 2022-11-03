@@ -29,9 +29,9 @@ impl UserService for UserServiceImpl {
         &self,
         request: Request<GetUserRequest>,
     ) -> Result<Response<GetUserResponse>, Status> {
-        let token = try_get_token(&request)?.clone();
+        let token = try_get_token(&request)?;
+        let user = token.try_get_user(*token.id(), &self.db).await?;
         let inner = request.into_inner();
-        let user = token.try_get_user(token.id().clone(), &self.db).await?;
         let response = GetUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             user: Some(GrpcUser::try_from(user)?),
@@ -68,7 +68,7 @@ impl UserService for UserServiceImpl {
             .extensions()
             .get::<AuthToken>()
             .ok_or_else(required("auth token"))?;
-        let user_id = token.try_get_user(token.id().clone(), &self.db).await?.id;
+        let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
         let inner = request.into_inner();
         let user = inner.user.ok_or_else(required("user"))?;
 

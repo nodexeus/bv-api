@@ -68,7 +68,7 @@ impl Hosts for HostsServiceImpl {
         &self,
         request: Request<DeleteHostRequest>,
     ) -> Result<Response<DeleteHostResponse>, Status> {
-        let host_token_id = try_get_token(&request)?.id().clone();
+        let host_token_id = *try_get_token(&request)?.id();
         let inner = request.into_inner();
         let host_id = Uuid::parse_str(inner.host_id.as_str()).map_err(ApiError::from)?;
         if host_token_id != host_id {

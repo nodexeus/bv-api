@@ -1,13 +1,13 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::TokenIdentifyable;
+use api::auth::{AuthToken, JwtToken, TokenHolderType, TokenType};
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
 use api::grpc::blockjoy_ui::{
     get_hosts_request, CreateHostRequest, DeleteHostRequest, GetHostsRequest, Host as GrpcHost,
     Pagination, RequestMeta, UpdateHostRequest,
 };
-use api::models::Org;
+use api::models::{Host, Org, User};
 use setup::{server_and_client_stub, setup};
 use std::env;
 use std::sync::Arc;
@@ -27,7 +27,8 @@ async fn responds_invalid_argument_without_any_for_get() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
         param: None,
@@ -36,7 +37,9 @@ async fn responds_invalid_argument_without_any_for_get() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::InvalidArgument, db, HostServiceClient<Channel> };
@@ -54,7 +57,8 @@ async fn responds_ok_with_id_for_get() {
     };
     let user = db.admin_user().await;
     let host_id = db.test_host().await.id.to_string();
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
         param: Some(get_hosts_request::Param::Id(host_id)),
@@ -63,7 +67,9 @@ async fn responds_ok_with_id_for_get() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::NotFound, db, HostServiceClient<Channel> };
@@ -88,7 +94,8 @@ async fn responds_ok_with_org_id_for_get() {
     }
 
     let org_id = host.org_id.unwrap().to_string();
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
         param: Some(get_hosts_request::Param::OrgId(org_id)),
@@ -97,7 +104,9 @@ async fn responds_ok_with_org_id_for_get() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::NotFound, db, HostServiceClient<Channel> };
@@ -122,7 +131,8 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
     let orgs = Org::find_all_by_user(user.id, &db.pool).await.unwrap();
     let org = orgs.first().unwrap();
     let org_id = org.id.to_string();
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
         param: Some(get_hosts_request::Param::OrgId(org_id)),
@@ -135,7 +145,9 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     let pool = std::sync::Arc::new(db.pool.clone());
@@ -181,17 +193,24 @@ async fn responds_ok_with_token_for_get() {
     };
     let user = db.admin_user().await;
     let host = db.test_host().await;
-    let host_token = host.get_token(&db.pool).await.unwrap().token;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let host_token =
+        AuthToken::create_token_for::<Host>(&host, TokenHolderType::Host, TokenType::Login)
+            .unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
-        param: Some(get_hosts_request::Param::Token(host_token)),
+        param: Some(get_hosts_request::Param::Token(
+            host_token.encode().unwrap(),
+        )),
     };
     let mut request = Request::new(inner);
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
@@ -209,7 +228,8 @@ async fn responds_ok_with_id_for_delete() {
     };
     let user = db.admin_user().await;
     let host = db.test_host().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = DeleteHostRequest {
         meta: Some(request_meta),
         id: host.id.to_string(),
@@ -218,7 +238,9 @@ async fn responds_ok_with_id_for_delete() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { delete, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
@@ -236,7 +258,8 @@ async fn responds_ok_with_host_for_update() {
     };
     let user = db.admin_user().await;
     let host = db.test_host().await.try_into().unwrap();
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = UpdateHostRequest {
         meta: Some(request_meta),
         host: Some(host),
@@ -245,7 +268,9 @@ async fn responds_ok_with_host_for_update() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
@@ -270,7 +295,8 @@ async fn responds_ok_with_host_for_create() {
         ..Default::default()
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = CreateHostRequest {
         meta: Some(request_meta),
         host: Some(host),
@@ -279,7 +305,9 @@ async fn responds_ok_with_host_for_create() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::Ok, db, HostServiceClient<Channel> };

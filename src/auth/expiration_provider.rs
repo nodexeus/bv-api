@@ -40,7 +40,7 @@ impl ExpirationProvider {
 
     fn get_expiration_from_dotenv(key: &str) -> ApiResult<i64> {
         dotenv::var(key)
-            .map_err(|e| ApiError::EnvError(e))?
+            .map_err(ApiError::EnvError)?
             .parse::<i64>()
             .map_err(|e| ApiError::UnexpectedError(anyhow!("Couldn't parse env var value: {e:?}")))
     }

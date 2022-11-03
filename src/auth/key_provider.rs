@@ -48,25 +48,25 @@ impl KeyProvider {
 
     fn get_auth_secret() -> KeyProviderResult {
         dotenv::var("JWT_SECRET")
-            .map(|val| KeyValue::new(val))
+            .map(KeyValue::new)
             .map_err(KeyProviderError::from)
     }
 
     fn get_pwd_reset_secret() -> KeyProviderResult {
         dotenv::var("PWD_RESET_SECRET")
-            .map(|val| KeyValue::new(val))
+            .map(KeyValue::new)
             .map_err(KeyProviderError::from)
     }
 
     fn get_registration_confirmation_secret() -> KeyProviderResult {
         dotenv::var("CONFIRMATION_SECRET")
-            .map(|val| KeyValue::new(val))
+            .map(KeyValue::new)
             .map_err(KeyProviderError::from)
     }
 
     fn get_refresh_secret() -> KeyProviderResult {
         dotenv::var("REFRESH_SECRET")
-            .map(|val| KeyValue::new(val))
+            .map(KeyValue::new)
             .map_err(KeyProviderError::from)
     }
 }

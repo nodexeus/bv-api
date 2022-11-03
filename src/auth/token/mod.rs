@@ -208,6 +208,10 @@ pub trait JwtToken: Sized + serde::Serialize {
         }
     }
 
+    fn to_base64(&self) -> ApiResult<String> {
+        Ok(base64::encode(self.encode()?))
+    }
+
     /// Try to retrieve host for given token
     async fn try_get_host(&self, id: Uuid, db: &DbPool) -> ApiResult<Host> {
         match (self.token_holder(), self.token_type()) {
@@ -310,6 +314,6 @@ pub fn from_encoded<T: JwtToken + DeserializeOwned>(
         &validation,
     ) {
         Ok(token) => Ok(token.claims),
-        Err(e) => Err(super::TokenError::EnDeCoding(e)),
+        Err(e) => Err(TokenError::EnDeCoding(e)),
     }
 }

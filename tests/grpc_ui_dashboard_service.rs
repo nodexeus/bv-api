@@ -2,9 +2,10 @@
 mod setup;
 
 use crate::setup::{server_and_client_stub, setup};
-use api::auth::TokenIdentifyable;
+use api::auth::{AuthToken, JwtToken, TokenHolderType, TokenType};
 use api::grpc::blockjoy_ui::dashboard_service_client::DashboardServiceClient;
 use api::grpc::blockjoy_ui::{metric, DashboardMetricsRequest, RequestMeta};
+use api::models::User;
 use std::sync::Arc;
 use test_macros::before;
 use tonic::{transport::Channel, Request, Status};
@@ -44,7 +45,8 @@ async fn responds_ok_with_valid_token_for_metrics() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = DashboardMetricsRequest {
         meta: Some(request_meta),
     };
@@ -52,7 +54,9 @@ async fn responds_ok_with_valid_token_for_metrics() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { metrics, request, tonic::Code::Ok, db, DashboardServiceClient<Channel> };
@@ -69,7 +73,8 @@ async fn responds_valid_values_for_metrics() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = DashboardMetricsRequest {
         meta: Some(request_meta),
     };
@@ -77,7 +82,9 @@ async fn responds_valid_values_for_metrics() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     let pool = std::sync::Arc::new(db.pool.clone());

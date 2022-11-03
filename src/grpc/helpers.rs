@@ -53,8 +53,7 @@ pub fn try_get_token<T>(req: &tonic::Request<T>) -> Result<&AuthToken, ApiError>
     let tkn = req
         .extensions()
         .get::<AuthToken>()
-        .ok_or_else(|| Status::internal("Token lost!"))?
-        .clone();
+        .ok_or_else(|| Status::internal("Token lost!"))?;
 
     Ok(tkn)
 }

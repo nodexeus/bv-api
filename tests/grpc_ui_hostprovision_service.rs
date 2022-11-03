@@ -1,13 +1,13 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::TokenIdentifyable;
+use api::auth::{AuthToken, JwtToken, TokenHolderType, TokenType};
 use api::grpc::blockjoy_ui::host_provision_service_client::HostProvisionServiceClient;
 use api::grpc::blockjoy_ui::{
     CreateHostProvisionRequest, GetHostProvisionRequest, HostProvision as GrpcHostProvision,
     RequestMeta,
 };
-use api::models::{HostProvision, HostProvisionRequest};
+use api::models::{HostProvision, HostProvisionRequest, User};
 use setup::setup;
 use sqlx::postgres::PgRow;
 use sqlx::Row;
@@ -30,7 +30,8 @@ async fn responds_not_found_without_valid_id_for_get() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = GetHostProvisionRequest {
         meta: Some(request_meta),
         id: Some("foo-bar1".to_string()),
@@ -39,7 +40,9 @@ async fn responds_not_found_without_valid_id_for_get() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::NotFound, db, HostProvisionServiceClient<Channel> };
@@ -65,7 +68,8 @@ async fn responds_ok_with_valid_id_for_get() {
         .unwrap();
     tx.commit().await.unwrap();
 
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let req = HostProvisionRequest {
         org_id: org_id.get::<Uuid, usize>(0),
         nodes: None,
@@ -83,7 +87,9 @@ async fn responds_ok_with_valid_id_for_get() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, HostProvisionServiceClient<Channel> };
@@ -100,7 +106,8 @@ async fn responds_error_with_invalid_provision_for_create() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let inner = CreateHostProvisionRequest {
         meta: Some(request_meta),
         host_provision: None,
@@ -109,7 +116,9 @@ async fn responds_error_with_invalid_provision_for_create() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, HostProvisionServiceClient<Channel> };
@@ -135,7 +144,8 @@ async fn responds_ok_with_valid_provision_for_create() {
         .unwrap();
     tx.commit().await.unwrap();
 
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
+        .unwrap();
     let provision = GrpcHostProvision {
         org_id: org_id.get::<Uuid, usize>(0).to_string(),
         ip_gateway: String::from("192.168.0.1"),
@@ -151,7 +161,9 @@ async fn responds_ok_with_valid_provision_for_create() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::Ok, db, HostProvisionServiceClient<Channel> };
