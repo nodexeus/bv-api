@@ -1,8 +1,7 @@
 use super::JwtToken;
-use crate::auth::key_provider::KeyProvider;
-use crate::auth::{OnetimeToken, TokenClaim, TokenResult, TokenType};
+use crate::auth::{from_encoded, OnetimeToken, TokenClaim, TokenResult, TokenType};
+use crate::errors::Result;
 use crate::server::DbPool;
-use jsonwebtoken as jwt;
 use std::str;
 use std::str::FromStr;
 
@@ -45,15 +44,7 @@ impl FromStr for PwdResetToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        let key = KeyProvider::get_secret(TokenType::PwdReset)?;
-        let secret = key.value();
-        let validation = jwt::Validation::new(jwt::Algorithm::HS512);
-        let key = jwt::DecodingKey::from_secret(secret.as_bytes());
-
-        match jwt::decode(encoded, &key, &validation) {
-            Ok(token) => Ok(token.claims),
-            Err(e) => Err(super::TokenError::EnDeCoding(e)),
-        }
+        from_encoded::<PwdResetToken>(encoded, TokenType::PwdReset)
     }
 }
 

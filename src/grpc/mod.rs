@@ -119,6 +119,7 @@ pub async fn server(
 
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
+        // TODO: Check if DB extension is still needed
         .layer(Extension(db.clone()))
         .layer(Extension(unauthenticated))
         .layer(AsyncRequireAuthorizationLayer::new(auth_service))

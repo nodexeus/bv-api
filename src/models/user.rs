@@ -1,4 +1,4 @@
-use crate::auth::FindableById;
+use crate::auth::{FindableById, Identifiable, TokenRole};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::LoginUserRequest;
 use crate::mail::MailClient;
@@ -205,7 +205,7 @@ impl User {
         Err(ApiError::ValidationError("Invalid password.".to_string()))
     }
 
-    pub async fn create(user: UserRequest, db: &PgPool, role: Option<TokenRole>) -> Result<Self> {
+    pub async fn create(user: UserRequest, db: &PgPool, _role: Option<TokenRole>) -> Result<Self> {
         user.validate()
             .map_err(|e| ApiError::ValidationError(e.to_string()))?;
 
@@ -333,6 +333,12 @@ impl FindableById for User {
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
+    }
+}
+
+impl Identifiable for User {
+    fn get_id(&self) -> Uuid {
+        self.id
     }
 }
 

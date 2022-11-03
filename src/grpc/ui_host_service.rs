@@ -1,5 +1,6 @@
 use super::blockjoy_ui::ResponseMeta;
-use crate::auth::{FindableById, TokenType};
+use crate::auth::token::JwtToken;
+use crate::auth::{from_encoded, AuthToken, FindableById, TokenType};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::host_service_server::HostService;
 use crate::grpc::blockjoy_ui::{
@@ -61,12 +62,18 @@ impl HostService for HostServiceImpl {
                     ResponseMeta::new(request_id.unwrap_or_default()).with_pagination(),
                 )
             }
-            Param::Token(ref token) => (
-                vec![Token::get_host_for_token(token, TokenType::Login, &self.db)
+            Param::Token(token) => {
+                let token: AuthToken = from_encoded(token.as_str(), TokenType::Login)?;
+                let host = token
+                    .try_get_host(token.id().clone(), &self.db)
                     .await?
-                    .try_into()?],
-                ResponseMeta::new(request_id.unwrap_or_default()),
-            ),
+                    .try_into()?;
+
+                (
+                    vec![host],
+                    ResponseMeta::new(request_id.unwrap_or_default()),
+                )
+            }
         };
 
         if hosts.is_empty() {

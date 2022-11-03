@@ -1,6 +1,4 @@
-use crate::auth::key_provider::KeyProvider;
-use crate::auth::{JwtToken, TokenClaim, TokenType};
-use jsonwebtoken as jwt;
+use crate::auth::{from_encoded, JwtToken, TokenClaim, TokenType};
 use std::str::FromStr;
 
 /// The claims of the token to be stored (encrypted) on the client side.
@@ -35,20 +33,7 @@ impl FromStr for RefreshToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        let key = KeyProvider::get_secret(TokenType::Refresh)?;
-        let secret = key.value();
-        let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
-
-        validation.validate_exp = true;
-
-        match jwt::decode(
-            encoded,
-            &jwt::DecodingKey::from_secret(secret.as_bytes()),
-            &validation,
-        ) {
-            Ok(token) => Ok(token.claims),
-            Err(e) => Err(super::TokenError::EnDeCoding(e)),
-        }
+        from_encoded::<RefreshToken>(encoded, TokenType::Refresh)
     }
 }
 

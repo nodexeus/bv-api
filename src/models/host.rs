@@ -1,5 +1,5 @@
 use super::{validator::Validator, Node, NodeProvision};
-use crate::auth::{FindableById, Owned};
+use crate::auth::{FindableById, Identifiable, Owned};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
 use crate::grpc::helpers::required;
@@ -358,6 +358,12 @@ impl FindableById for Host {
         host.nodes = Some(Node::find_all_by_host(host.id, db).await?);
 
         Ok(host)
+    }
+}
+
+impl Identifiable for Host {
+    fn get_id(&self) -> Uuid {
+        self.id
     }
 }
 

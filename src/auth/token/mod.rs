@@ -1,9 +1,12 @@
+use anyhow::anyhow;
 use axum::http::Request as HttpRequest;
 use base64::DecodeError;
 use http::header::AUTHORIZATION;
 use jsonwebtoken as jwt;
 use jsonwebtoken::errors::Error as JwtError;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::str::Utf8Error;
 use std::{env::VarError, str::FromStr};
 use thiserror::Error;
@@ -14,7 +17,11 @@ mod pwd_reset;
 mod refresh;
 mod registration_confirmation;
 
+use crate::auth::expiration_provider::ExpirationProvider;
 use crate::auth::key_provider::{KeyProvider, KeyProviderError};
+use crate::auth::{FindableById, Identifiable};
+use crate::errors::{ApiError, Result as ApiResult};
+use crate::models::{Host, User};
 use crate::server::DbPool;
 pub use {
     auth::AuthToken, pwd_reset::PwdResetToken, refresh::*,
@@ -22,6 +29,43 @@ pub use {
 };
 
 pub type TokenResult<T> = Result<T, TokenError>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TokenRole {
+    Admin,
+    Guest,
+    Service,
+    User,
+    PwdReset,
+}
+
+impl ToString for TokenRole {
+    fn to_string(&self) -> String {
+        match self {
+            TokenRole::Admin => "admin".into(),
+            TokenRole::Guest => "guest".into(),
+            TokenRole::Service => "service".into(),
+            TokenRole::User => "user".into(),
+            TokenRole::PwdReset => "pwd_reset".into(),
+        }
+    }
+}
+
+impl FromStr for TokenRole {
+    type Err = ApiError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "user" => Ok(TokenRole::User),
+            "service" => Ok(TokenRole::Service),
+            "guest" => Ok(TokenRole::Guest),
+            "admin" => Ok(TokenRole::Admin),
+            "pwd_reset" => Ok(TokenRole::PwdReset),
+            _ => Err(ApiError::UnexpectedError(anyhow!("Unknown role"))),
+        }
+    }
+}
 
 pub trait Identifier {
     fn get_id(&self) -> Uuid;
@@ -66,22 +110,41 @@ pub enum TokenType {
     RegistrationConfirmation,
 }
 
+impl ToString for TokenType {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Login => "login".to_string(),
+            Self::Refresh => "refresh".to_string(),
+            Self::PwdReset => "pwd_reset".to_string(),
+            Self::RegistrationConfirmation => "registration_confirmation".to_string(),
+        }
+    }
+}
+
 /// The claims of the tokens. Each claim is a key-value pair
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenClaim {
     id: Uuid,
     exp: i64,
     holder_type: TokenHolderType,
     token_type: TokenType,
+    data: Option<HashMap<String, String>>,
 }
 
 impl TokenClaim {
-    pub fn new(id: Uuid, exp: i64, holder_type: TokenHolderType, token_type: TokenType) -> Self {
+    pub fn new(
+        id: Uuid,
+        exp: i64,
+        holder_type: TokenHolderType,
+        token_type: TokenType,
+        data: Option<HashMap<String, String>>,
+    ) -> Self {
         Self {
             id,
             exp,
             holder_type,
             token_type,
+            data,
         }
     }
 }
@@ -104,6 +167,7 @@ impl TokenHolderType {
     }
 }
 
+#[tonic::async_trait]
 pub trait JwtToken: Sized + serde::Serialize {
     fn new(claim: TokenClaim) -> Self;
 
@@ -126,6 +190,51 @@ pub trait JwtToken: Sized + serde::Serialize {
         Self: FromStr<Err = TokenError>,
     {
         extract_token(request).and_then(|s| Self::from_str(&s))
+    }
+
+    /// Try to retrieve user for given token
+    async fn try_get_user(&self, id: Uuid, db: &DbPool) -> ApiResult<User> {
+        match (self.token_holder(), self.token_type()) {
+            (TokenHolderType::User, TokenType::Login) => User::find_by_id(id, db).await,
+            (TokenHolderType::User, TokenType::Refresh) => User::find_by_id(id, db).await,
+            (TokenHolderType::User, TokenType::RegistrationConfirmation) => {
+                User::find_by_id(id, db).await
+            }
+            (TokenHolderType::User, TokenType::PwdReset) => User::find_by_id(id, db).await,
+            _ => Err(ApiError::UnexpectedError(anyhow!(
+                "Cannot retrieve host from token of type {} for User",
+                self.token_type().to_string()
+            ))),
+        }
+    }
+
+    /// Try to retrieve host for given token
+    async fn try_get_host(&self, id: Uuid, db: &DbPool) -> ApiResult<Host> {
+        match (self.token_holder(), self.token_type()) {
+            (TokenHolderType::Host, TokenType::Login) => Host::find_by_id(id, db).await,
+            (TokenHolderType::Host, TokenType::Refresh) => Host::find_by_id(id, db).await,
+            _ => Err(ApiError::UnexpectedError(anyhow!(
+                "Cannot retrieve host from token of type {} for Host",
+                self.token_type().to_string()
+            ))),
+        }
+    }
+
+    /// Create token for given resource
+    fn create_token_for<T: Identifiable>(
+        resource: &T,
+        holder_type: TokenHolderType,
+        token_type: TokenType,
+    ) -> TokenResult<Self> {
+        let claim = TokenClaim::new(
+            resource.get_id(),
+            ExpirationProvider::expiration(holder_type, token_type),
+            holder_type,
+            token_type,
+            None,
+        );
+
+        Ok(Self::new(claim))
     }
 }
 
@@ -182,4 +291,25 @@ fn extract_token<B>(req: &HttpRequest<B>) -> TokenResult<String> {
 pub trait OnetimeToken {
     /// Method needs to be called after validation and use
     async fn blacklist(&self, db: DbPool) -> TokenResult<bool>;
+}
+
+/// Decode token from encoded value
+pub fn from_encoded<T: JwtToken + DeserializeOwned>(
+    encoded: &str,
+    token_type: TokenType,
+) -> Result<T, TokenError> {
+    let key = KeyProvider::get_secret(token_type)?;
+    let secret = key.value();
+    let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
+
+    validation.validate_exp = true;
+
+    match jwt::decode::<T>(
+        encoded,
+        &jwt::DecodingKey::from_secret(secret.as_bytes()),
+        &validation,
+    ) {
+        Ok(token) => Ok(token.claims),
+        Err(e) => Err(super::TokenError::EnDeCoding(e)),
+    }
 }

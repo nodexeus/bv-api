@@ -1,4 +1,4 @@
-use crate::auth::FindableById;
+use crate::auth::{FindableById, JwtToken};
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
@@ -13,7 +13,7 @@ use super::blockjoy_ui::{
     ResetPasswordRequest, ResetPasswordResponse, ResponseMeta, UpdatePasswordRequest,
     UpdatePasswordResponse,
 };
-use super::helpers::{required, try_get_token};
+use super::helpers::try_get_token;
 
 pub struct AuthenticationServiceImpl {
     db: DbPool,
@@ -68,8 +68,8 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<UpdatePasswordRequest>,
     ) -> Result<Response<UpdatePasswordResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let token = try_get_token(&request)?.clone();
+        let user_id = token.try_get_user(token.id().clone(), &self.db).await?.id;
         let cur_user = User::find_by_id(user_id, &self.db).await?;
         let request = request.into_inner();
         let _cur_user = cur_user
@@ -79,7 +79,9 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let response = UpdatePasswordResponse {
             meta: Some(meta),
             token: Some(ApiToken {
-                value: db_token.token,
+                value: token
+                    .encode()
+                    .map_err(|e| Status::internal(format!("Token encode error {e:?}")))?,
             }),
         };
 
@@ -93,9 +95,9 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<UpdateUiPasswordRequest>,
     ) -> Result<Response<UpdateUiPasswordResponse>, Status> {
-        let db_token = try_get_token(&request)?;
+        let token = try_get_token(&request)?.clone();
         let inner = request.into_inner();
-        let user = User::find_by_id(db_token.try_user_id()?, &self.db).await?;
+        let user = token.try_get_user(token.id().clone(), &self.db).await?;
 
         match user.verify_password(inner.old_pwd.as_str()) {
             Ok(_) => {
@@ -106,7 +108,9 @@ impl AuthenticationService for AuthenticationServiceImpl {
                     let response = UpdateUiPasswordResponse {
                         meta: None,
                         token: Some(ApiToken {
-                            value: db_token.token,
+                            value: token.encode().map_err(|e| {
+                                Status::internal(format!("Token encode error {e:?}"))
+                            })?,
                         }),
                     };
 

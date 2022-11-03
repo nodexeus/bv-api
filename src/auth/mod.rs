@@ -1,3 +1,4 @@
+pub mod expiration_provider;
 pub mod key_provider;
 pub mod middleware;
 pub mod token;
@@ -38,6 +39,10 @@ pub trait Owned<T, D> {
     async fn is_owned_by(&self, resource: T, db: D) -> bool
     where
         D: 'static;
+}
+
+pub trait Identifiable {
+    fn get_id(&self) -> uuid::Uuid;
 }
 
 #[axum::async_trait]

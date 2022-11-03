@@ -11,6 +11,7 @@ pub mod server;
 pub use test::TestDb;
 // #[cfg(test)]
 mod test {
+    use crate::auth::TokenRole;
     use crate::models::{self, validator};
     use rand::Rng;
     use sqlx::Connection;
@@ -162,7 +163,7 @@ mod test {
                 password_confirm: "abc12345".into(),
             };
 
-            let admin = models::User::create(user, &self.pool, Some(models::TokenRole::Admin))
+            let admin = models::User::create(user, &self.pool, Some(TokenRole::Admin))
                 .await
                 .expect("Could not create test user in db.");
 

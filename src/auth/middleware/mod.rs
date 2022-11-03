@@ -5,7 +5,6 @@
 use crate::auth::unauthenticated_paths::UnauthenticatedPaths;
 use crate::auth::JwtToken;
 use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
-use crate::server::DbPool;
 use futures_util::future::BoxFuture;
 use hyper::{Request, Response};
 use std::fmt::Debug;
@@ -65,40 +64,42 @@ where
         Box::pin(async move {
             let token = AnyToken::from_request(&request)
                 .map_err(|_| unauthenticated_response("Missing valid token"))?;
-            let db = request
-                .extensions()
-                .get::<DbPool>()
-                .unwrap_or_else(|| panic!("DB extension missing"));
             let cant_parse =
                 |e| unauthenticated_response(&format!("Could not extract token: {e:?}"));
-            let encoded = match token {
-                AnyToken::Auth(auth) => auth.encode().map_err(cant_parse)?,
+
+            match token {
+                AnyToken::Auth(token) => {
+                    token.encode().map_err(cant_parse)?;
+
+                    let auth_data = AuthorizationData {
+                        subject: token.role().to_string(),
+                        object: request.uri().path().to_string(),
+                        action: request.method().to_string(),
+                    };
+
+                    let result = enforcer
+                        .try_authorized(auth_data)
+                        .map_err(|e| unauthorized_response(&e.to_string()))?;
+                    // Evaluate authorization result
+                    match result {
+                        AuthorizationState::Authorized => {
+                            request.extensions_mut().insert(token);
+
+                            Ok(request)
+                        }
+                        AuthorizationState::Denied => {
+                            Err(unauthorized_response("Insufficient privileges"))
+                        }
+                    }
+                }
+                _ => Err(unauthorized_response("Invalid token type")),
+                /*
                 AnyToken::PwdReset(pwd_reset) => pwd_reset.encode().map_err(cant_parse)?,
                 AnyToken::Refresh(refresh) => refresh.encode().map_err(cant_parse)?,
                 AnyToken::RegistrationConfirmation(confirmation) => {
                     confirmation.encode().map_err(cant_parse)?
                 }
-            };
-            let db_token = Token::find_by_token(&encoded, db)
-                .await
-                .map_err(|_| unauthenticated_response("Token not found"))?;
-            let auth_data = AuthorizationData {
-                subject: db_token.role.to_string(),
-                object: request.uri().path().to_string(),
-                action: request.method().to_string(),
-            };
-
-            let result = enforcer
-                .try_authorized(auth_data)
-                .map_err(|e| unauthorized_response(&e.to_string()))?;
-            // Evaluate authorization result
-            match result {
-                AuthorizationState::Authorized => {
-                    request.extensions_mut().insert(db_token);
-
-                    Ok(request)
-                }
-                AuthorizationState::Denied => Err(unauthorized_response("Insufficient privileges")),
+                 */
             }
         })
     }

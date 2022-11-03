@@ -1,26 +1,35 @@
 use super::JwtToken;
-use crate::auth::key_provider::KeyProvider;
-use crate::auth::{TokenClaim, TokenType};
-use jsonwebtoken as jwt;
+use crate::auth::{from_encoded, TokenClaim, TokenRole, TokenType};
+use crate::errors::Result;
+use derive_getters::Getters;
 use std::str;
 use std::str::FromStr;
+use uuid::Uuid;
 
 /// The claims of the token to be stored (encrypted) on the client side
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Getters)]
 pub struct AuthToken {
-    id: uuid::Uuid,
+    id: Uuid,
     exp: i64,
     holder_type: super::TokenHolderType,
     token_type: TokenType,
+    role: TokenRole,
 }
 
+#[tonic::async_trait]
 impl JwtToken for AuthToken {
     fn new(claim: TokenClaim) -> Self {
+        let data = claim.data.unwrap_or_default();
+        let def = &"user".to_string();
+        let role = TokenRole::from_str(data.get("role").unwrap_or_else(|| def))
+            .unwrap_or_else(|_| TokenRole::User);
+
         Self {
             id: claim.id,
             exp: claim.exp,
             holder_type: claim.holder_type,
             token_type: TokenType::Login,
+            role,
         }
     }
 
@@ -37,25 +46,12 @@ impl FromStr for AuthToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        let key = KeyProvider::get_secret(TokenType::Login)?;
-        let secret = key.value();
-        let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
-
-        validation.validate_exp = true;
-
-        match jwt::decode::<AuthToken>(
-            encoded,
-            &jwt::DecodingKey::from_secret(secret.as_bytes()),
-            &validation,
-        ) {
-            Ok(token) => Ok(token.claims),
-            Err(e) => Err(super::TokenError::EnDeCoding(e)),
-        }
+        from_encoded::<AuthToken>(encoded, TokenType::Login)
     }
 }
 
 impl super::Identifier for AuthToken {
-    fn get_id(&self) -> uuid::Uuid {
+    fn get_id(&self) -> Uuid {
         self.id
     }
 }

@@ -1,4 +1,4 @@
-use crate::auth::TokenType;
+use crate::auth::JwtToken;
 use crate::errors::Result;
 use crate::grpc::blockjoy::{command_flow_server::CommandFlow, Command as GrpcCommand, InfoUpdate};
 use crate::grpc::helpers::try_get_token;
@@ -39,12 +39,10 @@ impl CommandFlow for CommandFlowServerImpl {
         &self,
         request: Request<Streaming<InfoUpdate>>,
     ) -> Result<Response<Self::CommandsStream>, Status> {
-        // DB token must be added by middleware beforehand
-        let db_token = try_get_token(&request)?.token;
+        // Token must be added by middleware beforehand
+        let token = try_get_token(&request)?;
         // Get the host that the user wants to listen to from the current login token.
-        let host_id = models::Token::get_host_for_token(&db_token, TokenType::Login, &self.db)
-            .await?
-            .id;
+        let host_id = token.try_get_host(token.id().clone(), &self.db).await?.id;
         // Set the host as online.
         models::Host::toggle_online(host_id, true, &self.db).await?;
         let update_stream = request.into_inner();
@@ -67,7 +65,6 @@ mod tests {
     use std::future::Future;
     use std::sync::Arc;
 
-    use crate::auth::TokenIdentifyable;
     use crate::grpc::blockjoy::command_flow_client::CommandFlowClient;
     use crate::grpc::blockjoy::info_update::Info;
     use crate::grpc::blockjoy::{InfoUpdate, NodeInfo};

@@ -30,8 +30,8 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<GetOrganizationsRequest>,
     ) -> Result<Response<GetOrganizationsResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let token = try_get_token(&request)?;
+        let user_id = token.id().clone();
         let inner = request.into_inner();
         let organizations: Vec<Org> = Org::find_all_by_user(user_id, &self.db).await?;
         let organizations: Result<_, ApiError> =
@@ -48,8 +48,8 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<CreateOrganizationRequest>,
     ) -> Result<Response<CreateOrganizationResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let token = try_get_token(&request)?;
+        let user_id = token.id().clone();
         let inner = request.into_inner();
         let org = inner.organization.ok_or_else(required("organization"))?;
         let name = org.name.ok_or_else(required("organization.name"))?;
@@ -66,8 +66,8 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<UpdateOrganizationRequest>,
     ) -> Result<Response<UpdateOrganizationResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let token = try_get_token(&request)?;
+        let user_id = token.id().clone();
         let inner = request.into_inner();
         let org = inner.organization.ok_or_else(required("organization"))?;
         let org_id = Uuid::parse_str(org.id.ok_or_else(required("organization.id"))?.as_str())
@@ -90,8 +90,8 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<DeleteOrganizationRequest>,
     ) -> Result<Response<DeleteOrganizationResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let token = try_get_token(&request)?;
+        let user_id = token.id().clone();
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
 
