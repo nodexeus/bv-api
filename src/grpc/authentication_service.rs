@@ -33,6 +33,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         _request: Request<LoginUserRequest>,
     ) -> Result<Response<LoginUserResponse>, Status> {
+        tracing::info!("{:?}", _request.metadata().get("cookie"));
         let user = User::find_by_email("admin@here.com", &self.db).await?;
         let refresh_token = RefreshToken::create_token_for::<User>(
             &user,
@@ -51,7 +52,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         response.metadata_mut().insert(
             "set-cookie",
             format!(
-                "refresh={}; expires=Fri, 05 Nov 2022 07:08:25 GMT; path=/; HttpOnly; SameSite=None; secure",
+                "refresh={}; path=/; expires=Fri, 05 Nov 2022 07:19:40 GMT; HttpOnly; SameSite=None; Secure",
                 refresh_token.encode()?,
                 // exp,
             )
