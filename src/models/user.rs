@@ -38,6 +38,7 @@ pub struct UserSelectiveUpdate {
     pub last_name: Option<String>,
     pub fee_bps: Option<i64>,
     pub staking_quota: Option<i64>,
+    pub refresh_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,15 +159,11 @@ impl User {
     }
 
     pub async fn find_by_email(email: &str, db: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>(
-            r#"SELECT u.*, t.token, t.role FROM users u
-                        RIGHT JOIN tokens t on u.id = t.user_id
-                    WHERE LOWER(email) = LOWER($1)"#,
-        )
-        .bind(email)
-        .fetch_one(db)
-        .await
-        .map_err(ApiError::from)
+        sqlx::query_as::<_, Self>(r#"SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1"#)
+            .bind(email)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
         /*
         sqlx::query_as::<_, Self>("SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1")
             .bind(email)
@@ -302,13 +299,15 @@ impl User {
                     first_name = COALESCE($1, first_name),
                     last_name = COALESCE($2, last_name),
                     fee_bps = COALESCE($3, fee_bps),
-                    staking_quota = COALESCE($4, staking_quota)
-                WHERE id = $5 RETURNING *"#,
+                    staking_quota = COALESCE($4, staking_quota),
+                    refresh = COALESCE($5, refresh)
+                WHERE id = $6 RETURNING *"#,
         )
         .bind(fields.first_name)
         .bind(fields.last_name)
         .bind(fields.fee_bps)
         .bind(fields.staking_quota)
+        .bind(fields.refresh_token)
         .bind(id)
         .fetch_one(&mut tx)
         .await?;

@@ -1,7 +1,14 @@
+use crate::auth::{AuthToken, JwtToken, RefreshToken, TokenHolderType, TokenType};
+use crate::errors::{ApiError, Result as ApiResult};
+use crate::grpc::blockjoy_ui::LoginUserRequest;
+use crate::http::HttpLoginUserRequest;
+use crate::models::{User, UserSelectiveUpdate};
 use crate::server::DbPool;
+use anyhow::anyhow;
 use axum::extract::{Extension, Json};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
+use chrono::{TimeZone, Utc};
 
 /// Health handler used indicating system status
 /// Returns empty message (assuming all is working properly).
@@ -15,6 +22,66 @@ pub async fn health(Extension(db): Extension<DbPool>) -> impl IntoResponse {
     } else {
         (StatusCode::OK, Json(""))
     }
+}
+
+/// 1. Create JWT login token
+/// 2. Create JWT refresh token
+/// 3. Save refresh token on user/host
+/// 4. Return tokens
+///     a. Refresh token as HTTP only cookie
+///     b. Login token inside the body
+pub async fn login(
+    Extension(db): Extension<DbPool>,
+    Json(req): Json<HttpLoginUserRequest>,
+) -> ApiResult<Response<Json<String>>> {
+    let login_req = LoginUserRequest {
+        meta: None,
+        email: req.email,
+        password: req.pwd,
+    };
+    let user = User::login(login_req, &db).await?;
+    let token =
+        AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)?;
+    let refresh_token =
+        RefreshToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Refresh)?;
+
+    // TODO: Update user with refresh token
+    let fields = UserSelectiveUpdate {
+        first_name: None,
+        last_name: None,
+        fee_bps: None,
+        staking_quota: None,
+        refresh_token: Some(refresh_token.encode()?),
+    };
+    User::update_all(user.id, fields, &db).await?;
+
+    let exp = *refresh_token.exp();
+    let exp = Utc.timestamp(exp, 0).to_string();
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header(
+            "Set-Cookie",
+            format!(
+                "refresh={}; Expires={}; Secure; HttpOnly",
+                refresh_token.encode()?,
+                exp,
+            ),
+        )
+        .body(Json(token.encode()?))
+        .map_err(|e| ApiError::UnexpectedError(anyhow!("Error creating response cookie: {e:?}")))?;
+
+    Ok(response)
+}
+
+/// @see `login`
+pub async fn claim_host_provision() -> impl IntoResponse {
+    (StatusCode::OK, Json(""))
+}
+
+/// Recreate JWT login/refresh tokens, @see `login`
+pub async fn refresh() -> impl IntoResponse {
+    (StatusCode::OK, Json(""))
 }
 
 /* TODO: DELETE ME after moving necessary to gRPC */

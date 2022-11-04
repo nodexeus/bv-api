@@ -1,8 +1,9 @@
 use crate::auth::{from_encoded, JwtToken, TokenClaim, TokenType};
+use derive_getters::Getters;
 use std::str::FromStr;
 
 /// The claims of the token to be stored (encrypted) on the client side.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Getters)]
 pub struct RefreshToken {
     id: uuid::Uuid,
     exp: i64,

@@ -1,4 +1,4 @@
-use crate::auth::{FindableById, JwtToken};
+use crate::auth::{FindableById, JwtToken, RefreshToken, TokenHolderType, TokenType};
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
@@ -7,6 +7,7 @@ use crate::grpc::blockjoy_ui::{
 use crate::mail::MailClient;
 use crate::models::User;
 use crate::server::DbPool;
+use chrono::{TimeZone, Utc};
 use tonic::{Request, Response, Status};
 
 use super::blockjoy_ui::{
@@ -32,7 +33,37 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         _request: Request<LoginUserRequest>,
     ) -> Result<Response<LoginUserResponse>, Status> {
-        Err(Status::unimplemented("To be moved to HTTP"))
+        let user = User::find_by_email("admin@here.com", &self.db).await?;
+        let refresh_token = RefreshToken::create_token_for::<User>(
+            &user,
+            TokenHolderType::User,
+            TokenType::Refresh,
+        )?;
+        let exp = *refresh_token.exp() + (60 * 60 * 24);
+        let exp = Utc.timestamp(exp, 0).to_string();
+
+        let response = LoginUserResponse {
+            meta: None,
+            token: None,
+        };
+        let mut response = Response::new(response);
+
+        response.metadata_mut().insert(
+            "set-cookie",
+            format!(
+                "refresh={}; expires=Fri, 05 Nov 2022 07:08:25 GMT; path=/; HttpOnly; SameSite=None; secure",
+                refresh_token.encode()?,
+                // exp,
+            )
+            .parse()
+            .unwrap(),
+        );
+
+        response.extensions_mut().insert("blub");
+
+        Ok(response)
+
+        //Err(Status::unavailable("Moved to HTTP"))
     }
 
     /// TODO: Move to HTTP endpoint
@@ -40,7 +71,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         _request: Request<RefreshTokenRequest>,
     ) -> Result<Response<RefreshTokenResponse>, Status> {
-        Err(Status::unimplemented("To be moved to HTTP"))
+        Err(Status::unavailable("Moved to HTTP"))
     }
 
     /// This endpoint triggers the sending of the reset-password email. The actual resetting is
