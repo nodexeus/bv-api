@@ -1,3 +1,4 @@
+use api::auth::expiration_provider::ExpirationProvider;
 use api::auth::token::*;
 use axum::http::header::AUTHORIZATION;
 use axum::http::Request;
@@ -125,32 +126,25 @@ fn should_not_work_with_empty_token() {
 #[before(call = "setup")]
 #[test]
 fn should_get_valid_token() -> anyhow::Result<()> {
-    temp_env::with_var_unset("JWT_SECRET", || {
-        let id = Uuid::new_v4();
-        let exp = _before_values.now + 60 * 60 * 24;
-        let claim = TokenClaim::new(id, exp, TokenType::UserAuth, None);
-        let token = UserAuthToken::new(claim);
-        let encoded = base64::encode(token.encode().unwrap());
-        let request = Request::builder()
-            .header(AUTHORIZATION, format!("Bearer {}", encoded))
-            .uri("/")
-            .method("GET")
-            .body(())?;
-        let token = UserAuthToken::from_request(&request).unwrap();
+    let id = Uuid::new_v4();
+    let claim = TokenClaim::new(
+        id,
+        ExpirationProvider::expiration(TokenType::UserAuth),
+        TokenType::UserAuth,
+        None,
+    );
+    let token = UserAuthToken::new(claim);
+    let encoded = base64::encode(token.encode().unwrap());
+    let request = Request::builder()
+        .header(AUTHORIZATION, format!("Bearer {}", encoded))
+        .uri("/")
+        .method("GET")
+        .body(())?;
+    let token = UserAuthToken::from_request(&request).unwrap();
 
-        assert_eq!(*token.id(), id);
+    assert_eq!(*token.id(), id);
 
-        Ok(())
-    })
-}
-
-#[test]
-fn should_panic_encode_without_secret_in_envs() {
-    temp_env::with_var_unset("JWT_SECRET", || {
-        let claim = TokenClaim::new(Uuid::new_v4(), 123123123, TokenType::UserAuth, None);
-        eprintln!("{}", UserAuthToken::new(claim.clone()).encode().unwrap());
-        assert!(UserAuthToken::new(claim).encode().is_err())
-    });
+    Ok(())
 }
 
 #[test]

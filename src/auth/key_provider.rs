@@ -1,4 +1,5 @@
 use crate::auth::TokenType;
+use anyhow::anyhow;
 use derive_getters::Getters;
 use thiserror::Error;
 
@@ -10,6 +11,8 @@ pub enum KeyProviderError {
     Empty,
     #[error("Env var couldn't be loaded: {0}")]
     DotenvError(#[from] dotenv::Error),
+    #[error("Unexpected error: {0}")]
+    UnexpectedError(#[from] anyhow::Error),
 }
 
 #[derive(Getters)]
@@ -49,38 +52,38 @@ impl KeyProvider {
     }
 
     fn get_user_auth_secret() -> KeyProviderResult {
-        dotenv::var("JWT_SECRET")
+        std::env::var("JWT_SECRET")
             .map(KeyValue::new)
-            .map_err(KeyProviderError::from)
+            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
     }
 
     fn get_host_auth_secret() -> KeyProviderResult {
-        dotenv::var("JWT_SECRET")
+        std::env::var("JWT_SECRET")
             .map(KeyValue::new)
-            .map_err(KeyProviderError::from)
+            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
     }
 
     fn get_pwd_reset_secret() -> KeyProviderResult {
-        dotenv::var("PWD_RESET_SECRET")
+        std::env::var("PWD_RESET_SECRET")
             .map(KeyValue::new)
-            .map_err(KeyProviderError::from)
+            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
     }
 
     fn get_registration_confirmation_secret() -> KeyProviderResult {
-        dotenv::var("CONFIRMATION_SECRET")
+        std::env::var("CONFIRMATION_SECRET")
             .map(KeyValue::new)
-            .map_err(KeyProviderError::from)
+            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
     }
 
     fn get_user_refresh_secret() -> KeyProviderResult {
-        dotenv::var("REFRESH_SECRET")
+        std::env::var("REFRESH_SECRET")
             .map(KeyValue::new)
-            .map_err(KeyProviderError::from)
+            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
     }
 
     fn get_host_refresh_secret() -> KeyProviderResult {
-        dotenv::var("REFRESH_SECRET")
+        std::env::var("REFRESH_SECRET")
             .map(KeyValue::new)
-            .map_err(KeyProviderError::from)
+            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
     }
 }
