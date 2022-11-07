@@ -8,33 +8,26 @@ use uuid::Uuid;
 
 /// The claims of the token to be stored (encrypted) on the client side
 #[derive(Debug, serde::Deserialize, serde::Serialize, Getters)]
-pub struct AuthToken {
+pub struct UserAuthToken {
     id: Uuid,
     exp: i64,
-    holder_type: super::TokenHolderType,
     token_type: TokenType,
     role: TokenRole,
 }
 
 #[tonic::async_trait]
-impl JwtToken for AuthToken {
+impl JwtToken for UserAuthToken {
     fn new(claim: TokenClaim) -> Self {
         let data = claim.data.unwrap_or_default();
         let def = &"user".to_string();
-        let role = TokenRole::from_str(data.get("role").unwrap_or(def))
-            .unwrap_or(TokenRole::User);
+        let role = TokenRole::from_str(data.get("role").unwrap_or(def)).unwrap_or(TokenRole::User);
 
         Self {
             id: claim.id,
             exp: claim.exp,
-            holder_type: claim.holder_type,
-            token_type: TokenType::Login,
+            token_type: TokenType::UserAuth,
             role,
         }
-    }
-
-    fn token_holder(&self) -> super::TokenHolderType {
-        self.holder_type
     }
 
     fn token_type(&self) -> TokenType {
@@ -42,15 +35,15 @@ impl JwtToken for AuthToken {
     }
 }
 
-impl FromStr for AuthToken {
+impl FromStr for UserAuthToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        from_encoded::<AuthToken>(encoded, TokenType::Login)
+        from_encoded::<UserAuthToken>(encoded, TokenType::UserAuth)
     }
 }
 
-impl super::Identifier for AuthToken {
+impl super::Identifier for UserAuthToken {
     fn get_id(&self) -> Uuid {
         self.id
     }

@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{AuthToken, JwtToken, TokenHolderType, TokenType};
+use api::auth::{JwtToken, TokenHolderType, TokenType, UserAuthToken};
 use api::grpc::blockjoy::command_flow_client::CommandFlowClient;
 use api::grpc::blockjoy::info_update::Info;
 use api::grpc::blockjoy::{self, NodeInfo};
@@ -33,7 +33,8 @@ async fn test_command_flow_works() {
     let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
     let token =
-        AuthToken::create_token_for::<Host>(host, TokenHolderType::Host, TokenType::Login).unwrap();
+        UserAuthToken::create_token_for::<Host>(host, TokenHolderType::Host, TokenType::Login)
+            .unwrap();
     // let node: Node = sqlx::query_as("INSERT INTO nodes VALUES (")
     let req = blockjoy::InfoUpdate {
         info: Some(Info::Node(NodeInfo {

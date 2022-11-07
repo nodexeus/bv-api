@@ -1,5 +1,5 @@
 use super::blockjoy_ui::ResponseMeta;
-use crate::auth::{AuthToken, Identifier};
+use crate::auth::{Identifier, UserAuthToken};
 use crate::grpc::blockjoy_ui::dashboard_service_server::DashboardService;
 use crate::grpc::blockjoy_ui::{metric, DashboardMetricsRequest, DashboardMetricsResponse, Metric};
 use crate::grpc::helpers::required;
@@ -25,7 +25,7 @@ impl DashboardService for DashboardServiceImpl {
     ) -> Result<Response<DashboardMetricsResponse>, Status> {
         let token = request
             .extensions()
-            .get::<AuthToken>()
+            .get::<UserAuthToken>()
             .ok_or_else(required("Auth token"))?;
         let user_id = token.get_id();
         let org_id = Org::find_personal_org(user_id, &self.db).await?.id;

@@ -1,5 +1,5 @@
 use super::helpers::try_get_token;
-use crate::auth::{AuthToken, FindableById, JwtToken, TokenHolderType, TokenType};
+use crate::auth::{FindableById, JwtToken, TokenType, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy::hosts_server::Hosts;
 use crate::grpc::blockjoy::{
@@ -34,8 +34,7 @@ impl Hosts for HostsServiceImpl {
         let host = HostProvision::claim_by_grpc_provision(otp, inner, &self.db)
             .await
             .map_err(|e| Status::not_found(format!("Host provision not found: {e:?}")))?;
-        let token: AuthToken =
-            JwtToken::create_token_for::<Host>(&host, TokenHolderType::Host, TokenType::Login)?;
+        let token: UserAuthToken = JwtToken::create_token_for::<Host>(&host, TokenType::HostAuth)?;
         let token = token.encode()?;
         let result = ProvisionHostResponse {
             host_id: host.id.to_string(),

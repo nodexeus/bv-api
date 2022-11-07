@@ -68,7 +68,7 @@ where
                 |e| unauthenticated_response(&format!("Could not extract token: {e:?}"));
 
             match token {
-                AnyToken::Auth(token) => {
+                AnyToken::UserAuth(token) => {
                     token.encode().map_err(cant_parse)?;
 
                     let auth_data = AuthorizationData {

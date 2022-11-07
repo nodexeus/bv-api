@@ -1,6 +1,5 @@
 use super::blockjoy_ui::ResponseMeta;
-use crate::auth::token::JwtToken;
-use crate::auth::{from_encoded, AuthToken, FindableById, TokenType};
+use crate::auth::{from_encoded, FindableById, HostAuthToken, JwtToken, TokenType};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::host_service_server::HostService;
 use crate::grpc::blockjoy_ui::{
@@ -63,7 +62,7 @@ impl HostService for HostServiceImpl {
                 )
             }
             Param::Token(token) => {
-                let token: AuthToken = from_encoded(token.as_str(), TokenType::Login)?;
+                let token: HostAuthToken = from_encoded(token.as_str(), TokenType::HostAuth)?;
                 let host = token
                     .try_get_host(*token.id(), &self.db)
                     .await?

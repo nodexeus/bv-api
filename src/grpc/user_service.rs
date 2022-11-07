@@ -1,4 +1,4 @@
-use crate::auth::{AuthToken, JwtToken, TokenRole};
+use crate::auth::{JwtToken, TokenRole, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::user_service_server::UserService;
 use crate::grpc::blockjoy_ui::{
@@ -66,7 +66,7 @@ impl UserService for UserServiceImpl {
     ) -> Result<Response<UpdateUserResponse>, Status> {
         let token = request
             .extensions()
-            .get::<AuthToken>()
+            .get::<UserAuthToken>()
             .ok_or_else(required("auth token"))?;
         let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
         let inner = request.into_inner();

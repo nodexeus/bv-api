@@ -7,7 +7,6 @@ use std::str::FromStr;
 pub struct RegistrationConfirmationToken {
     id: uuid::Uuid,
     exp: i64,
-    holder_type: super::TokenHolderType,
     token_type: TokenType,
 }
 
@@ -16,13 +15,8 @@ impl JwtToken for RegistrationConfirmationToken {
         Self {
             id: claim.id,
             exp: claim.exp,
-            holder_type: claim.holder_type,
             token_type: TokenType::RegistrationConfirmation,
         }
-    }
-
-    fn token_holder(&self) -> super::TokenHolderType {
-        self.holder_type
     }
 
     fn token_type(&self) -> TokenType {

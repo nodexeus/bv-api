@@ -1,4 +1,4 @@
-use crate::auth::{AuthToken, JwtToken, RefreshToken, TokenHolderType, TokenType};
+use crate::auth::{JwtToken, TokenType, UserAuthToken, UserRefreshToken};
 use crate::errors::{ApiError, Result as ApiResult};
 use crate::grpc::blockjoy_ui::LoginUserRequest;
 use crate::http::HttpLoginUserRequest;
@@ -40,10 +40,8 @@ pub async fn login(
         password: req.pwd,
     };
     let user = User::login(login_req, &db).await?;
-    let token =
-        AuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)?;
-    let refresh_token =
-        RefreshToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Refresh)?;
+    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth)?;
+    let refresh_token = UserRefreshToken::create_token_for::<User>(&user, TokenType::UserRefresh)?;
 
     // TODO: Update user with refresh token
     let fields = UserSelectiveUpdate {

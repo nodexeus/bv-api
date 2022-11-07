@@ -28,10 +28,12 @@ pub struct KeyProvider;
 impl KeyProvider {
     pub fn get_secret(token_type: TokenType) -> KeyProviderResult {
         let key = match token_type {
-            TokenType::Login => Self::get_auth_secret(),
+            TokenType::UserAuth => Self::get_user_auth_secret(),
+            TokenType::UserRefresh => Self::get_user_refresh_secret(),
+            TokenType::HostAuth => Self::get_host_auth_secret(),
+            TokenType::HostRefresh => Self::get_host_refresh_secret(),
             TokenType::RegistrationConfirmation => Self::get_registration_confirmation_secret(),
             TokenType::PwdReset => Self::get_pwd_reset_secret(),
-            TokenType::Refresh => Self::get_refresh_secret(),
         };
 
         match key {
@@ -46,7 +48,13 @@ impl KeyProvider {
         }
     }
 
-    fn get_auth_secret() -> KeyProviderResult {
+    fn get_user_auth_secret() -> KeyProviderResult {
+        dotenv::var("JWT_SECRET")
+            .map(KeyValue::new)
+            .map_err(KeyProviderError::from)
+    }
+
+    fn get_host_auth_secret() -> KeyProviderResult {
         dotenv::var("JWT_SECRET")
             .map(KeyValue::new)
             .map_err(KeyProviderError::from)
@@ -64,7 +72,13 @@ impl KeyProvider {
             .map_err(KeyProviderError::from)
     }
 
-    fn get_refresh_secret() -> KeyProviderResult {
+    fn get_user_refresh_secret() -> KeyProviderResult {
+        dotenv::var("REFRESH_SECRET")
+            .map(KeyValue::new)
+            .map_err(KeyProviderError::from)
+    }
+
+    fn get_host_refresh_secret() -> KeyProviderResult {
         dotenv::var("REFRESH_SECRET")
             .map(KeyValue::new)
             .map_err(KeyProviderError::from)

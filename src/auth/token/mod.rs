@@ -12,10 +12,12 @@ use std::{env::VarError, str::FromStr};
 use thiserror::Error;
 use uuid::Uuid;
 
-mod auth;
+mod host_auth;
+mod host_refresh;
 mod pwd_reset;
-mod refresh;
 mod registration_confirmation;
+mod user_auth;
+mod user_refresh;
 
 use crate::auth::expiration_provider::ExpirationProvider;
 use crate::auth::key_provider::{KeyProvider, KeyProviderError};
@@ -24,8 +26,9 @@ use crate::errors::{ApiError, Result as ApiResult};
 use crate::models::{Host, User};
 use crate::server::DbPool;
 pub use {
-    auth::AuthToken, pwd_reset::PwdResetToken, refresh::*,
-    registration_confirmation::RegistrationConfirmationToken,
+    host_auth::HostAuthToken, host_refresh::HostRefreshToken, pwd_reset::PwdResetToken,
+    registration_confirmation::RegistrationConfirmationToken, user_auth::UserAuthToken,
+    user_refresh::UserRefreshToken,
 };
 
 pub type TokenResult<T> = Result<T, TokenError>;
@@ -37,6 +40,8 @@ pub enum TokenRole {
     Guest,
     Service,
     User,
+    OrgMember,
+    OrgAdmin,
     PwdReset,
 }
 
@@ -47,6 +52,8 @@ impl ToString for TokenRole {
             TokenRole::Guest => "guest".into(),
             TokenRole::Service => "service".into(),
             TokenRole::User => "user".into(),
+            TokenRole::OrgMember => "org_member".into(),
+            TokenRole::OrgAdmin => "org_admin".into(),
             TokenRole::PwdReset => "pwd_reset".into(),
         }
     }
@@ -99,10 +106,16 @@ pub enum TokenError {
 pub enum TokenType {
     /// This is a "normal" login token obtained by sending the login credentials to
     /// `AuthenticationService.Login`.
-    Login,
+    UserAuth,
+    /// This is an auth token obtained by successfully claiming a HostProvision by sending the OTP to
+    /// `HostService.Provision`.
+    HostAuth,
     /// This is a dedicated refresh token. It can be used after the login token has expired to
     /// obtain a new refresh and login token pair.
-    Refresh,
+    UserRefresh,
+    /// This is a dedicated refresh token. It can be used after the login token has expired to
+    /// obtain a new refresh and login token pair.
+    HostRefresh,
     /// This is a password reset token. It is issued as a part of the password forgot/reset email
     /// and may be used _only_ to reset the user's password.
     PwdReset,
@@ -113,8 +126,10 @@ pub enum TokenType {
 impl ToString for TokenType {
     fn to_string(&self) -> String {
         match self {
-            Self::Login => "login".to_string(),
-            Self::Refresh => "refresh".to_string(),
+            Self::UserAuth => "user_auth".to_string(),
+            Self::HostAuth => "host_auth".to_string(),
+            Self::UserRefresh => "user_refresh".to_string(),
+            Self::HostRefresh => "host_refresh".to_string(),
             Self::PwdReset => "pwd_reset".to_string(),
             Self::RegistrationConfirmation => "registration_confirmation".to_string(),
         }
@@ -126,7 +141,6 @@ impl ToString for TokenType {
 pub struct TokenClaim {
     id: Uuid,
     exp: i64,
-    holder_type: TokenHolderType,
     token_type: TokenType,
     data: Option<HashMap<String, String>>,
 }
@@ -135,34 +149,14 @@ impl TokenClaim {
     pub fn new(
         id: Uuid,
         exp: i64,
-        holder_type: TokenHolderType,
         token_type: TokenType,
         data: Option<HashMap<String, String>>,
     ) -> Self {
         Self {
             id,
             exp,
-            holder_type,
             token_type,
             data,
-        }
-    }
-}
-
-/// The type of entity that is granted some permission through this token.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
-pub enum TokenHolderType {
-    /// This means that the token authenticates a host machine.
-    Host,
-    /// This means that the token authenticates a user of our web console.
-    User,
-}
-
-impl TokenHolderType {
-    pub fn id_field(&self) -> &'static str {
-        match self {
-            Self::User => "user_id",
-            Self::Host => "host_id",
         }
     }
 }
@@ -170,8 +164,6 @@ impl TokenHolderType {
 #[tonic::async_trait]
 pub trait JwtToken: Sized + serde::Serialize {
     fn new(claim: TokenClaim) -> Self;
-
-    fn token_holder(&self) -> TokenHolderType;
 
     fn token_type(&self) -> TokenType;
 
@@ -194,15 +186,13 @@ pub trait JwtToken: Sized + serde::Serialize {
 
     /// Try to retrieve user for given token
     async fn try_get_user(&self, id: Uuid, db: &DbPool) -> ApiResult<User> {
-        match (self.token_holder(), self.token_type()) {
-            (TokenHolderType::User, TokenType::Login) => User::find_by_id(id, db).await,
-            (TokenHolderType::User, TokenType::Refresh) => User::find_by_id(id, db).await,
-            (TokenHolderType::User, TokenType::RegistrationConfirmation) => {
-                User::find_by_id(id, db).await
-            }
-            (TokenHolderType::User, TokenType::PwdReset) => User::find_by_id(id, db).await,
+        match self.token_type() {
+            TokenType::UserAuth => User::find_by_id(id, db).await,
+            TokenType::UserRefresh => User::find_by_id(id, db).await,
+            TokenType::RegistrationConfirmation => User::find_by_id(id, db).await,
+            TokenType::PwdReset => User::find_by_id(id, db).await,
             _ => Err(ApiError::UnexpectedError(anyhow!(
-                "Cannot retrieve host from token of type {} for User",
+                "Cannot retrieve user from token of type {}",
                 self.token_type().to_string()
             ))),
         }
@@ -214,26 +204,21 @@ pub trait JwtToken: Sized + serde::Serialize {
 
     /// Try to retrieve host for given token
     async fn try_get_host(&self, id: Uuid, db: &DbPool) -> ApiResult<Host> {
-        match (self.token_holder(), self.token_type()) {
-            (TokenHolderType::Host, TokenType::Login) => Host::find_by_id(id, db).await,
-            (TokenHolderType::Host, TokenType::Refresh) => Host::find_by_id(id, db).await,
+        match self.token_type() {
+            TokenType::HostAuth => Host::find_by_id(id, db).await,
+            TokenType::HostRefresh => Host::find_by_id(id, db).await,
             _ => Err(ApiError::UnexpectedError(anyhow!(
-                "Cannot retrieve host from token of type {} for Host",
+                "Cannot retrieve host from token of type {}",
                 self.token_type().to_string()
             ))),
         }
     }
 
     /// Create token for given resource
-    fn create_token_for<T: Identifiable>(
-        resource: &T,
-        holder_type: TokenHolderType,
-        token_type: TokenType,
-    ) -> TokenResult<Self> {
+    fn create_token_for<T: Identifiable>(resource: &T, token_type: TokenType) -> TokenResult<Self> {
         let claim = TokenClaim::new(
             resource.get_id(),
-            ExpirationProvider::expiration(holder_type, token_type),
-            holder_type,
+            ExpirationProvider::expiration(token_type),
             token_type,
             None,
         );
@@ -249,9 +234,11 @@ struct UnknownToken {
 
 /// A token whose `token_type` is not known.
 pub enum AnyToken {
-    Auth(AuthToken),
+    UserAuth(UserAuthToken),
+    HostAuth(HostAuthToken),
     PwdReset(PwdResetToken),
-    Refresh(RefreshToken),
+    UserRefresh(UserRefreshToken),
+    HostRefresh(HostRefreshToken),
     RegistrationConfirmation(RegistrationConfirmationToken),
 }
 
@@ -265,8 +252,10 @@ impl AnyToken {
         let decoded = base64::decode(payload).or(Err(TokenError::Invalid))?;
         let json: UnknownToken = serde_json::from_slice(&decoded).or(Err(TokenError::Invalid))?;
         let token = match json.token_type {
-            TokenType::Login => Auth(AuthToken::from_str(&token)?),
-            TokenType::Refresh => Refresh(RefreshToken::from_str(&token)?),
+            TokenType::UserAuth => UserAuth(UserAuthToken::from_str(&token)?),
+            TokenType::UserRefresh => UserRefresh(UserRefreshToken::from_str(&token)?),
+            TokenType::HostAuth => HostAuth(HostAuthToken::from_str(&token)?),
+            TokenType::HostRefresh => HostRefresh(HostRefreshToken::from_str(&token)?),
             TokenType::PwdReset => PwdReset(PwdResetToken::from_str(&token)?),
             TokenType::RegistrationConfirmation => {
                 RegistrationConfirmation(RegistrationConfirmationToken::from_str(&token)?)

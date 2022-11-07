@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{AuthToken, JwtToken, TokenHolderType, TokenType};
+use api::auth::{JwtToken, TokenHolderType, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::command_service_client::CommandServiceClient;
 use api::grpc::blockjoy_ui::{CommandRequest as GrpcCommandRequest, RequestMeta};
 use api::models::User;

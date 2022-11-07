@@ -1,4 +1,4 @@
-use crate::auth::{FindableById, JwtToken, RefreshToken, TokenHolderType, TokenType};
+use crate::auth::{FindableById, JwtToken, TokenType, UserRefreshToken};
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
@@ -35,11 +35,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
     ) -> Result<Response<LoginUserResponse>, Status> {
         tracing::info!("{:?}", _request.metadata().get("cookie"));
         let user = User::find_by_email("admin@here.com", &self.db).await?;
-        let refresh_token = RefreshToken::create_token_for::<User>(
-            &user,
-            TokenHolderType::User,
-            TokenType::Refresh,
-        )?;
+        let refresh_token = UserRefreshToken::create_token_for::<User>(&user, TokenType::UserAuth)?;
         let exp = *refresh_token.exp() + (60 * 60 * 24);
         let exp = Utc.timestamp(exp, 0).to_string();
 
