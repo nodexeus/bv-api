@@ -1,4 +1,4 @@
-use crate::auth::{from_encoded, JwtToken, TokenClaim, TokenError, TokenResult, TokenType};
+use crate::auth::{JwtToken, TokenClaim, TokenError, TokenResult, TokenType};
 use axum::http::Request as HttpRequest;
 use derive_getters::Getters;
 use std::str::FromStr;
@@ -56,6 +56,6 @@ impl FromStr for HostRefreshToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        from_encoded::<HostRefreshToken>(encoded, TokenType::HostRefresh)
+        HostRefreshToken::from_encoded::<HostRefreshToken>(encoded, TokenType::HostRefresh)
     }
 }

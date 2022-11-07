@@ -1,5 +1,4 @@
-use super::JwtToken;
-use crate::auth::{from_encoded, Blacklisted, TokenClaim, TokenResult, TokenType};
+use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenType};
 use crate::errors::Result;
 use crate::models::BlacklistToken;
 use crate::server::DbPool;
@@ -54,6 +53,6 @@ impl FromStr for PwdResetToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        from_encoded::<PwdResetToken>(encoded, TokenType::PwdReset)
+        PwdResetToken::from_encoded::<PwdResetToken>(encoded, TokenType::PwdReset)
     }
 }

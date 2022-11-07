@@ -1,4 +1,4 @@
-use crate::auth::{from_encoded, Blacklisted, JwtToken, TokenClaim, TokenResult, TokenType};
+use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenType};
 use crate::models::BlacklistToken;
 use crate::server::DbPool;
 use std::str::FromStr;
@@ -51,6 +51,9 @@ impl FromStr for RegistrationConfirmationToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        from_encoded::<RegistrationConfirmationToken>(encoded, TokenType::RegistrationConfirmation)
+        RegistrationConfirmationToken::from_encoded::<RegistrationConfirmationToken>(
+            encoded,
+            TokenType::RegistrationConfirmation,
+        )
     }
 }

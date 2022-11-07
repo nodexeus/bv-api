@@ -1,5 +1,4 @@
-use super::JwtToken;
-use crate::auth::{from_encoded, TokenClaim, TokenRole, TokenType};
+use crate::auth::{JwtToken, TokenClaim, TokenRole, TokenType};
 use crate::errors::Result;
 use derive_getters::Getters;
 use std::str;
@@ -48,6 +47,6 @@ impl FromStr for HostAuthToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        from_encoded::<HostAuthToken>(encoded, TokenType::HostAuth)
+        HostAuthToken::from_encoded::<HostAuthToken>(encoded, TokenType::HostAuth)
     }
 }

@@ -1,4 +1,4 @@
-use crate::auth::{from_encoded, JwtToken, TokenClaim, TokenError, TokenResult, TokenType};
+use crate::auth::{JwtToken, TokenClaim, TokenError, TokenResult, TokenType};
 use axum::http::Request as HttpRequest;
 use derive_getters::Getters;
 use std::str::FromStr;
@@ -56,14 +56,14 @@ impl FromStr for UserRefreshToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        from_encoded::<UserRefreshToken>(encoded, TokenType::UserRefresh)
+        UserRefreshToken::from_encoded::<UserRefreshToken>(encoded, TokenType::UserRefresh)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::auth::expiration_provider::ExpirationProvider;
-    use crate::auth::{from_encoded, JwtToken, TokenClaim, TokenType, UserRefreshToken};
+    use crate::auth::{JwtToken, TokenClaim, TokenType, UserRefreshToken};
     use uuid::Uuid;
 
     #[test]
@@ -96,7 +96,10 @@ mod tests {
         println!("Encoded token: {encoded:?}");
         assert!(encoded.starts_with("ey"));
 
-        let token = from_encoded::<UserRefreshToken>(encoded.as_str(), TokenType::UserRefresh);
+        let token = UserRefreshToken::from_encoded::<UserRefreshToken>(
+            encoded.as_str(),
+            TokenType::UserRefresh,
+        );
 
         assert!(token.is_ok());
         assert_eq!(token.unwrap().id, user_id);

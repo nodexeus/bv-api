@@ -7,7 +7,6 @@ use crate::grpc::blockjoy_ui::{
 use crate::mail::MailClient;
 use crate::models::User;
 use crate::server::DbPool;
-use chrono::{TimeZone, Utc};
 use tonic::{Request, Response, Status};
 
 use super::blockjoy_ui::{
@@ -26,22 +25,22 @@ impl AuthenticationServiceImpl {
     }
 }
 
-/// TODO: Move to HTTP endpoint
 #[tonic::async_trait]
 impl AuthenticationService for AuthenticationServiceImpl {
     async fn login(
         &self,
-        _request: Request<LoginUserRequest>,
+        request: Request<LoginUserRequest>,
     ) -> Result<Response<LoginUserResponse>, Status> {
-        tracing::info!("{:?}", _request.metadata().get("cookie"));
-        let user = User::find_by_email("admin@here.com", &self.db).await?;
+        let inner = request.into_inner();
+        let user = User::login(inner.clone(), &self.db).await?;
         let refresh_token = UserRefreshToken::create_token_for::<User>(&user, TokenType::UserAuth)?;
-        let exp = *refresh_token.exp() + (60 * 60 * 24);
-        let _exp = Utc.timestamp(exp, 0).to_string();
+        let auth_token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth)?;
 
         let response = LoginUserResponse {
-            meta: None,
-            token: None,
+            meta: Some(ResponseMeta::from_meta(inner.meta)),
+            token: Some(ApiToken {
+                value: auth_token.to_base64()?,
+            }),
         };
         let mut response = Response::new(response);
 
@@ -56,14 +55,9 @@ impl AuthenticationService for AuthenticationServiceImpl {
             .unwrap(),
         );
 
-        response.extensions_mut().insert("blub");
-
         Ok(response)
-
-        //Err(Status::unavailable("Moved to HTTP"))
     }
 
-    /// TODO: Move to HTTP endpoint
     async fn refresh(
         &self,
         _request: Request<RefreshTokenRequest>,

@@ -21,13 +21,3 @@ pub async fn server(db: DbPool) -> Router {
         .layer(Extension(db))
         .layer(TraceLayer::new_for_http())
 }
-
-pub struct HttpLoginUserRequest {
-    pub(crate) email: String,
-    pub(crate) pwd: String,
-}
-
-#[allow(dead_code)]
-pub struct ClaimHostProvisionRequest {
-    pub(crate) otp: String,
-}

@@ -1,5 +1,4 @@
-use super::JwtToken;
-use crate::auth::{from_encoded, TokenClaim, TokenRole, TokenType};
+use crate::auth::{JwtToken, TokenClaim, TokenRole, TokenType};
 use crate::errors::Result;
 use derive_getters::Getters;
 use std::str;
@@ -47,7 +46,7 @@ impl FromStr for UserAuthToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        from_encoded::<UserAuthToken>(encoded, TokenType::UserAuth)
+        UserAuthToken::from_encoded::<UserAuthToken>(encoded, TokenType::UserAuth)
     }
 }
 
@@ -62,7 +61,7 @@ mod tests {
     #[test]
     fn returns_true_for_expired_token() {
         let id = Uuid::new_v4();
-        let exp = Utc::now().timestamp() - 60000;
+        let exp = (Utc::now().timestamp() - 60000 as i64) as i64;
         let claim = TokenClaim::new(id, exp, TokenType::UserAuth, None);
         let token = UserAuthToken::new(claim);
 

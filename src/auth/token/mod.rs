@@ -235,6 +235,31 @@ pub trait JwtToken: Sized + serde::Serialize {
 
         now > self.get_expiration()
     }
+
+    /// Decode token from encoded value
+    fn from_encoded<T: JwtToken + DeserializeOwned>(
+        encoded: &str,
+        token_type: TokenType,
+    ) -> Result<T, TokenError> {
+        let key = KeyProvider::get_secret(token_type)?;
+        let secret = key.value();
+        let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
+
+        validation.validate_exp = true;
+
+        match jwt::decode::<T>(
+            encoded,
+            &jwt::DecodingKey::from_secret(secret.as_bytes()),
+            &validation,
+        ) {
+            Ok(token) => Ok(token.claims),
+            Err(e) => {
+                tracing::error!("Error decoding token: {e:?}");
+                println!("Error decoding token: {e:?}");
+                Err(TokenError::EnDeCoding(e))
+            }
+        }
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -297,29 +322,4 @@ pub trait Blacklisted {
 
     /// Return true if encoded token value can be found in blacklist table
     async fn is_blacklisted(&self, token: String, db: DbPool) -> TokenResult<bool>;
-}
-
-/// Decode token from encoded value
-pub fn from_encoded<T: JwtToken + DeserializeOwned>(
-    encoded: &str,
-    token_type: TokenType,
-) -> Result<T, TokenError> {
-    let key = KeyProvider::get_secret(token_type)?;
-    let secret = key.value();
-    let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
-
-    validation.validate_exp = true;
-
-    match jwt::decode::<T>(
-        encoded,
-        &jwt::DecodingKey::from_secret(secret.as_bytes()),
-        &validation,
-    ) {
-        Ok(token) => Ok(token.claims),
-        Err(e) => {
-            tracing::error!("Error decoding token: {e:?}");
-            println!("Error decoding token: {e:?}");
-            Err(TokenError::EnDeCoding(e))
-        }
-    }
 }
