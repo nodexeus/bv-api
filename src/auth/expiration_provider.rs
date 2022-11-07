@@ -1,6 +1,7 @@
 use crate::auth::TokenType;
 use crate::errors::{ApiError, Result as ApiResult};
 use anyhow::anyhow;
+use chrono::{Duration, Utc};
 
 pub struct ExpirationProvider;
 
@@ -27,9 +28,28 @@ impl ExpirationProvider {
     }
 
     fn get_expiration_from_dotenv(key: &str) -> ApiResult<i64> {
-        dotenv::var(key)
-            .map_err(ApiError::EnvError)?
-            .parse::<i64>()
-            .map_err(|e| ApiError::UnexpectedError(anyhow!("Couldn't parse env var value: {e:?}")))
+        Ok((Utc::now()
+            + Duration::days(
+                dotenv::var(key)
+                    .map_err(ApiError::EnvError)?
+                    .parse::<i64>()
+                    .map_err(|e| {
+                        ApiError::UnexpectedError(anyhow!("Couldn't parse env var value: {e:?}"))
+                    })?,
+            ))
+        .timestamp())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::auth::TokenType;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn can_return_valid_expiration_for_each_token_type() {
+        for tt in TokenType::iter() {
+            assert!(super::ExpirationProvider::expiration(tt) > 0)
+        }
     }
 }

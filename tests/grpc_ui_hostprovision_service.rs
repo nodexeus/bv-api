@@ -43,6 +43,15 @@ async fn responds_not_found_without_valid_id_for_get() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { get, request, tonic::Code::NotFound, db, HostProvisionServiceClient<Channel> };
 }
@@ -89,6 +98,15 @@ async fn responds_ok_with_valid_id_for_get() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, HostProvisionServiceClient<Channel> };
 }
@@ -116,6 +134,15 @@ async fn responds_error_with_invalid_provision_for_create() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, HostProvisionServiceClient<Channel> };
@@ -160,6 +187,15 @@ async fn responds_ok_with_valid_provision_for_create() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::Ok, db, HostProvisionServiceClient<Channel> };

@@ -55,6 +55,24 @@ async fn test_command_flow_works() {
             .parse()
             .unwrap(),
     );
+    req.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
+    req.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     let pool = std::sync::Arc::new(db.pool.clone());
     let (serve_future, mut client) =

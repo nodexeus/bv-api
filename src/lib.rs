@@ -11,12 +11,16 @@ pub mod server;
 pub use test::TestDb;
 // #[cfg(test)]
 mod test {
-    use crate::auth::TokenRole;
+    use crate::auth::expiration_provider::ExpirationProvider;
+    use crate::auth::{
+        HostRefreshToken, JwtToken, TokenClaim, TokenRole, TokenType, UserRefreshToken,
+    };
     use crate::models::{self, validator};
     use rand::Rng;
     use sqlx::Connection;
     use std::net::IpAddr;
     use std::str::FromStr;
+    use uuid::Uuid;
 
     pub struct TestDb {
         pub pool: sqlx::PgPool,
@@ -282,6 +286,28 @@ mod test {
                 .first()
                 .expect("To have a test blockchain")
                 .to_owned()
+        }
+
+        pub fn user_refresh_token(&self, id: Uuid) -> UserRefreshToken {
+            let claim = TokenClaim::new(
+                id,
+                ExpirationProvider::expiration(TokenType::UserRefresh),
+                TokenType::UserRefresh,
+                None,
+            );
+
+            UserRefreshToken::new(claim)
+        }
+
+        pub fn host_refresh_token(&self, id: Uuid) -> HostRefreshToken {
+            let claim = TokenClaim::new(
+                id,
+                ExpirationProvider::expiration(TokenType::HostRefresh),
+                TokenType::HostRefresh,
+                None,
+            );
+
+            HostRefreshToken::new(claim)
         }
     }
 }

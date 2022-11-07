@@ -34,6 +34,14 @@ macro_rules! test_response_ok {
             "authorization",
             format!("Bearer {}", token.to_base64().unwrap()).parse().unwrap(),
         );
+        request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            $db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap());
 
         assert_grpc_request! { $func, request, tonic::Code::Ok, $db, CommandServiceClient<Channel> };
     }}
@@ -61,6 +69,14 @@ macro_rules! test_response_internal {
             "authorization",
             format!("Bearer {}", token.to_base64().unwrap()).parse().unwrap(),
         );
+        request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            $db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap());
 
         assert_grpc_request! { $func, request, tonic::Code::Internal, $db, CommandServiceClient<Channel> };
     }}
@@ -87,6 +103,14 @@ macro_rules! test_response_invalid_argument {
             "authorization",
             format!("Bearer {}", token.to_base64().unwrap()).parse().unwrap(),
         );
+        request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            $db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap());
 
         assert_grpc_request! { $func, request, tonic::Code::InvalidArgument, $db, CommandServiceClient<Channel> };
     }}

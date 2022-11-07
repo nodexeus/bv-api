@@ -22,6 +22,15 @@ async fn with_auth<T>(inner: T, db: &api::TestDb) -> Request<T> {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
     request
 }
 

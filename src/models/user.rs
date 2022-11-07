@@ -60,9 +60,7 @@ impl User {
         token: UserAuthToken,
         refresh_token: UserRefreshToken,
         db: &PgPool,
-    ) -> Result<(User, UserAuthToken, UserRefreshToken)> {
-        let user = User::find_by_id(token.get_id(), db).await?;
-
+    ) -> Result<(Option<User>, UserAuthToken, UserRefreshToken)> {
         if token.has_expired() {
             // Token has expired, check the refresh_token
             if !refresh_token.has_expired() {
@@ -87,13 +85,14 @@ impl User {
                 };
                 let user = User::update_all(refresh_token.get_id(), fields, db).await?;
 
-                Ok((user, token, refresh_token))
+                Ok((Some(user), token, refresh_token))
             } else {
                 Err(ApiError::UnexpectedError(anyhow!("Refresh token expired")))
             }
         } else {
             // Token is valid, just return what we got
-            Ok((user, token, refresh_token))
+            // If nothing was updated or changed, we don't even query for the user to save 1 query
+            Ok((None, token, refresh_token))
         }
     }
 

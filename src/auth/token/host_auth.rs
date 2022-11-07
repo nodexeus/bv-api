@@ -22,7 +22,7 @@ impl JwtToken for HostAuthToken {
     }
 
     fn get_id(&self) -> Uuid {
-        todo!()
+        self.id
     }
 
     fn new(claim: TokenClaim) -> Self {

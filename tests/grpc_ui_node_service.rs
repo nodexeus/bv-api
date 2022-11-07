@@ -42,6 +42,15 @@ async fn responds_not_found_without_any_for_get() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { get, request, tonic::Code::NotFound, db, NodeServiceClient<Channel> };
 }
@@ -98,6 +107,15 @@ async fn responds_ok_with_id_for_get() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
@@ -157,6 +175,15 @@ async fn responds_ok_with_valid_data_for_create() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { create, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
 }
@@ -206,6 +233,15 @@ async fn responds_internal_with_invalid_data_for_create() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, NodeServiceClient<Channel> };
@@ -267,6 +303,15 @@ async fn responds_ok_with_valid_data_for_update() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
@@ -331,6 +376,15 @@ async fn responds_internal_with_invalid_data_for_update() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { update, request, tonic::Code::Internal, db, NodeServiceClient<Channel> };
 }
@@ -363,6 +417,15 @@ async fn responds_not_found_with_invalid_id_for_update() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::NotFound, db, NodeServiceClient<Channel> };

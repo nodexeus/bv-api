@@ -65,3 +65,48 @@ impl super::Identifier for UserRefreshToken {
         self.id
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::auth::expiration_provider::ExpirationProvider;
+    use crate::auth::{from_encoded, JwtToken, TokenClaim, TokenType, UserRefreshToken};
+    use uuid::Uuid;
+
+    #[test]
+    fn can_create_token() -> anyhow::Result<()> {
+        let claim = TokenClaim::new(
+            Uuid::new_v4(),
+            ExpirationProvider::expiration(TokenType::UserRefresh),
+            TokenType::UserRefresh,
+            None,
+        );
+        let encoded = UserRefreshToken::new(claim).encode()?;
+
+        println!("Encoded token: {encoded:?}");
+        assert!(encoded.starts_with("ey"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn can_decode_token() -> anyhow::Result<()> {
+        let user_id = Uuid::new_v4();
+        let claim = TokenClaim::new(
+            user_id,
+            ExpirationProvider::expiration(TokenType::UserRefresh),
+            TokenType::UserRefresh,
+            None,
+        );
+        let encoded = UserRefreshToken::new(claim).encode()?;
+
+        println!("Encoded token: {encoded:?}");
+        assert!(encoded.starts_with("ey"));
+
+        let token = from_encoded::<UserRefreshToken>(encoded.as_str(), TokenType::UserRefresh);
+
+        assert!(token.is_ok());
+        assert_eq!(token.unwrap().id, user_id);
+
+        Ok(())
+    }
+}

@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{JwtToken, TokenType, UserAuthToken};
+use api::auth::{HostAuthToken, JwtToken, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
 use api::grpc::blockjoy_ui::{
     get_hosts_request, CreateHostRequest, DeleteHostRequest, GetHostsRequest, Host as GrpcHost,
@@ -40,6 +40,15 @@ async fn responds_invalid_argument_without_any_for_get() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { get, request, tonic::Code::InvalidArgument, db, HostServiceClient<Channel> };
 }
@@ -68,6 +77,15 @@ async fn responds_ok_with_id_for_get() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::NotFound, db, HostServiceClient<Channel> };
@@ -104,6 +122,15 @@ async fn responds_ok_with_org_id_for_get() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::NotFound, db, HostServiceClient<Channel> };
@@ -144,6 +171,15 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     let pool = std::sync::Arc::new(db.pool.clone());
@@ -189,7 +225,7 @@ async fn responds_ok_with_token_for_get() {
     };
     let user = db.admin_user().await;
     let host = db.test_host().await;
-    let host_token = UserAuthToken::create_token_for::<Host>(&host, TokenType::HostAuth).unwrap();
+    let host_token = HostAuthToken::create_token_for::<Host>(&host, TokenType::HostAuth).unwrap();
     let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
@@ -204,6 +240,15 @@ async fn responds_ok_with_token_for_get() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
@@ -234,6 +279,15 @@ async fn responds_ok_with_id_for_delete() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { delete, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
 }
@@ -262,6 +316,15 @@ async fn responds_ok_with_host_for_update() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::Ok, db, HostServiceClient<Channel> };
@@ -298,6 +361,15 @@ async fn responds_ok_with_host_for_create() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::Ok, db, HostServiceClient<Channel> };

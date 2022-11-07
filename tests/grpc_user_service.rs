@@ -37,6 +37,15 @@ async fn responds_ok_with_valid_token_for_get() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, UserServiceClient<Channel> };
 }
@@ -239,6 +248,15 @@ async fn responds_ok_with_equal_users_for_update() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::Ok, db, UserServiceClient<Channel> };

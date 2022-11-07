@@ -78,8 +78,17 @@ async fn responds_ok_with_valid_credentials_for_refresh() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
-    assert_grpc_request! { refresh, request, tonic::Code::Ok, db, AuthenticationServiceClient<Channel> };
+    assert_grpc_request! { refresh, request, tonic::Code::Unavailable, db, AuthenticationServiceClient<Channel> };
 }
 
 #[before(call = "setup")]
@@ -136,6 +145,15 @@ async fn responds_ok_with_valid_pwds_for_update_ui_pwd() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { update_ui_password, request, tonic::Code::Ok, db, AuthenticationServiceClient<Channel> };
 }
@@ -166,6 +184,15 @@ async fn responds_unauthenticated_with_invalid_old_pwd_for_update_ui_pwd() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { update_ui_password, request, tonic::Code::Unauthenticated, db, AuthenticationServiceClient<Channel> };
 }
@@ -195,6 +222,15 @@ async fn responds_invalid_argument_with_invalid_pwd_confirmation_for_update_ui_p
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(user.id).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update_ui_password, request, tonic::Code::InvalidArgument, db, AuthenticationServiceClient<Channel> };

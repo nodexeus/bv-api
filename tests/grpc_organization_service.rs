@@ -48,6 +48,15 @@ async fn responds_ok_for_create() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { create, request, tonic::Code::Ok, db, OrganizationServiceClient<Channel> };
 }
@@ -74,6 +83,15 @@ async fn responds_ok_for_get() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, OrganizationServiceClient<Channel> };
@@ -118,6 +136,15 @@ async fn responds_ok_for_update() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { update, request, tonic::Code::Ok, db, OrganizationServiceClient<Channel> };
 }
@@ -153,6 +180,15 @@ async fn responds_ok_for_delete() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { delete, request, tonic::Code::Ok, db, OrganizationServiceClient<Channel> };
 }
@@ -187,6 +223,15 @@ async fn responds_ok_for_members() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { members, request, tonic::Code::Ok, db, OrganizationServiceClient<Channel> };
@@ -227,6 +272,15 @@ async fn responds_ok_with_pagination_for_members() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     let pool = std::sync::Arc::new(db.pool.clone());

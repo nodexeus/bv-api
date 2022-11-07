@@ -282,6 +282,15 @@ async fn responds_ok_for_info_update() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.host_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { info_update, request, tonic::Code::Ok, db, HostsClient<Channel> };
 }
@@ -305,6 +314,15 @@ async fn responds_ok_for_delete() {
         format!("Bearer {}", token.to_base64().unwrap())
             .parse()
             .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.host_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { delete, request, tonic::Code::Ok, db, HostsClient<Channel> };

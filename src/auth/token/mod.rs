@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::Utf8Error;
 use std::{env::VarError, str::FromStr};
+use strum_macros::EnumIter;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -101,7 +102,7 @@ pub enum TokenError {
 
 /// The type of token we are dealing with. We have various different types of token and they convey
 /// various different permissions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, EnumIter)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "token_type", rename_all = "snake_case")]
 pub enum TokenType {
@@ -316,6 +317,10 @@ pub fn from_encoded<T: JwtToken + DeserializeOwned>(
         &validation,
     ) {
         Ok(token) => Ok(token.claims),
-        Err(e) => Err(TokenError::EnDeCoding(e)),
+        Err(e) => {
+            tracing::error!("Error decoding token: {e:?}");
+            println!("Error decoding token: {e:?}");
+            Err(TokenError::EnDeCoding(e))
+        }
     }
 }
