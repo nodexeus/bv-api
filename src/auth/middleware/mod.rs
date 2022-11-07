@@ -2,12 +2,14 @@
 //!
 //!
 
+use crate::auth::expiration_provider::ExpirationProvider;
 use crate::auth::unauthenticated_paths::UnauthenticatedPaths;
-use crate::auth::JwtToken;
 use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
+use crate::auth::{JwtToken, TokenClaim, TokenType, UserAuthToken, UserRefreshToken};
 use futures_util::future::BoxFuture;
 use hyper::{Request, Response};
 use std::fmt::Debug;
+use std::str::FromStr;
 use tonic::body::BoxBody;
 use tonic::Status;
 use tower_http::auth::AsyncAuthorizeRequest;
@@ -20,6 +22,10 @@ fn unauthorized_response(msg: &str) -> Response<BoxBody> {
 
 fn unauthenticated_response(msg: &str) -> Response<BoxBody> {
     Status::unauthenticated(msg).to_http()
+}
+
+fn internal_response(msg: &str) -> Response<BoxBody> {
+    Status::internal(msg).to_http()
 }
 
 #[derive(Clone)]
@@ -68,8 +74,46 @@ where
                 |e| unauthenticated_response(&format!("Could not extract token: {e:?}"));
 
             match token {
-                AnyToken::UserAuth(token) => {
+                AnyToken::UserAuth(mut token) => {
+                    // 1. try if token is valid
                     token.encode().map_err(cant_parse)?;
+
+                    // Get refresh token from metadata
+                    let refresh_token = request
+                        .headers()
+                        .get("cookie")
+                        .map(|hv| {
+                            hv.to_str()
+                                .map_err(|_| Status::unauthenticated("Couldn't read refresh token"))
+                                .unwrap_or_default()
+                        })
+                        .map(|hv| hv.split("refresh=").nth(1).unwrap_or_default())
+                        .unwrap_or_default();
+                    let mut refresh_token = UserRefreshToken::from_str(refresh_token)
+                        .map_err(|_| unauthorized_response("Cannot parse refresh token"))?;
+
+                    // 2. test if token is expired
+                    if token.has_expired() {
+                        // Test if refresh token is valid
+                        if !refresh_token.has_expired() {
+                            let claim = TokenClaim::new(
+                                token.get_id(),
+                                ExpirationProvider::expiration(TokenType::UserAuth),
+                                TokenType::UserAuth,
+                                None,
+                            );
+                            token = UserAuthToken::new(claim);
+                            let claim = TokenClaim::new(
+                                token.get_id(),
+                                ExpirationProvider::expiration(TokenType::UserRefresh),
+                                TokenType::UserRefresh,
+                                None,
+                            );
+                            refresh_token = UserRefreshToken::new(claim);
+                        } else {
+                            return Err(unauthorized_response("Invalid refresh token"));
+                        }
+                    }
 
                     let auth_data = AuthorizationData {
                         subject: token.role().to_string(),
@@ -84,6 +128,20 @@ where
                     match result {
                         AuthorizationState::Authorized => {
                             request.extensions_mut().insert(token);
+                            request.headers_mut().insert(
+                                "Set-Cookie",
+                                format!(
+                                    "refresh={}; Expires={}; Secure; HttpOnly",
+                                    refresh_token
+                                        .encode()
+                                        .map_err(|e| internal_response(e.to_string().as_str()))?,
+                                    refresh_token.get_expiration(),
+                                )
+                                .parse()
+                                .map_err(|_| {
+                                    internal_response("Cannot create refresh token cookie")
+                                })?,
+                            );
 
                             Ok(request)
                         }
@@ -95,7 +153,6 @@ where
                 _ => Err(unauthorized_response("Invalid token type")),
                 /*
                 AnyToken::PwdReset(pwd_reset) => pwd_reset.encode().map_err(cant_parse)?,
-                AnyToken::Refresh(refresh) => refresh.encode().map_err(cant_parse)?,
                 AnyToken::RegistrationConfirmation(confirmation) => {
                     confirmation.encode().map_err(cant_parse)?
                 }
