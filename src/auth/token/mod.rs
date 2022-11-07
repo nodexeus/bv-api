@@ -184,6 +184,11 @@ pub trait JwtToken: Sized + serde::Serialize {
         extract_token(request).and_then(|s| Self::from_str(&s))
     }
 
+    /// Create base64 hash value for encoded token
+    fn to_base64(&self) -> ApiResult<String> {
+        Ok(base64::encode(self.encode()?))
+    }
+
     /// Try to retrieve user for given token
     async fn try_get_user(&self, id: Uuid, db: &DbPool) -> ApiResult<User> {
         match self.token_type() {
@@ -196,10 +201,6 @@ pub trait JwtToken: Sized + serde::Serialize {
                 self.token_type().to_string()
             ))),
         }
-    }
-
-    fn to_base64(&self) -> ApiResult<String> {
-        Ok(base64::encode(self.encode()?))
     }
 
     /// Try to retrieve host for given token
@@ -225,6 +226,9 @@ pub trait JwtToken: Sized + serde::Serialize {
 
         Ok(Self::new(claim))
     }
+
+    /// Returns `true` if token has expired
+    fn has_expired(&self) -> bool;
 }
 
 #[derive(serde::Deserialize)]

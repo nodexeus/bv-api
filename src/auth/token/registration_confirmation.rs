@@ -1,5 +1,6 @@
 use crate::auth::{from_encoded, JwtToken, OnetimeToken, TokenClaim, TokenResult, TokenType};
 use crate::server::DbPool;
+use chrono::Utc;
 use std::str::FromStr;
 
 /// The claims of the token to be stored (encrypted) on the client side.
@@ -21,6 +22,12 @@ impl JwtToken for RegistrationConfirmationToken {
 
     fn token_type(&self) -> TokenType {
         self.token_type
+    }
+
+    fn has_expired(&self) -> bool {
+        let now = Utc::now().timestamp();
+
+        now > self.exp
     }
 }
 

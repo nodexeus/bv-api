@@ -2,6 +2,7 @@ use super::JwtToken;
 use crate::auth::{from_encoded, OnetimeToken, TokenClaim, TokenResult, TokenType};
 use crate::errors::Result;
 use crate::server::DbPool;
+use chrono::Utc;
 use std::str;
 use std::str::FromStr;
 
@@ -24,6 +25,12 @@ impl JwtToken for PwdResetToken {
 
     fn token_type(&self) -> TokenType {
         self.token_type
+    }
+
+    fn has_expired(&self) -> bool {
+        let now = Utc::now().timestamp();
+
+        now > self.exp
     }
 }
 

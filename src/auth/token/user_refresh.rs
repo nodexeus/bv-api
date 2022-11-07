@@ -1,4 +1,5 @@
 use crate::auth::{from_encoded, JwtToken, TokenClaim, TokenType};
+use chrono::Utc;
 use derive_getters::Getters;
 use std::str::FromStr;
 
@@ -21,6 +22,12 @@ impl JwtToken for UserRefreshToken {
 
     fn token_type(&self) -> TokenType {
         self.token_type
+    }
+
+    fn has_expired(&self) -> bool {
+        let now = Utc::now().timestamp();
+
+        now > self.exp
     }
 }
 

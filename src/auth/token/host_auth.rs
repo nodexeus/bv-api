@@ -1,6 +1,7 @@
 use super::JwtToken;
 use crate::auth::{from_encoded, TokenClaim, TokenRole, TokenType};
 use crate::errors::Result;
+use chrono::Utc;
 use derive_getters::Getters;
 use std::str;
 use std::str::FromStr;
@@ -33,6 +34,12 @@ impl JwtToken for HostAuthToken {
 
     fn token_type(&self) -> TokenType {
         self.token_type
+    }
+
+    fn has_expired(&self) -> bool {
+        let now = Utc::now().timestamp();
+
+        now > self.exp
     }
 }
 
