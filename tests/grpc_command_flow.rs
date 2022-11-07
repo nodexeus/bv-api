@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{JwtToken, TokenType, UserAuthToken};
+use api::auth::{HostAuthToken, JwtToken, TokenType};
 use api::grpc::blockjoy::command_flow_client::CommandFlowClient;
 use api::grpc::blockjoy::info_update::Info;
 use api::grpc::blockjoy::{self, NodeInfo};
@@ -32,7 +32,7 @@ async fn test_command_flow_works() {
     let (db, node) = _before_values.await;
     let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
-    let token = UserAuthToken::create_token_for::<Host>(host, TokenType::HostAuth).unwrap();
+    let token = HostAuthToken::create_token_for::<Host>(host, TokenType::HostAuth).unwrap();
     // let node: Node = sqlx::query_as("INSERT INTO nodes VALUES (")
     let req = blockjoy::InfoUpdate {
         info: Some(Info::Node(NodeInfo {
@@ -59,16 +59,7 @@ async fn test_command_flow_works() {
         "cookie",
         format!(
             "refresh={}",
-            db.user_refresh_token(*token.id()).encode().unwrap()
-        )
-        .parse()
-        .unwrap(),
-    );
-    req.metadata_mut().insert(
-        "cookie",
-        format!(
-            "refresh={}",
-            db.user_refresh_token(*token.id()).encode().unwrap()
+            db.host_refresh_token(*token.id()).encode().unwrap()
         )
         .parse()
         .unwrap(),

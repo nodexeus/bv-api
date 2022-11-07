@@ -7,12 +7,12 @@ use test_macros::*;
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn can_blacklist_any_token() -> anyhow::Result<()> {
+async fn can_blacklist_any_token() {
     let db = _before_values.await;
     let token = "some-fancy-token".to_string();
-    let blt = BlacklistToken::create(token.clone(), TokenType::UserAuth, &db.pool).await?;
+    let blt = BlacklistToken::create(token.clone(), TokenType::UserAuth, &db.pool)
+        .await
+        .unwrap();
 
     assert_eq!(blt.token, token);
-
-    Ok(())
 }

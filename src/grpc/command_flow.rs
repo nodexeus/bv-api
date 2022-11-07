@@ -1,4 +1,4 @@
-use crate::auth::JwtToken;
+use crate::auth::{HostAuthToken, JwtToken};
 use crate::errors::Result;
 use crate::grpc::blockjoy::{command_flow_server::CommandFlow, Command as GrpcCommand, InfoUpdate};
 use crate::grpc::helpers::try_get_token;
@@ -40,7 +40,7 @@ impl CommandFlow for CommandFlowServerImpl {
         request: Request<Streaming<InfoUpdate>>,
     ) -> Result<Response<Self::CommandsStream>, Status> {
         // Token must be added by middleware beforehand
-        let token = try_get_token(&request)?;
+        let token = try_get_token::<_, HostAuthToken>(&request)?;
         // Get the host that the user wants to listen to from the current login token.
         let host_id = token.try_get_host(&self.db).await?.id;
         // Set the host as online.

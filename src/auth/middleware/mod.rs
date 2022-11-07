@@ -3,10 +3,10 @@
 //!
 
 use crate::auth::unauthenticated_paths::UnauthenticatedPaths;
-use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
+use crate::auth::{Authorization, AuthorizationData, AuthorizationState, HostRefreshToken};
 use crate::auth::{JwtToken, UserRefreshToken};
 use crate::errors::Result;
-use crate::models::User;
+use crate::models::{Host, User};
 use crate::server::DbPool;
 use futures_util::future::BoxFuture;
 use hyper::{Request, Response};
@@ -29,7 +29,7 @@ fn internal_response(msg: &str) -> Response<BoxBody> {
     Status::internal(msg).to_http()
 }
 
-fn refresh_cookie(refresh_token: UserRefreshToken) -> Result<String> {
+fn refresh_cookie<T: JwtToken>(refresh_token: T) -> Result<String> {
     let cookie = format!(
         "refresh={}; Expires={}; Secure; HttpOnly",
         refresh_token.encode()?,
@@ -97,6 +97,48 @@ where
                         .map_err(|_| unauthorized_response("Cannot parse refresh token"))?;
                     let (_, token, refresh_token) =
                         User::verify_and_refresh_auth_token(token, refresh_token, db)
+                            .await
+                            .map_err(|e| Status::from(e).to_http())?;
+
+                    let auth_data = AuthorizationData {
+                        subject: token.role().to_string(),
+                        object: request.uri().path().to_string(),
+                        action: request.method().to_string(),
+                    };
+
+                    let result = enforcer
+                        .try_authorized(auth_data)
+                        .map_err(|e| unauthorized_response(&e.to_string()))?;
+                    // Evaluate authorization result
+                    match result {
+                        AuthorizationState::Authorized => {
+                            request.extensions_mut().insert(token);
+                            request.headers_mut().insert(
+                                "Set-Cookie",
+                                refresh_cookie(refresh_token)
+                                    .map_err(|e| Status::from(e).to_http())?
+                                    .parse()
+                                    .map_err(|_| {
+                                        internal_response("Cannot create refresh cookie")
+                                    })?,
+                            );
+
+                            Ok(request)
+                        }
+                        AuthorizationState::Denied => {
+                            Err(unauthorized_response("Insufficient privileges"))
+                        }
+                    }
+                }
+                // TODO: Adapt refresh token flow to host
+                AnyToken::HostAuth(token) => {
+                    // 1. try if token is valid
+                    token.encode().map_err(cant_parse)?;
+
+                    let refresh_token = HostRefreshToken::from_request(&request)
+                        .map_err(|_| unauthorized_response("Cannot parse refresh token"))?;
+                    let (_, token, refresh_token) =
+                        Host::verify_and_refresh_auth_token(token, refresh_token, db)
                             .await
                             .map_err(|e| Status::from(e).to_http())?;
 

@@ -29,7 +29,7 @@ impl UserService for UserServiceImpl {
         &self,
         request: Request<GetUserRequest>,
     ) -> Result<Response<GetUserResponse>, Status> {
-        let token = try_get_token(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
         let user = token.try_get_user(*token.id(), &self.db).await?;
         let inner = request.into_inner();
         let response = GetUserResponse {

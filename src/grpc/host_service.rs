@@ -1,5 +1,5 @@
 use super::helpers::try_get_token;
-use crate::auth::{FindableById, JwtToken, TokenType, UserAuthToken};
+use crate::auth::{FindableById, HostAuthToken, JwtToken, TokenType, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy::hosts_server::Hosts;
 use crate::grpc::blockjoy::{
@@ -67,7 +67,7 @@ impl Hosts for HostsServiceImpl {
         &self,
         request: Request<DeleteHostRequest>,
     ) -> Result<Response<DeleteHostResponse>, Status> {
-        let host_token_id = *try_get_token(&request)?.id();
+        let host_token_id = *try_get_token::<_, HostAuthToken>(&request)?.id();
         let inner = request.into_inner();
         let host_id = Uuid::parse_str(inner.host_id.as_str()).map_err(ApiError::from)?;
         if host_token_id != host_id {

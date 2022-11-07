@@ -1,5 +1,9 @@
 use super::{validator::Validator, Node, NodeProvision};
-use crate::auth::{FindableById, Identifiable, Owned};
+use crate::auth::expiration_provider::ExpirationProvider;
+use crate::auth::{
+    FindableById, HostAuthToken, HostRefreshToken, Identifiable, JwtToken, Owned, TokenClaim,
+    TokenType,
+};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
 use crate::grpc::helpers::required;
@@ -77,6 +81,47 @@ impl TryFrom<PgRow> for Host {
 }
 
 impl Host {
+    /// Test if given `token` has expired and refresh it using the `refresh_token` if necessary
+    pub async fn verify_and_refresh_auth_token(
+        token: HostAuthToken,
+        refresh_token: HostRefreshToken,
+        db: &PgPool,
+    ) -> Result<(Option<Host>, HostAuthToken, HostRefreshToken)> {
+        if token.has_expired() {
+            // Token has expired, check the refresh_token
+            if !refresh_token.has_expired() {
+                // Generate new auth token
+                let claim = TokenClaim::new(
+                    token.get_id(),
+                    ExpirationProvider::expiration(TokenType::HostAuth),
+                    TokenType::HostAuth,
+                    None,
+                );
+                let token = HostAuthToken::new(claim);
+                let claim = TokenClaim::new(
+                    token.get_id(),
+                    ExpirationProvider::expiration(TokenType::HostRefresh),
+                    TokenType::HostRefresh,
+                    None,
+                );
+                let refresh_token = HostRefreshToken::new(claim);
+                let fields = HostSelectiveUpdate {
+                    refresh_token: Some(refresh_token.encode()?),
+                    ..Default::default()
+                };
+                let host = Host::update_all(refresh_token.get_id(), fields, db).await?;
+
+                Ok((Some(host), token, refresh_token))
+            } else {
+                Err(ApiError::UnexpectedError(anyhow!("Refresh token expired")))
+            }
+        } else {
+            // Token is valid, just return what we got
+            // If nothing was updated or changed, we don't even query for the user to save 1 query
+            Ok((None, token, refresh_token))
+        }
+    }
+
     pub async fn toggle_online(id: Uuid, is_online: bool, db: &PgPool) -> Result<()> {
         let status = if is_online {
             ConnectionStatus::Online
@@ -284,8 +329,9 @@ impl Host {
                     os_version = COALESCE($9, os_version),
                     ip_addr = COALESCE($10, ip_addr),
                     val_ip_addrs = COALESCE($11, val_ip_addrs),
-                    status = COALESCE($12, status)
-                WHERE id = $13 RETURNING *"#,
+                    status = COALESCE($12, status),
+                    refresh = COALESCE($13, refresh)
+                WHERE id = $14 RETURNING *"#,
         )
         .bind(fields.org_id)
         .bind(fields.name)
@@ -299,6 +345,7 @@ impl Host {
         .bind(fields.ip_addr)
         .bind(fields.val_ip_addrs)
         .bind(fields.status)
+        .bind(fields.refresh_token)
         .bind(id)
         .map(|row| Self::try_from(row).unwrap_or_default())
         .fetch_one(&mut tx)
@@ -450,6 +497,7 @@ pub struct HostSelectiveUpdate {
     pub ip_range_from: Option<IpAddr>,
     pub ip_range_to: Option<IpAddr>,
     pub ip_gateway: Option<IpAddr>,
+    pub refresh_token: Option<String>,
 }
 
 impl From<HostCreateRequest> for HostRequest {
@@ -508,6 +556,7 @@ impl From<HostInfo> for HostSelectiveUpdate {
             ip_range_from: from,
             ip_range_to: to,
             ip_gateway: gateway,
+            refresh_token: None,
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::auth::UserAuthToken;
+use crate::auth::JwtToken;
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::{response_meta, Pagination, ResponseMeta};
 use crate::models::{Node, NodeTypeKey};
@@ -49,10 +49,12 @@ pub fn internal(error: impl std::fmt::Display) -> Status {
     Status::internal(error.to_string())
 }
 
-pub fn try_get_token<T>(req: &tonic::Request<T>) -> Result<&UserAuthToken, ApiError> {
+pub fn try_get_token<T, R: JwtToken + Sync + Send + 'static>(
+    req: &tonic::Request<T>,
+) -> Result<&R, ApiError> {
     let tkn = req
         .extensions()
-        .get::<UserAuthToken>()
+        .get::<R>()
         .ok_or_else(|| Status::internal("Token lost!"))?;
 
     Ok(tkn)

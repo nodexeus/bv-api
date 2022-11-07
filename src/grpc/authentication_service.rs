@@ -1,4 +1,4 @@
-use crate::auth::{FindableById, JwtToken, TokenType, UserRefreshToken};
+use crate::auth::{FindableById, JwtToken, TokenType, UserAuthToken, UserRefreshToken};
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
@@ -96,7 +96,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<UpdatePasswordRequest>,
     ) -> Result<Response<UpdatePasswordResponse>, Status> {
-        let token = try_get_token(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
         let encoded = token
             .encode()
             .map_err(|e| Status::internal(format!("Token encode error {e:?}")))?;
@@ -122,7 +122,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<UpdateUiPasswordRequest>,
     ) -> Result<Response<UpdateUiPasswordResponse>, Status> {
-        let token = try_get_token(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
         let user = token.try_get_user(*token.id(), &self.db).await?;
         let encoded = token
             .encode()

@@ -14,11 +14,12 @@ impl BlacklistToken {
     pub async fn create(token: String, token_type: TokenType, db: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
-        INSERT INTO token_blacklist 
-        (token, token_type) 
-        values 
-        ($1, $2)
-        RETURNING *"#,
+                INSERT INTO token_blacklist 
+                    (token, token_type)
+                values 
+                    ($1, $2)
+                RETURNING *
+                "#,
         )
         .bind(token)
         .bind(token_type)

@@ -18,7 +18,7 @@ pub struct HostAuthToken {
 #[tonic::async_trait]
 impl JwtToken for HostAuthToken {
     fn get_expiration(&self) -> i64 {
-        todo!()
+        self.exp
     }
 
     fn get_id(&self) -> Uuid {
