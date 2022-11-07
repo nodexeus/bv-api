@@ -3,7 +3,7 @@
 //!
 
 use crate::auth::unauthenticated_paths::UnauthenticatedPaths;
-use crate::auth::{Authorization, AuthorizationData, AuthorizationState, HostRefreshToken};
+use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
 use crate::auth::{JwtToken, UserRefreshToken};
 use crate::errors::Result;
 use crate::models::{Host, User};
@@ -130,17 +130,12 @@ where
                         }
                     }
                 }
-                // TODO: Adapt refresh token flow to host
                 AnyToken::HostAuth(token) => {
                     // 1. try if token is valid
                     token.encode().map_err(cant_parse)?;
 
-                    let refresh_token = HostRefreshToken::from_request(&request)
-                        .map_err(|_| unauthorized_response("Cannot parse refresh token"))?;
-                    let (_, token, refresh_token) =
-                        Host::verify_and_refresh_auth_token(token, refresh_token, db)
-                            .await
-                            .map_err(|e| Status::from(e).to_http())?;
+                    let token =
+                        Host::verify_auth_token(token).map_err(|e| Status::from(e).to_http())?;
 
                     let auth_data = AuthorizationData {
                         subject: token.role().to_string(),
@@ -155,15 +150,6 @@ where
                     match result {
                         AuthorizationState::Authorized => {
                             request.extensions_mut().insert(token);
-                            request.headers_mut().insert(
-                                "Set-Cookie",
-                                refresh_cookie(refresh_token)
-                                    .map_err(|e| Status::from(e).to_http())?
-                                    .parse()
-                                    .map_err(|_| {
-                                        internal_response("Cannot create refresh cookie")
-                                    })?,
-                            );
 
                             Ok(request)
                         }

@@ -56,6 +56,6 @@ impl FromStr for HostRefreshToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        HostRefreshToken::from_encoded::<HostRefreshToken>(encoded, TokenType::HostRefresh)
+        HostRefreshToken::from_encoded::<HostRefreshToken>(encoded, TokenType::HostRefresh, true)
     }
 }

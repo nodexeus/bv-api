@@ -56,7 +56,7 @@ impl FromStr for UserRefreshToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        UserRefreshToken::from_encoded::<UserRefreshToken>(encoded, TokenType::UserRefresh)
+        UserRefreshToken::from_encoded::<UserRefreshToken>(encoded, TokenType::UserRefresh, true)
     }
 }
 
@@ -99,6 +99,7 @@ mod tests {
         let token = UserRefreshToken::from_encoded::<UserRefreshToken>(
             encoded.as_str(),
             TokenType::UserRefresh,
+            true,
         );
 
         assert!(token.is_ok());

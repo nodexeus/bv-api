@@ -53,6 +53,6 @@ impl FromStr for PwdResetToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        PwdResetToken::from_encoded::<PwdResetToken>(encoded, TokenType::PwdReset)
+        PwdResetToken::from_encoded::<PwdResetToken>(encoded, TokenType::PwdReset, true)
     }
 }

@@ -240,12 +240,13 @@ pub trait JwtToken: Sized + serde::Serialize {
     fn from_encoded<T: JwtToken + DeserializeOwned>(
         encoded: &str,
         token_type: TokenType,
+        validate_exp: bool,
     ) -> Result<T, TokenError> {
         let key = KeyProvider::get_secret(token_type)?;
         let secret = key.value();
         let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
 
-        validation.validate_exp = true;
+        validation.validate_exp = validate_exp;
 
         match jwt::decode::<T>(
             encoded,

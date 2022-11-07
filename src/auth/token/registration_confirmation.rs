@@ -54,6 +54,7 @@ impl FromStr for RegistrationConfirmationToken {
         RegistrationConfirmationToken::from_encoded::<RegistrationConfirmationToken>(
             encoded,
             TokenType::RegistrationConfirmation,
+            true,
         )
     }
 }

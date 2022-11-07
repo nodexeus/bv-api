@@ -169,7 +169,6 @@ pub mod from {
                 ip_range_from: None,
                 ip_range_to: None,
                 ip_gateway: None,
-                refresh_token: None,
             };
             Ok(updater)
         }

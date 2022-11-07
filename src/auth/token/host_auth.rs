@@ -47,6 +47,6 @@ impl FromStr for HostAuthToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        HostAuthToken::from_encoded::<HostAuthToken>(encoded, TokenType::HostAuth)
+        HostAuthToken::from_encoded::<HostAuthToken>(encoded, TokenType::HostAuth, false)
     }
 }
