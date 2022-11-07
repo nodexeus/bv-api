@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use axum::http::Request as HttpRequest;
 use base64::DecodeError;
+use chrono::Utc;
 use http::header::AUTHORIZATION;
 use jsonwebtoken as jwt;
 use jsonwebtoken::errors::Error as JwtError;
@@ -163,6 +164,10 @@ impl TokenClaim {
 
 #[tonic::async_trait]
 pub trait JwtToken: Sized + serde::Serialize {
+    /* Getter common to all token types */
+    fn get_expiration(&self) -> i64;
+    fn get_id(&self) -> Uuid;
+
     fn new(claim: TokenClaim) -> Self;
 
     fn token_type(&self) -> TokenType;
@@ -204,10 +209,10 @@ pub trait JwtToken: Sized + serde::Serialize {
     }
 
     /// Try to retrieve host for given token
-    async fn try_get_host(&self, id: Uuid, db: &DbPool) -> ApiResult<Host> {
+    async fn try_get_host(&self, db: &DbPool) -> ApiResult<Host> {
         match self.token_type() {
-            TokenType::HostAuth => Host::find_by_id(id, db).await,
-            TokenType::HostRefresh => Host::find_by_id(id, db).await,
+            TokenType::HostAuth => Host::find_by_id(self.get_id(), db).await,
+            TokenType::HostRefresh => Host::find_by_id(self.get_id(), db).await,
             _ => Err(ApiError::UnexpectedError(anyhow!(
                 "Cannot retrieve host from token of type {}",
                 self.token_type().to_string()
@@ -228,7 +233,11 @@ pub trait JwtToken: Sized + serde::Serialize {
     }
 
     /// Returns `true` if token has expired
-    fn has_expired(&self) -> bool;
+    fn has_expired(&self) -> bool {
+        let now = Utc::now().timestamp();
+
+        now > self.get_expiration()
+    }
 }
 
 #[derive(serde::Deserialize)]

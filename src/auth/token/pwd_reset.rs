@@ -2,9 +2,9 @@ use super::JwtToken;
 use crate::auth::{from_encoded, OnetimeToken, TokenClaim, TokenResult, TokenType};
 use crate::errors::Result;
 use crate::server::DbPool;
-use chrono::Utc;
 use std::str;
 use std::str::FromStr;
+use uuid::Uuid;
 
 /// The claims of the token to be stored (encrypted) on the client side.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -15,6 +15,14 @@ pub struct PwdResetToken {
 }
 
 impl JwtToken for PwdResetToken {
+    fn get_expiration(&self) -> i64 {
+        self.exp
+    }
+
+    fn get_id(&self) -> Uuid {
+        self.id
+    }
+
     fn new(claim: TokenClaim) -> Self {
         Self {
             id: claim.id,
@@ -25,12 +33,6 @@ impl JwtToken for PwdResetToken {
 
     fn token_type(&self) -> TokenType {
         self.token_type
-    }
-
-    fn has_expired(&self) -> bool {
-        let now = Utc::now().timestamp();
-
-        now > self.exp
     }
 }
 

@@ -42,7 +42,7 @@ impl CommandFlow for CommandFlowServerImpl {
         // Token must be added by middleware beforehand
         let token = try_get_token(&request)?;
         // Get the host that the user wants to listen to from the current login token.
-        let host_id = token.try_get_host(*token.id(), &self.db).await?.id;
+        let host_id = token.try_get_host(&self.db).await?.id;
         // Set the host as online.
         models::Host::toggle_online(host_id, true, &self.db).await?;
         let update_stream = request.into_inner();
