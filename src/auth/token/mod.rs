@@ -291,9 +291,12 @@ fn extract_token<B>(req: &HttpRequest<B>) -> TokenResult<String> {
 
 /// Indicates the impl token is subject to be blacklisted once used
 #[tonic::async_trait]
-pub trait OnetimeToken {
+pub trait Blacklisted {
     /// Method needs to be called after validation and use
     async fn blacklist(&self, db: DbPool) -> TokenResult<bool>;
+
+    /// Return true if encoded token value can be found in blacklist table
+    async fn is_blacklisted(&self, token: String, db: DbPool) -> TokenResult<bool>;
 }
 
 /// Decode token from encoded value

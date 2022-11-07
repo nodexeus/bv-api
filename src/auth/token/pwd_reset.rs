@@ -1,6 +1,7 @@
 use super::JwtToken;
-use crate::auth::{from_encoded, OnetimeToken, TokenClaim, TokenResult, TokenType};
+use crate::auth::{from_encoded, Blacklisted, TokenClaim, TokenResult, TokenType};
 use crate::errors::Result;
+use crate::models::BlacklistToken;
 use crate::server::DbPool;
 use std::str;
 use std::str::FromStr;
@@ -9,7 +10,7 @@ use uuid::Uuid;
 /// The claims of the token to be stored (encrypted) on the client side.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct PwdResetToken {
-    id: uuid::Uuid,
+    id: Uuid,
     exp: i64,
     token_type: TokenType,
 }
@@ -37,9 +38,15 @@ impl JwtToken for PwdResetToken {
 }
 
 #[tonic::async_trait]
-impl OnetimeToken for PwdResetToken {
-    async fn blacklist(&self, _db: DbPool) -> TokenResult<bool> {
-        Ok(true)
+impl Blacklisted for PwdResetToken {
+    async fn blacklist(&self, db: DbPool) -> TokenResult<bool> {
+        Ok(BlacklistToken::create(self.encode()?, self.token_type, &db)
+            .await
+            .is_ok())
+    }
+
+    async fn is_blacklisted(&self, token: String, db: DbPool) -> TokenResult<bool> {
+        Ok(BlacklistToken::is_listed(token, &db).await.is_ok())
     }
 }
 

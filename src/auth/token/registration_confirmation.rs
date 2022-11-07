@@ -1,4 +1,5 @@
-use crate::auth::{from_encoded, JwtToken, OnetimeToken, TokenClaim, TokenResult, TokenType};
+use crate::auth::{from_encoded, Blacklisted, JwtToken, TokenClaim, TokenResult, TokenType};
+use crate::models::BlacklistToken;
 use crate::server::DbPool;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -6,7 +7,7 @@ use uuid::Uuid;
 /// The claims of the token to be stored (encrypted) on the client side.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct RegistrationConfirmationToken {
-    id: uuid::Uuid,
+    id: Uuid,
     exp: i64,
     token_type: TokenType,
 }
@@ -34,9 +35,15 @@ impl JwtToken for RegistrationConfirmationToken {
 }
 
 #[tonic::async_trait]
-impl OnetimeToken for RegistrationConfirmationToken {
-    async fn blacklist(&self, _db: DbPool) -> TokenResult<bool> {
-        Ok(true)
+impl Blacklisted for RegistrationConfirmationToken {
+    async fn blacklist(&self, db: DbPool) -> TokenResult<bool> {
+        Ok(BlacklistToken::create(self.encode()?, self.token_type, &db)
+            .await
+            .is_ok())
+    }
+
+    async fn is_blacklisted(&self, token: String, db: DbPool) -> TokenResult<bool> {
+        Ok(BlacklistToken::is_listed(token, &db).await.is_ok())
     }
 }
 
