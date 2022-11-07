@@ -37,7 +37,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let user = User::find_by_email("admin@here.com", &self.db).await?;
         let refresh_token = UserRefreshToken::create_token_for::<User>(&user, TokenType::UserAuth)?;
         let exp = *refresh_token.exp() + (60 * 60 * 24);
-        let exp = Utc.timestamp(exp, 0).to_string();
+        let _exp = Utc.timestamp(exp, 0).to_string();
 
         let response = LoginUserResponse {
             meta: None,

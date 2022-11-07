@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{JwtToken, TokenHolderType, TokenType, UserAuthToken};
+use api::auth::{JwtToken, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::node_service_client::NodeServiceClient;
 use api::grpc::blockjoy_ui::{
     node, CreateNodeRequest, GetNodeRequest, Node as GrpcNode, RequestMeta, UpdateNodeRequest,
@@ -29,9 +29,7 @@ async fn responds_not_found_without_any_for_get() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token =
-        UserAuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
-            .unwrap();
+    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
     let inner = GetNodeRequest {
         meta: Some(request_meta),
         id: Uuid::new_v4().to_string(),
@@ -88,9 +86,7 @@ async fn responds_ok_with_id_for_get() {
     };
     let node = Node::create(&req, &db.pool).await.unwrap();
     let user = db.admin_user().await;
-    let token =
-        UserAuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
-            .unwrap();
+    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
     let inner = GetNodeRequest {
         meta: Some(request_meta),
         id: node.id.to_string(),
@@ -148,9 +144,7 @@ async fn responds_ok_with_valid_data_for_create() {
         staking_status: None,
         sync_status: Some(NodeSyncStatus::Unknown as i32),
     };
-    let token =
-        UserAuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
-            .unwrap();
+    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
     let inner = CreateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -200,9 +194,7 @@ async fn responds_internal_with_invalid_data_for_create() {
         sync_status: Some(NodeSyncStatus::Unknown as i32),
     };
     let user = db.admin_user().await;
-    let token =
-        UserAuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
-            .unwrap();
+    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
     let inner = CreateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -263,9 +255,7 @@ async fn responds_ok_with_valid_data_for_update() {
         name: Some("stri-bu".to_string()),
         ..Default::default()
     };
-    let token =
-        UserAuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
-            .unwrap();
+    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
     let inner = UpdateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -328,9 +318,7 @@ async fn responds_internal_with_invalid_data_for_update() {
         blockchain_id: None,
         ..Default::default()
     };
-    let token =
-        UserAuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
-            .unwrap();
+    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
     let inner = UpdateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -363,9 +351,7 @@ async fn responds_not_found_with_invalid_id_for_update() {
         id: Some(Uuid::new_v4().to_string()),
         ..Default::default()
     };
-    let token =
-        UserAuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
-            .unwrap();
+    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
     let inner = UpdateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),

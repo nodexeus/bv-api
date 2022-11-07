@@ -27,6 +27,7 @@ pub struct HttpLoginUserRequest {
     pub(crate) pwd: String,
 }
 
+#[allow(dead_code)]
 pub struct ClaimHostProvisionRequest {
     pub(crate) otp: String,
 }

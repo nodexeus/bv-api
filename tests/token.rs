@@ -51,12 +51,7 @@ fn should_decode_valid_token() -> anyhow::Result<()> {
     let test_secret = "123456";
     temp_env::with_var("JWT_SECRET", Some(test_secret), || {
         let id = Uuid::new_v4();
-        let claim = TokenClaim::new(
-            id,
-            _before_values.now,
-            TokenType::UserAuth,
-            None,
-        );
+        let claim = TokenClaim::new(id, _before_values.now, TokenType::UserAuth, None);
         let token = UserAuthToken::new(claim);
         let token_str = token.encode().unwrap();
         let mut validation = Validation::new(Algorithm::HS512);
@@ -68,7 +63,7 @@ fn should_decode_valid_token() -> anyhow::Result<()> {
             &DecodingKey::from_secret(test_secret.as_bytes()),
             &validation,
         ) {
-            Ok(decoded_data) => assert_eq!(decoded_data.claims.get_id(), id),
+            Ok(decoded_data) => assert_eq!(*decoded_data.claims.id(), id),
             Err(e) => panic!("decoding failed: {}", e),
         }
 
@@ -143,7 +138,7 @@ fn should_get_valid_token() -> anyhow::Result<()> {
         .body(())?;
     let token = UserAuthToken::from_request(&request).unwrap();
 
-    assert_eq!(token.get_id(), id);
+    assert_eq!(*token.id(), id);
 
     Ok(())
 }
@@ -152,12 +147,7 @@ fn should_get_valid_token() -> anyhow::Result<()> {
 #[should_panic]
 fn should_panic_encode_without_secret_in_envs() {
     temp_env::with_var_unset("JWT_SECRET", || {
-        let claim = TokenClaim::new(
-            Uuid::new_v4(),
-            123123123,
-            TokenType::UserAuth,
-            None,
-        );
+        let claim = TokenClaim::new(Uuid::new_v4(), 123123123, TokenType::UserAuth, None);
         UserAuthToken::new(claim).encode().unwrap()
     });
 }
@@ -171,12 +161,7 @@ fn should_not_decode_without_secret_in_envs() {
 #[should_panic]
 fn should_panic_on_encode_with_empty_secret_in_envs() {
     temp_env::with_var("JWT_SECRET", Some(""), || {
-        let claim = TokenClaim::new(
-            Uuid::new_v4(),
-            123123123,
-            TokenType::UserAuth,
-            None,
-        );
+        let claim = TokenClaim::new(Uuid::new_v4(), 123123123, TokenType::UserAuth, None);
         let token = UserAuthToken::new(claim);
 
         assert!(token.encode().is_err());

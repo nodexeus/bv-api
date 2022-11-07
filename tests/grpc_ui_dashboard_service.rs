@@ -2,7 +2,7 @@
 mod setup;
 
 use crate::setup::{server_and_client_stub, setup};
-use api::auth::{JwtToken, TokenHolderType, TokenType, UserAuthToken};
+use api::auth::{JwtToken, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::dashboard_service_client::DashboardServiceClient;
 use api::grpc::blockjoy_ui::{metric, DashboardMetricsRequest, RequestMeta};
 use api::models::User;
@@ -45,9 +45,7 @@ async fn responds_ok_with_valid_token_for_metrics() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token =
-        UserAuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
-            .unwrap();
+    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
     let inner = DashboardMetricsRequest {
         meta: Some(request_meta),
     };
@@ -74,9 +72,7 @@ async fn responds_valid_values_for_metrics() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token =
-        UserAuthToken::create_token_for::<User>(&user, TokenHolderType::User, TokenType::Login)
-            .unwrap();
+    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
     let inner = DashboardMetricsRequest {
         meta: Some(request_meta),
     };
