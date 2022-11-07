@@ -1,6 +1,8 @@
-use crate::auth::{from_encoded, JwtToken, TokenClaim, TokenType};
+use crate::auth::{from_encoded, JwtToken, TokenClaim, TokenError, TokenResult, TokenType};
+use axum::http::Request as HttpRequest;
 use derive_getters::Getters;
 use std::str::FromStr;
+use tonic::Status;
 use uuid::Uuid;
 
 /// The claims of the token to be stored (encrypted) on the client side.
@@ -30,6 +32,23 @@ impl JwtToken for UserRefreshToken {
 
     fn token_type(&self) -> TokenType {
         self.token_type
+    }
+
+    fn from_request<B>(request: &HttpRequest<B>) -> TokenResult<Self>
+    where
+        Self: FromStr<Err = TokenError>,
+    {
+        request
+            .headers()
+            .get("cookie")
+            .map(|hv| {
+                hv.to_str()
+                    .map_err(|_| Status::unauthenticated("Couldn't read refresh token"))
+                    .unwrap_or_default()
+            })
+            .map(|hv| hv.split("refresh=").nth(1).unwrap_or_default())
+            .unwrap_or_default()
+            .parse()
     }
 }
 

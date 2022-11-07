@@ -9,7 +9,6 @@ use crate::auth::{JwtToken, TokenClaim, TokenType, UserAuthToken, UserRefreshTok
 use futures_util::future::BoxFuture;
 use hyper::{Request, Response};
 use std::fmt::Debug;
-use std::str::FromStr;
 use tonic::body::BoxBody;
 use tonic::Status;
 use tower_http::auth::AsyncAuthorizeRequest;
@@ -78,18 +77,8 @@ where
                     // 1. try if token is valid
                     token.encode().map_err(cant_parse)?;
 
-                    // Get refresh token from metadata
-                    let refresh_token = request
-                        .headers()
-                        .get("cookie")
-                        .map(|hv| {
-                            hv.to_str()
-                                .map_err(|_| Status::unauthenticated("Couldn't read refresh token"))
-                                .unwrap_or_default()
-                        })
-                        .map(|hv| hv.split("refresh=").nth(1).unwrap_or_default())
-                        .unwrap_or_default();
-                    let mut refresh_token = UserRefreshToken::from_str(refresh_token)
+                    // Get refresh token
+                    let mut refresh_token = UserRefreshToken::from_request(&request)
                         .map_err(|_| unauthorized_response("Cannot parse refresh token"))?;
 
                     // 2. test if token is expired
