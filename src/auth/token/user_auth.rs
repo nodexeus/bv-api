@@ -51,12 +51,6 @@ impl FromStr for UserAuthToken {
     }
 }
 
-impl super::Identifier for UserAuthToken {
-    fn get_id(&self) -> Uuid {
-        self.id
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::TokenClaim;

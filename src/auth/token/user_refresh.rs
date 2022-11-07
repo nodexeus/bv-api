@@ -60,12 +60,6 @@ impl FromStr for UserRefreshToken {
     }
 }
 
-impl super::Identifier for UserRefreshToken {
-    fn get_id(&self) -> uuid::Uuid {
-        self.id
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::auth::expiration_provider::ExpirationProvider;

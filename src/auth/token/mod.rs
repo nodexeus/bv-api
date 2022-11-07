@@ -76,10 +76,6 @@ impl FromStr for TokenRole {
     }
 }
 
-pub trait Identifier {
-    fn get_id(&self) -> Uuid;
-}
-
 #[derive(Error, Debug)]
 pub enum TokenError {
     #[error("Token is empty")]

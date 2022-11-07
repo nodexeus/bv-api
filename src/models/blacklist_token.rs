@@ -6,8 +6,7 @@ use sqlx::{FromRow, PgPool};
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct BlacklistToken {
     pub token: String,
-    #[sqlx(rename = "type")]
-    pub type_: TokenType,
+    pub token_type: TokenType,
 }
 
 impl BlacklistToken {

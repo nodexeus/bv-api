@@ -50,9 +50,3 @@ impl FromStr for PwdResetToken {
         from_encoded::<PwdResetToken>(encoded, TokenType::PwdReset)
     }
 }
-
-impl super::Identifier for PwdResetToken {
-    fn get_id(&self) -> uuid::Uuid {
-        self.id
-    }
-}

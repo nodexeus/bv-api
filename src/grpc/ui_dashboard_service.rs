@@ -1,5 +1,5 @@
 use super::blockjoy_ui::ResponseMeta;
-use crate::auth::{Identifier, UserAuthToken};
+use crate::auth::{JwtToken, UserAuthToken};
 use crate::grpc::blockjoy_ui::dashboard_service_server::DashboardService;
 use crate::grpc::blockjoy_ui::{metric, DashboardMetricsRequest, DashboardMetricsResponse, Metric};
 use crate::grpc::helpers::required;

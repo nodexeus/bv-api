@@ -51,9 +51,3 @@ impl FromStr for HostAuthToken {
         from_encoded::<HostAuthToken>(encoded, TokenType::HostAuth)
     }
 }
-
-impl super::Identifier for HostAuthToken {
-    fn get_id(&self) -> Uuid {
-        self.id
-    }
-}

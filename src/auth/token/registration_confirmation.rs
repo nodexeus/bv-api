@@ -47,9 +47,3 @@ impl FromStr for RegistrationConfirmationToken {
         from_encoded::<RegistrationConfirmationToken>(encoded, TokenType::RegistrationConfirmation)
     }
 }
-
-impl super::Identifier for RegistrationConfirmationToken {
-    fn get_id(&self) -> uuid::Uuid {
-        self.id
-    }
-}

@@ -59,9 +59,3 @@ impl FromStr for HostRefreshToken {
         from_encoded::<HostRefreshToken>(encoded, TokenType::HostRefresh)
     }
 }
-
-impl super::Identifier for HostRefreshToken {
-    fn get_id(&self) -> uuid::Uuid {
-        self.id
-    }
-}
