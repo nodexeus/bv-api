@@ -1,4 +1,8 @@
-use crate::auth::{FindableById, Identifiable, TokenRole};
+use crate::auth::expiration_provider::ExpirationProvider;
+use crate::auth::{
+    FindableById, Identifiable, JwtToken, TokenClaim, TokenRole, TokenType, UserAuthToken,
+    UserRefreshToken,
+};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::LoginUserRequest;
 use crate::mail::MailClient;
@@ -51,6 +55,48 @@ pub struct UserLogin {
 }
 
 impl User {
+    /// Test if given `token` has expired and refresh it using the `refresh_token` if necessary
+    pub async fn verify_and_refresh_auth_token(
+        token: UserAuthToken,
+        refresh_token: UserRefreshToken,
+        db: &PgPool,
+    ) -> Result<(User, UserAuthToken, UserRefreshToken)> {
+        let user = User::find_by_id(token.get_id(), db).await?;
+
+        if token.has_expired() {
+            // Token has expired, check the refresh_token
+            if !refresh_token.has_expired() {
+                // Generate new auth token
+                let claim = TokenClaim::new(
+                    token.get_id(),
+                    ExpirationProvider::expiration(TokenType::UserAuth),
+                    TokenType::UserAuth,
+                    None,
+                );
+                let token = UserAuthToken::new(claim);
+                let claim = TokenClaim::new(
+                    token.get_id(),
+                    ExpirationProvider::expiration(TokenType::UserRefresh),
+                    TokenType::UserRefresh,
+                    None,
+                );
+                let refresh_token = UserRefreshToken::new(claim);
+                let fields = UserSelectiveUpdate {
+                    refresh_token: Some(refresh_token.encode()?),
+                    ..Default::default()
+                };
+                let user = User::update_all(refresh_token.get_id(), fields, db).await?;
+
+                Ok((user, token, refresh_token))
+            } else {
+                Err(ApiError::UnexpectedError(anyhow!("Refresh token expired")))
+            }
+        } else {
+            // Token is valid, just return what we got
+            Ok((user, token, refresh_token))
+        }
+    }
+
     pub fn verify_password(&self, password: &str) -> Result<()> {
         let argon2 = Argon2::default();
         let parsed_hash = argon2.hash_password_simple(password.as_bytes(), &self.salt)?;

@@ -56,3 +56,32 @@ impl super::Identifier for UserAuthToken {
         self.id
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::TokenClaim;
+    use super::UserAuthToken;
+    use crate::auth::{JwtToken, TokenType};
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    #[test]
+    fn returns_true_for_expired_token() {
+        let id = Uuid::new_v4();
+        let exp = Utc::now().timestamp() - 60000;
+        let claim = TokenClaim::new(id, exp, TokenType::UserAuth, None);
+        let token = UserAuthToken::new(claim);
+
+        assert!(token.has_expired());
+    }
+
+    #[test]
+    fn returns_false_for_not_expired_token() {
+        let id = Uuid::new_v4();
+        let exp = Utc::now().timestamp() + 60000;
+        let claim = TokenClaim::new(id, exp, TokenType::UserAuth, None);
+        let token = UserAuthToken::new(claim);
+
+        assert!(!token.has_expired());
+    }
+}

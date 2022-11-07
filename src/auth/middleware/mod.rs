@@ -2,10 +2,12 @@
 //!
 //!
 
-use crate::auth::expiration_provider::ExpirationProvider;
 use crate::auth::unauthenticated_paths::UnauthenticatedPaths;
 use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
-use crate::auth::{JwtToken, TokenClaim, TokenType, UserAuthToken, UserRefreshToken};
+use crate::auth::{JwtToken, UserRefreshToken};
+use crate::errors::Result;
+use crate::models::User;
+use crate::server::DbPool;
 use futures_util::future::BoxFuture;
 use hyper::{Request, Response};
 use std::fmt::Debug;
@@ -25,6 +27,16 @@ fn unauthenticated_response(msg: &str) -> Response<BoxBody> {
 
 fn internal_response(msg: &str) -> Response<BoxBody> {
     Status::internal(msg).to_http()
+}
+
+fn refresh_cookie(refresh_token: UserRefreshToken) -> Result<String> {
+    let cookie = format!(
+        "refresh={}; Expires={}; Secure; HttpOnly",
+        refresh_token.encode()?,
+        refresh_token.get_expiration(),
+    );
+
+    Ok(cookie)
 }
 
 #[derive(Clone)]
@@ -67,42 +79,26 @@ where
         let enforcer = self.enforcer.clone();
 
         Box::pin(async move {
+            let db = request
+                .extensions()
+                .get::<DbPool>()
+                .unwrap_or_else(|| panic!("DB extension missing"));
             let token = AnyToken::from_request(&request)
                 .map_err(|_| unauthenticated_response("Missing valid token"))?;
             let cant_parse =
                 |e| unauthenticated_response(&format!("Could not extract token: {e:?}"));
 
             match token {
-                AnyToken::UserAuth(mut token) => {
+                AnyToken::UserAuth(token) => {
                     // 1. try if token is valid
                     token.encode().map_err(cant_parse)?;
 
-                    // Get refresh token
-                    let mut refresh_token = UserRefreshToken::from_request(&request)
+                    let refresh_token = UserRefreshToken::from_request(&request)
                         .map_err(|_| unauthorized_response("Cannot parse refresh token"))?;
-
-                    // 2. test if token is expired
-                    if token.has_expired() {
-                        // Test if refresh token is valid
-                        if !refresh_token.has_expired() {
-                            let claim = TokenClaim::new(
-                                token.get_id(),
-                                ExpirationProvider::expiration(TokenType::UserAuth),
-                                TokenType::UserAuth,
-                                None,
-                            );
-                            token = UserAuthToken::new(claim);
-                            let claim = TokenClaim::new(
-                                token.get_id(),
-                                ExpirationProvider::expiration(TokenType::UserRefresh),
-                                TokenType::UserRefresh,
-                                None,
-                            );
-                            refresh_token = UserRefreshToken::new(claim);
-                        } else {
-                            return Err(unauthorized_response("Invalid refresh token"));
-                        }
-                    }
+                    let (_, token, refresh_token) =
+                        User::verify_and_refresh_auth_token(token, refresh_token, db)
+                            .await
+                            .map_err(|e| Status::from(e).to_http())?;
 
                     let auth_data = AuthorizationData {
                         subject: token.role().to_string(),
@@ -119,17 +115,12 @@ where
                             request.extensions_mut().insert(token);
                             request.headers_mut().insert(
                                 "Set-Cookie",
-                                format!(
-                                    "refresh={}; Expires={}; Secure; HttpOnly",
-                                    refresh_token
-                                        .encode()
-                                        .map_err(|e| internal_response(e.to_string().as_str()))?,
-                                    refresh_token.get_expiration(),
-                                )
-                                .parse()
-                                .map_err(|_| {
-                                    internal_response("Cannot create refresh token cookie")
-                                })?,
+                                refresh_cookie(refresh_token)
+                                    .map_err(|e| Status::from(e).to_http())?
+                                    .parse()
+                                    .map_err(|_| {
+                                        internal_response("Cannot create refresh cookie")
+                                    })?,
                             );
 
                             Ok(request)
@@ -150,6 +141,3 @@ where
         })
     }
 }
-
-#[cfg(test)]
-mod tests {}

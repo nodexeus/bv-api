@@ -28,7 +28,7 @@ fn should_encode_token() -> anyhow::Result<()> {
     let test_secret = "123456";
     temp_env::with_var("JWT_SECRET", Some(test_secret), || {
         let id = Uuid::new_v4();
-        let claim = TokenClaim::new(id, 123123, TokenHolderType::User, TokenType::Login, None);
+        let claim = TokenClaim::new(id, 123123, TokenType::UserAuth, None);
         let token = UserAuthToken::new(claim);
         let header = Header::new(Algorithm::HS512);
 
@@ -54,8 +54,7 @@ fn should_decode_valid_token() -> anyhow::Result<()> {
         let claim = TokenClaim::new(
             id,
             _before_values.now,
-            TokenHolderType::User,
-            TokenType::Login,
+            TokenType::UserAuth,
             None,
         );
         let token = UserAuthToken::new(claim);
@@ -83,7 +82,7 @@ fn should_panic_on_decode_expired_token() {
     let test_secret = "123456";
     temp_env::with_var("JWT_SECRET", Some(test_secret), || {
         let id = Uuid::new_v4();
-        let claim = TokenClaim::new(id, 123123, TokenHolderType::User, TokenType::Login, None);
+        let claim = TokenClaim::new(id, 123123, TokenType::UserAuth, None);
         let token = UserAuthToken::new(claim);
         let token_str = token.encode().unwrap();
         let mut validation = Validation::new(Algorithm::HS512);
@@ -134,7 +133,7 @@ fn should_get_valid_token() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let id = Uuid::new_v4();
     let exp = _before_values.now + 60 * 60 * 24;
-    let claim = TokenClaim::new(id, exp, TokenHolderType::User, TokenType::Login, None);
+    let claim = TokenClaim::new(id, exp, TokenType::UserAuth, None);
     let token = UserAuthToken::new(claim);
     let encoded = base64::encode(token.encode().unwrap());
     let request = Request::builder()
@@ -156,8 +155,7 @@ fn should_panic_encode_without_secret_in_envs() {
         let claim = TokenClaim::new(
             Uuid::new_v4(),
             123123123,
-            TokenHolderType::User,
-            TokenType::Login,
+            TokenType::UserAuth,
             None,
         );
         UserAuthToken::new(claim).encode().unwrap()
@@ -176,8 +174,7 @@ fn should_panic_on_encode_with_empty_secret_in_envs() {
         let claim = TokenClaim::new(
             Uuid::new_v4(),
             123123123,
-            TokenHolderType::User,
-            TokenType::Login,
+            TokenType::UserAuth,
             None,
         );
         let token = UserAuthToken::new(claim);
