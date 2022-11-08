@@ -1,4 +1,4 @@
-use crate::auth::{JwtToken, TokenClaim, TokenRole, TokenType};
+use crate::auth::{JwtToken, TokenClaim, TokenResult, TokenRole, TokenType};
 use crate::errors::Result;
 use derive_getters::Getters;
 use std::str;
@@ -24,18 +24,13 @@ impl JwtToken for HostAuthToken {
         self.id
     }
 
-    fn new(claim: TokenClaim) -> Self {
-        let data = claim.data.unwrap_or_default();
-        let def = &"service".to_string();
-        let role =
-            TokenRole::from_str(data.get("role").unwrap_or(def)).unwrap_or(TokenRole::Service);
-
-        Self {
+    fn try_new(claim: TokenClaim) -> TokenResult<Self> {
+        Ok(Self {
             id: claim.id,
             exp: claim.exp,
             token_type: TokenType::HostAuth,
-            role,
-        }
+            role: claim.role,
+        })
     }
 
     fn token_type(&self) -> TokenType {
@@ -47,6 +42,6 @@ impl FromStr for HostAuthToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        HostAuthToken::from_encoded::<HostAuthToken>(encoded, TokenType::HostAuth, false)
+        HostAuthToken::from_encoded(encoded, TokenType::HostAuth, false)
     }
 }

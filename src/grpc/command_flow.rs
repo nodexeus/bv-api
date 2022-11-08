@@ -65,7 +65,7 @@ mod tests {
     use std::future::Future;
     use std::sync::Arc;
 
-    use crate::auth::{JwtToken, TokenType, UserAuthToken};
+    use crate::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
     use crate::grpc::blockjoy::command_flow_client::CommandFlowClient;
     use crate::grpc::blockjoy::info_update::Info;
     use crate::grpc::blockjoy::{InfoUpdate, NodeInfo};
@@ -144,7 +144,9 @@ mod tests {
         let db = Arc::new(_before_values.await);
         let (serve_future, mut client) = server_and_client_stub(Arc::new(db.pool.clone())).await;
         let host = db.test_host().await;
-        let token = UserAuthToken::create_token_for::<Host>(&host, TokenType::HostAuth).unwrap();
+        let token =
+            UserAuthToken::create_token_for::<Host>(&host, TokenType::HostAuth, TokenRole::Service)
+                .unwrap();
 
         let request_future = async move {
             println!("creating request");

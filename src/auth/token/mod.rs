@@ -8,6 +8,7 @@ use jsonwebtoken::errors::Error as JwtError;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::str::Utf8Error;
 use std::{env::VarError, str::FromStr};
 use strum_macros::EnumIter;
@@ -47,16 +48,16 @@ pub enum TokenRole {
     PwdReset,
 }
 
-impl ToString for TokenRole {
-    fn to_string(&self) -> String {
+impl Display for TokenRole {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            TokenRole::Admin => "admin".into(),
-            TokenRole::Guest => "guest".into(),
-            TokenRole::Service => "service".into(),
-            TokenRole::User => "user".into(),
-            TokenRole::OrgMember => "org_member".into(),
-            TokenRole::OrgAdmin => "org_admin".into(),
-            TokenRole::PwdReset => "pwd_reset".into(),
+            TokenRole::Admin => write!(f, "admin"),
+            TokenRole::Guest => write!(f, "guest"),
+            TokenRole::Service => write!(f, "service"),
+            TokenRole::User => write!(f, "user"),
+            TokenRole::OrgMember => write!(f, "org_member"),
+            TokenRole::OrgAdmin => write!(f, "org_admin"),
+            TokenRole::PwdReset => write!(f, "pwd_reset"),
         }
     }
 }
@@ -94,6 +95,10 @@ pub enum TokenError {
     JwtDecoding(#[from] DecodeError),
     #[error("Provided key is invalid: {0:?}")]
     KeyError(#[from] KeyProviderError),
+    #[error("Refresh token can't be read: {0:?}")]
+    RefreshTokenError(#[from] anyhow::Error),
+    #[error("Invalid role in claim")]
+    RoleError,
 }
 
 /// The type of token we are dealing with. We have various different types of token and they convey
@@ -121,15 +126,15 @@ pub enum TokenType {
     RegistrationConfirmation,
 }
 
-impl ToString for TokenType {
-    fn to_string(&self) -> String {
+impl Display for TokenType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UserAuth => "user_auth".to_string(),
-            Self::HostAuth => "host_auth".to_string(),
-            Self::UserRefresh => "user_refresh".to_string(),
-            Self::HostRefresh => "host_refresh".to_string(),
-            Self::PwdReset => "pwd_reset".to_string(),
-            Self::RegistrationConfirmation => "registration_confirmation".to_string(),
+            Self::UserAuth => write!(f, "user_auth"),
+            Self::HostAuth => write!(f, "host_auth"),
+            Self::UserRefresh => write!(f, "user_refresh"),
+            Self::HostRefresh => write!(f, "host_refresh"),
+            Self::PwdReset => write!(f, "pwd_reset"),
+            Self::RegistrationConfirmation => write!(f, "registration_confirmation"),
         }
     }
 }
@@ -140,6 +145,7 @@ pub struct TokenClaim {
     id: Uuid,
     exp: i64,
     token_type: TokenType,
+    role: TokenRole,
     data: Option<HashMap<String, String>>,
 }
 
@@ -148,12 +154,14 @@ impl TokenClaim {
         id: Uuid,
         exp: i64,
         token_type: TokenType,
+        role: TokenRole,
         data: Option<HashMap<String, String>>,
     ) -> Self {
         Self {
             id,
             exp,
             token_type,
+            role,
             data,
         }
     }
@@ -165,7 +173,7 @@ pub trait JwtToken: Sized + serde::Serialize {
     fn get_expiration(&self) -> i64;
     fn get_id(&self) -> Uuid;
 
-    fn new(claim: TokenClaim) -> Self;
+    fn try_new(claim: TokenClaim) -> TokenResult<Self>;
 
     fn token_type(&self) -> TokenType;
 
@@ -194,10 +202,10 @@ pub trait JwtToken: Sized + serde::Serialize {
     /// Try to retrieve user for given token
     async fn try_get_user(&self, id: Uuid, db: &DbPool) -> ApiResult<User> {
         match self.token_type() {
-            TokenType::UserAuth => User::find_by_id(id, db).await,
-            TokenType::UserRefresh => User::find_by_id(id, db).await,
-            TokenType::RegistrationConfirmation => User::find_by_id(id, db).await,
-            TokenType::PwdReset => User::find_by_id(id, db).await,
+            TokenType::UserAuth
+            | TokenType::UserRefresh
+            | TokenType::RegistrationConfirmation
+            | TokenType::PwdReset => User::find_by_id(id, db).await,
             _ => Err(ApiError::UnexpectedError(anyhow!(
                 "Cannot retrieve user from token of type {}",
                 self.token_type().to_string()
@@ -208,8 +216,9 @@ pub trait JwtToken: Sized + serde::Serialize {
     /// Try to retrieve host for given token
     async fn try_get_host(&self, db: &DbPool) -> ApiResult<Host> {
         match self.token_type() {
-            TokenType::HostAuth => Host::find_by_id(self.get_id(), db).await,
-            TokenType::HostRefresh => Host::find_by_id(self.get_id(), db).await,
+            TokenType::HostAuth | TokenType::HostRefresh => {
+                Host::find_by_id(self.get_id(), db).await
+            }
             _ => Err(ApiError::UnexpectedError(anyhow!(
                 "Cannot retrieve host from token of type {}",
                 self.token_type().to_string()
@@ -218,15 +227,20 @@ pub trait JwtToken: Sized + serde::Serialize {
     }
 
     /// Create token for given resource
-    fn create_token_for<T: Identifiable>(resource: &T, token_type: TokenType) -> TokenResult<Self> {
+    fn create_token_for<T: Identifiable>(
+        resource: &T,
+        token_type: TokenType,
+        role: TokenRole,
+    ) -> TokenResult<Self> {
         let claim = TokenClaim::new(
             resource.get_id(),
             ExpirationProvider::expiration(token_type),
             token_type,
+            role,
             None,
         );
 
-        Ok(Self::new(claim))
+        Self::try_new(claim)
     }
 
     /// Returns `true` if token has expired
@@ -256,7 +270,6 @@ pub trait JwtToken: Sized + serde::Serialize {
             Ok(token) => Ok(token.claims),
             Err(e) => {
                 tracing::error!("Error decoding token: {e:?}");
-                println!("Error decoding token: {e:?}");
                 Err(TokenError::EnDeCoding(e))
             }
         }

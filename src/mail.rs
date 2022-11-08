@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use sqlx::PgPool;
 
-use crate::auth::{JwtToken, PwdResetToken, TokenType};
+use crate::auth::{JwtToken, PwdResetToken, TokenRole, TokenType};
 use crate::{errors, models};
 use std::collections::HashMap;
 
@@ -43,7 +43,7 @@ impl MailClient {
         let templates = toml::from_str(TEMPLATES)
             .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
         let token: PwdResetToken =
-            JwtToken::create_token_for::<models::User>(user, TokenType::PwdReset)?;
+            JwtToken::create_token_for::<models::User>(user, TokenType::PwdReset, TokenRole::User)?;
         let mut context = HashMap::new();
         context.insert("token".to_owned(), token.encode()?);
         self.send_mail(&templates, user, Some(context)).await

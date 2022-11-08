@@ -1,4 +1,4 @@
-use crate::auth::{FindableById, JwtToken, TokenType, UserAuthToken, UserRefreshToken};
+use crate::auth::{FindableById, JwtToken, TokenRole, TokenType, UserAuthToken, UserRefreshToken};
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
@@ -7,6 +7,7 @@ use crate::grpc::blockjoy_ui::{
 use crate::mail::MailClient;
 use crate::models::User;
 use crate::server::DbPool;
+use tonic::metadata::errors::InvalidMetadataValue;
 use tonic::{Request, Response, Status};
 
 use super::blockjoy_ui::{
@@ -33,8 +34,13 @@ impl AuthenticationService for AuthenticationServiceImpl {
     ) -> Result<Response<LoginUserResponse>, Status> {
         let inner = request.into_inner();
         let user = User::login(inner.clone(), &self.db).await?;
-        let refresh_token = UserRefreshToken::create_token_for::<User>(&user, TokenType::UserAuth)?;
-        let auth_token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth)?;
+        let refresh_token = UserRefreshToken::create_token_for::<User>(
+            &user,
+            TokenType::UserAuth,
+            TokenRole::User,
+        )?;
+        let auth_token =
+            UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?;
 
         let response = LoginUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
@@ -51,8 +57,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
                 refresh_token.encode()?,
                 // exp,
             )
-            .parse()
-            .unwrap(),
+            .parse().map_err(|e: InvalidMetadataValue| Status::internal(e.to_string()))?
         );
 
         Ok(response)

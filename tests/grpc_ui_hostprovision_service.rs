@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{JwtToken, TokenType, UserAuthToken};
+use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::host_provision_service_client::HostProvisionServiceClient;
 use api::grpc::blockjoy_ui::{
     CreateHostProvisionRequest, GetHostProvisionRequest, HostProvision as GrpcHostProvision,
@@ -30,7 +30,9 @@ async fn responds_not_found_without_valid_id_for_get() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = GetHostProvisionRequest {
         meta: Some(request_meta),
         id: Some("foo-bar1".to_string()),
@@ -76,7 +78,9 @@ async fn responds_ok_with_valid_id_for_get() {
         .unwrap();
     tx.commit().await.unwrap();
 
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let req = HostProvisionRequest {
         org_id: org_id.get::<Uuid, usize>(0),
         nodes: None,
@@ -122,7 +126,9 @@ async fn responds_error_with_invalid_provision_for_create() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = CreateHostProvisionRequest {
         meta: Some(request_meta),
         host_provision: None,
@@ -168,7 +174,9 @@ async fn responds_ok_with_valid_provision_for_create() {
         .unwrap();
     tx.commit().await.unwrap();
 
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let provision = GrpcHostProvision {
         org_id: org_id.get::<Uuid, usize>(0).to_string(),
         ip_gateway: String::from("192.168.0.1"),

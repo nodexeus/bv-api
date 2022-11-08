@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{JwtToken, TokenType, UserAuthToken};
+use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::blockchain_service_client::BlockchainServiceClient;
 use api::grpc::blockjoy_ui::{GetBlockchainRequest, ListBlockchainsRequest, RequestMeta};
 use api::models::User;
@@ -15,7 +15,9 @@ use uuid::Uuid;
 async fn with_auth<T>(inner: T, db: &api::TestDb) -> Request<T> {
     let mut request = Request::new(inner);
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     request.metadata_mut().insert(
         "authorization",
         format!("Bearer {}", token.to_base64().unwrap())

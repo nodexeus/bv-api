@@ -69,16 +69,18 @@ impl User {
                     token.get_id(),
                     ExpirationProvider::expiration(TokenType::UserAuth),
                     TokenType::UserAuth,
+                    TokenRole::User,
                     None,
                 );
-                let token = UserAuthToken::new(claim);
+                let token = UserAuthToken::try_new(claim)?;
                 let claim = TokenClaim::new(
                     token.get_id(),
                     ExpirationProvider::expiration(TokenType::UserRefresh),
                     TokenType::UserRefresh,
+                    TokenRole::User,
                     None,
                 );
-                let refresh_token = UserRefreshToken::new(claim);
+                let refresh_token = UserRefreshToken::try_new(claim)?;
                 let fields = UserSelectiveUpdate {
                     refresh_token: Some(refresh_token.encode()?),
                     ..Default::default()
@@ -204,18 +206,11 @@ impl User {
     }
 
     pub async fn find_by_email(email: &str, db: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>(r#"SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1"#)
+        sqlx::query_as(r#"SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1"#)
             .bind(email)
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
-        /*
-        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1")
-            .bind(email)
-            .fetch_one(db)
-            .await
-            .map_err(ApiError::from)
-         */
     }
 
     pub async fn find_by_refresh(refresh: &str, db: &PgPool) -> Result<Self> {

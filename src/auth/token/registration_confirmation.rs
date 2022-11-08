@@ -1,4 +1,4 @@
-use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenType};
+use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenRole, TokenType};
 use crate::models::BlacklistToken;
 use crate::server::DbPool;
 use std::str::FromStr;
@@ -10,6 +10,7 @@ pub struct RegistrationConfirmationToken {
     id: Uuid,
     exp: i64,
     token_type: TokenType,
+    role: TokenRole,
 }
 
 impl JwtToken for RegistrationConfirmationToken {
@@ -21,12 +22,13 @@ impl JwtToken for RegistrationConfirmationToken {
         self.id
     }
 
-    fn new(claim: TokenClaim) -> Self {
-        Self {
+    fn try_new(claim: TokenClaim) -> TokenResult<Self> {
+        Ok(Self {
             id: claim.id,
             exp: claim.exp,
             token_type: TokenType::RegistrationConfirmation,
-        }
+            role: claim.role,
+        })
     }
 
     fn token_type(&self) -> TokenType {
@@ -51,7 +53,7 @@ impl FromStr for RegistrationConfirmationToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        RegistrationConfirmationToken::from_encoded::<RegistrationConfirmationToken>(
+        RegistrationConfirmationToken::from_encoded(
             encoded,
             TokenType::RegistrationConfirmation,
             true,

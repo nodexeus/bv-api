@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{JwtToken, TokenType, UserAuthToken};
+use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::command_service_client::CommandServiceClient;
 use api::grpc::blockjoy_ui::{CommandRequest as GrpcCommandRequest, RequestMeta};
 use api::models::User;
@@ -22,7 +22,7 @@ macro_rules! test_response_ok {
         };
         let host = $db.test_host().await;
         let user = $db.admin_user().await;
-        let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+        let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User).unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
             id: host.id.to_string(),
@@ -57,7 +57,7 @@ macro_rules! test_response_internal {
         };
         let host = $db.test_host().await;
         let user = $db.admin_user().await;
-        let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+        let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User).unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
             id: host.id.to_string(),
@@ -91,7 +91,7 @@ macro_rules! test_response_invalid_argument {
             pagination: None,
         };
         let user = $db.admin_user().await;
-        let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+        let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User).unwrap();
         let inner = GrpcCommandRequest {
             meta: Some(request_meta),
             id: "".to_string(),

@@ -28,16 +28,18 @@ impl ExpirationProvider {
     }
 
     fn get_expiration_from_dotenv(key: &str) -> ApiResult<i64> {
-        Ok((Utc::now()
-            + Duration::minutes(
-                dotenv::var(key)
-                    .map_err(ApiError::EnvError)?
-                    .parse::<i64>()
-                    .map_err(|e| {
-                        ApiError::UnexpectedError(anyhow!("Couldn't parse env var value: {e:?}"))
-                    })?,
-            ))
-        .timestamp())
+        let now = Utc::now();
+        let duration = Duration::minutes(
+            dotenv::var(key)
+                .map_err(ApiError::EnvError)?
+                .parse::<i64>()
+                .map_err(|e| {
+                    ApiError::UnexpectedError(anyhow!("Couldn't parse env var value: {e:?}"))
+                })?,
+        );
+        let expiration = (now + duration).timestamp();
+
+        Ok(expiration)
     }
 }
 

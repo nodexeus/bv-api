@@ -29,8 +29,8 @@ fn should_encode_token() -> anyhow::Result<()> {
     let test_secret = "123456";
     temp_env::with_var("JWT_SECRET", Some(test_secret), || {
         let id = Uuid::new_v4();
-        let claim = TokenClaim::new(id, 123123, TokenType::UserAuth, None);
-        let token = UserAuthToken::new(claim);
+        let claim = TokenClaim::new(id, 123123, TokenType::UserAuth, TokenRole::User, None);
+        let token = UserAuthToken::try_new(claim)?;
         let header = Header::new(Algorithm::HS512);
 
         match jsonwebtoken::encode(
@@ -52,8 +52,14 @@ fn should_decode_valid_token() -> anyhow::Result<()> {
     let test_secret = "123456";
     temp_env::with_var("JWT_SECRET", Some(test_secret), || {
         let id = Uuid::new_v4();
-        let claim = TokenClaim::new(id, _before_values.now, TokenType::UserAuth, None);
-        let token = UserAuthToken::new(claim);
+        let claim = TokenClaim::new(
+            id,
+            _before_values.now,
+            TokenType::UserAuth,
+            TokenRole::User,
+            None,
+        );
+        let token = UserAuthToken::try_new(claim)?;
         let token_str = token.encode().unwrap();
         let mut validation = Validation::new(Algorithm::HS512);
 
@@ -78,8 +84,8 @@ fn should_panic_on_decode_expired_token() {
     let test_secret = "123456";
     temp_env::with_var("JWT_SECRET", Some(test_secret), || {
         let id = Uuid::new_v4();
-        let claim = TokenClaim::new(id, 123123, TokenType::UserAuth, None);
-        let token = UserAuthToken::new(claim);
+        let claim = TokenClaim::new(id, 123123, TokenType::UserAuth, TokenRole::User, None);
+        let token = UserAuthToken::try_new(claim).unwrap();
         let token_str = token.encode().unwrap();
         let mut validation = Validation::new(Algorithm::HS512);
 
@@ -131,9 +137,10 @@ fn should_get_valid_token() -> anyhow::Result<()> {
         id,
         ExpirationProvider::expiration(TokenType::UserAuth),
         TokenType::UserAuth,
+        TokenRole::User,
         None,
     );
-    let token = UserAuthToken::new(claim);
+    let token = UserAuthToken::try_new(claim)?;
     let encoded = base64::encode(token.encode().unwrap());
     let request = Request::builder()
         .header(AUTHORIZATION, format!("Bearer {}", encoded))
@@ -155,8 +162,14 @@ fn should_not_decode_without_secret_in_envs() {
 #[test]
 fn should_panic_on_encode_with_empty_secret_in_envs() {
     temp_env::with_var("JWT_SECRET", Some(""), || {
-        let claim = TokenClaim::new(Uuid::new_v4(), 123123123, TokenType::UserAuth, None);
-        let token = UserAuthToken::new(claim);
+        let claim = TokenClaim::new(
+            Uuid::new_v4(),
+            123123123,
+            TokenType::UserAuth,
+            TokenRole::User,
+            None,
+        );
+        let token = UserAuthToken::try_new(claim).unwrap();
 
         assert!(token.encode().is_err());
     });

@@ -1,4 +1,4 @@
-use crate::auth::{JwtToken, TokenClaim, TokenRole, TokenType};
+use crate::auth::{JwtToken, TokenClaim, TokenResult, TokenRole, TokenType};
 use crate::errors::Result;
 use derive_getters::Getters;
 use std::str;
@@ -24,17 +24,13 @@ impl JwtToken for UserAuthToken {
         self.id
     }
 
-    fn new(claim: TokenClaim) -> Self {
-        let data = claim.data.unwrap_or_default();
-        let def = &"user".to_string();
-        let role = TokenRole::from_str(data.get("role").unwrap_or(def)).unwrap_or(TokenRole::User);
-
-        Self {
+    fn try_new(claim: TokenClaim) -> TokenResult<Self> {
+        Ok(Self {
             id: claim.id,
             exp: claim.exp,
             token_type: TokenType::UserAuth,
-            role,
-        }
+            role: claim.role,
+        })
     }
 
     fn token_type(&self) -> TokenType {
@@ -46,7 +42,7 @@ impl FromStr for UserAuthToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        UserAuthToken::from_encoded::<UserAuthToken>(encoded, TokenType::UserAuth, true)
+        UserAuthToken::from_encoded(encoded, TokenType::UserAuth, true)
     }
 }
 
@@ -54,27 +50,27 @@ impl FromStr for UserAuthToken {
 mod tests {
     use super::TokenClaim;
     use super::UserAuthToken;
-    use crate::auth::{JwtToken, TokenType};
+    use crate::auth::{JwtToken, TokenRole, TokenType};
     use chrono::Utc;
     use uuid::Uuid;
 
     #[test]
-    fn returns_true_for_expired_token() {
+    fn returns_true_for_expired_token() -> anyhow::Result<()> {
         let id = Uuid::new_v4();
         let exp = (Utc::now().timestamp() - 60000_i64) as i64;
-        let claim = TokenClaim::new(id, exp, TokenType::UserAuth, None);
-        let token = UserAuthToken::new(claim);
+        let claim = TokenClaim::new(id, exp, TokenType::UserAuth, TokenRole::User, None);
+        let token = UserAuthToken::try_new(claim)?;
 
-        assert!(token.has_expired());
+        Ok(assert!(token.has_expired()))
     }
 
     #[test]
-    fn returns_false_for_not_expired_token() {
+    fn returns_false_for_not_expired_token() -> anyhow::Result<()> {
         let id = Uuid::new_v4();
         let exp = Utc::now().timestamp() + 60000;
-        let claim = TokenClaim::new(id, exp, TokenType::UserAuth, None);
-        let token = UserAuthToken::new(claim);
+        let claim = TokenClaim::new(id, exp, TokenType::UserAuth, TokenRole::User, None);
+        let token = UserAuthToken::try_new(claim)?;
 
-        assert!(!token.has_expired());
+        Ok(assert!(!token.has_expired()))
     }
 }

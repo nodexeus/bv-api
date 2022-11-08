@@ -1,5 +1,4 @@
 use crate::auth::TokenError;
-use anyhow::anyhow;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -48,6 +47,9 @@ pub enum ApiError {
 
     #[error("Missing or invalid env param value: {0}")]
     EnvError(dotenv::Error),
+
+    #[error("Error handling token")]
+    TokenError(TokenError),
 }
 
 impl ApiError {
@@ -104,7 +106,7 @@ impl From<TokenError> for Status {
 
 impl From<TokenError> for ApiError {
     fn from(e: TokenError) -> Self {
-        ApiError::UnexpectedError(anyhow!("Token encode error {e:?}"))
+        ApiError::TokenError(e)
     }
 }
 

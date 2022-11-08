@@ -1,4 +1,4 @@
-use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenType};
+use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenRole, TokenType};
 use crate::errors::Result;
 use crate::models::BlacklistToken;
 use crate::server::DbPool;
@@ -12,6 +12,7 @@ pub struct PwdResetToken {
     id: Uuid,
     exp: i64,
     token_type: TokenType,
+    role: TokenRole,
 }
 
 impl JwtToken for PwdResetToken {
@@ -23,12 +24,13 @@ impl JwtToken for PwdResetToken {
         self.id
     }
 
-    fn new(claim: TokenClaim) -> Self {
-        Self {
+    fn try_new(claim: TokenClaim) -> TokenResult<Self> {
+        Ok(Self {
             id: claim.id,
             exp: claim.exp,
             token_type: TokenType::PwdReset,
-        }
+            role: claim.role,
+        })
     }
 
     fn token_type(&self) -> TokenType {
@@ -53,6 +55,6 @@ impl FromStr for PwdResetToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        PwdResetToken::from_encoded::<PwdResetToken>(encoded, TokenType::PwdReset, true)
+        PwdResetToken::from_encoded(encoded, TokenType::PwdReset, true)
     }
 }

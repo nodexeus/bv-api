@@ -293,10 +293,11 @@ mod test {
                 id,
                 ExpirationProvider::expiration(TokenType::UserRefresh),
                 TokenType::UserRefresh,
+                TokenRole::User,
                 None,
             );
 
-            UserRefreshToken::new(claim)
+            UserRefreshToken::try_new(claim).unwrap()
         }
 
         pub fn host_refresh_token(&self, id: Uuid) -> HostRefreshToken {
@@ -304,10 +305,11 @@ mod test {
                 id,
                 ExpirationProvider::expiration(TokenType::HostRefresh),
                 TokenType::HostRefresh,
+                TokenRole::Service,
                 None,
             );
 
-            HostRefreshToken::new(claim)
+            HostRefreshToken::try_new(claim).unwrap()
         }
     }
 }

@@ -31,58 +31,25 @@ pub struct KeyProvider;
 impl KeyProvider {
     pub fn get_secret(token_type: TokenType) -> KeyProviderResult {
         let key = match token_type {
-            TokenType::UserAuth => Self::get_user_auth_secret(),
-            TokenType::UserRefresh => Self::get_user_refresh_secret(),
-            TokenType::HostAuth => Self::get_host_auth_secret(),
-            TokenType::HostRefresh => Self::get_host_refresh_secret(),
-            TokenType::RegistrationConfirmation => Self::get_registration_confirmation_secret(),
-            TokenType::PwdReset => Self::get_pwd_reset_secret(),
+            TokenType::UserAuth => Self::get_env_value("JWT_SECRET"),
+            TokenType::UserRefresh => Self::get_env_value("REFRESH_SECRET"),
+            TokenType::HostAuth => Self::get_env_value("JWT_SECRET"),
+            TokenType::HostRefresh => Self::get_env_value("REFRESH_SECRET"),
+            TokenType::RegistrationConfirmation => Self::get_env_value("CONFIRMATION_SECRET"),
+            TokenType::PwdReset => Self::get_env_value("PWD_RESET_SECRET"),
         };
 
-        match key {
-            Ok(key) => {
-                if key.value.is_empty() {
-                    Err(KeyProviderError::Empty)
-                } else {
-                    Ok(key)
-                }
-            }
-            Err(e) => Err(e),
+        let key = key?;
+
+        if key.value.is_empty() {
+            Err(KeyProviderError::Empty)
+        } else {
+            Ok(key)
         }
     }
 
-    fn get_user_auth_secret() -> KeyProviderResult {
-        std::env::var("JWT_SECRET")
-            .map(KeyValue::new)
-            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
-    }
-
-    fn get_host_auth_secret() -> KeyProviderResult {
-        std::env::var("JWT_SECRET")
-            .map(KeyValue::new)
-            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
-    }
-
-    fn get_pwd_reset_secret() -> KeyProviderResult {
-        std::env::var("PWD_RESET_SECRET")
-            .map(KeyValue::new)
-            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
-    }
-
-    fn get_registration_confirmation_secret() -> KeyProviderResult {
-        std::env::var("CONFIRMATION_SECRET")
-            .map(KeyValue::new)
-            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
-    }
-
-    fn get_user_refresh_secret() -> KeyProviderResult {
-        std::env::var("REFRESH_SECRET")
-            .map(KeyValue::new)
-            .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
-    }
-
-    fn get_host_refresh_secret() -> KeyProviderResult {
-        std::env::var("REFRESH_SECRET")
+    fn get_env_value(name: &str) -> KeyProviderResult {
+        std::env::var(name)
             .map(KeyValue::new)
             .map_err(|e| KeyProviderError::UnexpectedError(anyhow!(e)))
     }

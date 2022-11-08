@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{HostAuthToken, JwtToken, TokenType, UserAuthToken};
+use api::auth::{HostAuthToken, JwtToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
 use api::grpc::blockjoy_ui::{
     get_hosts_request, CreateHostRequest, DeleteHostRequest, GetHostsRequest, Host as GrpcHost,
@@ -27,7 +27,9 @@ async fn responds_invalid_argument_without_any_for_get() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
         param: None,
@@ -65,7 +67,9 @@ async fn responds_ok_with_id_for_get() {
     };
     let user = db.admin_user().await;
     let host_id = db.test_host().await.id.to_string();
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
         param: Some(get_hosts_request::Param::Id(host_id)),
@@ -110,7 +114,9 @@ async fn responds_ok_with_org_id_for_get() {
     }
 
     let org_id = host.org_id.unwrap().to_string();
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
         param: Some(get_hosts_request::Param::OrgId(org_id)),
@@ -155,7 +161,9 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
     let orgs = Org::find_all_by_user(user.id, &db.pool).await.unwrap();
     let org = orgs.first().unwrap();
     let org_id = org.id.to_string();
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
         param: Some(get_hosts_request::Param::OrgId(org_id)),
@@ -225,8 +233,12 @@ async fn responds_ok_with_token_for_get() {
     };
     let user = db.admin_user().await;
     let host = db.test_host().await;
-    let host_token = HostAuthToken::create_token_for::<Host>(&host, TokenType::HostAuth).unwrap();
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let host_token =
+        HostAuthToken::create_token_for::<Host>(&host, TokenType::HostAuth, TokenRole::Service)
+            .unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = GetHostsRequest {
         meta: Some(request_meta),
         param: Some(get_hosts_request::Param::Token(
@@ -266,7 +278,9 @@ async fn responds_ok_with_id_for_delete() {
     };
     let user = db.admin_user().await;
     let host = db.test_host().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = DeleteHostRequest {
         meta: Some(request_meta),
         id: host.id.to_string(),
@@ -304,7 +318,9 @@ async fn responds_ok_with_host_for_update() {
     };
     let user = db.admin_user().await;
     let host = db.test_host().await.try_into().unwrap();
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = UpdateHostRequest {
         meta: Some(request_meta),
         host: Some(host),
@@ -349,7 +365,9 @@ async fn responds_ok_with_host_for_create() {
         ..Default::default()
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = CreateHostRequest {
         meta: Some(request_meta),
         host: Some(host),

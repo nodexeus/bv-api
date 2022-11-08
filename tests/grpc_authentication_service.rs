@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{JwtToken, TokenType, UserAuthToken};
+use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
 use api::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, RefreshTokenRequest, RequestMeta, UpdateUiPasswordRequest,
@@ -58,7 +58,9 @@ async fn responds_error_with_invalid_credentials_for_login() {
 async fn responds_ok_with_valid_credentials_for_refresh() {
     let db = _before_values.await;
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: Some(ApiToken {
@@ -97,7 +99,9 @@ async fn responds_unauthenticated_with_invalid_credentials_for_refresh() {
     let db = _before_values.await;
     let user = db.admin_user().await;
     let invalid_token = base64_encode("asdf.asdfasdfasdfasdfasdf.asfasdfasdfasdfaf");
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: Some(ApiToken {
@@ -130,7 +134,9 @@ async fn responds_ok_with_valid_pwds_for_update_ui_pwd() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = UpdateUiPasswordRequest {
         meta: Some(request_meta),
         new_pwd: "hugo-boss".to_string(),
@@ -169,7 +175,9 @@ async fn responds_unauthenticated_with_invalid_old_pwd_for_update_ui_pwd() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = UpdateUiPasswordRequest {
         meta: Some(request_meta),
         new_pwd: "hugo-boss".to_string(),
@@ -208,7 +216,9 @@ async fn responds_invalid_argument_with_invalid_pwd_confirmation_for_update_ui_p
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = UpdateUiPasswordRequest {
         meta: Some(request_meta),
         new_pwd: "hugo-boss".to_string(),

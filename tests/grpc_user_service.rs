@@ -2,7 +2,7 @@
 mod setup;
 
 use crate::setup::setup;
-use api::auth::{JwtToken, TokenType, UserAuthToken};
+use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::user_service_client::UserServiceClient;
 use api::grpc::blockjoy_ui::{
     CreateUserRequest, GetUserRequest, RequestMeta, UpdateUserRequest, User as GrpcUser,
@@ -25,7 +25,9 @@ async fn responds_ok_with_valid_token_for_get() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = GetUserRequest {
         meta: Some(request_meta),
     };
@@ -114,7 +116,9 @@ async fn responds_error_with_existing_email_for_create() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let grpc_user = GrpcUser {
         id: None,
         email: Some(user.email),
@@ -152,7 +156,9 @@ async fn responds_error_with_different_pwds_for_create() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let grpc_user = GrpcUser {
         id: None,
         email: Some("hugo@boss.com".to_string()),
@@ -190,7 +196,9 @@ async fn responds_permission_denied_with_diff_users_for_update() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let grpc_user = GrpcUser {
         id: Some(Uuid::new_v4().to_string()),
         email: Some("hugo@boss.com".to_string()),
@@ -227,7 +235,9 @@ async fn responds_ok_with_equal_users_for_update() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth).unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let grpc_user = GrpcUser {
         id: Some(user.id.to_string()),
         email: None,
