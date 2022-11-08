@@ -1,19 +1,20 @@
-use crate::auth::{FindableById, TokenIdentifyable};
+use crate::auth::{FindableById, JwtToken, TokenRole, TokenType, UserAuthToken, UserRefreshToken};
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
     UpdateUiPasswordRequest, UpdateUiPasswordResponse,
 };
 use crate::mail::MailClient;
-use crate::models::{Token, User};
+use crate::models::User;
 use crate::server::DbPool;
+use tonic::metadata::errors::InvalidMetadataValue;
 use tonic::{Request, Response, Status};
 
 use super::blockjoy_ui::{
     ResetPasswordRequest, ResetPasswordResponse, ResponseMeta, UpdatePasswordRequest,
     UpdatePasswordResponse,
 };
-use super::helpers::{required, try_get_token};
+use super::helpers::try_get_token;
 
 pub struct AuthenticationServiceImpl {
     db: DbPool,
@@ -33,41 +34,40 @@ impl AuthenticationService for AuthenticationServiceImpl {
     ) -> Result<Response<LoginUserResponse>, Status> {
         let inner = request.into_inner();
         let user = User::login(inner.clone(), &self.db).await?;
-        let db_token = user.get_token(&self.db).await?;
-        let token = ApiToken {
-            value: db_token.token,
-        };
+        let refresh_token = UserRefreshToken::create_token_for::<User>(
+            &user,
+            TokenType::UserAuth,
+            TokenRole::User,
+        )?;
+        let auth_token =
+            UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?;
+
         let response = LoginUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            token: Some(token),
+            token: Some(ApiToken {
+                value: auth_token.to_base64()?,
+            }),
         };
+        let mut response = Response::new(response);
 
-        Ok(Response::new(response))
+        response.metadata_mut().insert(
+            "set-cookie",
+            format!(
+                "refresh={}; path=/; expires=Fri, 05 Nov 2022 07:19:40 GMT; HttpOnly; SameSite=None; Secure",
+                refresh_token.encode()?,
+                // exp,
+            )
+            .parse().map_err(|e: InvalidMetadataValue| Status::internal(e.to_string()))?
+        );
+
+        Ok(response)
     }
 
     async fn refresh(
         &self,
-        request: Request<RefreshTokenRequest>,
+        _request: Request<RefreshTokenRequest>,
     ) -> Result<Response<RefreshTokenResponse>, Status> {
-        let db_token = try_get_token(&request)?.token;
-        let inner = request.into_inner();
-        let meta = inner.meta.as_ref().ok_or_else(required("meta"))?;
-        let req_token = meta.token.as_ref().ok_or_else(required("meta.token"))?;
-        let req_token = req_token.value.as_str();
-        let request_id = meta.id.clone();
-
-        if db_token == req_token {
-            let new_token = ApiToken {
-                value: Token::refresh(&db_token, &self.db).await?.token,
-            };
-            let response = RefreshTokenResponse {
-                meta: Some(ResponseMeta::new(request_id.unwrap_or_default())),
-                token: Some(new_token),
-            };
-            Ok(Response::new(response))
-        } else {
-            Err(Status::permission_denied("Not allowed to modify token"))
-        }
+        Err(Status::unavailable("Moved to HTTP"))
     }
 
     /// This endpoint triggers the sending of the reset-password email. The actual resetting is
@@ -95,8 +95,11 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<UpdatePasswordRequest>,
     ) -> Result<Response<UpdatePasswordResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let encoded = token
+            .encode()
+            .map_err(|e| Status::internal(format!("Token encode error {e:?}")))?;
+        let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
         let cur_user = User::find_by_id(user_id, &self.db).await?;
         let request = request.into_inner();
         let _cur_user = cur_user
@@ -105,9 +108,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let meta = ResponseMeta::from_meta(request.meta);
         let response = UpdatePasswordResponse {
             meta: Some(meta),
-            token: Some(ApiToken {
-                value: db_token.token,
-            }),
+            token: Some(ApiToken { value: encoded }),
         };
 
         // Send notification mail
@@ -120,9 +121,12 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<UpdateUiPasswordRequest>,
     ) -> Result<Response<UpdateUiPasswordResponse>, Status> {
-        let db_token = try_get_token(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user = token.try_get_user(*token.id(), &self.db).await?;
+        let encoded = token
+            .encode()
+            .map_err(|e| Status::internal(format!("Token encode error {e:?}")))?;
         let inner = request.into_inner();
-        let user = User::find_by_id(db_token.try_user_id()?, &self.db).await?;
 
         match user.verify_password(inner.old_pwd.as_str()) {
             Ok(_) => {
@@ -132,9 +136,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
 
                     let response = UpdateUiPasswordResponse {
                         meta: None,
-                        token: Some(ApiToken {
-                            value: db_token.token,
-                        }),
+                        token: Some(ApiToken { value: encoded }),
                     };
 
                     // Send notification mail

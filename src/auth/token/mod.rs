@@ -1,22 +1,80 @@
+use anyhow::anyhow;
 use axum::http::Request as HttpRequest;
 use base64::DecodeError;
+use chrono::Utc;
 use http::header::AUTHORIZATION;
 use jsonwebtoken as jwt;
 use jsonwebtoken::errors::Error as JwtError;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::str::Utf8Error;
 use std::{env::VarError, str::FromStr};
+use strum_macros::EnumIter;
 use thiserror::Error;
 use uuid::Uuid;
 
-mod auth;
+mod host_auth;
+mod host_refresh;
 mod pwd_reset;
-pub use {auth::AuthToken, pwd_reset::PwdResetToken};
+mod registration_confirmation;
+mod user_auth;
+mod user_refresh;
+
+use crate::auth::expiration_provider::ExpirationProvider;
+use crate::auth::key_provider::{KeyProvider, KeyProviderError};
+use crate::auth::{FindableById, Identifiable};
+use crate::errors::{ApiError, Result as ApiResult};
+use crate::models::{Host, User};
+use crate::server::DbPool;
+pub use {
+    host_auth::HostAuthToken, host_refresh::HostRefreshToken, pwd_reset::PwdResetToken,
+    registration_confirmation::RegistrationConfirmationToken, user_auth::UserAuthToken,
+    user_refresh::UserRefreshToken,
+};
 
 pub type TokenResult<T> = Result<T, TokenError>;
 
-pub trait Identifier {
-    fn get_id(&self) -> Uuid;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TokenRole {
+    Admin,
+    Guest,
+    Service,
+    User,
+    OrgMember,
+    OrgAdmin,
+    PwdReset,
+}
+
+impl Display for TokenRole {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenRole::Admin => write!(f, "admin"),
+            TokenRole::Guest => write!(f, "guest"),
+            TokenRole::Service => write!(f, "service"),
+            TokenRole::User => write!(f, "user"),
+            TokenRole::OrgMember => write!(f, "org_member"),
+            TokenRole::OrgAdmin => write!(f, "org_admin"),
+            TokenRole::PwdReset => write!(f, "pwd_reset"),
+        }
+    }
+}
+
+impl FromStr for TokenRole {
+    type Err = ApiError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "user" => Ok(TokenRole::User),
+            "service" => Ok(TokenRole::Service),
+            "guest" => Ok(TokenRole::Guest),
+            "admin" => Ok(TokenRole::Admin),
+            "pwd_reset" => Ok(TokenRole::PwdReset),
+            _ => Err(ApiError::UnexpectedError(anyhow!("Unknown role"))),
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -35,54 +93,97 @@ pub enum TokenError {
     Utf8(#[from] Utf8Error),
     #[error("JWT decoding error: {0:?}")]
     JwtDecoding(#[from] DecodeError),
+    #[error("Provided key is invalid: {0:?}")]
+    KeyError(#[from] KeyProviderError),
+    #[error("Refresh token can't be read: {0:?}")]
+    RefreshTokenError(#[from] anyhow::Error),
+    #[error("Invalid role in claim")]
+    RoleError,
 }
 
 /// The type of token we are dealing with. We have various different types of token and they convey
 /// various different permissions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, EnumIter)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "token_type", rename_all = "snake_case")]
 pub enum TokenType {
     /// This is a "normal" login token obtained by sending the login credentials to
     /// `AuthenticationService.Login`.
-    Login,
+    UserAuth,
+    /// This is an auth token obtained by successfully claiming a HostProvision by sending the OTP to
+    /// `HostService.Provision`.
+    HostAuth,
     /// This is a dedicated refresh token. It can be used after the login token has expired to
     /// obtain a new refresh and login token pair.
-    Refresh,
+    UserRefresh,
+    /// This is a dedicated refresh token. It can be used after the login token has expired to
+    /// obtain a new refresh and login token pair.
+    HostRefresh,
     /// This is a password reset token. It is issued as a part of the password forgot/reset email
     /// and may be used _only_ to reset the user's password.
     PwdReset,
+    /// This is the token used for confirming a new users registration
+    RegistrationConfirmation,
 }
 
-/// The type of entity that is granted some permission through this token.
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum TokenHolderType {
-    /// This means that the token authenticates a host machine.
-    Host,
-    /// This means that the token authenticates a user of our web console.
-    User,
-}
-
-impl TokenHolderType {
-    pub fn id_field(&self) -> &'static str {
+impl Display for TokenType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::User => "user_id",
-            Self::Host => "host_id",
+            Self::UserAuth => write!(f, "user_auth"),
+            Self::HostAuth => write!(f, "host_auth"),
+            Self::UserRefresh => write!(f, "user_refresh"),
+            Self::HostRefresh => write!(f, "host_refresh"),
+            Self::PwdReset => write!(f, "pwd_reset"),
+            Self::RegistrationConfirmation => write!(f, "registration_confirmation"),
         }
     }
 }
 
-pub trait JwtToken: Sized + serde::Serialize {
-    fn new(id: Uuid, exp: i64, holder_type: TokenHolderType) -> Self;
+/// The claims of the tokens. Each claim is a key-value pair
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TokenClaim {
+    id: Uuid,
+    exp: i64,
+    token_type: TokenType,
+    role: TokenRole,
+    data: Option<HashMap<String, String>>,
+}
 
-    fn token_holder(&self) -> TokenHolderType;
+impl TokenClaim {
+    pub fn new(
+        id: Uuid,
+        exp: i64,
+        token_type: TokenType,
+        role: TokenRole,
+        data: Option<HashMap<String, String>>,
+    ) -> Self {
+        Self {
+            id,
+            exp,
+            token_type,
+            role,
+            data,
+        }
+    }
+}
+
+#[tonic::async_trait]
+pub trait JwtToken: Sized + serde::Serialize {
+    /* Getter common to all token types */
+    fn get_expiration(&self) -> i64;
+    fn get_id(&self) -> Uuid;
+
+    fn try_new(claim: TokenClaim) -> TokenResult<Self>;
+
+    fn token_type(&self) -> TokenType;
 
     /// Encode this instance to a JWT token string
     fn encode(&self) -> TokenResult<String> {
-        let secret = Self::get_secret()?;
+        let key = KeyProvider::get_secret(self.token_type())?;
+        let secret = key.value();
         let header = jwt::Header::new(jwt::Algorithm::HS512);
         let key = jwt::EncodingKey::from_secret(secret.as_ref());
-        jwt::encode(&header, self, &key).map_err(super::TokenError::EnDeCoding)
+        jwt::encode(&header, self, &key).map_err(TokenError::EnDeCoding)
     }
 
     /// Extract the JWT from given request
@@ -93,7 +194,86 @@ pub trait JwtToken: Sized + serde::Serialize {
         extract_token(request).and_then(|s| Self::from_str(&s))
     }
 
-    fn get_secret() -> super::TokenResult<String>;
+    /// Create base64 hash value for encoded token
+    fn to_base64(&self) -> ApiResult<String> {
+        Ok(base64::encode(self.encode()?))
+    }
+
+    /// Try to retrieve user for given token
+    async fn try_get_user(&self, id: Uuid, db: &DbPool) -> ApiResult<User> {
+        match self.token_type() {
+            TokenType::UserAuth
+            | TokenType::UserRefresh
+            | TokenType::RegistrationConfirmation
+            | TokenType::PwdReset => User::find_by_id(id, db).await,
+            _ => Err(ApiError::UnexpectedError(anyhow!(
+                "Cannot retrieve user from token of type {}",
+                self.token_type().to_string()
+            ))),
+        }
+    }
+
+    /// Try to retrieve host for given token
+    async fn try_get_host(&self, db: &DbPool) -> ApiResult<Host> {
+        match self.token_type() {
+            TokenType::HostAuth | TokenType::HostRefresh => {
+                Host::find_by_id(self.get_id(), db).await
+            }
+            _ => Err(ApiError::UnexpectedError(anyhow!(
+                "Cannot retrieve host from token of type {}",
+                self.token_type().to_string()
+            ))),
+        }
+    }
+
+    /// Create token for given resource
+    fn create_token_for<T: Identifiable>(
+        resource: &T,
+        token_type: TokenType,
+        role: TokenRole,
+    ) -> TokenResult<Self> {
+        let claim = TokenClaim::new(
+            resource.get_id(),
+            ExpirationProvider::expiration(token_type),
+            token_type,
+            role,
+            None,
+        );
+
+        Self::try_new(claim)
+    }
+
+    /// Returns `true` if token has expired
+    fn has_expired(&self) -> bool {
+        let now = Utc::now().timestamp();
+
+        now > self.get_expiration()
+    }
+
+    /// Decode token from encoded value
+    fn from_encoded<T: JwtToken + DeserializeOwned>(
+        encoded: &str,
+        token_type: TokenType,
+        validate_exp: bool,
+    ) -> Result<T, TokenError> {
+        let key = KeyProvider::get_secret(token_type)?;
+        let secret = key.value();
+        let mut validation = jwt::Validation::new(jwt::Algorithm::HS512);
+
+        validation.validate_exp = validate_exp;
+
+        match jwt::decode::<T>(
+            encoded,
+            &jwt::DecodingKey::from_secret(secret.as_bytes()),
+            &validation,
+        ) {
+            Ok(token) => Ok(token.claims),
+            Err(e) => {
+                tracing::error!("Error decoding token: {e:?}");
+                Err(TokenError::EnDeCoding(e))
+            }
+        }
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -103,8 +283,12 @@ struct UnknownToken {
 
 /// A token whose `token_type` is not known.
 pub enum AnyToken {
-    Auth(AuthToken),
+    UserAuth(UserAuthToken),
+    HostAuth(HostAuthToken),
     PwdReset(PwdResetToken),
+    UserRefresh(UserRefreshToken),
+    HostRefresh(HostRefreshToken),
+    RegistrationConfirmation(RegistrationConfirmationToken),
 }
 
 impl AnyToken {
@@ -117,10 +301,16 @@ impl AnyToken {
         let decoded = base64::decode(payload).or(Err(TokenError::Invalid))?;
         let json: UnknownToken = serde_json::from_slice(&decoded).or(Err(TokenError::Invalid))?;
         let token = match json.token_type {
-            TokenType::Login => Auth(AuthToken::from_str(&token)?),
-            TokenType::Refresh => PwdReset(PwdResetToken::from_str(&token)?),
-            TokenType::PwdReset => todo!(),
+            TokenType::UserAuth => UserAuth(UserAuthToken::from_str(&token)?),
+            TokenType::UserRefresh => UserRefresh(UserRefreshToken::from_str(&token)?),
+            TokenType::HostAuth => HostAuth(HostAuthToken::from_str(&token)?),
+            TokenType::HostRefresh => HostRefresh(HostRefreshToken::from_str(&token)?),
+            TokenType::PwdReset => PwdReset(PwdResetToken::from_str(&token)?),
+            TokenType::RegistrationConfirmation => {
+                RegistrationConfirmation(RegistrationConfirmationToken::from_str(&token)?)
+            }
         };
+
         Ok(token)
     }
 }
@@ -136,4 +326,14 @@ fn extract_token<B>(req: &HttpRequest<B>) -> TokenResult<String> {
     let clear_token = base64::decode(token)?;
     let token = std::str::from_utf8(&clear_token)?;
     Ok(token.to_owned())
+}
+
+/// Indicates the impl token is subject to be blacklisted once used
+#[tonic::async_trait]
+pub trait Blacklisted {
+    /// Method needs to be called after validation and use
+    async fn blacklist(&self, db: DbPool) -> TokenResult<bool>;
+
+    /// Return true if encoded token value can be found in blacklist table
+    async fn is_blacklisted(&self, token: String, db: DbPool) -> TokenResult<bool>;
 }

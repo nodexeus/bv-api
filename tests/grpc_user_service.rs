@@ -2,11 +2,12 @@
 mod setup;
 
 use crate::setup::setup;
-use api::auth::TokenIdentifyable;
+use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::user_service_client::UserServiceClient;
 use api::grpc::blockjoy_ui::{
     CreateUserRequest, GetUserRequest, RequestMeta, UpdateUserRequest, User as GrpcUser,
 };
+use api::models::User;
 use base64::encode;
 use std::sync::Arc;
 use test_macros::before;
@@ -24,7 +25,9 @@ async fn responds_ok_with_valid_token_for_get() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = GetUserRequest {
         meta: Some(request_meta),
     };
@@ -32,7 +35,18 @@ async fn responds_ok_with_valid_token_for_get() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, UserServiceClient<Channel> };
@@ -102,7 +116,9 @@ async fn responds_error_with_existing_email_for_create() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let grpc_user = GrpcUser {
         id: None,
         email: Some(user.email),
@@ -121,7 +137,9 @@ async fn responds_error_with_existing_email_for_create() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, UserServiceClient<Channel> };
@@ -138,7 +156,9 @@ async fn responds_error_with_different_pwds_for_create() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let grpc_user = GrpcUser {
         id: None,
         email: Some("hugo@boss.com".to_string()),
@@ -157,7 +177,9 @@ async fn responds_error_with_different_pwds_for_create() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, UserServiceClient<Channel> };
@@ -174,7 +196,9 @@ async fn responds_permission_denied_with_diff_users_for_update() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let grpc_user = GrpcUser {
         id: Some(Uuid::new_v4().to_string()),
         email: Some("hugo@boss.com".to_string()),
@@ -192,7 +216,9 @@ async fn responds_permission_denied_with_diff_users_for_update() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::PermissionDenied, db, UserServiceClient<Channel> };
@@ -209,7 +235,9 @@ async fn responds_ok_with_equal_users_for_update() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let grpc_user = GrpcUser {
         id: Some(user.id.to_string()),
         email: None,
@@ -227,7 +255,18 @@ async fn responds_ok_with_equal_users_for_update() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::Ok, db, UserServiceClient<Channel> };

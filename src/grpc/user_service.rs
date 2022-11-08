@@ -1,4 +1,4 @@
-use crate::auth::TokenType;
+use crate::auth::{JwtToken, TokenRole, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::user_service_server::UserService;
 use crate::grpc::blockjoy_ui::{
@@ -6,7 +6,7 @@ use crate::grpc::blockjoy_ui::{
     GetUserRequest, GetUserResponse, ResponseMeta, UpdateUserRequest, UpdateUserResponse,
     UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
 };
-use crate::models::{Token, TokenRole, User, UserRequest};
+use crate::models::{User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -29,9 +29,9 @@ impl UserService for UserServiceImpl {
         &self,
         request: Request<GetUserRequest>,
     ) -> Result<Response<GetUserResponse>, Status> {
-        let token = try_get_token(&request)?.token;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user = token.try_get_user(*token.id(), &self.db).await?;
         let inner = request.into_inner();
-        let user = Token::get_user_for_token(token, TokenType::Login, &self.db).await?;
         let response = GetUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             user: Some(GrpcUser::try_from(user)?),
@@ -66,9 +66,9 @@ impl UserService for UserServiceImpl {
     ) -> Result<Response<UpdateUserResponse>, Status> {
         let token = request
             .extensions()
-            .get::<Token>()
-            .ok_or_else(required("db token"))?;
-        let user_id = token.user_id.ok_or_else(required("db token"))?;
+            .get::<UserAuthToken>()
+            .ok_or_else(required("auth token"))?;
+        let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
         let inner = request.into_inner();
         let user = inner.user.ok_or_else(required("user"))?;
 
