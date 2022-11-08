@@ -51,7 +51,7 @@ mod tests {
     #[test]
     fn can_return_valid_expiration_for_each_token_type() {
         for tt in TokenType::iter() {
-            println!("Testing token type: {}", tt.to_string());
+            println!("Testing token type: {}", tt);
             assert!(super::ExpirationProvider::expiration(tt) > 0)
         }
     }
