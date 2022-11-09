@@ -5,6 +5,7 @@ use crate::grpc::blockjoy_ui::{
     CreateHostProvisionRequest, CreateHostProvisionResponse, GetHostProvisionRequest,
     GetHostProvisionResponse, HostProvision as GrpcHostProvision, ResponseMeta,
 };
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models::{HostProvision, HostProvisionRequest};
 use crate::server::DbPool;
 use anyhow::anyhow;
@@ -42,6 +43,7 @@ impl HostProvisionService for HostProvisionServiceImpl {
         &self,
         request: Request<CreateHostProvisionRequest>,
     ) -> Result<Response<CreateHostProvisionResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let provision = inner
             .host_provision
@@ -67,6 +69,6 @@ impl HostProvisionService for HostProvisionServiceImpl {
         let meta = ResponseMeta::from_meta(inner.meta).with_message(provision.id);
         let response = CreateHostProvisionResponse { meta: Some(meta) };
 
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 }

@@ -1,7 +1,7 @@
 use crate::auth::expiration_provider::ExpirationProvider;
 use crate::auth::{
-    FindableById, Identifiable, JwtToken, TokenClaim, TokenRole, TokenType, UserAuthToken,
-    UserRefreshToken,
+    token::TokenError, FindableById, Identifiable, JwtToken, TokenClaim, TokenRole, TokenType,
+    UserAuthToken, UserRefreshToken,
 };
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::LoginUserRequest;
@@ -61,36 +61,37 @@ impl User {
         refresh_token: UserRefreshToken,
         db: &PgPool,
     ) -> Result<(Option<User>, UserAuthToken, UserRefreshToken)> {
-        if token.has_expired() {
-            // Token has expired, check the refresh_token
-            if !refresh_token.has_expired() {
-                // Generate new auth token
-                let claim = TokenClaim::new(
-                    token.get_id(),
-                    ExpirationProvider::expiration(TokenType::UserAuth),
-                    TokenType::UserAuth,
-                    TokenRole::User,
-                    None,
-                );
-                let token = UserAuthToken::try_new(claim)?;
-                let claim = TokenClaim::new(
-                    token.get_id(),
-                    ExpirationProvider::expiration(TokenType::UserRefresh),
-                    TokenType::UserRefresh,
-                    TokenRole::User,
-                    None,
-                );
-                let refresh_token = UserRefreshToken::try_new(claim)?;
-                let fields = UserSelectiveUpdate {
-                    refresh_token: Some(refresh_token.encode()?),
-                    ..Default::default()
-                };
-                let user = User::update_all(refresh_token.get_id(), fields, db).await?;
+        if token.has_expired() && refresh_token.has_expired() {
+            Err(ApiError::from(TokenError::Expired))
+        } else if token.has_expired() && !refresh_token.has_expired() {
+            // Generate new auth token
+            let claim = TokenClaim::new(
+                token.get_id(),
+                ExpirationProvider::expiration(TokenType::UserAuth),
+                TokenType::UserAuth,
+                TokenRole::User,
+                None,
+            );
+            let token = UserAuthToken::try_new(claim)?;
+            let claim = TokenClaim::new(
+                token.get_id(),
+                ExpirationProvider::expiration(TokenType::UserRefresh),
+                TokenType::UserRefresh,
+                TokenRole::User,
+                None,
+            );
+            let refresh_token = UserRefreshToken::try_new(claim)?;
+            let fields = UserSelectiveUpdate {
+                refresh_token: Some(refresh_token.encode()?),
+                ..Default::default()
+            };
+            let user = User::update_all(refresh_token.get_id(), fields, db).await?;
 
-                Ok((Some(user), token, refresh_token))
-            } else {
-                Err(ApiError::UnexpectedError(anyhow!("Refresh token expired")))
-            }
+            Ok((Some(user), token, refresh_token))
+        } else if !token.has_expired() && refresh_token.has_expired() {
+            Err(ApiError::from(TokenError::RefreshTokenError(anyhow!(
+                "Refresh token expired"
+            ))))
         } else {
             // Token is valid, just return what we got
             // If nothing was updated or changed, we don't even query for the user to save 1 query
@@ -109,7 +110,7 @@ impl User {
         }
 
         Err(ApiError::InvalidAuthentication(anyhow!(
-            "Inavlid email or password."
+            "Invalid email or password."
         )))
     }
 
@@ -254,7 +255,10 @@ impl User {
         {
             let mut tx = db.begin().await?;
             let result = match sqlx::query_as::<_, Self>(
-                "INSERT INTO users (email, first_name, last_name, hashword, salt, staking_quota, fee_bps) values (LOWER($1),$2,$3,$4,$5,$6,$7) RETURNING *",
+                r#"INSERT INTO users 
+                    (email, first_name, last_name, hashword, salt, staking_quota, fee_bps)
+                    values 
+                    (LOWER($1),$2,$3,$4,$5,$6,$7) RETURNING *"#,
             )
             .bind(user.email)
             .bind(user.first_name)
@@ -271,22 +275,22 @@ impl User {
                     let org = sqlx::query_as::<_, Org>(
                         "INSERT INTO orgs (name, is_personal) values (LOWER($1), true) RETURNING *",
                     )
-                        .bind(&user.email)
-                        .fetch_one(&mut tx)
-                        .await
-                        .map_err(ApiError::from)?;
+                    .bind(&user.email)
+                    .fetch_one(&mut tx)
+                    .await
+                    .map_err(ApiError::from)?;
 
                     sqlx::query(
                         "INSERT INTO orgs_users (org_id, user_id, role) values($1, $2, 'owner')",
                     )
-                        .bind(org.id)
-                        .bind(user.id)
-                        .execute(&mut tx)
-                        .await
-                        .map_err(ApiError::from)?;
+                    .bind(org.id)
+                    .bind(user.id)
+                    .execute(&mut tx)
+                    .await
+                    .map_err(ApiError::from)?;
 
                     Ok(user)
-                },
+                }
                 Err(e) => Err(e),
             };
 

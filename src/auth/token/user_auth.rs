@@ -42,7 +42,7 @@ impl FromStr for UserAuthToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        UserAuthToken::from_encoded(encoded, TokenType::UserAuth, true)
+        UserAuthToken::from_encoded(encoded, TokenType::UserAuth, false)
     }
 }
 

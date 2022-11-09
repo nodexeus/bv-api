@@ -8,6 +8,7 @@ use crate::grpc::blockjoy_ui::{
     UpdateHostResponse,
 };
 use crate::grpc::helpers::{pagination_parameters, required};
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models::{Host, HostRequest, HostSelectiveUpdate};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -36,6 +37,7 @@ impl HostService for HostServiceImpl {
     ) -> Result<Response<GetHostsResponse>, Status> {
         use get_hosts_request::Param;
 
+        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let meta = inner.meta.ok_or_else(required("meta"))?;
         let request_id = meta.id;
@@ -81,7 +83,7 @@ impl HostService for HostServiceImpl {
             hosts,
         };
 
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn create(

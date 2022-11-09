@@ -6,6 +6,7 @@ use crate::grpc::blockjoy_ui::{
     GetUserRequest, GetUserResponse, ResponseMeta, UpdateUserRequest, UpdateUserResponse,
     UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
 };
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models::{User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -29,6 +30,7 @@ impl UserService for UserServiceImpl {
         &self,
         request: Request<GetUserRequest>,
     ) -> Result<Response<GetUserResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let token = try_get_token::<_, UserAuthToken>(&request)?;
         let user = token.try_get_user(*token.id(), &self.db).await?;
         let inner = request.into_inner();
@@ -37,13 +39,14 @@ impl UserService for UserServiceImpl {
             user: Some(GrpcUser::try_from(user)?),
         };
 
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn create(
         &self,
         request: Request<CreateUserRequest>,
     ) -> Result<Response<CreateUserResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let user = inner.user.ok_or_else(required("user"))?;
         let user_request = UserRequest {
@@ -57,13 +60,14 @@ impl UserService for UserServiceImpl {
         let new_user = User::create(user_request, &self.db, Some(TokenRole::User)).await?;
         let meta = ResponseMeta::from_meta(inner.meta).with_message(new_user.id);
         let response = CreateUserResponse { meta: Some(meta) };
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn update(
         &self,
         request: Request<UpdateUserRequest>,
     ) -> Result<Response<UpdateUserResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let token = request
             .extensions()
             .get::<UserAuthToken>()
@@ -83,7 +87,7 @@ impl UserService for UserServiceImpl {
                 user: Some(user),
             };
 
-            Ok(Response::new(response))
+            Ok(response_with_refresh_token(refresh_token, response)?)
         } else {
             Err(Status::permission_denied(
                 "You are not allowed to update this user",

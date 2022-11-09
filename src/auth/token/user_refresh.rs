@@ -1,3 +1,4 @@
+use crate::auth::expiration_provider::ExpirationProvider;
 use crate::auth::{JwtToken, TokenClaim, TokenError, TokenResult, TokenType};
 use axum::http::Request as HttpRequest;
 use derive_getters::Getters;
@@ -10,6 +11,16 @@ pub struct UserRefreshToken {
     id: Uuid,
     exp: i64,
     token_type: TokenType,
+}
+
+impl UserRefreshToken {
+    pub fn create(id: Uuid) -> Self {
+        Self {
+            id,
+            exp: ExpirationProvider::expiration(TokenType::UserRefresh),
+            token_type: TokenType::UserRefresh,
+        }
+    }
 }
 
 impl JwtToken for UserRefreshToken {
