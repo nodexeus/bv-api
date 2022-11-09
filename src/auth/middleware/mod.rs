@@ -3,7 +3,7 @@
 //!
 
 use crate::auth::unauthenticated_paths::UnauthenticatedPaths;
-use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
+use crate::auth::{Authorization, AuthorizationData, AuthorizationState, FindableById, TokenType};
 use crate::auth::{JwtToken, UserRefreshToken};
 use crate::errors::Result;
 use crate::models::{Host, User};
@@ -23,20 +23,6 @@ fn unauthorized_response(msg: &str) -> Response<BoxBody> {
 
 fn unauthenticated_response(msg: &str) -> Response<BoxBody> {
     Status::unauthenticated(msg).to_http()
-}
-
-fn internal_response(msg: &str) -> Response<BoxBody> {
-    Status::internal(msg).to_http()
-}
-
-fn refresh_cookie<T: JwtToken>(refresh_token: T) -> Result<String> {
-    let cookie = format!(
-        "refresh={}; Expires={}; Secure; HttpOnly",
-        refresh_token.encode()?,
-        refresh_token.get_expiration(),
-    );
-
-    Ok(cookie)
 }
 
 #[derive(Clone)]
@@ -93,13 +79,32 @@ where
                     // 1. try if token is valid
                     token.encode().map_err(cant_parse)?;
 
-                    let refresh_token = UserRefreshToken::from_request(&request)
-                        .map_err(|_| unauthorized_response("Cannot parse refresh token"))?;
+                    let refresh_token = match UserRefreshToken::from_request(&request) {
+                        Ok(token) => token,
+                        Err(e) => {
+                            tracing::error!("No refresh token in request: {e}");
+                            let refresh = User::find_by_id(token.get_id(), db)
+                                .await
+                                .map_err(|_| unauthenticated_response("No refresh token for user"))?
+                                .refresh
+                                .unwrap_or_default();
+
+                            UserRefreshToken::from_encoded(
+                                refresh.as_str(),
+                                TokenType::UserRefresh,
+                                true,
+                            )
+                            .map_err(|e| {
+                                unauthenticated_response(&format!(
+                                    "Could not extract refresh token: {e:?}"
+                                ))
+                            })?
+                        }
+                    };
                     let (_, token, refresh_token) =
                         User::verify_and_refresh_auth_token(token, refresh_token, db)
                             .await
                             .map_err(|e| Status::from(e).to_http())?;
-
                     let auth_data = AuthorizationData {
                         subject: token.role().to_string(),
                         object: request.uri().path().to_string(),
@@ -113,15 +118,7 @@ where
                     match result {
                         AuthorizationState::Authorized => {
                             request.extensions_mut().insert(token);
-                            request.headers_mut().insert(
-                                "Set-Cookie",
-                                refresh_cookie(refresh_token)
-                                    .map_err(|e| Status::from(e).to_http())?
-                                    .parse()
-                                    .map_err(|_| {
-                                        internal_response("Cannot create refresh cookie")
-                                    })?,
-                            );
+                            request.extensions_mut().insert(refresh_token);
 
                             Ok(request)
                         }

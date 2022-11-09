@@ -90,7 +90,7 @@ async fn responds_ok_with_valid_credentials_for_refresh() {
         .unwrap(),
     );
 
-    assert_grpc_request! { refresh, request, tonic::Code::Unavailable, db, AuthenticationServiceClient<Channel> };
+    assert_grpc_request! { refresh, request, tonic::Code::Unimplemented, db, AuthenticationServiceClient<Channel> };
 }
 
 #[before(call = "setup")]

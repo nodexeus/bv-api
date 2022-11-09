@@ -4,6 +4,7 @@ use crate::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse,
     UpdateUiPasswordRequest, UpdateUiPasswordResponse,
 };
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::mail::MailClient;
 use crate::models::User;
 use crate::server::DbPool;
@@ -67,7 +68,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         _request: Request<RefreshTokenRequest>,
     ) -> Result<Response<RefreshTokenResponse>, Status> {
-        Err(Status::unavailable("Moved to HTTP"))
+        Err(Status::unimplemented("Not necessary anymore"))
     }
 
     /// This endpoint triggers the sending of the reset-password email. The actual resetting is
@@ -76,6 +77,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<ResetPasswordRequest>,
     ) -> Result<Response<ResetPasswordResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let request = request.into_inner();
         // We are going to query the user and send them an email, but when something goes wrong we
         // are not going to return an error. This hides whether or not a user is registered with
@@ -88,13 +90,15 @@ impl AuthenticationService for AuthenticationServiceImpl {
 
         let meta = ResponseMeta::new(String::from(""));
         let response = ResetPasswordResponse { meta: Some(meta) };
-        Ok(Response::new(response))
+
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn update_password(
         &self,
         request: Request<UpdatePasswordRequest>,
     ) -> Result<Response<UpdatePasswordResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let token = try_get_token::<_, UserAuthToken>(&request)?;
         let encoded = token
             .encode()
@@ -114,13 +118,14 @@ impl AuthenticationService for AuthenticationServiceImpl {
         // Send notification mail
         MailClient::new().update_password(&cur_user).await?;
 
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn update_ui_password(
         &self,
         request: Request<UpdateUiPasswordRequest>,
     ) -> Result<Response<UpdateUiPasswordResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let token = try_get_token::<_, UserAuthToken>(&request)?;
         let user = token.try_get_user(*token.id(), &self.db).await?;
         let encoded = token
@@ -142,7 +147,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
                     // Send notification mail
                     MailClient::new().update_password(&user).await?;
 
-                    Ok(Response::new(response))
+                    Ok(response_with_refresh_token(refresh_token, response)?)
                 } else {
                     Err(Status::invalid_argument(
                         "Password and password confirmation don't match",

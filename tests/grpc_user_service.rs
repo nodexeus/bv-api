@@ -220,6 +220,15 @@ async fn responds_permission_denied_with_diff_users_for_update() {
             .parse()
             .unwrap(),
     );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
+    );
 
     assert_grpc_request! { update, request, tonic::Code::PermissionDenied, db, UserServiceClient<Channel> };
 }
