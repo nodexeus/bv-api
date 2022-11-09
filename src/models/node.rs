@@ -164,6 +164,7 @@ pub struct Node {
     pub chain_status: NodeChainStatus,
     pub staking_status: NodeStakingStatus,
     pub container_status: ContainerStatus,
+    pub self_update: bool,
 }
 
 impl Node {
@@ -373,6 +374,7 @@ pub struct NodeCreateRequest {
     pub sync_status: NodeSyncStatus,
     pub staking_status: Option<NodeStakingStatus>,
     pub container_status: ContainerStatus,
+    pub self_update: bool,
 }
 
 pub struct NodeUpdateRequest {
