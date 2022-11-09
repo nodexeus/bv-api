@@ -253,12 +253,13 @@ impl User {
             .hash_password_simple(user.password.as_bytes(), salt.as_str())?
             .hash
         {
+            let id = Uuid::new_v4();
             let mut tx = db.begin().await?;
             let result = match sqlx::query_as::<_, Self>(
                 r#"INSERT INTO users 
-                    (email, first_name, last_name, hashword, salt, staking_quota, fee_bps)
+                    (email, first_name, last_name, hashword, salt, staking_quota, fee_bps, id, refresh)
                     values 
-                    (LOWER($1),$2,$3,$4,$5,$6,$7) RETURNING *"#,
+                    (LOWER($1),$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *"#,
             )
             .bind(user.email)
             .bind(user.first_name)
@@ -267,6 +268,8 @@ impl User {
             .bind(salt.as_str())
             .bind(STAKE_QUOTA_DEFAULT)
             .bind(FEE_BPS_DEFAULT)
+            .bind(id)
+            .bind(UserRefreshToken::create(id).encode()?)
             .fetch_one(&mut tx)
             .await
             .map_err(ApiError::from)
