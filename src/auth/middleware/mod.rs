@@ -3,7 +3,9 @@
 //!
 
 use crate::auth::unauthenticated_paths::UnauthenticatedPaths;
-use crate::auth::{Authorization, AuthorizationData, AuthorizationState};
+use crate::auth::{
+    Authorization, AuthorizationData, AuthorizationState, TokenClaim, TokenRole, TokenType,
+};
 use crate::auth::{JwtToken, UserRefreshToken};
 use crate::errors::Result;
 use crate::models::{Host, User};
@@ -93,13 +95,14 @@ where
                     // 1. try if token is valid
                     token.encode().map_err(cant_parse)?;
 
+                    /*
                     let refresh_token = UserRefreshToken::from_request(&request)
                         .map_err(|_| unauthorized_response("Cannot parse refresh token"))?;
                     let (_, token, refresh_token) =
                         User::verify_and_refresh_auth_token(token, refresh_token, db)
                             .await
                             .map_err(|e| Status::from(e).to_http())?;
-
+                     */
                     let auth_data = AuthorizationData {
                         subject: token.role().to_string(),
                         object: request.uri().path().to_string(),
@@ -113,6 +116,7 @@ where
                     match result {
                         AuthorizationState::Authorized => {
                             request.extensions_mut().insert(token);
+                            /*
                             request.headers_mut().insert(
                                 "Set-Cookie",
                                 refresh_cookie(refresh_token)
@@ -122,6 +126,8 @@ where
                                         internal_response("Cannot create refresh cookie")
                                     })?,
                             );
+
+                             */
 
                             Ok(request)
                         }

@@ -316,15 +316,18 @@ impl AnyToken {
 }
 
 fn extract_token<B>(req: &HttpRequest<B>) -> TokenResult<String> {
-    let token = req
+    let header = req
         .headers()
         .get(AUTHORIZATION)
-        .and_then(|hv| hv.to_str().ok())
-        .and_then(|hv| hv.strip_prefix("Bearer"))
-        .map(|tkn| tkn.trim())
-        .unwrap_or("");
-    let clear_token = base64::decode(token)?;
-    let token = std::str::from_utf8(&clear_token)?;
+        .ok_or_else(|| TokenError::Invalid)?;
+    let header = header.to_str().map_err(|_| TokenError::Invalid)?;
+    let header = header
+        .strip_prefix("Bearer")
+        .ok_or_else(|| TokenError::Invalid)?
+        .trim();
+    let token = base64::decode(header)?;
+    let token = std::str::from_utf8(&token)?;
+
     Ok(token.to_owned())
 }
 
