@@ -319,11 +319,11 @@ fn extract_token<B>(req: &HttpRequest<B>) -> TokenResult<String> {
     let header = req
         .headers()
         .get(AUTHORIZATION)
-        .ok_or_else(|| TokenError::Invalid)?;
+        .ok_or(TokenError::Invalid)?;
     let header = header.to_str().map_err(|_| TokenError::Invalid)?;
     let header = header
         .strip_prefix("Bearer")
-        .ok_or_else(|| TokenError::Invalid)?
+        .ok_or(TokenError::Invalid)?
         .trim();
     let token = base64::decode(header)?;
     let token = std::str::from_utf8(&token)?;
