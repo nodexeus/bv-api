@@ -1,5 +1,5 @@
 use super::blockjoy_ui::ResponseMeta;
-use crate::auth::{FindableById, TokenType};
+use crate::auth::{FindableById, HostAuthToken, JwtToken, TokenType};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::host_service_server::HostService;
 use crate::grpc::blockjoy_ui::{
@@ -8,7 +8,8 @@ use crate::grpc::blockjoy_ui::{
     UpdateHostResponse,
 };
 use crate::grpc::helpers::{pagination_parameters, required};
-use crate::models::{Host, HostRequest, HostSelectiveUpdate, Token};
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::models::{Host, HostRequest, HostSelectiveUpdate};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -36,6 +37,7 @@ impl HostService for HostServiceImpl {
     ) -> Result<Response<GetHostsResponse>, Status> {
         use get_hosts_request::Param;
 
+        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let meta = inner.meta.ok_or_else(required("meta"))?;
         let request_id = meta.id;
@@ -61,12 +63,16 @@ impl HostService for HostServiceImpl {
                     ResponseMeta::new(request_id.unwrap_or_default()).with_pagination(),
                 )
             }
-            Param::Token(ref token) => (
-                vec![Token::get_host_for_token(token, TokenType::Login, &self.db)
-                    .await?
-                    .try_into()?],
-                ResponseMeta::new(request_id.unwrap_or_default()),
-            ),
+            Param::Token(token) => {
+                let token: HostAuthToken =
+                    HostAuthToken::from_encoded(token.as_str(), TokenType::HostAuth, true)?;
+                let host = token.try_get_host(&self.db).await?.try_into()?;
+
+                (
+                    vec![host],
+                    ResponseMeta::new(request_id.unwrap_or_default()),
+                )
+            }
         };
 
         if hosts.is_empty() {
@@ -77,7 +83,7 @@ impl HostService for HostServiceImpl {
             hosts,
         };
 
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn create(

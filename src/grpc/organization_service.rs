@@ -1,3 +1,4 @@
+use crate::auth::UserAuthToken;
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationService;
 use crate::grpc::blockjoy_ui::{
@@ -8,6 +9,8 @@ use crate::grpc::blockjoy_ui::{
     UpdateOrganizationResponse, User as GrpcUiUser,
 };
 use crate::grpc::helpers::pagination_parameters;
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::models::{Org, OrgRequest};
 use crate::models::{Org, OrgRequest, OrgRole};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -31,8 +34,9 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<GetOrganizationsRequest>,
     ) -> Result<Response<GetOrganizationsResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user_id = *token.id();
         let inner = request.into_inner();
         let organizations: Vec<Org> = Org::find_all_by_user(user_id, &self.db).await?;
         let organizations: Result<_, ApiError> =
@@ -42,15 +46,16 @@ impl OrganizationService for OrganizationServiceImpl {
             organizations: organizations?,
         };
 
-        Ok(Response::new(inner))
+        Ok(response_with_refresh_token(refresh_token, inner)?)
     }
 
     async fn create(
         &self,
         request: Request<CreateOrganizationRequest>,
     ) -> Result<Response<CreateOrganizationResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user_id = *token.id();
         let inner = request.into_inner();
         let org = inner.organization.ok_or_else(required("organization"))?;
         let name = org.name.ok_or_else(required("organization.name"))?;
@@ -60,15 +65,16 @@ impl OrganizationService for OrganizationServiceImpl {
         let inner = CreateOrganizationResponse {
             meta: Some(response_meta),
         };
-        Ok(Response::new(inner))
+        Ok(response_with_refresh_token(refresh_token, inner)?)
     }
 
     async fn update(
         &self,
         request: Request<UpdateOrganizationRequest>,
     ) -> Result<Response<UpdateOrganizationResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user_id = *token.id();
         let inner = request.into_inner();
         let org = inner.organization.ok_or_else(required("organization"))?;
         let org_id = Uuid::parse_str(org.id.ok_or_else(required("organization.id"))?.as_str())
@@ -81,7 +87,7 @@ impl OrganizationService for OrganizationServiceImpl {
             Ok(_) => {
                 let meta = ResponseMeta::from_meta(inner.meta);
                 let inner = UpdateOrganizationResponse { meta: Some(meta) };
-                Ok(Response::new(inner))
+                Ok(response_with_refresh_token(refresh_token, inner)?)
             }
             Err(e) => Err(Status::from(e)),
         }
@@ -91,12 +97,21 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<DeleteOrganizationRequest>,
     ) -> Result<Response<DeleteOrganizationResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user_id = *token.id();
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
         let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
 
+        if !Org::is_member(&user_id, &org_id, &self.db).await? {
+            let msg = "User is not member of given organization";
+            return Err(Status::permission_denied(msg));
+        }
+        Org::delete(org_id, &self.db).await?;
+        let meta = ResponseMeta::from_meta(inner.meta);
+        let inner = DeleteOrganizationResponse { meta: Some(meta) };
+        Ok(response_with_refresh_token(refresh_token, inner)?)
         // Only owner or admins may delete orgs
         if member.role == OrgRole::Member {
             Err(Status::permission_denied(format!(
@@ -145,6 +160,7 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<OrganizationMemberRequest>,
     ) -> Result<Response<OrganizationMemberResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let meta = inner.meta.ok_or_else(required("meta"))?;
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
@@ -157,6 +173,6 @@ impl OrganizationService for OrganizationServiceImpl {
             users: users?,
         };
 
-        Ok(Response::new(inner))
+        Ok(response_with_refresh_token(refresh_token, inner)?)
     }
 }

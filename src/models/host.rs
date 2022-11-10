@@ -1,5 +1,5 @@
-use super::{validator::Validator, Node, NodeProvision, Token, TokenRole};
-use crate::auth::{FindableById, Owned, TokenHolderType, TokenIdentifyable, TokenType};
+use super::{validator::Validator, Node, NodeProvision};
+use crate::auth::{FindableById, HostAuthToken, Identifiable, JwtToken, Owned, TokenError};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::HostInfo;
 use crate::grpc::helpers::required;
@@ -77,6 +77,17 @@ impl TryFrom<PgRow> for Host {
 }
 
 impl Host {
+    /// Test if given `token` has expired and refresh it using the `refresh_token` if necessary
+    pub fn verify_auth_token(token: HostAuthToken) -> Result<HostAuthToken> {
+        if token.has_expired() {
+            Err(ApiError::from(TokenError::Expired))
+        } else {
+            // Token is valid, just return what we got
+            // If nothing was updated or changed, we don't even query for the user to save 1 query
+            Ok(token)
+        }
+    }
+
     pub async fn toggle_online(id: Uuid, is_online: bool, db: &PgPool) -> Result<()> {
         let status = if is_online {
             ConnectionStatus::Online
@@ -232,9 +243,6 @@ impl Host {
 
         tx.commit().await?;
 
-        // Create token for new host
-        Token::create_for::<Host>(&host, TokenRole::Service, TokenType::Login, db).await?;
-
         // Create IP range for new host
         let req = IpAddressRangeRequest::try_new(
             host.ip_range_from.ok_or_else(required("ip.range.from"))?,
@@ -329,19 +337,13 @@ impl Host {
 
     pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
         let mut tx = db.begin().await?;
-        // TODO: cascading delete doesn't seem to work, so i'm manually deleting the token
-        let token_deleted = sqlx::query("delete from tokens where host_id = $1")
-            .bind(id)
-            .execute(&mut tx)
-            .await?;
-        // ////
         let deleted = sqlx::query("DELETE FROM hosts WHERE id = $1")
             .bind(id)
             .execute(&mut tx)
             .await?;
 
         tx.commit().await?;
-        Ok(deleted.rows_affected() + token_deleted.rows_affected())
+        Ok(deleted.rows_affected())
     }
 
     pub fn validator_ips(&self) -> Vec<String> {
@@ -370,29 +372,9 @@ impl FindableById for Host {
     }
 }
 
-#[axum::async_trait]
-impl TokenIdentifyable for Host {
-    async fn set_token(token_id: Uuid, host_id: Uuid, db: &PgPool) -> Result<()> {
-        let host_token = super::HostToken::new(host_id, token_id, TokenType::Login);
-        host_token.create_or_update(db).await?;
-        Ok(())
-    }
-
-    fn get_holder_type() -> TokenHolderType {
-        TokenHolderType::Host
-    }
-
+impl Identifiable for Host {
     fn get_id(&self) -> Uuid {
         self.id
-    }
-
-    async fn delete_token(host_id: Uuid, db: &PgPool) -> Result<()> {
-        super::HostToken::delete_by_host(host_id, TokenType::Login, db).await?;
-        Ok(())
-    }
-
-    async fn get_token(&self, db: &PgPool) -> Result<Token> {
-        Token::get::<Host>(self.id, TokenType::Login, db).await
     }
 }
 
@@ -728,6 +710,7 @@ impl HostProvision {
                 .ip_gateway
                 .ok_or_else(|| anyhow!("No IP gateway"))?,
         );
+        req.name = petname::petname(4, "_");
 
         //TODO: transaction this
         let mut host = Host::create(req.into(), db).await?;

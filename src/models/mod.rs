@@ -8,15 +8,16 @@ mod node;
 mod org;
 mod payment;
 mod reward;
-mod token;
 mod user;
 // needs to be brought into namespace like this because of
 // name ambiguities with another crate
+mod blacklist_token;
 mod ip_address;
 mod node_type;
 pub mod validator;
 
 use crate::errors::Result as ApiResult;
+pub use blacklist_token::*;
 pub use blockchain::*;
 pub use broadcast::*;
 pub use command::*;
@@ -29,7 +30,6 @@ pub use node_type::*;
 pub use org::*;
 pub use payment::*;
 pub use reward::*;
-pub use token::*;
 pub use user::*;
 
 pub const STAKE_QUOTA_DEFAULT: i64 = 5;

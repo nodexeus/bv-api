@@ -11,11 +11,16 @@ pub mod server;
 pub use test::TestDb;
 // #[cfg(test)]
 mod test {
+    use crate::auth::expiration_provider::ExpirationProvider;
+    use crate::auth::{
+        HostRefreshToken, JwtToken, TokenClaim, TokenRole, TokenType, UserRefreshToken,
+    };
     use crate::models::{self, validator};
     use rand::Rng;
     use sqlx::Connection;
     use std::net::IpAddr;
     use std::str::FromStr;
+    use uuid::Uuid;
 
     pub struct TestDb {
         pub pool: sqlx::PgPool,
@@ -162,7 +167,7 @@ mod test {
                 password_confirm: "abc12345".into(),
             };
 
-            let admin = models::User::create(user, &self.pool, Some(models::TokenRole::Admin))
+            let admin = models::User::create(user, &self.pool, Some(TokenRole::Admin))
                 .await
                 .expect("Could not create test user in db.");
 
@@ -259,7 +264,7 @@ mod test {
         }
 
         pub async fn test_host(&self) -> models::Host {
-            sqlx::query("select h.*, t.token, t.role from hosts h right join tokens t on h.id = t.host_id where name = 'Host-1'")
+            sqlx::query("select h.* from hosts h where name = 'Host-1'")
                 .map(|row| models::Host::try_from(row).unwrap_or_default())
                 .fetch_one(&self.pool)
                 .await
@@ -281,6 +286,30 @@ mod test {
                 .first()
                 .expect("To have a test blockchain")
                 .to_owned()
+        }
+
+        pub fn user_refresh_token(&self, id: Uuid) -> UserRefreshToken {
+            let claim = TokenClaim::new(
+                id,
+                ExpirationProvider::expiration(TokenType::UserRefresh),
+                TokenType::UserRefresh,
+                TokenRole::User,
+                None,
+            );
+
+            UserRefreshToken::try_new(claim).unwrap()
+        }
+
+        pub fn host_refresh_token(&self, id: Uuid) -> HostRefreshToken {
+            let claim = TokenClaim::new(
+                id,
+                ExpirationProvider::expiration(TokenType::HostRefresh),
+                TokenType::HostRefresh,
+                TokenRole::Service,
+                None,
+            );
+
+            HostRefreshToken::try_new(claim).unwrap()
         }
     }
 }

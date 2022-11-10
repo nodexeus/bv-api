@@ -1,9 +1,10 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::TokenIdentifyable;
+use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::blockchain_service_client::BlockchainServiceClient;
 use api::grpc::blockjoy_ui::{GetBlockchainRequest, ListBlockchainsRequest, RequestMeta};
+use api::models::User;
 use setup::setup;
 use std::sync::Arc;
 use test_macros::*;
@@ -14,10 +15,23 @@ use uuid::Uuid;
 async fn with_auth<T>(inner: T, db: &api::TestDb) -> Request<T> {
     let mut request = Request::new(inner);
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
     request
 }

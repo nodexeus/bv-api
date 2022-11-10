@@ -1,4 +1,4 @@
-use crate::auth::TokenType;
+use crate::auth::{HostAuthToken, JwtToken};
 use crate::errors::Result;
 use crate::grpc::blockjoy::{command_flow_server::CommandFlow, Command as GrpcCommand, InfoUpdate};
 use crate::grpc::helpers::try_get_token;
@@ -39,12 +39,10 @@ impl CommandFlow for CommandFlowServerImpl {
         &self,
         request: Request<Streaming<InfoUpdate>>,
     ) -> Result<Response<Self::CommandsStream>, Status> {
-        // DB token must be added by middleware beforehand
-        let db_token = try_get_token(&request)?.token;
+        // Token must be added by middleware beforehand
+        let token = try_get_token::<_, HostAuthToken>(&request)?;
         // Get the host that the user wants to listen to from the current login token.
-        let host_id = models::Token::get_host_for_token(&db_token, TokenType::Login, &self.db)
-            .await?
-            .id;
+        let host_id = token.try_get_host(&self.db).await?.id;
         // Set the host as online.
         models::Host::toggle_online(host_id, true, &self.db).await?;
         let update_stream = request.into_inner();
@@ -67,7 +65,7 @@ mod tests {
     use std::future::Future;
     use std::sync::Arc;
 
-    use crate::auth::TokenIdentifyable;
+    use crate::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
     use crate::grpc::blockjoy::command_flow_client::CommandFlowClient;
     use crate::grpc::blockjoy::info_update::Info;
     use crate::grpc::blockjoy::{InfoUpdate, NodeInfo};
@@ -146,7 +144,9 @@ mod tests {
         let db = Arc::new(_before_values.await);
         let (serve_future, mut client) = server_and_client_stub(Arc::new(db.pool.clone())).await;
         let host = db.test_host().await;
-        let token = host.get_token(&db.pool).await.unwrap();
+        let token =
+            UserAuthToken::create_token_for::<Host>(&host, TokenType::HostAuth, TokenRole::Service)
+                .unwrap();
 
         let request_future = async move {
             println!("creating request");
@@ -158,7 +158,9 @@ mod tests {
 
             request.metadata_mut().insert(
                 "authorization",
-                format!("Bearer {}", token.to_base64()).parse().unwrap(),
+                format!("Bearer {}", token.to_base64().unwrap())
+                    .parse()
+                    .unwrap(),
             );
 
             match client.commands(request).await {
