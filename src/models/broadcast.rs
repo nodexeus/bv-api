@@ -25,7 +25,7 @@ pub struct BroadcastFilter {
 impl BroadcastFilter {
     pub async fn find_by_id(id: &Uuid, db: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, Self>("SELECT * FROM broadcast_filters where id = $1")
-            .bind(&id)
+            .bind(id)
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
@@ -33,7 +33,7 @@ impl BroadcastFilter {
 
     pub async fn find_all_by_org_id(org_id: &Uuid, db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM broadcast_filters where org_id = $1")
-            .bind(&org_id)
+            .bind(org_id)
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
@@ -50,14 +50,14 @@ impl BroadcastFilter {
                 ($1,$2,$3,$4,$5,$6,$7,$8)
             RETURNING *
             "##)
-        .bind(&req.blockchain_id)
-        .bind(&req.org_id)
+        .bind(req.blockchain_id)
+        .bind(req.org_id)
         .bind(&req.name)
-        .bind(&req.addresses.as_ref().map(Json))
+        .bind(req.addresses.as_ref().map(Json))
         .bind(&req.callback_url)
         .bind(&req.auth_token)
-        .bind(&Json(&req.txn_types))
-        .bind(&req.is_active)
+        .bind(Json(&req.txn_types))
+        .bind(req.is_active)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)
@@ -74,15 +74,15 @@ impl BroadcastFilter {
                 id=$9
             RETURNING *
             "##)
-        .bind(&req.blockchain_id)
-        .bind(&req.org_id)
+        .bind(req.blockchain_id)
+        .bind(req.org_id)
         .bind(&req.name)
-        .bind(&req.addresses.as_ref().map(Json))
+        .bind(req.addresses.as_ref().map(Json))
         .bind(&req.callback_url)
         .bind(&req.auth_token)
-        .bind(&Json(&req.txn_types))
-        .bind(&req.is_active)
-        .bind(&id)
+        .bind(Json(&req.txn_types))
+        .bind(req.is_active)
+        .bind(id)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)
@@ -90,7 +90,7 @@ impl BroadcastFilter {
 
     pub async fn delete(id: &Uuid, db: &PgPool) -> Result<()> {
         let _ = sqlx::query("DELETE FROM broadcast_filters WHERE id = $1")
-            .bind(&id)
+            .bind(id)
             .execute(db)
             .await?;
 

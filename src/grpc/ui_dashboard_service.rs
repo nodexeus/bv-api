@@ -1,8 +1,10 @@
 use super::blockjoy_ui::ResponseMeta;
+use crate::auth::{JwtToken, UserAuthToken};
 use crate::grpc::blockjoy_ui::dashboard_service_server::DashboardService;
 use crate::grpc::blockjoy_ui::{metric, DashboardMetricsRequest, DashboardMetricsResponse, Metric};
 use crate::grpc::helpers::required;
-use crate::models::{Node, Org, Token};
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::models::{Node, Org};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 
@@ -24,9 +26,10 @@ impl DashboardService for DashboardServiceImpl {
     ) -> Result<Response<DashboardMetricsResponse>, Status> {
         let token = request
             .extensions()
-            .get::<Token>()
-            .ok_or_else(required("DB token"))?;
-        let user_id = token.try_user_id()?;
+            .get::<UserAuthToken>()
+            .ok_or_else(required("Auth token"))?;
+        let refresh_token = get_refresh_token(&request);
+        let user_id = token.get_id();
         let org_id = Org::find_personal_org(user_id, &self.db).await?.id;
         let inner = request.into_inner();
         let mut metrics: Vec<Metric> = Vec::with_capacity(2);
@@ -52,6 +55,6 @@ impl DashboardService for DashboardServiceImpl {
             metrics,
         };
 
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 }

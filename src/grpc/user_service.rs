@@ -1,4 +1,4 @@
-use crate::auth::TokenType;
+use crate::auth::{JwtToken, TokenRole, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::user_service_server::UserService;
 use crate::grpc::blockjoy_ui::{
@@ -6,7 +6,8 @@ use crate::grpc::blockjoy_ui::{
     GetUserRequest, GetUserResponse, ResponseMeta, UpdateUserRequest, UpdateUserResponse,
     UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
 };
-use crate::models::{Token, TokenRole, User, UserRequest};
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::models::{User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -29,21 +30,23 @@ impl UserService for UserServiceImpl {
         &self,
         request: Request<GetUserRequest>,
     ) -> Result<Response<GetUserResponse>, Status> {
-        let token = try_get_token(&request)?.token;
+        let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user = token.try_get_user(*token.id(), &self.db).await?;
         let inner = request.into_inner();
-        let user = Token::get_user_for_token(token, TokenType::Login, &self.db).await?;
         let response = GetUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             user: Some(GrpcUser::try_from(user)?),
         };
 
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn create(
         &self,
         request: Request<CreateUserRequest>,
     ) -> Result<Response<CreateUserResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let user = inner.user.ok_or_else(required("user"))?;
         let user_request = UserRequest {
@@ -57,18 +60,19 @@ impl UserService for UserServiceImpl {
         let new_user = User::create(user_request, &self.db, Some(TokenRole::User)).await?;
         let meta = ResponseMeta::from_meta(inner.meta).with_message(new_user.id);
         let response = CreateUserResponse { meta: Some(meta) };
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn update(
         &self,
         request: Request<UpdateUserRequest>,
     ) -> Result<Response<UpdateUserResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let token = request
             .extensions()
-            .get::<Token>()
-            .ok_or_else(required("db token"))?;
-        let user_id = token.user_id.ok_or_else(required("db token"))?;
+            .get::<UserAuthToken>()
+            .ok_or_else(required("auth token"))?;
+        let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
         let inner = request.into_inner();
         let user = inner.user.ok_or_else(required("user"))?;
 
@@ -83,7 +87,7 @@ impl UserService for UserServiceImpl {
                 user: Some(user),
             };
 
-            Ok(Response::new(response))
+            Ok(response_with_refresh_token(refresh_token, response)?)
         } else {
             Err(Status::permission_denied(
                 "You are not allowed to update this user",

@@ -1,8 +1,10 @@
 use anyhow::anyhow;
 use sqlx::PgPool;
 
+use crate::auth::{JwtToken, PwdResetToken, TokenRole, TokenType};
 use crate::errors::ApiError;
 use crate::{auth, errors, models};
+use crate::{errors, models};
 use std::collections::HashMap;
 
 pub struct MailClient {
@@ -37,22 +39,15 @@ impl MailClient {
 
     /// Sends a password reset email to the specified user, containing a JWT that they can use to
     /// authenticate themselves to reset their password.
-    pub async fn reset_password(&self, user: &models::User, db: &PgPool) -> errors::Result<()> {
-        use auth::TokenType::*;
+    pub async fn reset_password(&self, user: &models::User, _db: &PgPool) -> errors::Result<()> {
         const TEMPLATES: &str = include_str!("../mails/reset_password.toml");
         // SAFETY: assume we can write toml and also protected by test
         let templates = toml::from_str(TEMPLATES)
             .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
-        let login_token = models::Token::get::<models::User>(user.id, Login, db).await?;
-        let token = models::Token::create_for(user, login_token.role, PwdReset, db).await?;
-        models::UserToken::new(user.id, token.id, PwdReset)
-            .create_or_update(db)
-            .await?;
-        let base_url = dotenv::var("UI_BASE_URL")
-            .map_err(|e| ApiError::UnexpectedError(anyhow!("UI_BASE_URL not found: {e}")))?;
-        let link = format!("{}/reset?token={}", base_url, token.token);
+        let token: PwdResetToken =
+            JwtToken::create_token_for::<models::User>(user, TokenType::PwdReset, TokenRole::User)?;
         let mut context = HashMap::new();
-        context.insert("link".to_owned(), link);
+        context.insert("token".to_owned(), token.encode()?);
         self.send_mail(&templates, user, Some(context)).await
     }
 

@@ -1,11 +1,12 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::TokenIdentifyable;
+use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
 use api::grpc::blockjoy_ui::{
     ApiToken, LoginUserRequest, RefreshTokenRequest, RequestMeta, UpdateUiPasswordRequest,
 };
+use api::models::User;
 use base64::encode as base64_encode;
 use setup::setup;
 use std::sync::Arc;
@@ -57,11 +58,13 @@ async fn responds_error_with_invalid_credentials_for_login() {
 async fn responds_ok_with_valid_credentials_for_refresh() {
     let db = _before_values.await;
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: Some(ApiToken {
-            value: token.token.clone(),
+            value: token.encode().unwrap(),
         }),
         fields: vec![],
         pagination: None,
@@ -73,10 +76,21 @@ async fn responds_ok_with_valid_credentials_for_refresh() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
-    assert_grpc_request! { refresh, request, tonic::Code::Ok, db, AuthenticationServiceClient<Channel> };
+    assert_grpc_request! { refresh, request, tonic::Code::Unimplemented, db, AuthenticationServiceClient<Channel> };
 }
 
 #[before(call = "setup")]
@@ -85,11 +99,13 @@ async fn responds_unauthenticated_with_invalid_credentials_for_refresh() {
     let db = _before_values.await;
     let user = db.admin_user().await;
     let invalid_token = base64_encode("asdf.asdfasdfasdfasdfasdf.asfasdfasdfasdfaf");
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: Some(ApiToken {
-            value: token.token.clone(),
+            value: token.encode().unwrap(),
         }),
         fields: vec![],
         pagination: None,
@@ -118,7 +134,9 @@ async fn responds_ok_with_valid_pwds_for_update_ui_pwd() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = UpdateUiPasswordRequest {
         meta: Some(request_meta),
         new_pwd: "hugo-boss".to_string(),
@@ -129,7 +147,18 @@ async fn responds_ok_with_valid_pwds_for_update_ui_pwd() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update_ui_password, request, tonic::Code::Ok, db, AuthenticationServiceClient<Channel> };
@@ -146,7 +175,9 @@ async fn responds_unauthenticated_with_invalid_old_pwd_for_update_ui_pwd() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = UpdateUiPasswordRequest {
         meta: Some(request_meta),
         new_pwd: "hugo-boss".to_string(),
@@ -157,7 +188,18 @@ async fn responds_unauthenticated_with_invalid_old_pwd_for_update_ui_pwd() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update_ui_password, request, tonic::Code::Unauthenticated, db, AuthenticationServiceClient<Channel> };
@@ -174,7 +216,9 @@ async fn responds_invalid_argument_with_invalid_pwd_confirmation_for_update_ui_p
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = UpdateUiPasswordRequest {
         meta: Some(request_meta),
         new_pwd: "hugo-boss".to_string(),
@@ -185,7 +229,18 @@ async fn responds_invalid_argument_with_invalid_pwd_confirmation_for_update_ui_p
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(user.id).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update_ui_password, request, tonic::Code::InvalidArgument, db, AuthenticationServiceClient<Channel> };

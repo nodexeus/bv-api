@@ -44,14 +44,14 @@ impl Reward {
                 error!("Reward has zero amount. {:?}", reward);
             }
             let res = sqlx::query("INSERT INTO rewards (block, hash, txn_time, validator_id, user_id, account, validator, amount) values ($1,$2,$3,$4,$5,$6,$7,$8)")
-                .bind(&reward.block)
+                .bind(reward.block)
                 .bind(&reward.hash)
-                .bind(&reward.txn_time)
-                .bind(&reward.validator_id)
-                .bind(&reward.user_id)
+                .bind(reward.txn_time)
+                .bind(reward.validator_id)
+                .bind(reward.user_id)
                 .bind(&reward.account)
                 .bind(&reward.validator)
-                .bind(&reward.amount)
+                .bind(reward.amount)
                 .execute(db)
                 .await;
 
