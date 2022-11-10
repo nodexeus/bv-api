@@ -94,6 +94,7 @@ async fn responds_ok_with_id_for_get() {
         name: None,
         version: None,
         staking_status: None,
+        self_update: false,
     };
     let node = Node::create(&req, &db.pool).await.unwrap();
     let user = db.admin_user().await;
@@ -165,6 +166,7 @@ async fn responds_ok_with_valid_data_for_create() {
         groups: vec![],
         staking_status: None,
         sync_status: Some(NodeSyncStatus::Unknown as i32),
+        self_update: None,
     };
     let token =
         UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
@@ -225,6 +227,7 @@ async fn responds_internal_with_invalid_data_for_create() {
         groups: vec![],
         staking_status: None,
         sync_status: Some(NodeSyncStatus::Unknown as i32),
+        self_update: None,
     };
     let user = db.admin_user().await;
     let token =
@@ -292,6 +295,7 @@ async fn responds_ok_with_valid_data_for_update() {
         name: None,
         version: None,
         staking_status: None,
+        self_update: false,
     };
     let db_node = Node::create(&req, &db.pool).await.unwrap();
     let node = GrpcNode {
@@ -364,6 +368,7 @@ async fn responds_internal_with_invalid_data_for_update() {
         name: None,
         version: None,
         staking_status: None,
+        self_update: false,
     };
     let db_node = Node::create(&req, &db.pool).await.unwrap();
     let node = GrpcNode {
