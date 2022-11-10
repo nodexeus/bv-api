@@ -516,6 +516,7 @@ pub mod from {
                 sync_status: None,
                 staking_status: None,
                 container_status: None,
+                self_update: node.self_update.unwrap_or(false),
             };
             Ok(node_info)
         }

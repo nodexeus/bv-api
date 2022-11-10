@@ -385,6 +385,7 @@ pub struct NodeUpdateRequest {
     pub sync_status: Option<NodeSyncStatus>,
     pub staking_status: Option<NodeStakingStatus>,
     pub block_height: Option<i64>,
+    pub self_update: bool,
 }
 
 impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
@@ -400,6 +401,7 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
             sync_status: info.sync_status.map(|n| n.try_into()).transpose()?,
             staking_status: info.staking_status.map(|n| n.try_into()).transpose()?,
             block_height: info.block_height,
+            self_update: info.self_update.unwrap_or(false),
         };
         Ok(req)
     }
@@ -415,6 +417,7 @@ pub struct NodeInfo {
     pub sync_status: Option<NodeSyncStatus>,
     pub staking_status: Option<NodeStakingStatus>,
     pub container_status: Option<ContainerStatus>,
+    pub self_update: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
