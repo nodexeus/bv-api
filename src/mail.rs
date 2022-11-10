@@ -64,8 +64,12 @@ impl MailClient {
             .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
         let token: PwdResetToken =
             JwtToken::create_token_for::<models::User>(user, TokenType::PwdReset, TokenRole::User)?;
+        let base_url =
+            dotenv::var("UI_BASE_URL").map_err(|e| anyhow!("UI_BASE_URL can't be read: {e}"))?;
+        let link = format!("{}/password_reset?token={}", base_url, token.encode()?);
         let mut context = HashMap::new();
-        context.insert("token".to_owned(), token.encode()?);
+        context.insert("link".to_owned(), link);
+
         self.send_mail(&templates, user, Some(context)).await
     }
 

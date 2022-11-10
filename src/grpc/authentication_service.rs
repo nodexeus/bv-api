@@ -1,6 +1,6 @@
 use crate::auth::{
-    FindableById, JwtToken, RegistrationConfirmationToken, TokenRole, TokenType, UserAuthToken,
-    UserRefreshToken,
+    FindableById, JwtToken, PwdResetToken, RegistrationConfirmationToken, TokenRole, TokenType,
+    UserAuthToken, UserRefreshToken,
 };
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
@@ -124,11 +124,11 @@ impl AuthenticationService for AuthenticationServiceImpl {
         &self,
         request: Request<UpdatePasswordRequest>,
     ) -> Result<Response<UpdatePasswordResponse>, Status> {
+        let token = request
+            .extensions()
+            .get::<PwdResetToken>()
+            .ok_or_else(|| Status::unauthenticated("Invalid reset token"))?;
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
-        let encoded = token
-            .encode()
-            .map_err(|e| Status::internal(format!("Token encode error {e:?}")))?;
         let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
         let cur_user = User::find_by_id(user_id, &self.db).await?;
         let request = request.into_inner();
@@ -136,9 +136,13 @@ impl AuthenticationService for AuthenticationServiceImpl {
             .update_password(&request.password, &self.db)
             .await?;
         let meta = ResponseMeta::from_meta(request.meta);
+        let auth_token =
+            UserAuthToken::create_token_for(&cur_user, TokenType::UserAuth, TokenRole::User)?;
         let response = UpdatePasswordResponse {
             meta: Some(meta),
-            token: Some(ApiToken { value: encoded }),
+            token: Some(ApiToken {
+                value: auth_token.to_base64()?,
+            }),
         };
 
         // Send notification mail
