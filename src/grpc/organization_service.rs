@@ -124,10 +124,10 @@ impl OrganizationService for OrganizationServiceImpl {
         request: Request<RestoreOrganizationRequest>,
     ) -> Result<Response<RestoreOrganizationResponse>, Status> {
         let token = try_get_token::<_, UserAuthToken>(&request)?;
-        let user_id = token.id();
+        let user_id = token.id().clone();
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
-        let member = Org::find_org_user(user_id, &org_id, &self.db).await?;
+        let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
 
         // Only owner or admins may restore orgs
         if member.role == OrgRole::Member {

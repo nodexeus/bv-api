@@ -160,13 +160,8 @@ async fn responds_ok_for_update() {
 async fn responds_ok_for_delete() {
     let db = Arc::new(_before_values.await);
     let user = db.admin_user().await;
-    let org_id = Org::find_all_by_user(user.id, &db.pool)
-        .await
-        .unwrap()
-        .first()
-        .unwrap()
-        .id
-        .to_string();
+    let orgs = Org::find_all_by_user(user.id, &db.pool).await.unwrap();
+    let org_id = orgs.first().unwrap().id.to_string();
     let token =
         UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
             .unwrap();
