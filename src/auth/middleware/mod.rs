@@ -100,6 +100,29 @@ where
                         }
                     }
                 }
+                AnyToken::RegistrationConfirmation(token) => {
+                    token.encode().map_err(cant_parse)?;
+
+                    let auth_data = AuthorizationData {
+                        subject: token.role().to_string(),
+                        object: request.uri().path().to_string(),
+                        action: request.method().to_string(),
+                    };
+                    let result = enforcer
+                        .try_authorized(auth_data)
+                        .map_err(|e| unauthorized_response(&e.to_string()))?;
+                    // Evaluate authorization result
+                    match result {
+                        AuthorizationState::Authorized => {
+                            request.extensions_mut().insert(token);
+
+                            Ok(request)
+                        }
+                        AuthorizationState::Denied => {
+                            Err(unauthorized_response("Insufficient privileges"))
+                        }
+                    }
+                }
                 AnyToken::UserAuth(token) => {
                     // 1. try if token is valid
                     token.encode().map_err(cant_parse)?;
@@ -183,9 +206,6 @@ where
                 _ => Err(unauthorized_response("Invalid token type")),
                 /*
                 AnyToken::PwdReset(pwd_reset) => pwd_reset.encode().map_err(cant_parse)?,
-                AnyToken::RegistrationConfirmation(confirmation) => {
-                    confirmation.encode().map_err(cant_parse)?
-                }
                  */
             }
         })

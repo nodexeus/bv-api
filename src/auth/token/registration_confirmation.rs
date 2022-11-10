@@ -1,11 +1,12 @@
 use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenRole, TokenType};
 use crate::models::BlacklistToken;
 use crate::server::DbPool;
+use derive_getters::Getters;
 use std::str::FromStr;
 use uuid::Uuid;
 
 /// The claims of the token to be stored (encrypted) on the client side.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Getters)]
 pub struct RegistrationConfirmationToken {
     id: Uuid,
     exp: i64,

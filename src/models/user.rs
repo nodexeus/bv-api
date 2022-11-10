@@ -34,6 +34,7 @@ pub struct User {
     pub fee_bps: i64,
     pub staking_quota: i64,
     pub created_at: DateTime<Utc>,
+    pub confirmed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -305,19 +306,33 @@ impl User {
         }
     }
 
+    /// Check if user can be found by email, is confirmed and has provided a valid password
     pub async fn login(login: LoginUserRequest, db: &PgPool) -> Result<Self> {
         let user = Self::find_by_email(&login.email, db).await.map_err(|_e| {
             ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
         })?;
 
-        match user.verify_password(&login.password) {
-            Ok(_) => Ok(user),
-            Err(e) => Err(e),
+        if User::is_confirmed(user.id, db).await? {
+            match user.verify_password(&login.password) {
+                Ok(_) => Ok(user),
+                Err(e) => Err(e),
+            }
+        } else {
+            Err(ApiError::UserConfirmationError)
         }
     }
 
-    pub async fn refresh(req: UserRefreshRequest, db: &PgPool) -> Result<User> {
-        Self::find_by_refresh(&req.refresh, db).await
+    pub async fn refresh(id: Uuid, refresh_token: String, db: &PgPool) -> Result<User> {
+        // Update user with new refresh token
+        let fields = UserSelectiveUpdate {
+            first_name: None,
+            last_name: None,
+            fee_bps: None,
+            staking_quota: None,
+            refresh_token: Some(refresh_token.clone()),
+        };
+
+        Self::update_all(id, fields, db).await
     }
 
     /// QR Code data for specific invoice
@@ -362,6 +377,31 @@ impl User {
         tx.commit().await?;
 
         Ok(user)
+    }
+
+    pub async fn confirm(id: Uuid, db: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, User>(
+            r#"UPDATE users SET 
+                    confirmed_at = now()
+                WHERE id = $1 and confirmed_at IS NULL RETURNING *"#,
+        )
+        .bind(id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
+    }
+
+    pub async fn is_confirmed(id: Uuid, db: &PgPool) -> Result<bool> {
+        let result: i32 = sqlx::query_scalar(
+            r#"SELECT count(*)::int 
+            FROM users WHERE id = $1 AND confirmed_at IS NOT NULL"#,
+        )
+        .bind(id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)?;
+
+        Ok(result == 1)
     }
 
     pub fn preferred_language(&self) -> &str {
@@ -424,11 +464,6 @@ pub struct UserRequest {
 //     #[validate(email)]
 //     pub email: String,
 // }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserRefreshRequest {
-    pub refresh: String,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct UserPayAddress {

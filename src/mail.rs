@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use sqlx::PgPool;
 
-use crate::auth::{JwtToken, PwdResetToken, TokenRole, TokenType};
+use crate::auth::{JwtToken, PwdResetToken, RegistrationConfirmationToken, TokenRole, TokenType};
 use crate::{errors, models};
 use std::collections::HashMap;
 
@@ -33,6 +33,26 @@ impl MailClient {
             .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
 
         self.send_mail(&templates, user, None).await
+    }
+
+    pub async fn registration_confirmation(&self, user: &models::User) -> errors::Result<()> {
+        const TEMPLATES: &str = include_str!("../mails/register.toml");
+        // SAFETY: assume we can write toml and also protected by test
+        let templates = toml::from_str(TEMPLATES)
+            .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
+        let confirmation_token = RegistrationConfirmationToken::create_token_for(
+            user,
+            TokenType::RegistrationConfirmation,
+            TokenRole::User,
+        )?
+        .encode()?;
+        let base_url =
+            dotenv::var("UI_BASE_URL").map_err(|e| anyhow!("UI_BASE_URL can't be read: {e}"))?;
+        let link = format!("{}/verified?token={}", base_url, confirmation_token);
+        let mut context = HashMap::new();
+        context.insert("link".to_owned(), link);
+
+        self.send_mail(&templates, user, Some(context)).await
     }
 
     /// Sends a password reset email to the specified user, containing a JWT that they can use to
