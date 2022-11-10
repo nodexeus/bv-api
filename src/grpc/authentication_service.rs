@@ -1,9 +1,6 @@
 use crate::auth::{
-    FindableById, JwtToken, PwdResetToken, TokenRole, TokenType, UserAuthToken, UserRefreshToken,
-};
-use crate::auth::{
-    FindableById, JwtToken, RegistrationConfirmationToken, TokenRole, TokenType, UserAuthToken,
-    UserRefreshToken,
+    FindableById, JwtToken, PwdResetToken, RegistrationConfirmationToken, TokenRole, TokenType,
+    UserAuthToken, UserRefreshToken,
 };
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
