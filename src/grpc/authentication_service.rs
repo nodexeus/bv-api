@@ -67,8 +67,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let token = request
             .extensions()
             .get::<RegistrationConfirmationToken>()
-            .ok_or_else(required("Registration confirmation token extension"))?
-            .clone();
+            .ok_or_else(required("Registration confirmation token extension"))?;
         let user_id = token.get_id();
         let user = User::confirm(user_id, &self.db).await?;
         let auth_token =
