@@ -48,6 +48,7 @@ jobs:
       REFRESH_SECRET: 23942390
       REQUEST_CONCURRENCY_LIMIT: 128
       PAGINATION_MAX_ITEMS: 10
+      UI_BASE_URL: https://localhost:3000
 
     steps:
       - uses: actions/checkout@v2

@@ -198,8 +198,8 @@ html = """
   <p>
     You have registered at blockjoy.com. To confirm your registration,
     please visit
-    <a href="https://console.blockjoy.com/confirm?t={{token}}">
-      https://console.blockjoy.com/confirm?t={{token}}
+    <a href="{{link}}">
+      {{link}}
     </a>.
   </p>
   <br/><br/>
@@ -213,7 +213,7 @@ text = """
 Registration at BlockJoy
 
 You have registered at blockjoy.com. To confirm your registration, please
-visit https://console.blockjoy.com/confirm?t={{token}}
+visit {{link}}
 
 Welcome to BlockJoy!
 """
@@ -418,8 +418,8 @@ html = """
   <p>
     Sie haben sich bei blockjoy.com registriert. Um die Registrierung
     zu bestätigen, öffnen Sie bitte folgenden Link:
-    <a href="https://console.blockjoy.com/confirm?t={{token}}">
-      https://console.blockjoy.com/confirm?t={{token}}
+    <a href="{{link}}">
+      {{link}}
     </a>.
   </p>
   <br/><br/>
@@ -434,7 +434,7 @@ Registrierung bei BlockJoy
 
 Sie haben sich bei blockjoy.com registriert. Um die Registrierung
 zu bestätigen, öffnen Sie bitte folgenden Link:
-https://console.blockjoy.com/confirm?t={{token}}
+{{link}}
 
 Willkommen bei BlockJoy!
 """
@@ -639,8 +639,8 @@ html = """
   <p>
     U heeft zich geregistreerd bij blockjoy.com. Om uw registratie te bevestigen
     bezoek
-    <a href="https://console.blockjoy.com/confirm?t={{token}}">
-      https://console.blockjoy.com/confirm?t={{token}}
+    <a href="{{link}}">
+      {{link}}
     </a>.
   </p>
   <br/><br/>
@@ -654,7 +654,7 @@ text = """
 Registratie bij BlockJoy
 
 U heeft zich geregistreerd bij blockjoy.com. Om uw registratie te bevestigen
-bezoek https://console.blockjoy.com/confirm?t={{token}}
+bezoek {{link}}
 
 Welkom bij BlockJoy!
 """

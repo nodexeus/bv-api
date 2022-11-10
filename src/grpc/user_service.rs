@@ -7,6 +7,7 @@ use crate::grpc::blockjoy_ui::{
     UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
 };
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::mail::MailClient;
 use crate::models::{User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -46,7 +47,6 @@ impl UserService for UserServiceImpl {
         &self,
         request: Request<CreateUserRequest>,
     ) -> Result<Response<CreateUserResponse>, Status> {
-        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let user = inner.user.ok_or_else(required("user"))?;
         let user_request = UserRequest {
@@ -56,11 +56,15 @@ impl UserService for UserServiceImpl {
             password: inner.password,
             password_confirm: inner.password_confirmation,
         };
-
         let new_user = User::create(user_request, &self.db, Some(TokenRole::User)).await?;
         let meta = ResponseMeta::from_meta(inner.meta).with_message(new_user.id);
         let response = CreateUserResponse { meta: Some(meta) };
-        Ok(response_with_refresh_token(refresh_token, response)?)
+
+        MailClient::new()
+            .registration_confirmation(&new_user)
+            .await?;
+
+        Ok(Response::new(response))
     }
 
     async fn update(
