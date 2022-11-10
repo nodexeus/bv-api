@@ -181,9 +181,6 @@ where
                 _ => Err(unauthorized_response("Invalid token type")),
                 /*
                 AnyToken::PwdReset(pwd_reset) => pwd_reset.encode().map_err(cant_parse)?,
-                AnyToken::RegistrationConfirmation(confirmation) => {
-                    confirmation.encode().map_err(cant_parse)?
-                }
                  */
             }
         })
