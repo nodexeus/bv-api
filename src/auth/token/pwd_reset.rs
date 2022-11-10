@@ -2,12 +2,13 @@ use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenRole, Tok
 use crate::errors::Result;
 use crate::models::BlacklistToken;
 use crate::server::DbPool;
+use derive_getters::Getters;
 use std::str;
 use std::str::FromStr;
 use uuid::Uuid;
 
 /// The claims of the token to be stored (encrypted) on the client side.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Getters)]
 pub struct PwdResetToken {
     id: Uuid,
     exp: i64,
