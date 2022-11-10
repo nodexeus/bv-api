@@ -10,7 +10,6 @@ use crate::grpc::blockjoy_ui::{
 };
 use crate::grpc::helpers::pagination_parameters;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
-use crate::models::{Org, OrgRequest};
 use crate::models::{Org, OrgRequest, OrgRole};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -104,14 +103,6 @@ impl OrganizationService for OrganizationServiceImpl {
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
         let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
 
-        if !Org::is_member(&user_id, &org_id, &self.db).await? {
-            let msg = "User is not member of given organization";
-            return Err(Status::permission_denied(msg));
-        }
-        Org::delete(org_id, &self.db).await?;
-        let meta = ResponseMeta::from_meta(inner.meta);
-        let inner = DeleteOrganizationResponse { meta: Some(meta) };
-        Ok(response_with_refresh_token(refresh_token, inner)?)
         // Only owner or admins may delete orgs
         if member.role == OrgRole::Member {
             Err(Status::permission_denied(format!(
@@ -124,7 +115,7 @@ impl OrganizationService for OrganizationServiceImpl {
             let meta = ResponseMeta::from_meta(inner.meta);
             let inner = DeleteOrganizationResponse { meta: Some(meta) };
 
-            Ok(Response::new(inner))
+            Ok(response_with_refresh_token(refresh_token, inner)?)
         }
     }
 
@@ -132,11 +123,11 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<RestoreOrganizationRequest>,
     ) -> Result<Response<RestoreOrganizationResponse>, Status> {
-        let db_token = try_get_token(&request)?;
-        let user_id = db_token.try_user_id()?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user_id = token.id();
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
-        let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
+        let member = Org::find_org_user(user_id, &org_id, &self.db).await?;
 
         // Only owner or admins may restore orgs
         if member.role == OrgRole::Member {
