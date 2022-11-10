@@ -32,13 +32,13 @@ impl Payment {
                     oracle_price
                 ) values ($1,$2,$3,$4,$5,$6,$7)"##,
             )
-            .bind(&payment.block)
-            .bind(&payment.user_id)
+            .bind(payment.block)
+            .bind(payment.user_id)
             .bind(&payment.hash)
             .bind(&payment.payer)
             .bind(&payment.payee)
-            .bind(&payment.amount)
-            .bind(&payment.oracle_price)
+            .bind(payment.amount)
+            .bind(payment.oracle_price)
             .execute(db)
             .await;
 

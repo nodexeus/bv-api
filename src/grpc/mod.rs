@@ -25,7 +25,11 @@ pub mod blockjoy_ui {
 }
 
 use crate::auth::middleware::AuthorizationService;
-use crate::auth::{unauthenticated_paths::UnauthenticatedPaths, Authorization};
+use crate::auth::{
+    unauthenticated_paths::UnauthenticatedPaths, Authorization, JwtToken, TokenType,
+    UserRefreshToken,
+};
+use crate::errors::Result as ApiResult;
 use crate::grpc::authentication_service::AuthenticationServiceImpl;
 use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationServiceServer;
@@ -52,10 +56,12 @@ use crate::grpc::user_service::UserServiceImpl;
 use crate::server::DbPool;
 use axum::Extension;
 use blockjoy::hosts_server::HostsServer;
+use chrono::NaiveDateTime;
 use host_service::HostsServiceImpl;
 use sqlx::PgPool;
 use std::env;
 use std::sync::Arc;
+use tonic::metadata::errors::InvalidMetadataValue;
 use tonic::transport::server::Router;
 use tonic::transport::Server;
 use tower::layer::util::{Identity, Stack};
@@ -119,6 +125,7 @@ pub async fn server(
 
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
+        // TODO: Check if DB extension is still needed
         .layer(Extension(db.clone()))
         .layer(Extension(unauthenticated))
         .layer(AsyncRequireAuthorizationLayer::new(auth_service))
@@ -152,4 +159,47 @@ fn rate_limiting_settings() -> usize {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(32)
+}
+
+pub fn response_with_refresh_token<ResponseBody>(
+    token: String,
+    inner: ResponseBody,
+) -> ApiResult<tonic::Response<ResponseBody>> {
+    let mut response = tonic::Response::new(inner);
+
+    if !token.is_empty() {
+        let refresh_token = UserRefreshToken::from_encoded::<UserRefreshToken>(
+            token.as_str(),
+            TokenType::UserRefresh,
+            true,
+        )?;
+        let exp = NaiveDateTime::from_timestamp(refresh_token.get_expiration(), 0);
+        // let exp = "Fri, 09 Jan 2026 03:15:14 GMT";
+        let exp = exp.format("%a, %d %b %Y %H:%M:%S GMT").to_string();
+
+        let raw_cookie = format!(
+            "refresh={}; path=/; expires={}; secure; HttpOnly; SameSite=Lax",
+            token, exp
+        );
+        let cookie = raw_cookie.parse().map_err(|e: InvalidMetadataValue| {
+            tracing::error!("error creating cookie: {e:?}");
+            tonic::Status::internal(e.to_string())
+        })?;
+
+        tracing::debug!("Setting refresh cookie");
+
+        response.metadata_mut().insert("set-cookie", cookie);
+    } else {
+        tracing::debug!("NOT setting refresh cookie as no refresh token is available");
+    }
+
+    Ok(response)
+}
+
+pub fn get_refresh_token<B>(request: &tonic::Request<B>) -> String {
+    request
+        .extensions()
+        .get::<UserRefreshToken>()
+        .map(|t| t.encode().map_err(|_| String::new()).unwrap_or_default())
+        .unwrap_or_default()
 }

@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::TokenIdentifyable;
+use api::auth::{HostAuthToken, JwtToken, TokenRole, TokenType};
 use api::grpc::blockjoy::command_flow_client::CommandFlowClient;
 use api::grpc::blockjoy::info_update::Info;
 use api::grpc::blockjoy::{self, NodeInfo};
@@ -32,7 +32,9 @@ async fn test_command_flow_works() {
     let (db, node) = _before_values.await;
     let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
-    let token = host.get_token(&db.pool).await.unwrap();
+    let token =
+        HostAuthToken::create_token_for::<Host>(host, TokenType::HostAuth, TokenRole::Service)
+            .unwrap();
     // let node: Node = sqlx::query_as("INSERT INTO nodes VALUES (")
     let req = blockjoy::InfoUpdate {
         info: Some(Info::Node(NodeInfo {
@@ -51,7 +53,18 @@ async fn test_command_flow_works() {
     let mut req = Request::new(strm);
     req.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    req.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.host_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     let pool = std::sync::Arc::new(db.pool.clone());

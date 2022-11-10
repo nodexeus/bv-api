@@ -121,6 +121,7 @@ pub mod from {
                 last_name: user.last_name,
                 fee_bps: None,
                 staking_quota: None,
+                refresh_token: None,
             }
         }
     }

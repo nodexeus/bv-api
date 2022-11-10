@@ -1,21 +1,19 @@
 use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenRole, TokenType};
-use crate::errors::Result;
 use crate::models::BlacklistToken;
 use crate::server::DbPool;
-use std::str;
 use std::str::FromStr;
 use uuid::Uuid;
 
 /// The claims of the token to be stored (encrypted) on the client side.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
-pub struct PwdResetToken {
+pub struct RegistrationConfirmationToken {
     id: Uuid,
     exp: i64,
     token_type: TokenType,
     role: TokenRole,
 }
 
-impl JwtToken for PwdResetToken {
+impl JwtToken for RegistrationConfirmationToken {
     fn get_expiration(&self) -> i64 {
         self.exp
     }
@@ -28,7 +26,7 @@ impl JwtToken for PwdResetToken {
         Ok(Self {
             id: claim.id,
             exp: claim.exp,
-            token_type: TokenType::PwdReset,
+            token_type: TokenType::RegistrationConfirmation,
             role: claim.role,
         })
     }
@@ -39,7 +37,7 @@ impl JwtToken for PwdResetToken {
 }
 
 #[tonic::async_trait]
-impl Blacklisted for PwdResetToken {
+impl Blacklisted for RegistrationConfirmationToken {
     async fn blacklist(&self, db: DbPool) -> TokenResult<bool> {
         Ok(BlacklistToken::create(self.encode()?, self.token_type, &db)
             .await
@@ -51,10 +49,14 @@ impl Blacklisted for PwdResetToken {
     }
 }
 
-impl FromStr for PwdResetToken {
+impl FromStr for RegistrationConfirmationToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        PwdResetToken::from_encoded(encoded, TokenType::PwdReset, true)
+        RegistrationConfirmationToken::from_encoded(
+            encoded,
+            TokenType::RegistrationConfirmation,
+            true,
+        )
     }
 }

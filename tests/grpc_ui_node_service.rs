@@ -1,14 +1,14 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::TokenIdentifyable;
+use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::node_service_client::NodeServiceClient;
 use api::grpc::blockjoy_ui::{
     node, CreateNodeRequest, GetNodeRequest, Node as GrpcNode, RequestMeta, UpdateNodeRequest,
 };
 use api::models::{
     ContainerStatus, Node, NodeChainStatus, NodeCreateRequest, NodeSyncStatus, NodeType,
-    NodeTypeKey, Org,
+    NodeTypeKey, Org, User,
 };
 use setup::setup;
 use sqlx::types::Json;
@@ -29,7 +29,9 @@ async fn responds_not_found_without_any_for_get() {
         pagination: None,
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = GetNodeRequest {
         meta: Some(request_meta),
         id: Uuid::new_v4().to_string(),
@@ -38,7 +40,18 @@ async fn responds_not_found_without_any_for_get() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::NotFound, db, NodeServiceClient<Channel> };
@@ -84,7 +97,9 @@ async fn responds_ok_with_id_for_get() {
     };
     let node = Node::create(&req, &db.pool).await.unwrap();
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = GetNodeRequest {
         meta: Some(request_meta),
         id: node.id.to_string(),
@@ -93,7 +108,18 @@ async fn responds_ok_with_id_for_get() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { get, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
@@ -140,7 +166,9 @@ async fn responds_ok_with_valid_data_for_create() {
         staking_status: None,
         sync_status: Some(NodeSyncStatus::Unknown as i32),
     };
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = CreateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -149,7 +177,18 @@ async fn responds_ok_with_valid_data_for_create() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
@@ -188,7 +227,9 @@ async fn responds_internal_with_invalid_data_for_create() {
         sync_status: Some(NodeSyncStatus::Unknown as i32),
     };
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = CreateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -197,7 +238,18 @@ async fn responds_internal_with_invalid_data_for_create() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { create, request, tonic::Code::InvalidArgument, db, NodeServiceClient<Channel> };
@@ -247,7 +299,9 @@ async fn responds_ok_with_valid_data_for_update() {
         name: Some("stri-bu".to_string()),
         ..Default::default()
     };
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = UpdateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -256,7 +310,18 @@ async fn responds_ok_with_valid_data_for_update() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
@@ -308,7 +373,9 @@ async fn responds_internal_with_invalid_data_for_update() {
         blockchain_id: None,
         ..Default::default()
     };
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = UpdateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -317,7 +384,18 @@ async fn responds_internal_with_invalid_data_for_update() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::Internal, db, NodeServiceClient<Channel> };
@@ -339,7 +417,9 @@ async fn responds_not_found_with_invalid_id_for_update() {
         id: Some(Uuid::new_v4().to_string()),
         ..Default::default()
     };
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token =
+        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
+            .unwrap();
     let inner = UpdateNodeRequest {
         meta: Some(request_meta),
         node: Some(node),
@@ -348,7 +428,18 @@ async fn responds_not_found_with_invalid_id_for_update() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.user_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { update, request, tonic::Code::NotFound, db, NodeServiceClient<Channel> };

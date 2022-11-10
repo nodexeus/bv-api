@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::TokenIdentifyable;
+use api::auth::{HostAuthToken, JwtToken, TokenRole, TokenType};
 use api::grpc::blockjoy;
 use api::grpc::blockjoy::{
     hosts_client::HostsClient, DeleteHostRequest, HostInfoUpdateRequest, ProvisionHostRequest,
@@ -122,7 +122,12 @@ async fn responds_unauthenticated_with_token_for_info_update() {
 async fn responds_permission_denied_with_token_ownership_for_info_update() {
     let db = _before_values.await;
     let hosts = Host::find_all(&db.pool).await.unwrap();
-    let request_token = hosts.first().unwrap().get_token(&db.pool).await.unwrap();
+    let request_token = HostAuthToken::create_token_for::<Host>(
+        hosts.first().unwrap(),
+        TokenType::HostAuth,
+        TokenRole::Service,
+    )
+    .unwrap();
     let resource_host = hosts.last().unwrap();
     let b_uuid = resource_host.id.to_string();
     let host_info = blockjoy::HostInfo {
@@ -148,7 +153,7 @@ async fn responds_permission_denied_with_token_ownership_for_info_update() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", request_token.to_base64())
+        format!("Bearer {}", request_token.to_base64().unwrap())
             .parse()
             .unwrap(),
     );
@@ -189,7 +194,7 @@ async fn responds_not_found_for_provision() {
 
 #[before(call = "setup")]
 #[tokio::test]
-async fn responds_ok_for_provision() {
+async fn responds_ok_for_provision() -> anyhow::Result<()> {
     let db = _before_values.await;
     let mut tx = db.pool.begin().await.unwrap();
     let org: (Uuid,) = sqlx::query_as("select id from orgs")
@@ -232,6 +237,17 @@ async fn responds_ok_for_provision() {
     let request = Request::new(inner);
 
     assert_grpc_request! { provision, request, tonic::Code::Ok, db, HostsClient<Channel> };
+
+    let host = sqlx::query("SELECT * FROM hosts ORDER BY created_at DESC LIMIT 1")
+        .map(|row| Host::try_from(row).unwrap_or_default())
+        .fetch_one(&db.pool)
+        .await?;
+
+    println!("host name: {}", host.name);
+
+    assert_eq!(host.name.split('_').count(), 4);
+
+    Ok(())
 }
 
 #[before(call = "setup")]
@@ -240,7 +256,9 @@ async fn responds_ok_for_info_update() {
     let db = _before_values.await;
     let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
-    let token = host.get_token(&db.pool).await.unwrap();
+    let token =
+        HostAuthToken::create_token_for::<Host>(host, TokenType::HostAuth, TokenRole::Service)
+            .unwrap();
     let b_uuid = host.id.to_string();
     let host_info = blockjoy::HostInfo {
         id: Some(b_uuid.clone()),
@@ -265,7 +283,18 @@ async fn responds_ok_for_info_update() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.host_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { info_update, request, tonic::Code::Ok, db, HostsClient<Channel> };
@@ -277,7 +306,9 @@ async fn responds_ok_for_delete() {
     let db = _before_values.await;
     let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
-    let token = host.get_token(&db.pool).await.unwrap();
+    let token =
+        HostAuthToken::create_token_for::<Host>(host, TokenType::HostAuth, TokenRole::Service)
+            .unwrap();
     let b_uuid = host.id.to_string();
     let inner = DeleteHostRequest {
         request_id: Some(Uuid::new_v4().to_string()),
@@ -287,7 +318,18 @@ async fn responds_ok_for_delete() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+    request.metadata_mut().insert(
+        "cookie",
+        format!(
+            "refresh={}",
+            db.host_refresh_token(*token.id()).encode().unwrap()
+        )
+        .parse()
+        .unwrap(),
     );
 
     assert_grpc_request! { delete, request, tonic::Code::Ok, db, HostsClient<Channel> };
@@ -315,7 +357,12 @@ async fn responds_permission_denied_for_delete() {
     let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
     let request_host = hosts.last().unwrap();
-    let token = request_host.get_token(&db.pool).await.unwrap();
+    let token = HostAuthToken::create_token_for::<Host>(
+        request_host,
+        TokenType::HostAuth,
+        TokenRole::Service,
+    )
+    .unwrap();
     let b_uuid = host.id.to_string();
     let inner = DeleteHostRequest {
         request_id: Some(Uuid::new_v4().to_string()),
@@ -325,7 +372,9 @@ async fn responds_permission_denied_for_delete() {
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
     );
 
     assert_grpc_request! { delete, request, tonic::Code::PermissionDenied, db, HostsClient<Channel> };
