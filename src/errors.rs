@@ -50,7 +50,7 @@ pub enum ApiError {
 
     #[error("Error handling token")]
     TokenError(TokenError),
-    
+
     #[error("Given user is not yet confirmed")]
     UserConfirmationError,
 }
