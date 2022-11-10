@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod setup;
 
-use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
+use api::auth::{JwtToken, RegistrationConfirmationToken, TokenRole, TokenType, UserAuthToken};
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
 use api::grpc::blockjoy_ui::{
     ApiToken, ConfirmRegistrationRequest, LoginUserRequest, RefreshTokenRequest, RequestMeta,
@@ -84,7 +84,11 @@ async fn responds_error_with_invalid_credentials_for_login() {
 async fn responds_ok_with_valid_credentials_for_confirm() -> anyhow::Result<()> {
     let db = _before_values.await;
     let user = db.admin_user().await;
-    let token = user.get_token(&db.pool).await.unwrap();
+    let token = RegistrationConfirmationToken::create_token_for(
+        &user,
+        TokenType::RegistrationConfirmation,
+        TokenRole::User,
+    )?;
     let request_meta = RequestMeta {
         id: Some(Uuid::new_v4().to_string()),
         token: None,
@@ -98,7 +102,7 @@ async fn responds_ok_with_valid_credentials_for_confirm() -> anyhow::Result<()> 
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", token.to_base64()).parse().unwrap(),
+        format!("Bearer {}", token.to_base64()?).parse().unwrap(),
     );
 
     assert_grpc_request! { confirm, request, tonic::Code::Ok, db, AuthenticationServiceClient<Channel> };

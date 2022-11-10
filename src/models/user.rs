@@ -306,19 +306,33 @@ impl User {
         }
     }
 
+    /// Check if user can be found by email, is confirmed and has provided a valid password
     pub async fn login(login: LoginUserRequest, db: &PgPool) -> Result<Self> {
         let user = Self::find_by_email(&login.email, db).await.map_err(|_e| {
             ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
         })?;
 
-        match user.verify_password(&login.password) {
-            Ok(_) => Ok(user),
-            Err(e) => Err(e),
+        if User::is_confirmed(user.id, db).await? {
+            match user.verify_password(&login.password) {
+                Ok(_) => Ok(user),
+                Err(e) => Err(e),
+            }
+        } else {
+            Err(ApiError::UserConfirmationError)
         }
     }
 
-    pub async fn refresh(req: UserRefreshRequest, db: &PgPool) -> Result<User> {
-        Self::find_by_refresh(&req.refresh, db).await
+    pub async fn refresh(id: Uuid, refresh_token: String, db: &PgPool) -> Result<User> {
+        // Update user with new refresh token
+        let fields = UserSelectiveUpdate {
+            first_name: None,
+            last_name: None,
+            fee_bps: None,
+            staking_quota: None,
+            refresh_token: Some(refresh_token.clone()),
+        };
+
+        Self::update_all(id, fields, db).await
     }
 
     /// QR Code data for specific invoice
@@ -450,11 +464,6 @@ pub struct UserRequest {
 //     #[validate(email)]
 //     pub email: String,
 // }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserRefreshRequest {
-    pub refresh: String,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct UserPayAddress {

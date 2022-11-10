@@ -1,15 +1,19 @@
-use crate::auth::{FindableById, JwtToken, TokenRole, TokenType, UserAuthToken, UserRefreshToken};
+use crate::auth::{
+    FindableById, JwtToken, RegistrationConfirmationToken, TokenRole, TokenType, UserAuthToken,
+    UserRefreshToken,
+};
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, ConfirmRegistrationRequest, ConfirmRegistrationResponse, LoginUserRequest,
     LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse, UpdateUiPasswordRequest,
     UpdateUiPasswordResponse,
 };
+use crate::grpc::helpers::required;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::mail::MailClient;
 use crate::models::User;
 use crate::server::DbPool;
-use tonic::metadata::errors::InvalidMetadataValue;
 use tonic::{Request, Response, Status};
 
 use super::blockjoy_ui::{
@@ -35,12 +39,14 @@ impl AuthenticationService for AuthenticationServiceImpl {
         request: Request<LoginUserRequest>,
     ) -> Result<Response<LoginUserResponse>, Status> {
         let inner = request.into_inner();
-        let user = User::login(inner.clone(), &self.db).await?;
-        let refresh_token = UserRefreshToken::create_token_for::<User>(
-            &user,
-            TokenType::UserAuth,
-            TokenRole::User,
-        )?;
+        // User::login checks if user is confirmed before testing for valid login credentials
+        let user = User::login(inner.clone(), &self.db)
+            .await
+            .map_err(|e| Status::unauthenticated(e.to_string()))?;
+        let refresh_token = user
+            .refresh
+            .clone()
+            .ok_or(ApiError::UserConfirmationError)?;
         let auth_token =
             UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?;
 
@@ -50,35 +56,8 @@ impl AuthenticationService for AuthenticationServiceImpl {
                 value: auth_token.to_base64()?,
             }),
         };
-        let mut response = Response::new(response);
 
-        if User::is_confirmed(user.id, &self.db).await? {
-            let db_token = user.get_token(&self.db).await?;
-            let token = ApiToken {
-                value: db_token.token,
-            };
-            let response = LoginUserResponse {
-                meta: Some(ResponseMeta::from_meta(inner.meta)),
-                token: Some(token),
-            };
-
-        response.metadata_mut().insert(
-            "set-cookie",
-            format!(
-                "refresh={}; path=/; expires=Fri, 05 Nov 2022 07:19:40 GMT; HttpOnly; SameSite=None; Secure",
-                refresh_token.encode()?,
-                // exp,
-            )
-            .parse().map_err(|e: InvalidMetadataValue| Status::internal(e.to_string()))?
-        );
-
-        Ok(response)
-            Ok(Response::new(response))
-        } else {
-            Err(Status::unauthenticated(
-                "User registration ist not confirmed",
-            ))
-        }
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn confirm(
@@ -87,21 +66,29 @@ impl AuthenticationService for AuthenticationServiceImpl {
     ) -> Result<Response<ConfirmRegistrationResponse>, Status> {
         let token = request
             .extensions()
-            .get::<Token>()
-            .ok_or_else(required("Confirmation token extension"))?
+            .get::<RegistrationConfirmationToken>()
+            .ok_or_else(required("Registration confirmation token extension"))?
             .clone();
-        let user_id = token
-            .user_id
-            .ok_or_else(required("User ID for registration confirmation"))?;
+        let user_id = token.get_id();
         let user = User::confirm(user_id, &self.db).await?;
+        let auth_token =
+            UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?
+                .encode()?;
+        let refresh_token = UserRefreshToken::create_token_for::<User>(
+            &user,
+            TokenType::UserAuth,
+            TokenRole::User,
+        )?
+        .encode()?;
+
+        User::refresh(user.id, refresh_token.clone(), &self.db).await?;
+
         let response = ConfirmRegistrationResponse {
             meta: Some(ResponseMeta::from_meta(request.into_inner().meta)),
-            token: Some(ApiToken {
-                value: user.get_token(&self.db).await?.token,
-            }),
+            token: Some(ApiToken { value: auth_token }),
         };
 
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn refresh(
