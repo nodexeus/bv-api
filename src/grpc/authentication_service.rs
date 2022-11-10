@@ -103,7 +103,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let token = request
             .extensions()
             .get::<PwdResetToken>()
-            .ok_or(Status::unauthenticated("Invalid reset token"))?;
+            .ok_or_else(|| Status::unauthenticated("Invalid reset token"))?;
         let refresh_token = get_refresh_token(&request);
         let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
         let cur_user = User::find_by_id(user_id, &self.db).await?;
