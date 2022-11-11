@@ -129,6 +129,7 @@ mod tests {
                 container_status: None,
                 sync_status: None,
                 staking_status: None,
+                self_update: Some(false),
             })),
         })
     }

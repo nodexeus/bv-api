@@ -57,6 +57,7 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
                 r#type: node.node_type.to_json()?,
                 ip: node.ip_addr.ok_or_else(required("node.ip_addr"))?,
                 gateway: node.ip_gateway.ok_or_else(required("node.ip_gateway"))?,
+                self_update: node.self_update,
             };
 
             Some(node_command::Command::Create(create_cmd))
@@ -402,6 +403,7 @@ pub mod from {
                 status: Some(GrpcNodeStatus::from(node.chain_status).into()),
                 staking_status: Some(GrpcStakingStatus::from(node.staking_status).into()),
                 sync_status: Some(GrpcSyncStatus::from(node.sync_status).into()),
+                self_update: Some(node.self_update),
             };
             Ok(grpc_node)
         }
@@ -440,6 +442,7 @@ pub mod from {
                     .into(),
                 ),
                 sync_status: Some(GrpcSyncStatus::from(req.sync_status).into()),
+                self_update: Some(req.self_update),
             };
             Ok(node)
         }
@@ -494,6 +497,7 @@ pub mod from {
                 sync_status: NodeSyncStatus::Unknown,
                 staking_status: Some(NodeStakingStatus::Unknown),
                 container_status: ContainerStatus::Unknown,
+                self_update: node.self_update.unwrap_or(false),
             };
             Ok(req)
         }
@@ -512,6 +516,7 @@ pub mod from {
                 sync_status: None,
                 staking_status: None,
                 container_status: None,
+                self_update: node.self_update.unwrap_or(false),
             };
             Ok(node_info)
         }

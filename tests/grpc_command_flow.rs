@@ -47,6 +47,7 @@ async fn test_command_flow_works() {
             container_status: None,
             sync_status: Some(1),
             staking_status: Some(1),
+            self_update: Some(true),
         })),
     };
     let strm = tokio_stream::once(req);
