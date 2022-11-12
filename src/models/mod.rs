@@ -13,6 +13,7 @@ mod user;
 // name ambiguities with another crate
 mod blacklist_token;
 mod ip_address;
+mod node_key_file;
 mod node_type;
 pub mod validator;
 
@@ -26,6 +27,7 @@ pub use info::*;
 pub use invoice::*;
 pub use ip_address::*;
 pub use node::*;
+pub use node_key_file::*;
 pub use node_type::*;
 pub use org::*;
 pub use payment::*;
