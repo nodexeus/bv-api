@@ -1,16 +1,18 @@
 use crate::auth::FindableById;
 use crate::errors::{ApiError, Result as ApiResult};
+use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
+#[derive(Clone, Debug)]
 pub struct CreateNodeKeyFileRequest {
-    name: String,
-    content: String,
-    node_id: Uuid,
+    pub name: String,
+    pub content: String,
+    pub node_id: Uuid,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, FromRow)]
+#[derive(Clone, Debug, Serialize, Deserialize, FromRow, Getters)]
 pub struct NodeKeyFile {
     id: Uuid,
     name: String,

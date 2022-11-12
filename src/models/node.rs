@@ -321,6 +321,14 @@ impl Node {
             }
         }
     }
+
+    pub async fn delete(node_id: Uuid, db: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, Self>(r#"DELETE FROM nodes WHERE id = $1 RETURNING *"#)
+            .bind(node_id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
+    }
 }
 
 #[tonic::async_trait]
