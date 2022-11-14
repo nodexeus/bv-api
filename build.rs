@@ -10,6 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Backend API
                 "command_flow.proto",
                 "host_service.proto",
+                "key_file_service.proto",
                 // UI API
                 "authentication_service.proto",
                 "billing_service.proto",

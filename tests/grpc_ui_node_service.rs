@@ -43,6 +43,7 @@ async fn responds_ok_with_id_for_get() {
         version: None,
         staking_status: None,
         self_update: false,
+        key_files: vec![],
     };
     let node = models::Node::create(&req, tester.pool()).await.unwrap();
     let req = blockjoy_ui::GetNodeRequest {
@@ -59,6 +60,10 @@ async fn responds_ok_with_valid_data_for_create() {
     let host = tester.host().await;
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
+    let key_file = node::Keyfile {
+        name: "some key".to_string(),
+        content: "lorem ipsum dolor sit amit".bytes().collect(),
+    };
     let node = blockjoy_ui::Node {
         id: None,
         host_id: Some(host.id.to_string()),
@@ -72,7 +77,10 @@ async fn responds_ok_with_valid_data_for_create() {
         ),
         ip_gateway: Some("192.168.0.1".into()),
         groups: vec![],
+        staking_status: None,
         sync_status: Some(models::NodeSyncStatus::Unknown as i32),
+        self_update: None,
+        key_files: vec![key_file],
         ..Default::default()
     };
     let req = blockjoy_ui::CreateNodeRequest {
@@ -80,10 +88,20 @@ async fn responds_ok_with_valid_data_for_create() {
         node: Some(node),
     };
     tester.send_admin(Service::create, req).await.unwrap();
+    let files = sqlx::query_as::<_, models::NodeKeyFile>("select * from node_key_files")
+        .fetch_all(tester.pool())
+        .await
+        .unwrap();
+    let key_file = files.first().unwrap();
+
+    println!("key file: {key_file:?}");
+
+    assert_eq!(files.len(), 1);
+    assert_eq!(key_file.name, "some key");
 }
 
 #[tokio::test]
-async fn responds_internal_with_invalid_data_for_create() {
+async fn responds_invalid_argument_with_invalid_data_for_create() {
     let tester = setup::Tester::new().await;
     let node = blockjoy_ui::Node {
         // This is required so the test should fail:
@@ -133,6 +151,7 @@ async fn responds_ok_with_valid_data_for_update() {
         version: None,
         staking_status: None,
         self_update: false,
+        key_files: vec![],
     };
     let db_node = models::Node::create(&req, tester.pool()).await.unwrap();
     let node = blockjoy_ui::Node {

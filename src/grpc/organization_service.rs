@@ -4,7 +4,8 @@ use crate::grpc::blockjoy_ui::organization_service_server::OrganizationService;
 use crate::grpc::blockjoy_ui::{
     CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
     DeleteOrganizationResponse, GetOrganizationsRequest, GetOrganizationsResponse, Organization,
-    OrganizationMemberRequest, OrganizationMemberResponse, ResponseMeta, UpdateOrganizationRequest,
+    OrganizationMemberRequest, OrganizationMemberResponse, ResponseMeta,
+    RestoreOrganizationRequest, RestoreOrganizationResponse, UpdateOrganizationRequest,
     UpdateOrganizationResponse, User as GrpcUiUser,
 };
 use crate::grpc::helpers::pagination_parameters;
@@ -109,6 +110,14 @@ impl OrganizationService for OrganizationServiceImpl {
         let meta = ResponseMeta::from_meta(inner.meta);
         let inner = DeleteOrganizationResponse { meta: Some(meta) };
         Ok(response_with_refresh_token(refresh_token, inner)?)
+    }
+
+    /// TODO: Will be implemented in PR https://github.com/blockjoy/blockvisor-api/pull/111
+    async fn restore(
+        &self,
+        _request: Request<RestoreOrganizationRequest>,
+    ) -> Result<Response<RestoreOrganizationResponse>, Status> {
+        todo!()
     }
 
     async fn members(

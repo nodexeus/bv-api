@@ -3,7 +3,6 @@ mod setup;
 use api::grpc::blockjoy::{self, hosts_client};
 use api::models;
 use tonic::transport;
-use uuid::Uuid;
 
 type Service = hosts_client::HostsClient<transport::Channel>;
 
@@ -22,7 +21,7 @@ async fn responds_unauthenticated_with_empty_token_for_info_update() {
         ..Default::default()
     };
     let req = blockjoy::HostInfoUpdateRequest {
-        request_id: Some(Uuid::new_v4().to_string()),
+        request_id: Some(uuid::Uuid::new_v4().to_string()),
         info: Some(host_info),
     };
     let status = tester
@@ -59,7 +58,7 @@ async fn responds_unauthenticated_without_token_for_info_update() {
         ip_range_to: Some("192.168.0.20".into()),
     };
     let req = blockjoy::HostInfoUpdateRequest {
-        request_id: Some(Uuid::new_v4().to_string()),
+        request_id: Some(uuid::Uuid::new_v4().to_string()),
         info: Some(host_info),
     };
     let status = tester.send(Service::info_update, req).await.unwrap_err();
@@ -88,7 +87,7 @@ async fn responds_unauthenticated_with_bad_token_for_info_update() {
         ip_range_to: Some("192.168.0.20".into()),
     };
     let req = blockjoy::HostInfoUpdateRequest {
-        request_id: Some(Uuid::new_v4().to_string()),
+        request_id: Some(uuid::Uuid::new_v4().to_string()),
         info: Some(host_info),
     };
     let status = tester
@@ -122,7 +121,7 @@ async fn responds_permission_denied_with_token_ownership_for_info_update() {
         ..Default::default()
     };
     let req = blockjoy::HostInfoUpdateRequest {
-        request_id: Some(Uuid::new_v4().to_string()),
+        request_id: Some(uuid::Uuid::new_v4().to_string()),
         info: Some(host_info),
     };
 
@@ -136,7 +135,7 @@ async fn responds_permission_denied_with_token_ownership_for_info_update() {
 #[tokio::test]
 async fn responds_not_found_for_provision() {
     let tester = setup::Tester::new().await;
-    let random_uuid = Uuid::new_v4().to_string();
+    let random_uuid = uuid::Uuid::new_v4().to_string();
     let host_info = blockjoy::HostInfo {
         id: Some(random_uuid), // does not exist
         name: Some("tester".into()),
@@ -153,7 +152,7 @@ async fn responds_not_found_for_provision() {
         ip_range_to: Some("192.168.0.20".into()),
     };
     let req = blockjoy::ProvisionHostRequest {
-        request_id: Some(Uuid::new_v4().to_string()),
+        request_id: Some(uuid::Uuid::new_v4().to_string()),
         otp: "unknown-otp".into(),
         info: Some(host_info),
         status: 0,
@@ -177,7 +176,7 @@ async fn responds_ok_for_provision() {
         .await
         .unwrap();
     let host_info = blockjoy::HostInfo {
-        id: Some(Uuid::new_v4().to_string()),
+        id: Some(uuid::Uuid::new_v4().to_string()),
         name: Some("tester".into()),
         ip: Some("123.456.789.0".into()),
         ip_gateway: Some("127.18.0.1".into()),
@@ -186,7 +185,7 @@ async fn responds_ok_for_provision() {
         ..Default::default()
     };
     let req = blockjoy::ProvisionHostRequest {
-        request_id: Some(Uuid::new_v4().to_string()),
+        request_id: Some(uuid::Uuid::new_v4().to_string()),
         otp: host_provision.id,
         info: Some(host_info),
         status: 0,
@@ -216,7 +215,7 @@ async fn responds_ok_for_info_update() {
         ip_range_to: Some("192.168.0.20".into()),
     };
     let req = blockjoy::HostInfoUpdateRequest {
-        request_id: Some(Uuid::new_v4().to_string()),
+        request_id: Some(uuid::Uuid::new_v4().to_string()),
         info: Some(host_info),
     };
     tester
@@ -232,7 +231,7 @@ async fn responds_ok_for_delete() {
     let token = tester.host_token(&host);
     let refresh = tester.refresh_for(&token);
     let req = blockjoy::DeleteHostRequest {
-        request_id: Some(Uuid::new_v4().to_string()),
+        request_id: Some(uuid::Uuid::new_v4().to_string()),
         host_id: host.id.to_string(),
     };
     tester
@@ -246,7 +245,7 @@ async fn responds_unauthenticated_without_token_for_delete() {
     let tester = setup::Tester::new().await;
     let host = tester.host().await;
     let req = blockjoy::DeleteHostRequest {
-        request_id: Some(Uuid::new_v4().to_string()),
+        request_id: Some(uuid::Uuid::new_v4().to_string()),
         host_id: host.id.to_string(),
     };
     let status = tester.send(Service::delete, req).await.unwrap_err();
@@ -259,7 +258,7 @@ async fn responds_permission_denied_for_delete() {
 
     let host = tester.host().await;
     let req = blockjoy::DeleteHostRequest {
-        request_id: Some(Uuid::new_v4().to_string()),
+        request_id: Some(uuid::Uuid::new_v4().to_string()),
         host_id: host.id.to_string(),
     };
 
