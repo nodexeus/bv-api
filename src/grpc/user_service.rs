@@ -1,13 +1,17 @@
-use crate::auth::TokenType;
+use crate::auth::{JwtToken, TokenRole, UserAuthToken};
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::user_service_server::UserService;
 use crate::grpc::blockjoy_ui::{
     CreateUserRequest, CreateUserResponse, GetConfigurationRequest, GetConfigurationResponse,
     GetUserRequest, GetUserResponse, ResponseMeta, UpdateUserRequest, UpdateUserResponse,
     UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
 };
-use crate::models::{Token, TokenRole, User, UserRequest};
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::mail::MailClient;
+use crate::models::{User, UserRequest};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 use super::helpers::{required, try_get_token};
 
@@ -27,15 +31,16 @@ impl UserService for UserServiceImpl {
         &self,
         request: Request<GetUserRequest>,
     ) -> Result<Response<GetUserResponse>, Status> {
-        let token = try_get_token(&request)?.token;
+        let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user = token.try_get_user(*token.id(), &self.db).await?;
         let inner = request.into_inner();
-        let user = Token::get_user_for_token(token, TokenType::Login, &self.db).await?;
         let response = GetUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             user: Some(GrpcUser::try_from(user)?),
         };
 
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn create(
@@ -51,18 +56,47 @@ impl UserService for UserServiceImpl {
             password: inner.password,
             password_confirm: inner.password_confirmation,
         };
-
         let new_user = User::create(user_request, &self.db, Some(TokenRole::User)).await?;
         let meta = ResponseMeta::from_meta(inner.meta).with_message(new_user.id);
         let response = CreateUserResponse { meta: Some(meta) };
+
+        MailClient::new()
+            .registration_confirmation(&new_user)
+            .await?;
+
         Ok(Response::new(response))
     }
 
     async fn update(
         &self,
-        _request: Request<UpdateUserRequest>,
+        request: Request<UpdateUserRequest>,
     ) -> Result<Response<UpdateUserResponse>, Status> {
-        Err(Status::unimplemented(""))
+        let refresh_token = get_refresh_token(&request);
+        let token = request
+            .extensions()
+            .get::<UserAuthToken>()
+            .ok_or_else(required("auth token"))?;
+        let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
+        let inner = request.into_inner();
+        let user = inner.user.ok_or_else(required("user"))?;
+
+        // Check if current user is the same as the one to be updated
+        if user_id == Uuid::parse_str(user.id()).map_err(ApiError::from)? {
+            let user: GrpcUser = User::update_all(user_id, user.into(), &self.db)
+                .await?
+                .try_into()?;
+            let response_meta = ResponseMeta::from_meta(inner.meta);
+            let response = UpdateUserResponse {
+                meta: Some(response_meta),
+                user: Some(user),
+            };
+
+            Ok(response_with_refresh_token(refresh_token, response)?)
+        } else {
+            Err(Status::permission_denied(
+                "You are not allowed to update this user",
+            ))
+        }
     }
 
     async fn upsert_configuration(

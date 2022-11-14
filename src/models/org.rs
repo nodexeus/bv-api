@@ -52,8 +52,8 @@ impl Org {
                 orgs_users.user_id = $1 AND orgs.id = $2
             "##,
         )
-        .bind(&user_id)
-        .bind(&org_id)
+        .bind(user_id)
+        .bind(org_id)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)
@@ -87,7 +87,7 @@ impl Org {
     /// Returns the users of an organization
     pub async fn find_all_members(org_id: &Uuid, db: &PgPool) -> Result<Vec<OrgUser>> {
         sqlx::query_as::<_, OrgUser>("SELECT * FROM orgs_users WHERE org_id = $1")
-            .bind(&org_id)
+            .bind(org_id)
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
@@ -102,8 +102,33 @@ impl Org {
                                 ON users.id = ou.user_id
                         WHERE ou.org_id = $1"#,
         )
-        .bind(&org_id)
+        .bind(org_id)
         .fetch_all(db)
+        .await
+        .map_err(ApiError::from)
+    }
+
+    pub async fn find_personal_org(user_id: Uuid, db: &PgPool) -> Result<Org> {
+        sqlx::query_as::<_, Self>(
+            r##"
+            SELECT
+                orgs.*,
+                orgs_users.role,
+                (SELECT count(*) from orgs_users where orgs_users.org_id = orgs.id) as member_count
+            FROM
+                orgs
+            INNER JOIN
+                orgs_users
+            ON
+                orgs.id = orgs_users.org_id
+            WHERE
+                orgs_users.user_id = $1 and is_personal = true
+            ORDER BY
+                lower(orgs.name)
+            "##,
+        )
+        .bind(user_id)
+        .fetch_one(db)
         .await
         .map_err(ApiError::from)
     }
@@ -124,7 +149,7 @@ impl Org {
                         ORDER BY users.email
                         LIMIT $2 OFFSET $3"#,
         )
-        .bind(&org_id)
+        .bind(org_id)
         .bind(limit)
         .bind(offset)
         .fetch_all(db)
@@ -146,8 +171,8 @@ impl Org {
         let org_user = sqlx::query_as::<_, OrgUser>(
             "SELECT * FROM orgs_users WHERE org_id = $1 AND user_id = $2",
         )
-        .bind(&org_id)
-        .bind(&user_id)
+        .bind(org_id)
+        .bind(user_id)
         .fetch_one(db)
         .await?;
 
@@ -161,7 +186,7 @@ impl Org {
         let mut org = sqlx::query_as::<_, Org>(
             "INSERT INTO orgs (id,name,is_personal) values ($1,$2,false) RETURNING *",
         )
-        .bind(&org_id)
+        .bind(org_id)
         .bind(&req.name)
         .fetch_one(&mut tx)
         .await
@@ -170,7 +195,7 @@ impl Org {
         let _org_user = sqlx::query(
             "INSERT INTO orgs_users (org_id, user_id, role) values($1, $2, 'owner') RETURNING *",
         )
-        .bind(&org_id)
+        .bind(org_id)
         .bind(user_id)
         .fetch_one(&mut tx)
         .await?;

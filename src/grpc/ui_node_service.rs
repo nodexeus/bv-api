@@ -1,4 +1,5 @@
 use super::helpers::{internal, required};
+use crate::auth::FindableById;
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
@@ -6,7 +7,10 @@ use crate::grpc::blockjoy_ui::{
     ListNodesResponse, Node as GrpcNode, ResponseMeta, UpdateNodeRequest, UpdateNodeResponse,
 };
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
-use crate::models::{Command, CommandRequest, HostCmd, Node, NodeInfo};
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::models::{
+    Command, CommandRequest, Host, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo,
+};
 use crate::server::DbPool;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
@@ -29,6 +33,7 @@ impl NodeService for NodeServiceImpl {
         &self,
         request: Request<GetNodeRequest>,
     ) -> Result<Response<GetNodeResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let node_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
         let node = Node::find_by_id(node_id, &self.db).await?;
@@ -36,13 +41,14 @@ impl NodeService for NodeServiceImpl {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             node: Some(node.try_into()?),
         };
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn list(
         &self,
         request: Request<ListNodesRequest>,
     ) -> Result<Response<ListNodesResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
         let nodes = Node::find_all_by_org(org_id, &self.db).await?;
@@ -51,15 +57,26 @@ impl NodeService for NodeServiceImpl {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             nodes: nodes?,
         };
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn create(
         &self,
         request: Request<CreateNodeRequest>,
     ) -> Result<Response<CreateNodeResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
-        let fields = inner.node.ok_or_else(required("node"))?.try_into()?;
+        let mut fields: NodeCreateRequest = inner.node.ok_or_else(required("node"))?.try_into()?;
+        let host = Host::find_by_id(fields.host_id, &self.db).await?;
+        // Set IPs retrieved from system
+        fields.ip_gateway = host.ip_gateway.map(|ip| ip.to_string());
+        fields.ip_addr = Some(
+            IpAddress::next_for_host(fields.host_id, &self.db)
+                .await?
+                .ip
+                .to_string(),
+        );
+
         let node = Node::create(&fields, &self.db).await?;
         let req = CommandRequest {
             cmd: HostCmd::CreateNode,
@@ -88,13 +105,14 @@ impl NodeService for NodeServiceImpl {
         let response = CreateNodeResponse {
             meta: Some(response_meta),
         };
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
     async fn update(
         &self,
         request: Request<UpdateNodeRequest>,
     ) -> Result<Response<UpdateNodeResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let node = inner.node.ok_or_else(required("node"))?;
         let node_id = node.id.as_deref();
@@ -108,6 +126,6 @@ impl NodeService for NodeServiceImpl {
         let response = UpdateNodeResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
         };
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 }

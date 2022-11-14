@@ -1,7 +1,9 @@
+use crate::auth::TokenError;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use std::num::TryFromIntError;
+use tonic::Status;
 
 pub type Result<T, E = ApiError> = std::result::Result<T, E>;
 
@@ -36,6 +38,21 @@ pub enum ApiError {
 
     #[error("UUID parse error: {0}")]
     UuidParseError(#[from] uuid::Error),
+
+    #[error("No free IP available: {0}")]
+    IpAssignmentError(sqlx::Error),
+
+    #[error("Gateway IP mustn't be within the provided range: {0}")]
+    IpGatewayError(anyhow::Error),
+
+    #[error("Missing or invalid env param value: {0}")]
+    EnvError(dotenv::Error),
+
+    #[error("Error handling token: {0}")]
+    TokenError(TokenError),
+
+    #[error("Given user is not yet confirmed")]
+    UserConfirmationError,
 }
 
 impl ApiError {
@@ -81,6 +98,18 @@ impl IntoResponse for ApiError {
         let response = (status_code, Json(self.to_string())).into_response();
         tracing::error!("{:?}", response);
         response
+    }
+}
+
+impl From<TokenError> for Status {
+    fn from(e: TokenError) -> Self {
+        Status::internal(format!("Token encode error {e:?}"))
+    }
+}
+
+impl From<TokenError> for ApiError {
+    fn from(e: TokenError) -> Self {
+        ApiError::TokenError(e)
     }
 }
 

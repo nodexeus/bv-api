@@ -38,11 +38,13 @@ async fn responds_ok_with_id_for_get() {
         groups: None,
         node_data: None,
         ip_addr: None,
+        ip_gateway: Some("192.168.0.1".into()),
         name: None,
         version: None,
         staking_status: None,
+        self_update: false,
     };
-    let node = models::Node::create(&req, &tester.db.pool).await.unwrap();
+    let node = models::Node::create(&req, tester.pool()).await.unwrap();
     let req = blockjoy_ui::GetNodeRequest {
         meta: Some(tester.meta()),
         id: node.id.to_string(),
@@ -58,6 +60,7 @@ async fn responds_ok_with_valid_data_for_create() {
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
     let node = blockjoy_ui::Node {
+        id: None,
         host_id: Some(host.id.to_string()),
         org_id: Some(org.id.to_string()),
         blockchain_id: Some(blockchain.id.to_string()),
@@ -67,6 +70,7 @@ async fn responds_ok_with_valid_data_for_create() {
                 .to_json()
                 .unwrap(),
         ),
+        ip_gateway: Some("192.168.0.1".into()),
         groups: vec![],
         sync_status: Some(models::NodeSyncStatus::Unknown as i32),
         ..Default::default()
@@ -124,11 +128,13 @@ async fn responds_ok_with_valid_data_for_update() {
         groups: None,
         node_data: None,
         ip_addr: None,
+        ip_gateway: Some("192.168.0.1".into()),
         name: None,
         version: None,
         staking_status: None,
+        self_update: false,
     };
-    let db_node = models::Node::create(&req, &tester.db.pool).await.unwrap();
+    let db_node = models::Node::create(&req, tester.pool()).await.unwrap();
     let node = blockjoy_ui::Node {
         id: Some(db_node.id.to_string()),
         name: Some("stri-bu".to_string()),
@@ -144,10 +150,15 @@ async fn responds_ok_with_valid_data_for_update() {
 #[tokio::test]
 async fn responds_invalid_argument_with_invalid_data_for_update() {
     let tester = setup::Tester::new().await;
+    let node = blockjoy_ui::Node {
+        // This should cause an error
+        id: None,
+        name: Some("stri-bu".to_string()),
+        ..Default::default()
+    };
     let req = blockjoy_ui::UpdateNodeRequest {
         meta: Some(tester.meta()),
-        // This should cause an error
-        node: None,
+        node: Some(node),
     };
     let status = tester.send_admin(Service::update, req).await.unwrap_err();
     assert_eq!(status.code(), tonic::Code::InvalidArgument);

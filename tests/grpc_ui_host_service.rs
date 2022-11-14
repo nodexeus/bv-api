@@ -1,6 +1,9 @@
 mod setup;
 
-use api::grpc::blockjoy_ui::{self, host_service_client};
+use api::{
+    auth::JwtToken,
+    grpc::blockjoy_ui::{self, host_service_client},
+};
 use tonic::transport;
 
 type Service = host_service_client::HostServiceClient<transport::Channel>;
@@ -67,7 +70,8 @@ async fn responds_ok_with_pagination_with_org_id_for_get() {
 async fn responds_ok_with_token_for_get() {
     let tester = setup::Tester::new().await;
     let host = tester.host().await;
-    let host_token = tester.token_for(&host).await;
+    let host_token = tester.host_token(&host);
+    let host_token = host_token.encode().unwrap();
     let req = blockjoy_ui::GetHostsRequest {
         meta: Some(tester.meta()),
         param: Some(blockjoy_ui::get_hosts_request::Param::Token(host_token)),
@@ -103,6 +107,9 @@ async fn responds_ok_with_host_for_create() {
     let host = blockjoy_ui::Host {
         name: Some("burli-bua".to_string()),
         ip: Some("127.0.0.1".to_string()),
+        ip_gateway: Some("128.168.0.1".to_string()),
+        ip_range_from: Some("128.168.0.10".to_string()),
+        ip_range_to: Some("128.168.0.100".to_string()),
         ..Default::default()
     };
     let req = blockjoy_ui::CreateHostRequest {

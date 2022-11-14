@@ -22,6 +22,9 @@ message HostInfo {
     optional string os = 8;
     optional string os_version = 9;
     optional string ip = 10;
+    optional string ip_range_from = 11;
+    optional string ip_range_to = 12;
+    optional string ip_gateway = 13;
 }
 
 message DeleteHostRequest {

@@ -11,8 +11,9 @@ async fn responds_unauthenticated_with_invalid_token_for_metrics() {
     let req = blockjoy_ui::DashboardMetricsRequest {
         meta: Some(tester.meta()),
     };
+    let (auth, refresh) = (setup::DummyToken("some-invalid-token"), setup::DummyRefresh);
     let status = tester
-        .send_with(Service::metrics, req, "some-invalid-token")
+        .send_with(Service::metrics, req, auth, refresh)
         .await
         .unwrap_err();
     assert_eq!(status.code(), tonic::Code::Unauthenticated);
@@ -38,7 +39,6 @@ async fn responds_valid_values_for_metrics() {
 
     let online_name: i32 = metrics.first().unwrap().name;
     let offline_name: i32 = metrics.last().unwrap().name;
-    // TODO Thomas: looks like these maybe should be numbers instead of strings in the API?
     let online_value: i32 = metrics.first().unwrap().value.parse().unwrap();
     let offline_value: i32 = metrics.last().unwrap().value.parse().unwrap();
 

@@ -11,8 +11,9 @@ async fn responds_unauthenticated_with_invalid_token_for_update() {
     let req = blockjoy_ui::GetUpdatesRequest {
         meta: Some(tester.meta()),
     };
+    let auth = setup::DummyToken("some-invalid-token");
     let status = tester
-        .send_with(Service::updates, req, "some-invalid-token")
+        .send_with(Service::updates, req, auth, setup::DummyRefresh)
         .await
         .unwrap_err();
     assert_eq!(status.code(), tonic::Code::Unauthenticated);

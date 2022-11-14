@@ -18,11 +18,12 @@ async fn responds_ok_with_valid_token_for_get() {
 async fn responds_unauthenticated_without_valid_token_for_get() {
     let tester = setup::Tester::new().await;
     let token = base64::encode("some-invalid-token");
+    let token = setup::DummyToken(&token);
     let req = GetUserRequest {
         meta: Some(tester.meta()),
     };
     let status = tester
-        .send_with(Service::get, req, token)
+        .send_with(Service::get, req, token, setup::DummyRefresh)
         .await
         .unwrap_err();
     assert_eq!(status.code(), tonic::Code::Unauthenticated);
@@ -87,4 +88,42 @@ async fn responds_error_with_different_pwds_for_create() {
     };
     let status = tester.send_admin(Service::create, req).await.unwrap_err();
     assert_eq!(status.code(), tonic::Code::InvalidArgument);
+}
+
+#[tokio::test]
+async fn responds_permission_denied_with_diff_users_for_update() {
+    let tester = setup::Tester::new().await;
+    let grpc_user = blockjoy_ui::User {
+        id: Some(uuid::Uuid::new_v4().to_string()),
+        email: Some("hugo@boss.com".to_string()),
+        first_name: Some("Hugo".to_string()),
+        last_name: Some("Boss".to_string()),
+        created_at: None,
+        updated_at: None,
+    };
+    let req = blockjoy_ui::UpdateUserRequest {
+        meta: Some(tester.meta()),
+        user: Some(grpc_user),
+    };
+    let status = tester.send_admin(Service::update, req).await.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::PermissionDenied);
+}
+
+#[tokio::test]
+async fn responds_ok_with_equal_users_for_update() {
+    let tester = setup::Tester::new().await;
+    let user = tester.admin_user().await;
+    let grpc_user = blockjoy_ui::User {
+        id: Some(user.id.to_string()),
+        email: None,
+        first_name: Some("Hugo".to_string()),
+        last_name: Some("Boss".to_string()),
+        created_at: None,
+        updated_at: None,
+    };
+    let req = blockjoy_ui::UpdateUserRequest {
+        meta: Some(tester.meta()),
+        user: Some(grpc_user),
+    };
+    tester.send_admin(Service::update, req).await.unwrap();
 }

@@ -151,6 +151,7 @@ pub struct Node {
     pub groups: Option<String>,
     pub version: Option<String>,
     pub ip_addr: Option<String>,
+    pub ip_gateway: Option<String>,
     pub blockchain_id: Uuid,
     pub node_type: Json<NodeType>,
     pub address: Option<String>,
@@ -163,6 +164,7 @@ pub struct Node {
     pub chain_status: NodeChainStatus,
     pub staking_status: NodeStakingStatus,
     pub container_status: ContainerStatus,
+    pub self_update: bool,
 }
 
 impl Node {
@@ -191,23 +193,27 @@ impl Node {
                     block_height, 
                     node_data,
                     chain_status,
-                    sync_status
-                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *"#,
+                    sync_status,
+                    ip_gateway,
+                    self_update
+                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *"#,
         )
-        .bind(&req.org_id)
-        .bind(&req.host_id)
+        .bind(req.org_id)
+        .bind(req.host_id)
         .bind(&req.name)
         .bind(&req.groups)
         .bind(&req.version)
         .bind(&req.ip_addr)
-        .bind(&req.blockchain_id)
+        .bind(req.blockchain_id)
         .bind(&req.node_type)
         .bind(&req.address)
         .bind(&req.wallet_address)
-        .bind(&req.block_height)
+        .bind(req.block_height)
         .bind(&req.node_data)
-        .bind(&req.chain_status)
-        .bind(&req.sync_status)
+        .bind(req.chain_status)
+        .bind(req.sync_status)
+        .bind(&req.ip_gateway)
+        .bind(req.self_update)
         .fetch_one(&mut tx)
         .await
         //.map_err(ApiError::from)?;
@@ -229,16 +235,18 @@ impl Node {
                     block_height = COALESCE($3, block_height),
                     node_data = COALESCE($4, node_data),
                     chain_status = COALESCE($5, chain_status),
-                    sync_status = COALESCE($6, sync_status)
-                WHERE id = $7 RETURNING *"#,
+                    sync_status = COALESCE($6, sync_status),
+                    self_update = COALESCE($7, self_update)
+                WHERE id = $8 RETURNING *"#,
         )
         .bind(&info.version)
         .bind(&info.ip_addr)
-        .bind(&info.block_height)
+        .bind(info.block_height)
         .bind(&info.node_data)
-        .bind(&info.chain_status)
-        .bind(&info.sync_status)
-        .bind(&id)
+        .bind(info.chain_status)
+        .bind(info.sync_status)
+        .bind(info.self_update)
+        .bind(id)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)
@@ -260,9 +268,9 @@ impl Node {
             .map_err(ApiError::from)
     }
 
-    pub async fn running_nodes_count(db: &PgPool) -> Result<i32> {
+    pub async fn running_nodes_count(org_id: &Uuid, db: &PgPool) -> Result<i32> {
         match sqlx::query(
-            r#"select count(id)::int from nodes where chain_status in
+            r#"select COALESCE(count(id)::int, 0) from nodes where chain_status in
                                  (
                                   'broadcasting'::enum_node_chain_status,
                                   'provisioning'::enum_node_chain_status,
@@ -278,8 +286,9 @@ impl Node {
                                   'minting'::enum_node_chain_status,
                                   'processing'::enum_node_chain_status,
                                   'relaying'::enum_node_chain_status
-                                 );"#,
+                                 ) and org_id = $1;"#,
         )
+        .bind(org_id)
         .fetch_one(db)
         .await
         {
@@ -291,16 +300,17 @@ impl Node {
         }
     }
 
-    pub async fn halted_nodes_count(db: &PgPool) -> Result<i32> {
+    pub async fn halted_nodes_count(org_id: &Uuid, db: &PgPool) -> Result<i32> {
         match sqlx::query(
-            r#"select count(id)::int from nodes where chain_status in
+            r#"select COALESCE(count(id)::int, 0) from nodes where chain_status in
                                  (
                                   'unknown'::enum_node_chain_status,
                                   'disabled'::enum_node_chain_status,
                                   'removed'::enum_node_chain_status,
                                   'removing'::enum_node_chain_status
-                                 );"#,
+                                 ) and org_id = $1;"#,
         )
+        .bind(org_id)
         .fetch_one(db)
         .await
         {
@@ -324,8 +334,9 @@ impl UpdateInfo<GrpcNodeInfo, Node> for Node {
                          chain_status = COALESCE($3, chain_status),
                          sync_status = COALESCE($4, sync_status),
                          staking_status = COALESCE($5, staking_status),
-                         block_height = COALESCE($6, block_height)
-                WHERE id = $7
+                         block_height = COALESCE($6, block_height),
+                         self_update = COALESCE($7, self_update)
+                WHERE id = $8
                 RETURNING *
             "##,
         )
@@ -335,6 +346,7 @@ impl UpdateInfo<GrpcNodeInfo, Node> for Node {
         .bind(req.sync_status)
         .bind(req.staking_status)
         .bind(req.block_height)
+        .bind(req.self_update)
         .bind(req.id)
         .fetch_one(db)
         .await?;
@@ -357,6 +369,7 @@ pub struct NodeCreateRequest {
     pub groups: Option<String>,
     pub version: Option<String>,
     pub ip_addr: Option<String>,
+    pub ip_gateway: Option<String>,
     pub blockchain_id: Uuid,
     pub node_type: Json<NodeType>,
     pub address: Option<String>,
@@ -367,6 +380,7 @@ pub struct NodeCreateRequest {
     pub sync_status: NodeSyncStatus,
     pub staking_status: Option<NodeStakingStatus>,
     pub container_status: ContainerStatus,
+    pub self_update: bool,
 }
 
 pub struct NodeUpdateRequest {
@@ -377,6 +391,7 @@ pub struct NodeUpdateRequest {
     pub sync_status: Option<NodeSyncStatus>,
     pub staking_status: Option<NodeStakingStatus>,
     pub block_height: Option<i64>,
+    pub self_update: bool,
 }
 
 impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
@@ -392,6 +407,7 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
             sync_status: info.sync_status.map(|n| n.try_into()).transpose()?,
             staking_status: info.staking_status.map(|n| n.try_into()).transpose()?,
             block_height: info.block_height,
+            self_update: info.self_update.unwrap_or(false),
         };
         Ok(req)
     }
@@ -407,6 +423,7 @@ pub struct NodeInfo {
     pub sync_status: Option<NodeSyncStatus>,
     pub staking_status: Option<NodeStakingStatus>,
     pub container_status: Option<ContainerStatus>,
+    pub self_update: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]

@@ -1,6 +1,7 @@
+use crate::auth::JwtToken;
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::{response_meta, Pagination, ResponseMeta};
-use crate::models::{self, Node, NodeTypeKey};
+use crate::models::{Node, NodeTypeKey};
 use heck::ToLowerCamelCase;
 use prost_types::Timestamp;
 use std::env;
@@ -48,12 +49,14 @@ pub fn internal(error: impl std::fmt::Display) -> Status {
     Status::internal(error.to_string())
 }
 
-pub fn try_get_token<T>(req: &tonic::Request<T>) -> Result<models::Token, ApiError> {
+pub fn try_get_token<T, R: JwtToken + Sync + Send + 'static>(
+    req: &tonic::Request<T>,
+) -> Result<&R, ApiError> {
     let tkn = req
         .extensions()
-        .get::<models::Token>()
-        .ok_or_else(|| Status::internal("Token lost!"))?
-        .clone();
+        .get::<R>()
+        .ok_or_else(|| Status::internal("Token lost!"))?;
+
     Ok(tkn)
 }
 

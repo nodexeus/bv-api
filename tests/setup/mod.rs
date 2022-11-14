@@ -1,9 +1,12 @@
 #![allow(dead_code)]
 
+mod dummy_token;
+pub use dummy_token::*;
 mod helper_traits;
 
+use api::auth::{self, JwtToken, TokenRole, TokenType};
 use api::models;
-use api::{auth::TokenIdentifyable, grpc::blockjoy_ui, TestDb};
+use api::{grpc::blockjoy_ui, TestDb};
 use futures_util::{Stream, StreamExt};
 use helper_traits::GrpcClient;
 use std::convert::TryFrom;
@@ -22,8 +25,22 @@ use tonic::Response;
 /// integration tests easy. Re-exports some of the functionality from `TestDb` (a helper used
 /// internally for more unit test-like tests).
 pub struct Tester {
-    pub db: TestDb,
+    db: TestDb,
     server_input: Arc<TempPath>,
+}
+
+impl std::ops::Deref for Tester {
+    type Target = TestDb;
+
+    fn deref(&self) -> &Self::Target {
+        &self.db
+    }
+}
+
+impl std::ops::DerefMut for Tester {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.db
+    }
 }
 
 impl Tester {
@@ -52,6 +69,10 @@ impl Tester {
         }
     }
 
+    pub fn pool(&self) -> &sqlx::Pool<sqlx::Postgres> {
+        &self.db.pool
+    }
+
     pub fn meta(&self) -> blockjoy_ui::RequestMeta {
         blockjoy_ui::RequestMeta {
             id: Some(uuid::Uuid::new_v4().to_string()),
@@ -74,8 +95,11 @@ impl Tester {
         self.db.admin_user().await
     }
 
-    pub async fn admin_token(&self) -> String {
-        self.token_for(&self.admin_user().await).await
+    /// Returns a (auth, refresh) token pair.
+    pub async fn admin_token(&self) -> (impl JwtToken, impl JwtToken) {
+        let auth = self.user_token(&self.admin_user().await);
+        let refresh = self.db.user_refresh_token(auth.get_id());
+        (auth, refresh)
     }
 
     pub async fn hosts(&self) -> Vec<models::Host> {
@@ -107,8 +131,16 @@ impl Tester {
             .clone()
     }
 
-    pub async fn token_for(&self, entity: &impl TokenIdentifyable) -> String {
-        entity.get_token(&self.db.pool).await.unwrap().token
+    pub fn user_token(&self, user: &models::User) -> impl JwtToken + Clone {
+        auth::UserAuthToken::create_token_for(user, TokenType::UserAuth, TokenRole::User).unwrap()
+    }
+
+    pub fn host_token(&self, host: &models::Host) -> impl JwtToken + Clone {
+        auth::HostAuthToken::create_token_for(host, TokenType::HostAuth, TokenRole::User).unwrap()
+    }
+
+    pub fn refresh_for(&self, token: &impl JwtToken) -> impl JwtToken + Clone {
+        self.db.user_refresh_token(token.get_id())
     }
 
     pub async fn node(&self) -> models::Node {
@@ -183,27 +215,35 @@ impl Tester {
     /// let status = tester.send(Service::some_endpoint, some_data, "").await.unwrap_err();
     /// assert_eq!(status.code(), tonic::Code::Unauthorized);
     /// ```
-    pub async fn send_with<F, In, Req, Resp, Client, Token>(
+    pub async fn send_with<F, In, Req, Resp, Client, AuthTkn, RefreshTkn>(
         &self,
         f: F,
         req: Req,
-        token: Token,
+        auth: AuthTkn,
+        refresh: RefreshTkn,
     ) -> Result<Resp, tonic::Status>
     where
         F: for<'any> TestableFunction<'any, In, tonic::Request<In>, Response<Resp>, Client>,
         Req: tonic::IntoRequest<In>,
         Client: GrpcClient<Channel> + Debug + 'static,
-        Token: std::fmt::Display,
+        AuthTkn: JwtToken,
+        RefreshTkn: JwtToken,
     {
-        let token = format!("Bearer {}", base64::encode(&token.to_string()));
         let mut req = req.into_request();
+
+        let auth = format!("Bearer {}", auth.to_base64().unwrap());
         req.metadata_mut()
-            .insert("authorization", token.parse().unwrap());
+            .insert("authorization", auth.parse().unwrap());
+
+        let refresh = format!("refresh={}", refresh.to_base64().unwrap());
+        req.metadata_mut()
+            .insert("cookie", refresh.parse().unwrap());
+
         self._send(f, req).await
     }
 
     /// Sends a request with authentication as though the user were an admin. This is the same as
-    /// creating an admin token manually and then calling `tester.send_with(_, _, admin_token)`.
+    /// creating an admin token manually and then calling `tester.send_with(_, _, ...admin_tokens)`.
     pub async fn send_admin<F, In, Req, Resp, Client>(
         &self,
         f: F,
@@ -214,7 +254,8 @@ impl Tester {
         Req: tonic::IntoRequest<In>,
         Client: GrpcClient<Channel> + Debug + 'static,
     {
-        self.send_with(f, req, self.admin_token().await).await
+        let (auth, refresh) = self.admin_token().await;
+        self.send_with(f, req, auth, refresh).await
     }
 
     async fn _send<F, In, Resp, Client>(
@@ -254,11 +295,12 @@ impl Tester {
     /// let data = stream.assert_receives().await;
     /// assert_eq!(data, expected);
     /// ```
-    pub async fn open_stream_with<F, In, Req, Resp, Client, S, Token>(
+    pub async fn open_stream_with<F, In, Req, Resp, Client, S, AuthTkn, RefreshTkn>(
         &self,
         f: F,
         req: Req,
-        token: Token,
+        auth: AuthTkn,
+        refresh: RefreshTkn,
     ) -> Result<Streaming<Resp>, tonic::Status>
     where
         F: for<'any> TestableFunction<
@@ -270,12 +312,19 @@ impl Tester {
         >,
         Req: tonic::IntoStreamingRequest<Message = In, Stream = S>,
         Client: GrpcClient<Channel> + Debug + 'static,
-        Token: std::fmt::Display,
+        AuthTkn: JwtToken,
+        RefreshTkn: JwtToken,
     {
-        let token = format!("Bearer {}", base64::encode(&token.to_string()));
         let mut req = req.into_streaming_request();
+
+        let auth = format!("Bearer {}", auth.to_base64().unwrap());
         req.metadata_mut()
-            .insert("authorization", token.parse().unwrap());
+            .insert("authorization", auth.parse().unwrap());
+
+        let refresh = format!("refresh={}", refresh.to_base64().unwrap());
+        req.metadata_mut()
+            .insert("cookie", refresh.parse().unwrap());
+
         self._open_stream(f, req).await
     }
 
@@ -304,8 +353,8 @@ impl Tester {
         Req: tonic::IntoStreamingRequest<Message = In, Stream = S>,
         Client: GrpcClient<Channel> + Debug + 'static,
     {
-        self.open_stream_with(f, req, self.admin_token().await)
-            .await
+        let (auth, refresh) = self.admin_token().await;
+        self.open_stream_with(f, req, auth, refresh).await
     }
 
     pub async fn _open_stream<F, In, S, Resp, Client>(

@@ -26,8 +26,11 @@ async fn responds_ok_with_valid_id_for_get() {
     let req = models::HostProvisionRequest {
         org_id: org.id,
         nodes: None,
+        ip_gateway: "192.168.0.1".parse().unwrap(),
+        ip_range_from: "192.168.0.10".parse().unwrap(),
+        ip_range_to: "192.168.0.20".parse().unwrap(),
     };
-    let provision = models::HostProvision::create(req, &tester.db.pool)
+    let provision = models::HostProvision::create(req, tester.pool())
         .await
         .unwrap();
 
@@ -55,6 +58,9 @@ async fn responds_ok_with_valid_provision_for_create() {
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
     let provision = blockjoy_ui::HostProvision {
+        ip_gateway: "192.168.0.1".parse().unwrap(),
+        ip_range_from: "192.168.0.10".parse().unwrap(),
+        ip_range_to: "192.168.0.20".parse().unwrap(),
         org_id: org.id.to_string(),
         ..Default::default()
     };

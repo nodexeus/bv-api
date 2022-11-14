@@ -3,7 +3,7 @@ use crate::grpc::blockjoy::{
     command, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
     NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
 };
-use crate::grpc::helpers::image_url_from_node;
+use crate::grpc::helpers::{image_url_from_node, required};
 use crate::models::{Blockchain, Command, HostCmd, Node};
 use crate::server::DbPool;
 
@@ -55,6 +55,9 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
                 blockchain: node.blockchain_id.to_string(),
                 image: Some(image),
                 r#type: node.node_type.to_json()?,
+                ip: node.ip_addr.ok_or_else(required("node.ip_addr"))?,
+                gateway: node.ip_gateway.ok_or_else(required("node.ip_gateway"))?,
+                self_update: node.self_update,
             };
 
             Some(node_command::Command::Create(create_cmd))
@@ -87,12 +90,14 @@ pub mod from {
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
         NodeCreateRequest, NodeInfo, NodeStakingStatus, NodeSyncStatus, Org, User,
+        UserSelectiveUpdate,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
     use prost_types::Timestamp;
     use serde_json::Value;
     use std::i64;
+    use std::net::AddrParseError;
     use tonic::{Code, Status};
     use uuid::Uuid;
 
@@ -110,6 +115,18 @@ pub mod from {
         Ok(timestamp)
     }
 
+    impl From<GrpcUiUser> for UserSelectiveUpdate {
+        fn from(user: GrpcUiUser) -> Self {
+            Self {
+                first_name: user.first_name,
+                last_name: user.last_name,
+                fee_bps: None,
+                staking_quota: None,
+                refresh_token: None,
+            }
+        }
+    }
+
     impl From<HostSelectiveUpdate> for HostInfo {
         fn from(update: HostSelectiveUpdate) -> Self {
             Self {
@@ -123,6 +140,9 @@ pub mod from {
                 os: update.os,
                 os_version: update.os_version,
                 ip: None,
+                ip_range_from: update.ip_range_from.map(|v| v.to_string()),
+                ip_range_to: update.ip_range_to.map(|v| v.to_string()),
+                ip_gateway: update.ip_gateway.map(|v| v.to_string()),
             }
         }
     }
@@ -147,6 +167,9 @@ pub mod from {
                 ip_addr: host.ip,
                 val_ip_addrs: None,
                 status: None,
+                ip_range_from: None,
+                ip_range_to: None,
+                ip_gateway: None,
             };
             Ok(updater)
         }
@@ -163,6 +186,18 @@ pub mod from {
                 created_at: Some(try_dt_to_ts(hp.created_at)?),
                 claimed_at: hp.claimed_at.map(try_dt_to_ts).transpose()?,
                 install_cmd: hp.install_cmd.map(String::from),
+                ip_range_from: hp
+                    .ip_range_from
+                    .map(|ip| ip.to_string())
+                    .ok_or_else(required("host_provision.ip_range_from"))?,
+                ip_range_to: hp
+                    .ip_range_to
+                    .map(|ip| ip.to_string())
+                    .ok_or_else(required("host_provision.ip_range_to"))?,
+                ip_gateway: hp
+                    .ip_gateway
+                    .map(|ip| ip.to_string())
+                    .ok_or_else(required("host_provision.ip_gateway"))?,
             };
             Ok(hp)
         }
@@ -188,6 +223,24 @@ pub mod from {
                 ip_addr: host.ip.ok_or_else(required("host.ip"))?,
                 val_ip_addrs: None,
                 status: ConnectionStatus::Online,
+                ip_range_from: Some(
+                    host.ip_range_from
+                        .ok_or_else(required("host.ip_range_from"))?
+                        .parse()
+                        .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
+                ),
+                ip_range_to: Some(
+                    host.ip_range_to
+                        .ok_or_else(required("host.ip_range_to"))?
+                        .parse()
+                        .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
+                ),
+                ip_gateway: Some(
+                    host.ip_gateway
+                        .ok_or_else(required("host.ip_gateway"))?
+                        .parse()
+                        .map_err(|e: AddrParseError| ApiError::UnexpectedError(anyhow!(e)))?,
+                ),
             };
             Ok(req)
         }
@@ -308,6 +361,9 @@ pub mod from {
                 status: None,
                 nodes: nodes?,
                 created_at: Some(try_dt_to_ts(host.created_at)?),
+                ip_range_from: host.ip_range_from.map(|ip| ip.to_string()),
+                ip_range_to: host.ip_range_to.map(|ip| ip.to_string()),
+                ip_gateway: host.ip_gateway.map(|ip| ip.to_string()),
             };
             Ok(grpc_host)
         }
@@ -335,6 +391,7 @@ pub mod from {
                 groups: vec![],
                 version: node.version.clone(),
                 ip: node.ip_addr.clone(),
+                ip_gateway: node.ip_gateway.clone(),
                 r#type: Some(node.node_type.to_json()?),
                 address: node.address.clone(),
                 wallet_address: node.wallet_address.clone(),
@@ -346,6 +403,7 @@ pub mod from {
                 status: Some(GrpcNodeStatus::from(node.chain_status).into()),
                 staking_status: Some(GrpcStakingStatus::from(node.staking_status).into()),
                 sync_status: Some(GrpcSyncStatus::from(node.sync_status).into()),
+                self_update: Some(node.self_update),
             };
             Ok(grpc_node)
         }
@@ -368,6 +426,7 @@ pub mod from {
                 groups: vec![],
                 version: req.version.clone(),
                 ip: req.ip_addr.clone(),
+                ip_gateway: req.ip_gateway.clone(),
                 r#type: Some(r#type),
                 address: req.address.clone(),
                 wallet_address: req.wallet_address.clone(),
@@ -383,6 +442,7 @@ pub mod from {
                     .into(),
                 ),
                 sync_status: Some(GrpcSyncStatus::from(req.sync_status).into()),
+                self_update: Some(req.self_update),
             };
             Ok(node)
         }
@@ -415,6 +475,7 @@ pub mod from {
                 groups: Some(node.groups.join(",")),
                 version: node.version.map(String::from),
                 ip_addr: node.ip.map(String::from),
+                ip_gateway: node.ip_gateway.map(String::from),
                 blockchain_id: Uuid::parse_str(
                     node.blockchain_id
                         .ok_or_else(|| ApiError::validation("GrpcNode.blockchain_id is required"))?
@@ -436,6 +497,7 @@ pub mod from {
                 sync_status: NodeSyncStatus::Unknown,
                 staking_status: Some(NodeStakingStatus::Unknown),
                 container_status: ContainerStatus::Unknown,
+                self_update: node.self_update.unwrap_or(false),
             };
             Ok(req)
         }
@@ -454,6 +516,7 @@ pub mod from {
                 sync_status: None,
                 staking_status: None,
                 container_status: None,
+                self_update: node.self_update.unwrap_or(false),
             };
             Ok(node_info)
         }

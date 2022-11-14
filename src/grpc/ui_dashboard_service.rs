@@ -1,7 +1,10 @@
 use super::blockjoy_ui::ResponseMeta;
+use crate::auth::{JwtToken, UserAuthToken};
 use crate::grpc::blockjoy_ui::dashboard_service_server::DashboardService;
 use crate::grpc::blockjoy_ui::{metric, DashboardMetricsRequest, DashboardMetricsResponse, Metric};
-use crate::models::Node;
+use crate::grpc::helpers::required;
+use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::models::{Node, Org};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 
@@ -21,10 +24,17 @@ impl DashboardService for DashboardServiceImpl {
         &self,
         request: Request<DashboardMetricsRequest>,
     ) -> Result<Response<DashboardMetricsResponse>, Status> {
+        let token = request
+            .extensions()
+            .get::<UserAuthToken>()
+            .ok_or_else(required("Auth token"))?;
+        let refresh_token = get_refresh_token(&request);
+        let user_id = token.get_id();
+        let org_id = Org::find_personal_org(user_id, &self.db).await?.id;
         let inner = request.into_inner();
         let mut metrics: Vec<Metric> = Vec::with_capacity(2);
 
-        if let Ok(running_nodes) = Node::running_nodes_count(&self.db).await {
+        if let Ok(running_nodes) = Node::running_nodes_count(&org_id, &self.db).await {
             let running = Metric {
                 name: metric::Name::Online.into(),
                 value: running_nodes.to_string(),
@@ -32,12 +42,12 @@ impl DashboardService for DashboardServiceImpl {
             metrics.insert(0, running);
         }
 
-        if let Ok(stopped_nodes) = Node::halted_nodes_count(&self.db).await {
-            let running = Metric {
+        if let Ok(stopped_nodes) = Node::halted_nodes_count(&org_id, &self.db).await {
+            let stopped = Metric {
                 name: metric::Name::Offline.into(),
                 value: stopped_nodes.to_string(),
             };
-            metrics.insert(1, running);
+            metrics.insert(1, stopped);
         }
 
         let response = DashboardMetricsResponse {
@@ -45,6 +55,6 @@ impl DashboardService for DashboardServiceImpl {
             metrics,
         };
 
-        Ok(Response::new(response))
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 }

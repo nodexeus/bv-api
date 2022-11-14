@@ -1,38 +1,54 @@
-use super::JwtToken;
-use jsonwebtoken as jwt;
+use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenRole, TokenType};
+use crate::errors::Result;
+use crate::models::BlacklistToken;
+use crate::server::DbPool;
+use derive_getters::Getters;
+use std::str;
 use std::str::FromStr;
-use std::{env, str};
+use uuid::Uuid;
 
 /// The claims of the token to be stored (encrypted) on the client side.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Getters)]
 pub struct PwdResetToken {
-    id: uuid::Uuid,
+    id: Uuid,
     exp: i64,
-    holder_type: super::TokenHolderType,
-    token_type: super::TokenType,
+    token_type: TokenType,
+    role: TokenRole,
 }
 
 impl JwtToken for PwdResetToken {
-    fn new(id: uuid::Uuid, exp: i64, holder_type: super::TokenHolderType) -> Self {
-        Self {
-            id,
-            exp,
-            holder_type,
-            token_type: super::TokenType::PwdReset,
-        }
+    fn get_expiration(&self) -> i64 {
+        self.exp
     }
 
-    fn token_holder(&self) -> super::TokenHolderType {
-        self.holder_type
+    fn get_id(&self) -> Uuid {
+        self.id
     }
 
-    /// Get PWD_RESET_SECRET from env vars.
-    fn get_secret() -> crate::auth::TokenResult<String> {
-        match env::var("PWD_RESET_SECRET") {
-            Ok(s) if s.is_empty() => panic!("`PWD_RESET_SECRET` parameter is empty"),
-            Ok(secret) => Ok(secret),
-            Err(e) => Err(super::TokenError::EnvVar(e)),
-        }
+    fn try_new(claim: TokenClaim) -> TokenResult<Self> {
+        Ok(Self {
+            id: claim.id,
+            exp: claim.exp,
+            token_type: TokenType::PwdReset,
+            role: claim.role,
+        })
+    }
+
+    fn token_type(&self) -> TokenType {
+        self.token_type
+    }
+}
+
+#[tonic::async_trait]
+impl Blacklisted for PwdResetToken {
+    async fn blacklist(&self, db: DbPool) -> TokenResult<bool> {
+        Ok(BlacklistToken::create(self.encode()?, self.token_type, &db)
+            .await
+            .is_ok())
+    }
+
+    async fn is_blacklisted(&self, token: String, db: DbPool) -> TokenResult<bool> {
+        Ok(BlacklistToken::is_listed(token, &db).await.is_ok())
     }
 }
 
@@ -40,19 +56,6 @@ impl FromStr for PwdResetToken {
     type Err = super::TokenError;
 
     fn from_str(encoded: &str) -> Result<Self, Self::Err> {
-        let secret = Self::get_secret()?;
-        let validation = jwt::Validation::new(jwt::Algorithm::HS512);
-        let key = jwt::DecodingKey::from_secret(secret.as_bytes());
-
-        match jwt::decode(encoded, &key, &validation) {
-            Ok(token) => Ok(token.claims),
-            Err(e) => Err(super::TokenError::EnDeCoding(e)),
-        }
-    }
-}
-
-impl super::Identifier for PwdResetToken {
-    fn get_id(&self) -> uuid::Uuid {
-        self.id
+        PwdResetToken::from_encoded(encoded, TokenType::PwdReset, true)
     }
 }
