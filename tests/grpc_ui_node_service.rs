@@ -2,13 +2,14 @@
 mod setup;
 
 use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
+use api::grpc::blockjoy_ui::node::Keyfile;
 use api::grpc::blockjoy_ui::node_service_client::NodeServiceClient;
 use api::grpc::blockjoy_ui::{
     node, CreateNodeRequest, GetNodeRequest, Node as GrpcNode, RequestMeta, UpdateNodeRequest,
 };
 use api::models::{
-    ContainerStatus, Node, NodeChainStatus, NodeCreateRequest, NodeSyncStatus, NodeType,
-    NodeTypeKey, Org, User,
+    ContainerStatus, Node, NodeChainStatus, NodeCreateRequest, NodeKeyFile, NodeSyncStatus,
+    NodeType, NodeTypeKey, Org, User,
 };
 use setup::setup;
 use sqlx::types::Json;
@@ -17,6 +18,7 @@ use test_macros::*;
 use tonic::transport::Channel;
 use tonic::{Request, Status};
 use uuid::Uuid;
+use validator::HasLen;
 
 #[before(call = "setup")]
 #[tokio::test]
@@ -95,6 +97,7 @@ async fn responds_ok_with_id_for_get() {
         version: None,
         staking_status: None,
         self_update: false,
+        key_files: vec![],
     };
     let node = Node::create(&req, &db.pool).await.unwrap();
     let user = db.admin_user().await;
@@ -146,6 +149,10 @@ async fn responds_ok_with_valid_data_for_create() {
         .unwrap()
         .id
         .to_string();
+    let key_file = Keyfile {
+        name: "some key".to_string(),
+        content: String::from("lorem ipsum dolor sit amit").into_bytes(),
+    };
     let node = GrpcNode {
         id: None,
         host_id: Some(host.id.to_string()),
@@ -167,6 +174,7 @@ async fn responds_ok_with_valid_data_for_create() {
         staking_status: None,
         sync_status: Some(NodeSyncStatus::Unknown as i32),
         self_update: None,
+        key_files: vec![key_file],
     };
     let token =
         UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
@@ -194,6 +202,17 @@ async fn responds_ok_with_valid_data_for_create() {
     );
 
     assert_grpc_request! { create, request, tonic::Code::Ok, db, NodeServiceClient<Channel> };
+
+    let files = sqlx::query_as::<_, NodeKeyFile>("select * from node_key_files")
+        .fetch_all(&db.pool)
+        .await
+        .unwrap();
+    let key_file = files.first().unwrap();
+
+    println!("key file: {key_file:?}");
+
+    assert_eq!(files.length(), 1);
+    assert_eq!(key_file.name, "some key".to_string());
 }
 
 #[before(call = "setup")]
@@ -228,6 +247,7 @@ async fn responds_internal_with_invalid_data_for_create() {
         staking_status: None,
         sync_status: Some(NodeSyncStatus::Unknown as i32),
         self_update: None,
+        key_files: vec![],
     };
     let user = db.admin_user().await;
     let token =
@@ -296,6 +316,7 @@ async fn responds_ok_with_valid_data_for_update() {
         version: None,
         staking_status: None,
         self_update: false,
+        key_files: vec![],
     };
     let db_node = Node::create(&req, &db.pool).await.unwrap();
     let node = GrpcNode {
@@ -369,6 +390,7 @@ async fn responds_internal_with_invalid_data_for_update() {
         version: None,
         staking_status: None,
         self_update: false,
+        key_files: vec![],
     };
     let db_node = Node::create(&req, &db.pool).await.unwrap();
     let node = GrpcNode {
