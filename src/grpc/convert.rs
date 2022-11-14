@@ -80,6 +80,7 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
 
 pub mod from {
     use crate::errors::ApiError;
+    use crate::grpc;
     use crate::grpc::blockjoy::HostInfo;
     use crate::grpc::blockjoy_ui::node::Keyfile;
     use crate::grpc::blockjoy_ui::{
@@ -625,6 +626,17 @@ pub mod from {
                 updated_at: Some(try_dt_to_ts(model.updated_at)?),
             };
             Ok(blockchain)
+        }
+    }
+
+    impl TryFrom<NodeKeyFile> for grpc::blockjoy::Keyfile {
+        type Error = ApiError;
+
+        fn try_from(value: NodeKeyFile) -> Result<Self, Self::Error> {
+            Ok(Self {
+                name: value.name.clone(),
+                content: value.content.into_bytes(),
+            })
         }
     }
 }
