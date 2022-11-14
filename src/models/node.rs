@@ -233,7 +233,7 @@ impl Node {
                     node_id: node.id,
                 };
 
-                NodeKeyFile::create(kf_req, &db).await?;
+                NodeKeyFile::create(kf_req, db).await?;
             }
         }
 
