@@ -23,7 +23,7 @@ async fn responds_not_found_with_invalid_node_id() {
     let hosts = Host::find_all(&db.pool).await.unwrap();
     let host = hosts.first().unwrap();
     let token: HostAuthToken =
-        HostAuthToken::create_token_for::<Host>(&host, TokenType::HostAuth, TokenRole::Service)
+        HostAuthToken::create_token_for::<Host>(host, TokenType::HostAuth, TokenRole::Service)
             .unwrap();
     let inner = KeyFilesGetRequest {
         request_id: None,
@@ -56,7 +56,7 @@ async fn responds_ok_with_valid_node_id() {
     let host = hosts.first().unwrap();
     let blockchain = db.blockchain().await;
     let token: HostAuthToken =
-        HostAuthToken::create_token_for::<Host>(&host, TokenType::HostAuth, TokenRole::Service)
+        HostAuthToken::create_token_for::<Host>(host, TokenType::HostAuth, TokenRole::Service)
             .unwrap();
     let req = NodeCreateRequest {
         host_id: host.id,
