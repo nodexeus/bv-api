@@ -20,7 +20,19 @@ message KeyFilesGetResponse {
     repeated Keyfile key_files = 2;
 }
 
+message KeyFilesSaveRequest {
+    optional string request_id = 1;
+    repeated Keyfile key_files = 2;
+}
+
+message KeyFilesSaveResponse {
+    optional string origin_request_id = 1;
+    repeated string messages = 2;
+}
+
 service KeyFiles {
     /* Return all available key files for given node ID */
     rpc Get(KeyFilesGetRequest) returns (KeyFilesGetResponse) {}
+    /* Save key files for given node ID */
+    rpc Save(KeyFilesSaveRequest) returns (KeyFilesSaveResponse) {}
 }
