@@ -2,7 +2,7 @@ use super::node_type::*;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
 use crate::grpc::helpers::internal;
-use crate::models::{validator::Validator, UpdateInfo};
+use crate::models::{validator::Validator, CreateNodeKeyFileRequest, NodeKeyFile, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -224,6 +224,19 @@ impl Node {
 
         tx.commit().await?;
 
+        // Create key files, if available
+        if !req.key_files.is_empty() {
+            for file in &req.key_files {
+                let kf_req = CreateNodeKeyFileRequest {
+                    name: file.name.clone(),
+                    content: file.content.clone(),
+                    node_id: node.id,
+                };
+
+                NodeKeyFile::create(kf_req, &db).await?;
+            }
+        }
+
         Ok(node)
     }
 
@@ -389,6 +402,7 @@ pub struct NodeCreateRequest {
     pub staking_status: Option<NodeStakingStatus>,
     pub container_status: ContainerStatus,
     pub self_update: bool,
+    pub key_files: Vec<NodeKeyFile>,
 }
 
 pub struct NodeUpdateRequest {

@@ -81,6 +81,7 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
 pub mod from {
     use crate::errors::ApiError;
     use crate::grpc::blockjoy::HostInfo;
+    use crate::grpc::blockjoy_ui::node::Keyfile;
     use crate::grpc::blockjoy_ui::{
         self, node::NodeStatus as GrpcNodeStatus, node::StakingStatus as GrpcStakingStatus,
         node::SyncStatus as GrpcSyncStatus, Host as GrpcHost, HostProvision as GrpcHostProvision,
@@ -89,7 +90,7 @@ pub mod from {
     use crate::grpc::helpers::required;
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
-        NodeCreateRequest, NodeInfo, NodeStakingStatus, NodeSyncStatus, Org, User,
+        NodeCreateRequest, NodeInfo, NodeKeyFile, NodeStakingStatus, NodeSyncStatus, Org, User,
         UserSelectiveUpdate,
     };
     use crate::models::{Host, HostSelectiveUpdate};
@@ -98,6 +99,7 @@ pub mod from {
     use serde_json::Value;
     use std::i64;
     use std::net::AddrParseError;
+    use std::string::FromUtf8Error;
     use tonic::{Code, Status};
     use uuid::Uuid;
 
@@ -404,6 +406,7 @@ pub mod from {
                 staking_status: Some(GrpcStakingStatus::from(node.staking_status).into()),
                 sync_status: Some(GrpcSyncStatus::from(node.sync_status).into()),
                 self_update: Some(node.self_update),
+                key_files: vec![],
             };
             Ok(grpc_node)
         }
@@ -443,6 +446,7 @@ pub mod from {
                 ),
                 sync_status: Some(GrpcSyncStatus::from(req.sync_status).into()),
                 self_update: Some(req.self_update),
+                key_files: vec![],
             };
             Ok(node)
         }
@@ -453,6 +457,19 @@ pub mod from {
 
         fn try_from(req: NodeCreateRequest) -> Result<Self, Self::Error> {
             Self::try_from(&req)
+        }
+    }
+
+    impl TryFrom<Keyfile> for NodeKeyFile {
+        type Error = ApiError;
+
+        fn try_from(value: Keyfile) -> Result<Self, Self::Error> {
+            Ok(Self {
+                name: value.name,
+                content: String::from_utf8(value.content)
+                    .map_err(|e: FromUtf8Error| ApiError::UnexpectedError(anyhow!(e)))?,
+                ..Default::default()
+            })
         }
     }
 
@@ -498,7 +515,17 @@ pub mod from {
                 staking_status: Some(NodeStakingStatus::Unknown),
                 container_status: ContainerStatus::Unknown,
                 self_update: node.self_update.unwrap_or(false),
+                key_files: node
+                    .key_files
+                    .iter()
+                    .map(|v| NodeKeyFile {
+                        name: v.name.clone(),
+                        content: String::from_utf8(v.content.to_owned()).unwrap_or_default(),
+                        ..Default::default()
+                    })
+                    .collect(),
             };
+
             Ok(req)
         }
     }
