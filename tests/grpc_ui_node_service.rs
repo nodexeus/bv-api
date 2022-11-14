@@ -17,7 +17,6 @@ use test_macros::*;
 use tonic::transport::Channel;
 use tonic::{Request, Status};
 use uuid::Uuid;
-use validator::HasLen;
 
 #[before(call = "setup")]
 #[tokio::test]
