@@ -1,6 +1,8 @@
 use crate::errors::ApiError;
 use crate::grpc::blockjoy::key_files_server::KeyFiles;
-use crate::grpc::blockjoy::{KeyFilesGetRequest, KeyFilesGetResponse};
+use crate::grpc::blockjoy::{
+    KeyFilesGetRequest, KeyFilesGetResponse, KeyFilesSaveRequest, KeyFilesSaveResponse,
+};
 use crate::models::NodeKeyFile;
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -42,5 +44,12 @@ impl KeyFiles for KeyFileServiceImpl {
         };
 
         Ok(Response::new(response))
+    }
+
+    async fn save(
+        &self,
+        request: Request<KeyFilesSaveRequest>,
+    ) -> Result<Response<KeyFilesSaveResponse>, Status> {
+        let inner = request.into_inner();
     }
 }
