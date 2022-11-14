@@ -22,7 +22,8 @@ message KeyFilesGetResponse {
 
 message KeyFilesSaveRequest {
     optional string request_id = 1;
-    repeated Keyfile key_files = 2;
+    string node_id = 2;
+    repeated Keyfile key_files = 3;
 }
 
 message KeyFilesSaveResponse {

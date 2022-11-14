@@ -40,7 +40,6 @@ async fn can_create_key_file() -> anyhow::Result<()> {
         version: None,
         staking_status: None,
         self_update: false,
-        key_files: vec![],
     };
     let node = Node::create(&req, &db.pool).await.unwrap();
     let req = CreateNodeKeyFileRequest {
@@ -106,7 +105,6 @@ async fn deletes_key_file_if_node_is_deleted() -> anyhow::Result<()> {
         version: None,
         staking_status: None,
         self_update: false,
-        key_files: vec![],
     };
     let node = Node::create(&req, &db.pool).await.unwrap();
     let req = CreateNodeKeyFileRequest {
