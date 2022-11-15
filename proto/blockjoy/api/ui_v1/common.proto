@@ -112,14 +112,6 @@ message HostProvision {
 /* Blockchain node representation */
 message Node {
   /**
-   * A single keyfile representation
-   */
-  message Keyfile {
-    string name = 1;
-    bytes content = 2;
-  }
-
-  /**
    * Describe the node's chain related status
    * Generic, NOT chain specific states. These states are used to describe the
    * node's states as seen by the blockchain
@@ -192,7 +184,6 @@ message Node {
   optional StakingStatus staking_status = 18;
   optional string ip_gateway = 19;
   optional bool self_update = 20;
-  repeated Keyfile key_files = 21;
 }
 
 /* Organization representation */
