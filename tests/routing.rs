@@ -1,12 +1,10 @@
 #[allow(dead_code)]
 mod setup;
 
-use setup::setup;
 use std::sync::Arc;
 
 use axum::http::{Request, StatusCode};
 use hyper::Body;
-use test_macros::before;
 use tower::ServiceExt;
 
 fn possible_routes() -> Vec<(&'static str, &'static str, StatusCode)> {
@@ -16,12 +14,11 @@ fn possible_routes() -> Vec<(&'static str, &'static str, StatusCode)> {
     ]
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn test_possible_routes() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
 
-    let db = Arc::new(_before_values.await);
+    let db = Arc::new(api::TestDb::setup().await);
     let routes = possible_routes();
     let app = api::http::server(std::sync::Arc::new(db.pool.clone())).await;
 

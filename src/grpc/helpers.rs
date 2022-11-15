@@ -8,7 +8,7 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tonic::Status;
 
-use super::blockjoy_ui::RequestMeta;
+use super::blockjoy_ui::{ApiToken, RequestMeta};
 
 pub fn image_url_from_node(node: &Node, chain_name: String) -> String {
     let node_type = NodeTypeKey::str_from_value(node.node_type.0.get_id()).to_lowercase();
@@ -113,6 +113,22 @@ impl ResponseMeta {
         };
 
         ResponseMeta {
+            pagination: Some(pagination),
+            ..self
+        }
+    }
+}
+
+impl RequestMeta {
+    pub fn with_token(self, token: String) -> Self {
+        Self {
+            token: Some(ApiToken { value: token }),
+            ..self
+        }
+    }
+
+    pub fn with_pagination(self, pagination: Pagination) -> Self {
+        Self {
             pagination: Some(pagination),
             ..self
         }

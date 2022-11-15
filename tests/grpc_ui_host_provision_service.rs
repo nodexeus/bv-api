@@ -1,7 +1,6 @@
 mod setup;
 
-use api::grpc::blockjoy_ui;
-use api::grpc::blockjoy_ui::host_provision_service_client;
+use api::grpc::blockjoy_ui::{self, host_provision_service_client};
 use api::models;
 use tonic::transport;
 
@@ -23,16 +22,18 @@ async fn responds_ok_with_valid_id_for_get() {
     let tester = setup::Tester::new().await;
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
+
     let req = models::HostProvisionRequest {
         org_id: org.id,
         nodes: None,
         ip_gateway: "192.168.0.1".parse().unwrap(),
         ip_range_from: "192.168.0.10".parse().unwrap(),
-        ip_range_to: "192.168.0.100".parse().unwrap(),
+        ip_range_to: "192.168.0.20".parse().unwrap(),
     };
     let provision = models::HostProvision::create(req, tester.pool())
         .await
         .unwrap();
+
     let req = blockjoy_ui::GetHostProvisionRequest {
         meta: Some(tester.meta()),
         id: Some(provision.id),
@@ -57,10 +58,10 @@ async fn responds_ok_with_valid_provision_for_create() {
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
     let provision = blockjoy_ui::HostProvision {
+        ip_gateway: "192.168.0.1".parse().unwrap(),
+        ip_range_from: "192.168.0.10".parse().unwrap(),
+        ip_range_to: "192.168.0.20".parse().unwrap(),
         org_id: org.id.to_string(),
-        ip_gateway: String::from("192.168.0.1"),
-        ip_range_from: String::from("192.168.0.10"),
-        ip_range_to: String::from("192.168.0.100"),
         ..Default::default()
     };
     let req = blockjoy_ui::CreateHostProvisionRequest {

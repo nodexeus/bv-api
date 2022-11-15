@@ -1,4 +1,4 @@
-use super::helpers::try_get_token;
+use super::helpers::{self, try_get_token};
 use crate::auth::{FindableById, HostAuthToken, JwtToken, TokenRole, TokenType};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy::hosts_server::Hosts;
@@ -50,9 +50,18 @@ impl Hosts for HostsServiceImpl {
         &self,
         request: Request<HostInfoUpdateRequest>,
     ) -> Result<Response<HostInfoUpdateResponse>, Status> {
+        let host_token_id = *try_get_token::<_, HostAuthToken>(&request)?.id();
         let (request_id, info) = request.into_data()?;
-        let request_host_id = Uuid::parse_str(info.id.clone().unwrap_or_default().as_str())
+        let request_host_id = info
+            .id
+            .as_deref()
+            .ok_or_else(helpers::required("info.id"))?
+            .parse()
             .map_err(ApiError::from)?;
+        if host_token_id != request_host_id {
+            let msg = format!("Not allowed to delete host '{request_host_id}'");
+            return Err(Status::permission_denied(msg));
+        }
         let host = Host::find_by_id(request_host_id, &self.db).await?;
         Host::update_all(host.id, HostSelectiveUpdate::from(info), &self.db)
             .await

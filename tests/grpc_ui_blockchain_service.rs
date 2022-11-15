@@ -1,113 +1,47 @@
-#[allow(dead_code)]
 mod setup;
 
-use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
-use api::grpc::blockjoy_ui::blockchain_service_client::BlockchainServiceClient;
-use api::grpc::blockjoy_ui::{GetBlockchainRequest, ListBlockchainsRequest, RequestMeta};
-use api::models::User;
-use setup::setup;
-use std::sync::Arc;
-use test_macros::*;
-use tonic::transport::Channel;
-use tonic::{Request, Status};
-use uuid::Uuid;
+use api::grpc::blockjoy_ui;
+use tonic::transport;
 
-async fn with_auth<T>(inner: T, db: &api::TestDb) -> Request<T> {
-    let mut request = Request::new(inner);
-    let user = db.admin_user().await;
-    let token =
-        UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)
-            .unwrap();
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", token.to_base64().unwrap())
-            .parse()
-            .unwrap(),
-    );
-    request.metadata_mut().insert(
-        "cookie",
-        format!(
-            "refresh={}",
-            db.user_refresh_token(*token.id()).encode().unwrap()
-        )
-        .parse()
-        .unwrap(),
-    );
-    request
-}
+type Service = blockjoy_ui::blockchain_service_client::BlockchainServiceClient<transport::Channel>;
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_ok_for_get_existing() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
+    let tester = setup::Tester::new().await;
+    let req = blockjoy_ui::GetBlockchainRequest {
+        meta: Some(tester.meta()),
+        id: "1fdbf4c3-ff16-489a-8d3d-87c8620b963c".to_string(),
     };
-    let uuid: uuid::Uuid = "1fdbf4c3-ff16-489a-8d3d-87c8620b963c".parse().unwrap();
-    let inner = GetBlockchainRequest {
-        meta: Some(request_meta),
-        id: uuid.to_string(),
-    };
-    let req = with_auth(inner, &db).await;
-    assert_grpc_request! { get, req, tonic::Code::Ok, db, BlockchainServiceClient<Channel> };
+    tester.send_admin(Service::get, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_not_found_for_get_nonexisting() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
+    let tester = setup::Tester::new().await;
+    let req = blockjoy_ui::GetBlockchainRequest {
+        meta: Some(tester.meta()),
+        id: "6a9efd38-0c5a-4ab0-bda2-5f308f850565".to_string(),
     };
-    let uuid: uuid::Uuid = "6a9efd38-0c5a-4ab0-bda2-5f308f850565".parse().unwrap();
-
-    let inner = GetBlockchainRequest {
-        meta: Some(request_meta),
-        id: uuid.to_string(),
-    };
-    let req = with_auth(inner, &db).await;
-    assert_grpc_request! { get, req, tonic::Code::NotFound, db, BlockchainServiceClient<Channel> };
+    let status = tester.send_admin(Service::get, req).await.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::NotFound);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_not_found_for_get_deleted() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
+    let tester = setup::Tester::new().await;
+    let req = blockjoy_ui::GetBlockchainRequest {
+        meta: Some(tester.meta()),
+        id: "13f25489-bf9b-4667-9f18-f8caa32fa4a9".to_string(),
     };
-    // TODO
-    let uuid: uuid::Uuid = "13f25489-bf9b-4667-9f18-f8caa32fa4a9".parse().unwrap();
-    let inner = GetBlockchainRequest {
-        meta: Some(request_meta),
-        id: uuid.to_string(),
-    };
-    let req = with_auth(inner, &db).await;
-    assert_grpc_request! { get, req, tonic::Code::NotFound, db, BlockchainServiceClient<Channel> };
+    let status = tester.send_admin(Service::get, req).await.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::NotFound);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn can_list_blockchains() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
+    let tester = setup::Tester::new().await;
+    let req = blockjoy_ui::ListBlockchainsRequest {
+        meta: Some(tester.meta()),
     };
-    let inner = ListBlockchainsRequest {
-        meta: Some(request_meta),
-    };
-    let req = with_auth(inner, &db).await;
-    assert_grpc_request! { list, req, tonic::Code::Ok, db, BlockchainServiceClient<Channel> };
+    tester.send_admin(Service::list, req).await.unwrap();
 }

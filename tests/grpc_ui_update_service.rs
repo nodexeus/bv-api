@@ -1,33 +1,20 @@
-#[allow(dead_code)]
 mod setup;
 
-use crate::setup::setup;
-use api::grpc::blockjoy_ui::update_service_client::UpdateServiceClient;
-use api::grpc::blockjoy_ui::{GetUpdatesRequest, RequestMeta};
-use std::sync::Arc;
-use test_macros::before;
-use tonic::{transport::Channel, Request, Status};
-use uuid::Uuid;
+use api::grpc::blockjoy_ui::{self, update_service_client};
+use tonic::transport;
 
-#[before(call = "setup")]
+type Service = update_service_client::UpdateServiceClient<transport::Channel>;
+
 #[tokio::test]
 async fn responds_unauthenticated_with_invalid_token_for_update() {
-    let db = Arc::new(_before_values.await);
-    let request_meta = RequestMeta {
-        id: Some(Uuid::new_v4().to_string()),
-        token: None,
-        fields: vec![],
-        pagination: None,
+    let tester = setup::Tester::new().await;
+    let req = blockjoy_ui::GetUpdatesRequest {
+        meta: Some(tester.meta()),
     };
-    let inner = GetUpdatesRequest {
-        meta: Some(request_meta),
-    };
-    let mut request = Request::new(inner);
-
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {}", "some-invalid-token").parse().unwrap(),
-    );
-
-    assert_grpc_request! { updates, request, tonic::Code::Unauthenticated, db, UpdateServiceClient<Channel> };
+    let auth = setup::DummyToken("some-invalid-token");
+    let status = tester
+        .send_with(Service::updates, req, auth, setup::DummyRefresh)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Unauthenticated);
 }

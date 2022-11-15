@@ -115,8 +115,10 @@ impl NodeService for NodeServiceImpl {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let node = inner.node.ok_or_else(required("node"))?;
-        let node_id = node.id.clone();
-        let node_id = Uuid::parse_str(node_id.ok_or_else(required("node.id"))?.as_str())
+        let node_id = node.id.as_deref();
+        let node_id = node_id
+            .ok_or_else(required("node.id"))?
+            .parse()
             .map_err(ApiError::from)?;
         let fields: NodeInfo = node.try_into()?;
 
