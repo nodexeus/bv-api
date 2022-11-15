@@ -43,7 +43,6 @@ async fn responds_ok_with_id_for_get() {
         version: None,
         staking_status: None,
         self_update: false,
-        key_files: vec![],
     };
     let node = models::Node::create(&req, tester.pool()).await.unwrap();
     let req = blockjoy_ui::GetNodeRequest {
@@ -151,7 +150,6 @@ async fn responds_ok_with_valid_data_for_update() {
         version: None,
         staking_status: None,
         self_update: false,
-        key_files: vec![],
     };
     let db_node = models::Node::create(&req, tester.pool()).await.unwrap();
     let node = blockjoy_ui::Node {
