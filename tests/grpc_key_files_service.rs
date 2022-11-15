@@ -191,3 +191,78 @@ async fn responds_ok_with_valid_node_id_for_save() {
 
     assert_grpc_request! { save, request, tonic::Code::Ok, db, KeyFilesClient<Channel> };
 }
+
+#[before(call = "setup")]
+#[tokio::test]
+async fn responds_error_with_same_node_id_name_twice_for_save() {
+    let db = _before_values.await;
+    let user = db.admin_user().await;
+    let org_id = Org::find_all_by_user(user.id, &db.pool)
+        .await
+        .unwrap()
+        .first()
+        .unwrap()
+        .id;
+    let hosts = Host::find_all(&db.pool).await.unwrap();
+    let host = hosts.first().unwrap();
+    let blockchain = db.blockchain().await;
+    let token: HostAuthToken =
+        HostAuthToken::create_token_for::<Host>(host, TokenType::HostAuth, TokenRole::Service)
+            .unwrap();
+    let req = NodeCreateRequest {
+        host_id: host.id,
+        org_id,
+        blockchain_id: blockchain.id,
+        node_type: Json(NodeType::special_type(NodeTypeKey::Api)),
+        chain_status: NodeChainStatus::Unknown,
+        sync_status: NodeSyncStatus::Syncing,
+        container_status: ContainerStatus::Installing,
+        address: None,
+        wallet_address: None,
+        block_height: None,
+        groups: None,
+        node_data: None,
+        ip_addr: None,
+        ip_gateway: Some("192.168.0.1".into()),
+        name: None,
+        version: None,
+        staking_status: None,
+        self_update: false,
+    };
+    let node = Node::create(&req, &db.pool).await.unwrap();
+    let key_file = Keyfile {
+        name: "new keyfile".to_string(),
+        content: "üöäß@niesfiefasd".to_string().into_bytes(),
+    };
+    let inner = KeyFilesSaveRequest {
+        request_id: None,
+        node_id: node.id.to_string(),
+        key_files: vec![key_file.clone()],
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+
+    assert_grpc_request! { save, request, tonic::Code::Ok, db, KeyFilesClient<Channel> };
+
+    let inner = KeyFilesSaveRequest {
+        request_id: None,
+        node_id: node.id.to_string(),
+        key_files: vec![key_file],
+    };
+    let mut request = Request::new(inner);
+
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", token.to_base64().unwrap())
+            .parse()
+            .unwrap(),
+    );
+
+    assert_grpc_request! { save, request, tonic::Code::InvalidArgument, db, KeyFilesClient<Channel> };
+}
