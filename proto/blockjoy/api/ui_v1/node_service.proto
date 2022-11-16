@@ -5,9 +5,9 @@ package blockjoy.api.ui_v1;
 import "common.proto";
 
 message FilterCriteria {
-  repeated string status = 1;
-  repeated string types = 2;
-  repeated string blockchains = 3;
+  repeated string states = 1;
+  repeated string node_types = 2;
+  repeated string blockchain_ids = 3;
 }
 
 message CreateNodeRequest {
