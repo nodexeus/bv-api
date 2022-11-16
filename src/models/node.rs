@@ -116,32 +116,6 @@ pub enum NodeChainStatus {
     Removed,
     Removing,
 }
-/*
-impl Display for NodeChainStatus {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Unknown => write!(f, "unknown"),
-            Self::Provisioning => write!(f, "provisioning"),
-            Self::Broadcasting => write!(f, "broadcasting"),
-            Self::Cancelled => write!(f, "cancelled"),
-            Self::Delegating => write!(f, "delegating"),
-            Self::Delinquent => write!(f, "delinquent"),
-            Self::Disabled => write!(f, "disabled"),
-            Self::Earning => write!(f, "earning"),
-            Self::Electing => write!(f, "electing"),
-            Self::Elected => write!(f, "elected"),
-            Self::Exported => write!(f, "exported"),
-            Self::Ingesting => write!(f, "ingesting"),
-            Self::Mining => write!(f, "mining"),
-            Self::Minting => write!(f, "minting"),
-            Self::Processing => write!(f, "processing"),
-            Self::Relaying => write!(f, "relaying"),
-            Self::Removed => write!(f, "removed"),
-            Self::Removing => write!(f, "removing"),
-        }
-    }
-}
- */
 
 impl TryFrom<i32> for NodeChainStatus {
     type Error = ApiError;
