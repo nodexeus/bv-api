@@ -8,6 +8,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::{types::Json, FromRow, PgPool, Row};
+use std::string::ToString;
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 /// ContainerStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
@@ -88,9 +90,12 @@ impl TryFrom<i32> for NodeStakingStatus {
 }
 
 /// NodeChainStatus reflects blockjoy.api.v1.node.NodeInfo.ApplicationStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(
+    Clone, Copy, Debug, Display, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, EnumString,
+)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_node_chain_status", rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum NodeChainStatus {
     Unknown,
     Provisioning,
@@ -111,6 +116,32 @@ pub enum NodeChainStatus {
     Removed,
     Removing,
 }
+/*
+impl Display for NodeChainStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unknown => write!(f, "unknown"),
+            Self::Provisioning => write!(f, "provisioning"),
+            Self::Broadcasting => write!(f, "broadcasting"),
+            Self::Cancelled => write!(f, "cancelled"),
+            Self::Delegating => write!(f, "delegating"),
+            Self::Delinquent => write!(f, "delinquent"),
+            Self::Disabled => write!(f, "disabled"),
+            Self::Earning => write!(f, "earning"),
+            Self::Electing => write!(f, "electing"),
+            Self::Elected => write!(f, "elected"),
+            Self::Exported => write!(f, "exported"),
+            Self::Ingesting => write!(f, "ingesting"),
+            Self::Mining => write!(f, "mining"),
+            Self::Minting => write!(f, "minting"),
+            Self::Processing => write!(f, "processing"),
+            Self::Relaying => write!(f, "relaying"),
+            Self::Removed => write!(f, "removed"),
+            Self::Removing => write!(f, "removing"),
+        }
+    }
+}
+ */
 
 impl TryFrom<i32> for NodeChainStatus {
     type Error = ApiError;
@@ -165,6 +196,13 @@ pub struct Node {
     pub staking_status: NodeStakingStatus,
     pub container_status: ContainerStatus,
     pub self_update: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct NodeFilter {
+    pub status: Vec<String>,
+    pub node_types: Vec<String>,
+    pub blockchains: Vec<Uuid>,
 }
 
 impl Node {
@@ -266,6 +304,46 @@ impl Node {
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
+    }
+
+    pub async fn find_all_by_filter(
+        org_id: Uuid,
+        filter: NodeFilter,
+        offset: i32,
+        limit: i32,
+        db: &PgPool,
+    ) -> Result<Vec<Self>> {
+        let mut nodes = sqlx::query_as::<_, Self>(
+            r#"
+                SELECT * FROM nodes
+                WHERE org_id = $1
+                ORDER BY created_at DESC
+                OFFSET $2
+                LIMIT $3
+            "#,
+        )
+        .bind(org_id)
+        .bind(offset)
+        .bind(limit)
+        .fetch_all(db)
+        .await
+        .map_err(ApiError::from)?;
+
+        // Apply filters if present
+        if !filter.blockchains.is_empty() {
+            nodes = nodes
+                .into_iter()
+                .filter(|p| filter.blockchains.contains(&p.blockchain_id))
+                .collect();
+        }
+        if !filter.status.is_empty() {
+            nodes = nodes
+                .into_iter()
+                .filter(|p| filter.status.contains(&p.chain_status.to_string()))
+                .collect();
+        }
+
+        Ok(nodes)
     }
 
     pub async fn running_nodes_count(org_id: &Uuid, db: &PgPool) -> Result<i32> {
