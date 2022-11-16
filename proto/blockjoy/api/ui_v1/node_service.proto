@@ -4,6 +4,12 @@ package blockjoy.api.ui_v1;
 
 import "common.proto";
 
+message FilterCriteria {
+  repeated string states = 1;
+  repeated string node_types = 2;
+  repeated string blockchain_ids = 3;
+}
+
 message CreateNodeRequest {
   RequestMeta meta = 1;
   Node node = 2;
@@ -26,6 +32,7 @@ message GetNodeResponse {
 message ListNodesRequest {
   RequestMeta meta = 1;
   string org_id = 2;
+  FilterCriteria filter = 3;
 }
 
 message ListNodesResponse {

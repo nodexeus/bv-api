@@ -84,14 +84,14 @@ pub mod from {
     use crate::grpc::blockjoy::Keyfile;
     use crate::grpc::blockjoy_ui::{
         self, node::NodeStatus as GrpcNodeStatus, node::StakingStatus as GrpcStakingStatus,
-        node::SyncStatus as GrpcSyncStatus, Host as GrpcHost, HostProvision as GrpcHostProvision,
-        Node as GrpcNode, Organization, User as GrpcUiUser,
+        node::SyncStatus as GrpcSyncStatus, FilterCriteria, Host as GrpcHost,
+        HostProvision as GrpcHostProvision, Node as GrpcNode, Organization, User as GrpcUiUser,
     };
     use crate::grpc::helpers::required;
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
-        NodeCreateRequest, NodeInfo, NodeKeyFile, NodeStakingStatus, NodeSyncStatus, Org, User,
-        UserSelectiveUpdate,
+        NodeCreateRequest, NodeFilter, NodeInfo, NodeKeyFile, NodeStakingStatus, NodeSyncStatus,
+        Org, User, UserSelectiveUpdate,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
@@ -99,6 +99,7 @@ pub mod from {
     use serde_json::Value;
     use std::i64;
     use std::net::AddrParseError;
+    use std::str::FromStr;
     use std::string::FromUtf8Error;
     use tonic::{Code, Status};
     use uuid::Uuid;
@@ -146,6 +147,22 @@ pub mod from {
                 ip_range_to: update.ip_range_to.map(|v| v.to_string()),
                 ip_gateway: update.ip_gateway.map(|v| v.to_string()),
             }
+        }
+    }
+
+    impl TryFrom<FilterCriteria> for NodeFilter {
+        type Error = ();
+
+        fn try_from(value: FilterCriteria) -> Result<Self, Self::Error> {
+            Ok(Self {
+                status: value.states,
+                node_types: vec![],
+                blockchains: value
+                    .blockchain_ids
+                    .iter()
+                    .map(|id| Uuid::from_str(id.as_str()).unwrap_or_default())
+                    .collect(),
+            })
         }
     }
 
