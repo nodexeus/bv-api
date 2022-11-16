@@ -155,10 +155,10 @@ pub mod from {
 
         fn try_from(value: FilterCriteria) -> Result<Self, Self::Error> {
             Ok(Self {
-                status: value.status,
+                status: value.states,
                 node_types: vec![],
                 blockchains: value
-                    .blockchains
+                    .blockchain_ids
                     .iter()
                     .map(|id| Uuid::from_str(id.as_str()).unwrap_or_default())
                     .collect(),
