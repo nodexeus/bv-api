@@ -305,16 +305,10 @@ impl Node {
 
         // Apply filters if present
         if !filter.blockchains.is_empty() {
-            nodes = nodes
-                .into_iter()
-                .filter(|p| filter.blockchains.contains(&p.blockchain_id))
-                .collect();
+            nodes.retain(|n| filter.blockchains.contains(&n.blockchain_id));
         }
         if !filter.status.is_empty() {
-            nodes = nodes
-                .into_iter()
-                .filter(|p| filter.status.contains(&p.chain_status.to_string()))
-                .collect();
+            nodes.retain(|n| filter.status.contains(&n.chain_status.to_string()));
         }
 
         Ok(nodes)
