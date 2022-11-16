@@ -58,7 +58,7 @@ impl NodeService for NodeServiceImpl {
             Some(filter) => {
                 let filter = filter
                     .try_into()
-                    .map_err(|_| Status::internal(format!("Unexpected error at filtering")))?;
+                    .map_err(|_| Status::internal("Unexpected error at filtering"))?;
 
                 Node::find_all_by_filter(org_id, filter, 0, 10, &self.db).await?
             }
