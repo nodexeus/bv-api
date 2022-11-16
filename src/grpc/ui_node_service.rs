@@ -50,8 +50,20 @@ impl NodeService for NodeServiceImpl {
     ) -> Result<Response<ListNodesResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
+        let filters = inner.filter;
         let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
-        let nodes = Node::find_all_by_org(org_id, &self.db).await?;
+
+        let nodes = match filters {
+            None => Node::find_all_by_org(org_id, &self.db).await?,
+            Some(filter) => {
+                let filter = filter
+                    .try_into()
+                    .map_err(|_| Status::internal(format!("Unexpected error at filtering")))?;
+
+                Node::find_all_by_filter(org_id, filter, 0, 10, &self.db).await?
+            }
+        };
+
         let nodes: Result<_, ApiError> = nodes.iter().map(GrpcNode::try_from).collect();
         let response = ListNodesResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
