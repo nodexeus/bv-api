@@ -59,7 +59,7 @@ impl NodeService for NodeServiceImpl {
                 let pagination = inner
                     .meta
                     .clone()
-                    .ok_or_else(|| Status::invalid_argument("Pagination missing"))?;
+                    .ok_or_else(|| Status::invalid_argument("Metadata missing"))?;
                 let pagination = pagination
                     .pagination
                     .ok_or_else(|| Status::invalid_argument("Pagination missing"))?;
