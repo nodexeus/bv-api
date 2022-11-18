@@ -310,6 +310,13 @@ impl Node {
         if !filter.status.is_empty() {
             nodes.retain(|n| filter.status.contains(&n.chain_status.to_string()));
         }
+        if !filter.node_types.is_empty() {
+            nodes.retain(|n| {
+                filter
+                    .node_types
+                    .contains(&n.node_type.get_id().to_string())
+            })
+        }
 
         Ok(nodes)
     }
