@@ -26,17 +26,6 @@ message NodeInfo {
         Snapshotting = 11;
     }
 
-    // Describe the node's syncing status
-    enum SyncStatus {
-        // Reserving values up to 15 for possible later use
-        // Up to 15 to ensure only 1 byte is used for the most common values
-        reserved 3 to 15;
-
-        UndefinedSyncStatus = 0;
-        Syncing = 1;
-        Synced = 2;
-    }
-
     // Describe the node's staking status
     enum StakingStatus {
         // Reserving values up to 15 for possible later use
@@ -50,6 +39,17 @@ message NodeInfo {
         Validating = 4;
         Consensus = 5;
         Unstaked = 6;
+    }
+
+    // Describe the node's syncing status
+    enum SyncStatus {
+        // Reserving values up to 15 for possible later use
+        // Up to 15 to ensure only 1 byte is used for the most common values
+        reserved 3 to 15;
+
+        UndefinedSyncStatus = 0;
+        Syncing = 1;
+        Synced = 2;
     }
 
     // Describe the node's chain related status
