@@ -10,7 +10,7 @@ use uuid::Uuid;
 type Service = key_files_client::KeyFilesClient<transport::Channel>;
 
 #[tokio::test]
-async fn responds_not_found_with_invalid_node_id() {
+async fn responds_ok_with_invalid_node_id() {
     let tester = setup::Tester::new().await;
     let host = tester.host().await;
     let auth = tester.host_token(&host);
@@ -19,11 +19,10 @@ async fn responds_not_found_with_invalid_node_id() {
         request_id: None,
         node_id: Uuid::new_v4().to_string(),
     };
-    let status = tester
+    tester
         .send_with(Service::get, req, auth, refresh)
         .await
-        .unwrap_err();
-    assert_eq!(status.code(), tonic::Code::NotFound);
+        .unwrap();
 }
 
 #[tokio::test]

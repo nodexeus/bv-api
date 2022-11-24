@@ -35,16 +35,18 @@ impl KeyFiles for KeyFileServiceImpl {
         let key_files = NodeKeyFile::find_by_node(node_id, &self.db).await?;
 
         // Ensure we return "Not found" if no key files could be found
-        if key_files.is_empty() {
-            return Err(Status::not_found("No key files for given node ID"));
-        }
+        let key_files = if key_files.is_empty() {
+            vec![]
+        } else {
+            key_files
+                .into_iter()
+                .map(|f: NodeKeyFile| f.try_into())
+                .collect::<Result<_, ApiError>>()?
+        };
 
         let response = KeyFilesGetResponse {
             origin_request_id: request_id,
-            key_files: key_files
-                .into_iter()
-                .map(|f: NodeKeyFile| f.try_into())
-                .collect::<Result<_, ApiError>>()?,
+            key_files,
         };
 
         Ok(Response::new(response))
