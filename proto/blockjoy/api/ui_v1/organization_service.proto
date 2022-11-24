@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package blockjoy.api.ui_v1;
+
+import "common.proto";
+
+message GetOrganizationsRequest {
+  RequestMeta meta = 1;
+}
+
+message GetOrganizationsResponse {
+  ResponseMeta meta = 1;
+  repeated Organization organizations = 2;
+}
+
+message CreateOrganizationRequest {
+  RequestMeta meta = 1;
+  Organization organization = 2;
+}
+
+message CreateOrganizationResponse {
+  ResponseMeta meta = 1;
+}
+
+message UpdateOrganizationRequest {
+  RequestMeta meta = 1;
+  Organization organization = 2;
+}
+
+message UpdateOrganizationResponse {
+  ResponseMeta meta = 1;
+}
+
+message DeleteOrganizationRequest {
+  RequestMeta meta = 1;
+  string id = 2;
+}
+
+message DeleteOrganizationResponse {
+  ResponseMeta meta = 1;
+}
+
+message OrganizationMemberRequest {
+  RequestMeta meta = 1;
+  string id = 2;
+}
+
+message OrganizationMemberResponse {
+  ResponseMeta meta = 1;
+  repeated User users = 2;
+}
+
+message RestoreOrganizationRequest {
+  RequestMeta meta = 1;
+  string id = 2;
+}
+
+message RestoreOrganizationResponse {
+  ResponseMeta meta = 1;
+  Organization organization = 2;
+}
+
+/* Manage organizations */
+service OrganizationService {
+  /* Get all the organizations for a user. All users automatically get a private (internal) organization */
+  rpc Get(GetOrganizationsRequest) returns (GetOrganizationsResponse) {}
+  /* Create a single organization */
+  rpc Create(CreateOrganizationRequest) returns (CreateOrganizationResponse) {}
+  /* Update a single organization */
+  rpc Update(UpdateOrganizationRequest) returns (UpdateOrganizationResponse) {}
+  /* Mark a single organization as deleted */
+  rpc Delete(DeleteOrganizationRequest) returns (DeleteOrganizationResponse) {}
+  /* Restore a previously deleted organization */
+  rpc Restore(RestoreOrganizationRequest) returns (RestoreOrganizationResponse) {}
+  /* Retrieve organization members */
+  rpc Members(OrganizationMemberRequest) returns (OrganizationMemberResponse) {}
+}
