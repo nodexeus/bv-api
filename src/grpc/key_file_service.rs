@@ -36,6 +36,7 @@ impl KeyFiles for KeyFileServiceImpl {
 
         // Ensure we return "Not found" if no key files could be found
         let key_files = if key_files.is_empty() {
+            tracing::debug!("No key files found");
             vec![]
         } else {
             key_files
