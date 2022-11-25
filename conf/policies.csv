@@ -2,6 +2,8 @@ p, master_admin, /blockjoy.api.v1.Hosts/InfoUpdate, POST
 p, master_admin, /blockjoy.api.v1.Hosts/Delete, POST
 p, master_admin, /blockjoy.api.v1.KeyFiles/Get, POST
 p, master_admin, /blockjoy.api.v1.KeyFiles/Save, POST
+p, master_admin, /blockjoy.api.v1.MetricsService/Node, POST
+p, master_admin, /blockjoy.api.v1.MetricsService/Host, POST
 p, master_admin, /blockjoy.api.v1.CommandFlow/Commands, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/Confirm, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/Refresh, POST

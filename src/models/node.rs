@@ -1,12 +1,13 @@
 use super::node_type::*;
 use crate::errors::{ApiError, Result};
-use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
+use crate::grpc::blockjoy::{self, NodeInfo as GrpcNodeInfo};
 use crate::grpc::helpers::internal;
 use crate::models::{validator::Validator, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgRow;
+use sqlx::postgres::{PgArguments, PgRow};
+use sqlx::query::Query;
 use sqlx::{types::Json, FromRow, PgPool, Row};
 use uuid::Uuid;
 
@@ -165,6 +166,8 @@ pub struct Node {
     pub staking_status: NodeStakingStatus,
     pub container_status: ContainerStatus,
     pub self_update: bool,
+    pub block_age: Option<i64>,
+    pub consensus: Option<bool>,
 }
 
 impl Node {
@@ -482,5 +485,82 @@ impl From<PgRow> for NodeGroup {
                 .expect("Couldn't try_get node_count node_group."),
             nodes: None,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct NodeSelectiveUpdate {
+    id: Uuid,
+    height: Option<i64>,
+    block_age: Option<i64>,
+    staking_status: Option<super::NodeStakingStatus>,
+    consensus: Option<bool>,
+}
+
+type PgQuery<'a> = Query<'a, sqlx::Postgres, PgArguments>;
+
+impl NodeSelectiveUpdate {
+    /// Performs a selective update of only the columns related to metrics of the provided nodes.
+    pub async fn update_many(updates: Vec<Self>, db: &PgPool) -> Result<()> {
+        type PgBuilder = sqlx::QueryBuilder<'static, sqlx::Postgres>;
+
+        // We first start the query out by declaring which fields to update.
+        let mut query_builder = PgBuilder::new(
+            "UPDATE nodes SET
+                block_height = row.height::BIGINT,
+                block_age = row.block_age::BIGINT,
+                staking_status = row.staking_status::enum_node_staking_status,
+                consensus = row.consensus::BOOLEAN
+            FROM (
+                ",
+        );
+
+        // Now we bind a variable number of parameters
+        query_builder.push_values(updates.iter(), |mut builder, update| {
+            builder
+                .push_bind(update.id)
+                .push_bind(update.height)
+                .push_bind(update.block_age)
+                .push_bind(update.staking_status)
+                .push_bind(update.consensus);
+        });
+        // We finish the query by specifying which bind parameters mean what. NOTE: When adding
+        // bind parameters they MUST be bound in the same order as they are specified below. Not
+        // doing so results in incorrectly interpreted queries.
+        query_builder.push(
+            "
+            ) AS row(id, height, block_age, staking_status, consensus)
+            WHERE
+                nodes.id = row.id::uuid;",
+        );
+        let template = sqlx::query(query_builder.sql());
+        let query = updates.into_iter().fold(template, Self::bind_to);
+        query.execute(db).await?;
+        Ok(())
+    }
+
+    pub fn from_api(id: String, metric: blockjoy::Metrics) -> Result<Self> {
+        let id = id.parse()?;
+        Ok(Self {
+            id,
+            height: metric.height.map(i64::try_from).transpose()?,
+            block_age: metric.block_age.map(i64::try_from).transpose()?,
+            staking_status: metric
+                .staking_status
+                .map(NodeStakingStatus::try_from)
+                .transpose()?,
+            consensus: metric.consensus,
+        })
+    }
+
+    /// Binds the params in `params` to the provided query in the correct order, then returns the
+    /// modified query. Since this is order-dependent, this function is private.
+    fn bind_to(query: PgQuery<'_>, params: Self) -> PgQuery<'_> {
+        query
+            .bind(params.id)
+            .bind(params.height)
+            .bind(params.block_age)
+            .bind(params.staking_status)
+            .bind(params.consensus)
     }
 }

@@ -4,6 +4,7 @@ pub mod convert;
 pub mod helpers;
 pub mod host_service;
 pub mod key_file_service;
+pub mod metrics_service;
 pub mod notification;
 pub mod organization_service;
 pub mod ui_blockchain_service;
@@ -46,6 +47,7 @@ use crate::grpc::blockjoy_ui::update_service_server::UpdateServiceServer;
 use crate::grpc::blockjoy_ui::user_service_server::UserServiceServer;
 use crate::grpc::command_flow::CommandFlowServerImpl;
 use crate::grpc::key_file_service::KeyFileServiceImpl;
+use crate::grpc::metrics_service::MetricsServiceImpl;
 use crate::grpc::notification::ChannelNotifier;
 use crate::grpc::organization_service::OrganizationServiceImpl;
 use crate::grpc::ui_blockchain_service::BlockchainServiceImpl;
@@ -72,6 +74,8 @@ use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::classify::{GrpcErrorsAsFailures, SharedClassifier};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
+
+use self::blockjoy::metrics_service_server::MetricsServiceServer;
 
 pub async fn server(
     db: DbPool,
@@ -111,6 +115,7 @@ pub async fn server(
     let c_service =
         CommandFlowServer::new(CommandFlowServerImpl::new(db.clone(), notifier.clone()));
     let k_service = KeyFilesServer::new(KeyFileServiceImpl::new(db.clone()));
+    let m_service = MetricsServiceServer::new(MetricsServiceImpl::new(db.clone()));
     let ui_auth_service =
         AuthenticationServiceServer::new(AuthenticationServiceImpl::new(db.clone()));
     let ui_org_service = OrganizationServiceServer::new(OrganizationServiceImpl::new(db.clone()));
@@ -147,6 +152,7 @@ pub async fn server(
         .add_service(h_service)
         .add_service(c_service)
         .add_service(k_service)
+        .add_service(m_service)
         .add_service(ui_auth_service)
         .add_service(ui_org_service)
         .add_service(ui_user_service)
