@@ -66,7 +66,7 @@ impl NodeService for NodeServiceImpl {
                 let filter = filter
                     .try_into()
                     .map_err(|_| Status::internal("Unexpected error at filtering"))?;
-                let offset = pagination.items_per_page * pagination.current_page;
+                let offset = pagination.items_per_page * (pagination.current_page - 1);
 
                 Node::find_all_by_filter(
                     org_id,
