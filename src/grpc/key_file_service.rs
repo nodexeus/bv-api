@@ -36,7 +36,7 @@ impl KeyFiles for KeyFileServiceImpl {
 
         // Ensure we return "Not found" if no key files could be found
         if key_files.is_empty() {
-            return Err(Status::not_found("No key files for given node ID"));
+            tracing::debug!("No key files found");
         }
 
         let response = KeyFilesGetResponse {

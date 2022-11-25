@@ -50,8 +50,35 @@ impl NodeService for NodeServiceImpl {
     ) -> Result<Response<ListNodesResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
+        let filters = inner.filter.clone();
         let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
-        let nodes = Node::find_all_by_org(org_id, &self.db).await?;
+
+        let nodes = match filters {
+            None => Node::find_all_by_org(org_id, &self.db).await?,
+            Some(filter) => {
+                let pagination = inner
+                    .meta
+                    .clone()
+                    .ok_or_else(|| Status::invalid_argument("Metadata missing"))?;
+                let pagination = pagination
+                    .pagination
+                    .ok_or_else(|| Status::invalid_argument("Pagination missing"))?;
+                let filter = filter
+                    .try_into()
+                    .map_err(|_| Status::internal("Unexpected error at filtering"))?;
+                let offset = pagination.items_per_page * (pagination.current_page - 1);
+
+                Node::find_all_by_filter(
+                    org_id,
+                    filter,
+                    offset,
+                    pagination.items_per_page,
+                    &self.db,
+                )
+                .await?
+            }
+        };
+
         let nodes: Result<_, ApiError> = nodes.iter().map(GrpcNode::try_from).collect();
         let response = ListNodesResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),

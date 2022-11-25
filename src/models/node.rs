@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::{PgArguments, PgRow};
 use sqlx::query::Query;
 use sqlx::{types::Json, FromRow, PgPool, Row};
+use std::string::ToString;
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 /// ContainerStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
@@ -89,9 +91,12 @@ impl TryFrom<i32> for NodeStakingStatus {
 }
 
 /// NodeChainStatus reflects blockjoy.api.v1.node.NodeInfo.ApplicationStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(
+    Clone, Copy, Debug, Display, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, EnumString,
+)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "enum_node_chain_status", rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum NodeChainStatus {
     Unknown,
     Provisioning,
@@ -168,6 +173,13 @@ pub struct Node {
     pub self_update: bool,
     pub block_age: Option<i64>,
     pub consensus: Option<bool>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NodeFilter {
+    pub status: Vec<String>,
+    pub node_types: Vec<String>,
+    pub blockchains: Vec<Uuid>,
 }
 
 impl Node {
@@ -269,6 +281,48 @@ impl Node {
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
+    }
+
+    pub async fn find_all_by_filter(
+        org_id: Uuid,
+        filter: NodeFilter,
+        offset: i32,
+        limit: i32,
+        db: &PgPool,
+    ) -> Result<Vec<Self>> {
+        let mut nodes = sqlx::query_as::<_, Self>(
+            r#"
+                SELECT * FROM nodes
+                WHERE org_id = $1
+                ORDER BY created_at DESC
+                OFFSET $2
+                LIMIT $3
+            "#,
+        )
+        .bind(org_id)
+        .bind(offset)
+        .bind(limit)
+        .fetch_all(db)
+        .await
+        .map_err(ApiError::from)?;
+
+        // Apply filters if present
+        if !filter.blockchains.is_empty() {
+            tracing::debug!("Applying blockchain filter: {:?}", filter.blockchains);
+            nodes.retain(|n| filter.blockchains.contains(&n.blockchain_id));
+        }
+        if !filter.status.is_empty() {
+            nodes.retain(|n| filter.status.contains(&n.chain_status.to_string()));
+        }
+        if !filter.node_types.is_empty() {
+            nodes.retain(|n| {
+                filter
+                    .node_types
+                    .contains(&n.node_type.get_id().to_string())
+            })
+        }
+
+        Ok(nodes)
     }
 
     pub async fn running_nodes_count(org_id: &Uuid, db: &PgPool) -> Result<i32> {
