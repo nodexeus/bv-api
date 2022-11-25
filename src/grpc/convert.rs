@@ -156,7 +156,7 @@ pub mod from {
         fn try_from(value: FilterCriteria) -> Result<Self, Self::Error> {
             Ok(Self {
                 status: value.states,
-                node_types: vec![],
+                node_types: value.node_types,
                 blockchains: value
                     .blockchain_ids
                     .iter()
