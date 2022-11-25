@@ -305,6 +305,7 @@ impl Node {
 
         // Apply filters if present
         if !filter.blockchains.is_empty() {
+            tracing::debug!("Applying blockchain filter: {:?}", filter.blockchains);
             nodes.retain(|n| filter.blockchains.contains(&n.blockchain_id));
         }
         if !filter.status.is_empty() {
