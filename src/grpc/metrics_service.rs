@@ -20,8 +20,8 @@ impl MetricsServiceImpl {
 #[tonic::async_trait]
 impl MetricsService for MetricsServiceImpl {
     /// Update the metrics for the nodes provided in this request. Since this endpoint is called
-    /// often (e.g. if we have 10,000 nodes, 36 million times per hour) we take care to perform a
-    /// single query for this whole list of metrics that comes in.
+    /// often (e.g. if we have 10,000 nodes, 170 calls per second) we take care to perform a single
+    /// query for this whole list of metrics that comes in.
     async fn node(
         &self,
         request: tonic::Request<blockjoy::NodeMetricsRequest>,
