@@ -146,10 +146,11 @@ impl Tester {
     pub async fn node(&self) -> models::Node {
         sqlx::query_as(r#"
             INSERT INTO
-                nodes (org_id, host_id, node_type, blockchain_id)
+                nodes (id, org_id, host_id, node_type, blockchain_id)
             VALUES
-                ((SELECT id FROM orgs LIMIT 1), (SELECT id FROM hosts LIMIT 1), '{"id":404}', (SELECT id FROM blockchains LIMIT 1))
-            ON CONFLICT DO NOTHING
+                ('59edfb35-bbf1-460f-bd3d-e4c86ba73e0d', (SELECT id FROM orgs LIMIT 1), (SELECT id FROM hosts LIMIT 1), '{"id":404}', (SELECT id FROM blockchains LIMIT 1))
+            ON CONFLICT (id) DO UPDATE
+            SET id = '59edfb35-bbf1-460f-bd3d-e4c86ba73e0d'
             RETURNING *;
         "#)
         .fetch_one(&self.db.pool)

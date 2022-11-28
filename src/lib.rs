@@ -146,11 +146,11 @@ mod test {
                 .expect("Could not create test user in db.");
 
             sqlx::query(
-            "UPDATE users set pay_address = '123456', staking_quota = 3 where email = 'test@here.com'",
-        )
-        .execute(&self.pool)
-        .await
-        .expect("could not set user's pay address for user test user in sql");
+                "UPDATE users set pay_address = '123456', staking_quota = 3 where email = 'test@here.com'",
+            )
+            .execute(&self.pool)
+            .await
+            .expect("could not set user's pay address for user test user in sql");
 
             sqlx::query("INSERT INTO invoices (user_id, earnings, fee_bps, validators_count, amount, starts_at, ends_at, is_paid) values ($1, 99, 200, 1, 1000000000, now(), now(), false)")
             .bind(user.id)
