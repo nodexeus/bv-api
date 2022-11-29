@@ -289,8 +289,8 @@ async fn can_update_host_info() {
         ip_range_to: Some("192.168.0.20".into()),
         ..Default::default()
     };
-    let fields = models::HostSelectiveUpdate::from(host_info);
-    let update = models::Host::update_all(host.id, fields, tester.pool())
+    let fields = host_info.try_into().unwrap();
+    let update = models::Host::update_all(fields, tester.pool())
         .await
         .unwrap();
     assert_eq!(update.name, "tester".to_string());

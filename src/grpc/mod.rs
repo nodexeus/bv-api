@@ -26,6 +26,7 @@ pub mod blockjoy_ui {
     tonic::include_proto!("blockjoy.api.ui_v1");
 }
 
+use self::blockjoy::metrics_service_server::MetricsServiceServer;
 use crate::auth::middleware::AuthorizationService;
 use crate::auth::{
     unauthenticated_paths::UnauthenticatedPaths, Authorization, JwtToken, TokenType,
@@ -74,8 +75,6 @@ use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::classify::{GrpcErrorsAsFailures, SharedClassifier};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
-
-use self::blockjoy::metrics_service_server::MetricsServiceServer;
 
 pub async fn server(
     db: DbPool,

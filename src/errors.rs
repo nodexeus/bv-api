@@ -53,6 +53,9 @@ pub enum ApiError {
 
     #[error("Given user is not yet confirmed")]
     UserConfirmationError,
+
+    #[error("Cannot parse IP address: {0}")]
+    IpParseError(#[from] std::net::AddrParseError),
 }
 
 impl ApiError {

@@ -1,5 +1,5 @@
 use super::helpers::{self, try_get_token};
-use crate::auth::{FindableById, HostAuthToken, JwtToken, TokenRole, TokenType};
+use crate::auth::{HostAuthToken, JwtToken, TokenRole, TokenType};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy::hosts_server::Hosts;
 use crate::grpc::blockjoy::{
@@ -7,7 +7,7 @@ use crate::grpc::blockjoy::{
     ProvisionHostRequest, ProvisionHostResponse,
 };
 use crate::grpc::convert::into::IntoData;
-use crate::models::{Host, HostProvision, HostSelectiveUpdate};
+use crate::models::{Host, HostProvision};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -62,8 +62,7 @@ impl Hosts for HostsServiceImpl {
             let msg = format!("Not allowed to delete host '{request_host_id}'");
             return Err(Status::permission_denied(msg));
         }
-        let host = Host::find_by_id(request_host_id, &self.db).await?;
-        Host::update_all(host.id, HostSelectiveUpdate::from(info), &self.db)
+        Host::update_all(info.try_into()?, &self.db)
             .await
             .map_err(|e| Status::not_found(format!("Host {request_host_id} not found. {e}")))?;
         let result = HostInfoUpdateResponse {

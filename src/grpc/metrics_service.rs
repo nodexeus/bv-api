@@ -25,21 +25,28 @@ impl MetricsService for MetricsServiceImpl {
     async fn node(
         &self,
         request: tonic::Request<blockjoy::NodeMetricsRequest>,
-    ) -> Result<tonic::Response<blockjoy::NodeMetricsResponse>, tonic::Status> {
+    ) -> Result<tonic::Response<()>, tonic::Status> {
         let request = request.into_inner();
         let updates = request
             .metrics
             .into_iter()
-            .map(|(k, v)| models::NodeSelectiveUpdate::from_api(k, v))
+            .map(|(k, v)| models::NodeSelectiveUpdate::from_metrics(k, v))
             .collect::<Result<_, _>>()?;
-        models::NodeSelectiveUpdate::update_many(updates, &self.db).await?;
-        Ok(tonic::Response::new(Default::default()))
+        models::NodeSelectiveUpdate::update_metrics(updates, &self.db).await?;
+        Ok(tonic::Response::new(()))
     }
 
     async fn host(
         &self,
-        _request: tonic::Request<blockjoy::HostMetricsRequest>,
-    ) -> Result<tonic::Response<blockjoy::HostMetricsResponse>, tonic::Status> {
-        todo!()
+        request: tonic::Request<blockjoy::HostMetricsRequest>,
+    ) -> Result<tonic::Response<()>, tonic::Status> {
+        let request = request.into_inner();
+        let updates = request
+            .metrics
+            .into_iter()
+            .map(|(k, v)| models::HostSelectiveUpdate::from_metrics(k, v))
+            .collect::<Result<_, _>>()?;
+        models::HostSelectiveUpdate::update_metrics(updates, &self.db).await?;
+        Ok(tonic::Response::new(()))
     }
 }

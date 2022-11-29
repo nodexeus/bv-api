@@ -14,7 +14,7 @@ async fn responds_ok_for_write() {
     let refresh = tester.refresh_for(&auth);
     let node = tester.node().await;
     let mut metrics = std::collections::HashMap::new();
-    let metric = blockjoy::Metrics {
+    let metric = blockjoy::NodeMetrics {
         height: Some(10),
         block_age: Some(5),
         staking_status: Some(4),
