@@ -3,8 +3,8 @@ use crate::grpc::blockjoy::{
     command, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
     NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
 };
-use crate::grpc::helpers::{image_url_from_node, required};
-use crate::models::{Blockchain, Command, HostCmd, Node};
+use crate::grpc::helpers::required;
+use crate::models::{Blockchain, Command, HostCmd, Node, NodeTypeKey};
 use crate::server::DbPool;
 
 pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<GrpcCommand> {
@@ -48,7 +48,14 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
             let node = Node::find_by_id(cmd.resource_id, db).await?;
             let blockchain = Blockchain::find_by_id(node.blockchain_id, db).await?;
             let image = ContainerImage {
-                url: image_url_from_node(&node, blockchain.name),
+                protocol: blockchain.name,
+                node_type: NodeTypeKey::str_from_value(node.node_type.0.get_id()).to_lowercase(),
+                node_version: node
+                    .version
+                    .clone()
+                    .unwrap_or_else(|| "latest".to_string())
+                    .to_lowercase(),
+                status: 0,
             };
             let create_cmd = NodeCreate {
                 name: node.name.unwrap_or_default(),
