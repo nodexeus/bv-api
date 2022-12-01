@@ -1,4 +1,5 @@
 use crate::errors::Result as ApiResult;
+use crate::grpc::blockjoy::container_image::StatusName;
 use crate::grpc::blockjoy::{
     command, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
     NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
@@ -55,7 +56,7 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
                     .clone()
                     .unwrap_or_else(|| "latest".to_string())
                     .to_lowercase(),
-                status: 0,
+                status: StatusName::Development.into(),
             };
             let create_cmd = NodeCreate {
                 name: node.name.unwrap_or_default(),
