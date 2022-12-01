@@ -31,16 +31,23 @@ impl MetricsService for MetricsServiceImpl {
         let updates = request
             .metrics
             .into_iter()
-            .map(|(k, v)| models::NodeSelectiveUpdate::from_api(k, v))
+            .map(|(k, v)| models::NodeSelectiveUpdate::from_metrics(k, v))
             .collect::<Result<_, _>>()?;
-        models::NodeSelectiveUpdate::update_many(updates, &self.db).await?;
-        Ok(Response::new(()))
+        models::NodeSelectiveUpdate::update_metrics(updates, &self.db).await?;
+        Ok(tonic::Response::new(()))
     }
 
     async fn host(
         &self,
-        _request: tonic::Request<blockjoy::HostMetricsRequest>,
+        request: tonic::Request<blockjoy::HostMetricsRequest>,
     ) -> Result<Response<()>, tonic::Status> {
-        todo!()
+        let request = request.into_inner();
+        let updates = request
+            .metrics
+            .into_iter()
+            .map(|(k, v)| models::HostSelectiveUpdate::from_metrics(k, v))
+            .collect::<Result<_, _>>()?;
+        models::HostSelectiveUpdate::update_metrics(updates, &self.db).await?;
+        Ok(tonic::Response::new(()))
     }
 }

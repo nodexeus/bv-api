@@ -1,4 +1,4 @@
-use super::node_type::*;
+use super::{node_type::*, PgQuery};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::{self, NodeInfo as GrpcNodeInfo};
 use crate::grpc::helpers::internal;
@@ -6,8 +6,7 @@ use crate::models::{validator::Validator, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::{PgArguments, PgRow};
-use sqlx::query::Query;
+use sqlx::postgres::PgRow;
 use sqlx::{types::Json, FromRow, PgPool, Row};
 use std::string::ToString;
 use strum_macros::{Display, EnumString};
@@ -551,11 +550,9 @@ pub struct NodeSelectiveUpdate {
     consensus: Option<bool>,
 }
 
-type PgQuery<'a> = Query<'a, sqlx::Postgres, PgArguments>;
-
 impl NodeSelectiveUpdate {
     /// Performs a selective update of only the columns related to metrics of the provided nodes.
-    pub async fn update_many(updates: Vec<Self>, db: &PgPool) -> Result<()> {
+    pub async fn update_metrics(updates: Vec<Self>, db: &PgPool) -> Result<()> {
         type PgBuilder = sqlx::QueryBuilder<'static, sqlx::Postgres>;
 
         // We first start the query out by declaring which fields to update.
@@ -593,7 +590,7 @@ impl NodeSelectiveUpdate {
         Ok(())
     }
 
-    pub fn from_api(id: String, metric: blockjoy::NodeMetrics) -> Result<Self> {
+    pub fn from_metrics(id: String, metric: blockjoy::NodeMetrics) -> Result<Self> {
         let id = id.parse()?;
         Ok(Self {
             id,

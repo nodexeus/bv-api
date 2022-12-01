@@ -90,16 +90,18 @@ pub mod from {
     use crate::errors::ApiError;
     use crate::grpc::blockjoy::HostInfo;
     use crate::grpc::blockjoy::Keyfile;
+    use crate::grpc::blockjoy_ui::FilterCriteria;
     use crate::grpc::blockjoy_ui::{
         self, node::NodeStatus as GrpcNodeStatus, node::StakingStatus as GrpcStakingStatus,
-        node::SyncStatus as GrpcSyncStatus, FilterCriteria, Host as GrpcHost,
-        HostProvision as GrpcHostProvision, Node as GrpcNode, Organization, User as GrpcUiUser,
+        node::SyncStatus as GrpcSyncStatus, Host as GrpcHost, HostProvision as GrpcHostProvision,
+        Node as GrpcNode, Organization, User as GrpcUiUser,
     };
     use crate::grpc::helpers::required;
+    use crate::models::NodeFilter;
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
-        NodeCreateRequest, NodeFilter, NodeInfo, NodeKeyFile, NodeStakingStatus, NodeSyncStatus,
-        Org, User, UserSelectiveUpdate,
+        NodeCreateRequest, NodeInfo, NodeKeyFile, NodeStakingStatus, NodeSyncStatus, Org, User,
+        UserSelectiveUpdate,
     };
     use crate::models::{Host, HostSelectiveUpdate};
     use anyhow::anyhow;
@@ -141,7 +143,7 @@ pub mod from {
     impl From<HostSelectiveUpdate> for HostInfo {
         fn from(update: HostSelectiveUpdate) -> Self {
             Self {
-                id: None,
+                id: Some(update.id.to_string()),
                 name: update.name,
                 version: update.version,
                 location: update.location,
@@ -179,6 +181,7 @@ pub mod from {
 
         fn try_from(host: GrpcHost) -> Result<Self, Self::Error> {
             let updater = Self {
+                id: host.id.ok_or_else(required("update.id"))?.parse()?,
                 org_id: host
                     .org_id
                     .map(|id| Uuid::parse_str(id.as_str()))
@@ -197,6 +200,7 @@ pub mod from {
                 ip_range_from: None,
                 ip_range_to: None,
                 ip_gateway: None,
+                ..Default::default()
             };
             Ok(updater)
         }

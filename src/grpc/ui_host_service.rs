@@ -108,12 +108,9 @@ impl HostService for HostServiceImpl {
     ) -> Result<Response<UpdateHostResponse>, Status> {
         let inner = request.into_inner();
         let host = inner.host.ok_or_else(required("host"))?;
-        let host_id = host.id.clone();
-        let host_id = Uuid::parse_str(host_id.ok_or_else(required("host.id"))?.as_str())
-            .map_err(ApiError::from)?;
         let fields: HostSelectiveUpdate = host.try_into()?;
 
-        Host::update_all(host_id, fields, &self.db).await?;
+        Host::update_all(fields, &self.db).await?;
         let response = UpdateHostResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
         };
