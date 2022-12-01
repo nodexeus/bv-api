@@ -6,6 +6,7 @@
 use crate::grpc::blockjoy::{self, metrics_service_server::MetricsService};
 use crate::models;
 use crate::server::DbPool;
+use tonic::Response;
 
 pub struct MetricsServiceImpl {
     db: DbPool,
@@ -25,7 +26,7 @@ impl MetricsService for MetricsServiceImpl {
     async fn node(
         &self,
         request: tonic::Request<blockjoy::NodeMetricsRequest>,
-    ) -> Result<tonic::Response<()>, tonic::Status> {
+    ) -> Result<Response<()>, tonic::Status> {
         let request = request.into_inner();
         let updates = request
             .metrics
@@ -39,7 +40,7 @@ impl MetricsService for MetricsServiceImpl {
     async fn host(
         &self,
         request: tonic::Request<blockjoy::HostMetricsRequest>,
-    ) -> Result<tonic::Response<()>, tonic::Status> {
+    ) -> Result<Response<()>, tonic::Status> {
         let request = request.into_inner();
         let updates = request
             .metrics

@@ -546,7 +546,7 @@ pub struct NodeSelectiveUpdate {
     id: Uuid,
     height: Option<i64>,
     block_age: Option<i64>,
-    staking_status: Option<super::NodeStakingStatus>,
+    staking_status: Option<NodeStakingStatus>,
     consensus: Option<bool>,
 }
 
