@@ -547,7 +547,7 @@ pub struct NodeSelectiveUpdate {
     id: Uuid,
     height: Option<i64>,
     block_age: Option<i64>,
-    staking_status: Option<super::NodeStakingStatus>,
+    staking_status: Option<NodeStakingStatus>,
     consensus: Option<bool>,
 }
 
@@ -593,7 +593,7 @@ impl NodeSelectiveUpdate {
         Ok(())
     }
 
-    pub fn from_api(id: String, metric: blockjoy::Metrics) -> Result<Self> {
+    pub fn from_api(id: String, metric: blockjoy::NodeMetrics) -> Result<Self> {
         let id = id.parse()?;
         Ok(Self {
             id,

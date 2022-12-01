@@ -1,30 +1,12 @@
 use crate::auth::JwtToken;
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::{response_meta, Pagination, ResponseMeta};
-use crate::models::{Node, NodeTypeKey};
-use heck::ToLowerCamelCase;
 use prost_types::Timestamp;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tonic::Status;
 
 use super::blockjoy_ui::{ApiToken, RequestMeta};
-
-pub fn image_url_from_node(node: &Node, chain_name: String) -> String {
-    let node_type = NodeTypeKey::str_from_value(node.node_type.0.get_id()).to_lowercase();
-    let version = node
-        .version
-        .clone()
-        .unwrap_or_else(|| "latest".to_string())
-        .to_lowercase();
-
-    format!(
-        "{}/{}/{}",
-        chain_name.to_lower_camel_case(),
-        node_type,
-        version
-    )
-}
 
 pub fn pb_current_timestamp() -> Timestamp {
     let start = SystemTime::now();
