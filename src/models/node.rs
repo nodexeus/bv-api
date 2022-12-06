@@ -274,12 +274,25 @@ impl Node {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_org(org_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
-        sqlx::query_as::<_, Self>("SELECT * FROM nodes WHERE org_id = $1 order by name DESC")
-            .bind(org_id)
-            .fetch_all(db)
-            .await
-            .map_err(ApiError::from)
+    pub async fn find_all_by_org(
+        org_id: Uuid,
+        offset: i32,
+        limit: i32,
+        db: &PgPool,
+    ) -> Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            SELECT * FROM nodes WHERE org_id = $1 
+            ORDER BY name DESC 
+            OFFSET $2
+            LIMIT $3"#,
+        )
+        .bind(org_id)
+        .bind(offset)
+        .bind(limit)
+        .fetch_all(db)
+        .await
+        .map_err(ApiError::from)
     }
 
     pub async fn find_all_by_filter(

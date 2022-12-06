@@ -52,21 +52,23 @@ impl NodeService for NodeServiceImpl {
         let inner = request.into_inner();
         let filters = inner.filter.clone();
         let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
+        let pagination = inner
+            .meta
+            .clone()
+            .ok_or_else(|| Status::invalid_argument("Metadata missing"))?;
+        let pagination = pagination
+            .pagination
+            .ok_or_else(|| Status::invalid_argument("Pagination missing"))?;
+        let offset = pagination.items_per_page * (pagination.current_page - 1);
 
         let nodes = match filters {
-            None => Node::find_all_by_org(org_id, &self.db).await?,
+            None => {
+                Node::find_all_by_org(org_id, offset, pagination.items_per_page, &self.db).await?
+            }
             Some(filter) => {
-                let pagination = inner
-                    .meta
-                    .clone()
-                    .ok_or_else(|| Status::invalid_argument("Metadata missing"))?;
-                let pagination = pagination
-                    .pagination
-                    .ok_or_else(|| Status::invalid_argument("Pagination missing"))?;
                 let filter = filter
                     .try_into()
                     .map_err(|_| Status::internal("Unexpected error at filtering"))?;
-                let offset = pagination.items_per_page * (pagination.current_page - 1);
 
                 Node::find_all_by_filter(
                     org_id,
