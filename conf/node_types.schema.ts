@@ -1,7 +1,12 @@
 /**
+ * Helper lib providing types for node-types and their actually values stored in nodes
+ *
+ */
+
+/**
  * All possible node-type IDs (taken from src/models/node_type.rs)
  */
-enum NodeTypeKey {
+export enum NodeTypeKey {
     Miner = 1,
     Etl = 2,
     Validator = 3,
@@ -19,7 +24,7 @@ enum NodeTypeKey {
 /**
  * All possible UI types provided for nodes
  */
-enum UiType {
+export enum UiType {
     // Upload e.g. validator keys component
     KeyUpload = 'key-upload',
     // Upload arbitrary files component
@@ -43,7 +48,7 @@ enum UiType {
 /**
  * A single node property template
  */
-type Property = {
+export type Property = {
     // Property name as used in the resulting node
     name: string,
     // Type of UI element to input value
@@ -57,7 +62,7 @@ type Property = {
 /**
  * A node-type template
  */
-type NodeType = {
+export type NodeType = {
     // The ID of the node-type matching the enum in the DB
     id: NodeTypeKey,
     // An optional array of node-type properties
@@ -67,7 +72,33 @@ type NodeType = {
 /**
  * Collection of all supported node-types among a blockchain
  */
-type SupportedNodeTypes = Array<NodeType>;
+export type SupportedNodeTypes = Array<NodeType>;
+
+/**
+ * Node property value storing an actual field of one node property
+ */
+export type NodePropertyValue = {
+    // The technical ID of the value field
+    id: string,
+    // The display name of the value field
+    label: string,
+    // Optional descriptive text (e.g. shown in a tooltip)
+    description: string | null,
+    // The actual value
+    value: any | null,
+    // The UI type for rendering
+    ui_type: UiType,
+    // Determines if value is read-only
+    disabled: boolean,
+};
+
+/**
+ * Collection of NodeProperty values to be created within the UI
+ */
+export type NodeProperties = {
+    id: NodeTypeKey,
+    values: Array<NodePropertyValue> | null,
+};
 
 /// Samples
 const disabled_self_hosted: Property = {
