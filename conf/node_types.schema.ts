@@ -43,6 +43,8 @@ export enum UiType {
     Switch = 'switch',
     // Render a URL
     Url = 'url',
+    // Save an IPv4 address
+    IpAddress = 'ip_address',
 }
 
 /**
