@@ -1,5 +1,5 @@
 /**
- * All possible node-type IDs
+ * All possible node-type IDs (taken from src/models/node_type.rs)
  */
 enum NodeTypeKey {
     Miner = 1,
@@ -20,14 +20,23 @@ enum NodeTypeKey {
  * All possible UI types provided for nodes
  */
 enum UiType {
+    // Upload e.g. validator keys component
     KeyUpload = 'key-upload',
+    // Upload arbitrary files component
     FileUpload = 'file-upload',
+    // Enter arbitrary text
     Text = 'text',
+    // Enter some password
     Password = "password",
+    // Enter arbitrary numbers
     Number = 'number',
+    // Enter a voting key pwd
     VotingKeyPwd = 'voting_key_pwd',
+    // Enter a wallet address
     WalletAddress = 'wallet_address',
+    // Render a switch
     Switch = 'switch',
+    // Render a URL
     Url = 'url',
 }
 
@@ -152,5 +161,5 @@ let json = JSON.stringify(supported_nodes);
 Deno.writeTextFile(path, json).then(() => {
     console.log(`Created JSON file in ${path}`);
 }).catch((e) => {
-    console.error(`Failed wrting JSON file in ${path}: ${e}`);
+    console.error(`Failed writing JSON file in ${path}: ${e}`);
 });
