@@ -112,7 +112,7 @@ const disabled_self_hosted: Property = {
 ///             HNT sample                       ///
 ////////////////////////////////////////////////////
 
-let hnt_miner: NodeType = {
+const hnt_miner: NodeType = {
     id: NodeTypeKey.Miner,
     properties: [
         {
@@ -125,7 +125,7 @@ let hnt_miner: NodeType = {
     ],
 };
 
-let hnt_validator: NodeType = {
+const hnt_validator: NodeType = {
     id: NodeTypeKey.Validator,
     properties: [
         {
@@ -142,7 +142,7 @@ let hnt_validator: NodeType = {
 ///             ETH sample                       ///
 ////////////////////////////////////////////////////
 
-let eth_validator: NodeType = {
+const eth_validator: NodeType = {
     id: NodeTypeKey.Validator,
     properties: [
         {
@@ -185,9 +185,9 @@ let eth_validator: NodeType = {
     ],
 };
 
-let supported_nodes: SupportedNodeTypes = [hnt_miner, hnt_validator, eth_validator];
-let path = './supported_node_types.json';
-let json = JSON.stringify(supported_nodes);
+const supported_nodes: SupportedNodeTypes = [hnt_miner, hnt_validator, eth_validator];
+const path = './supported_node_types.json';
+const json = JSON.stringify(supported_nodes);
 
 Deno.writeTextFile(path, json).then(() => {
     console.log(`Created JSON file in ${path}`);
