@@ -40,17 +40,13 @@ pub struct KeyProvider;
 
 impl KeyProvider {
     pub fn get_secret(token_type: TokenType) -> KeyProviderResult {
-        let key_retriever = match Self::get_env_value("SECRETS_ROOT") {
-            Ok(_) => Self::get_key_value,
-            Err(_) => Self::get_env_value,
-        };
         let key = match token_type {
-            TokenType::UserAuth => key_retriever("JWT_SECRET"),
-            TokenType::UserRefresh => key_retriever("REFRESH_SECRET"),
-            TokenType::HostAuth => key_retriever("JWT_SECRET"),
-            TokenType::HostRefresh => key_retriever("REFRESH_SECRET"),
-            TokenType::RegistrationConfirmation => key_retriever("CONFIRMATION_SECRET"),
-            TokenType::PwdReset => key_retriever("PWD_RESET_SECRET"),
+            TokenType::UserAuth => Self::get_retriever()("JWT_SECRET"),
+            TokenType::UserRefresh => Self::get_retriever()("REFRESH_SECRET"),
+            TokenType::HostAuth => Self::get_retriever()("JWT_SECRET"),
+            TokenType::HostRefresh => Self::get_retriever()("REFRESH_SECRET"),
+            TokenType::RegistrationConfirmation => Self::get_retriever()("CONFIRMATION_SECRET"),
+            TokenType::PwdReset => Self::get_retriever()("PWD_RESET_SECRET"),
         };
 
         let key = key?;
@@ -63,16 +59,19 @@ impl KeyProvider {
     }
 
     pub fn get_var(name: &str) -> KeyProviderResult {
-        let key_retriever = match Self::get_env_value("SECRETS_ROOT") {
-            Ok(_) => Self::get_key_value,
-            Err(_) => Self::get_env_value,
-        };
-        let key = key_retriever(name)?;
+        let key = Self::get_retriever()(name)?;
 
         if key.value.is_empty() {
             Err(KeyProviderError::Empty)
         } else {
             Ok(key)
+        }
+    }
+
+    fn get_retriever() -> fn(&str) -> KeyProviderResult {
+        match Self::get_env_value("SECRETS_ROOT") {
+            Ok(_) => Self::get_key_value,
+            Err(_) => Self::get_env_value,
         }
     }
 
