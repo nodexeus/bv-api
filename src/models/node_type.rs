@@ -63,9 +63,9 @@ impl From<NodeTypeKey> for i32 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeTypeProperty {
     name: String,
-    label: String,
+    ui_type: String,
     default: Option<String>,
-    r#type: String,
+    disabled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -187,7 +187,7 @@ const eth_validator: NodeType = {
     ],
 };
 
-const supported_nodes: SupportedNodeTypes = [hnt_miner, hnt_validator, eth_validator];
+const supported_nodes: SupportedNodeTypes = [eth_validator];
 const path = './supported_node_types.json';
 const json = JSON.stringify(supported_nodes);
 
