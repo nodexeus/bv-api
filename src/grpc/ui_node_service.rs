@@ -1,15 +1,17 @@
 use super::helpers::{internal, required};
-use crate::auth::FindableById;
+use crate::auth::{FindableById, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
-    CreateNodeRequest, CreateNodeResponse, GetNodeRequest, GetNodeResponse, ListNodesRequest,
-    ListNodesResponse, Node as GrpcNode, ResponseMeta, UpdateNodeRequest, UpdateNodeResponse,
+    CreateNodeRequest, CreateNodeResponse, DeleteNodeRequest, GetNodeRequest, GetNodeResponse,
+    ListNodesRequest, ListNodesResponse, Node as GrpcNode, ResponseMeta, UpdateNodeRequest,
+    UpdateNodeResponse,
 };
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models::{
     Command, CommandRequest, Host, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo,
+    NodeKeyFile,
 };
 use crate::server::DbPool;
 use std::sync::Arc;
@@ -156,5 +158,40 @@ impl NodeService for NodeServiceImpl {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
         };
         Ok(response_with_refresh_token(refresh_token, response)?)
+    }
+
+    async fn delete(&self, request: Request<DeleteNodeRequest>) -> Result<Response<()>, Status> {
+        let refresh_token = get_refresh_token(&request);
+        let token = request
+            .extensions()
+            .get::<UserAuthToken>()
+            .ok_or_else(required("User token"))?
+            .clone();
+        let inner = request.into_inner();
+        let node_id = inner.id.parse().map_err(ApiError::from)?;
+        let node = Node::find_by_id(node_id, &self.db).await?;
+
+        if Node::belongs_to_user_org(node.org_id, *token.id(), &self.db).await? {
+            // 1. Delete node, if the node belongs to the current user
+            Node::delete(node_id, &self.db).await?;
+
+            // 2. Delete all key files
+            let key_files = NodeKeyFile::find_by_node(node_id, &self.db).await?;
+
+            for key in key_files {
+                NodeKeyFile::delete(key.id, &self.db).await?;
+            }
+
+            // 3. Delete reserved IP addresses
+            let ips = IpAddress::find_by_node(node_id, &self.db).await?;
+
+            for ip in ips {
+                IpAddress::delete(ip.id, &self.db).await?;
+            }
+
+            Ok(response_with_refresh_token::<()>(refresh_token, ())?)
+        } else {
+            Err(Status::permission_denied("User cannot delete node"))
+        }
     }
 }
