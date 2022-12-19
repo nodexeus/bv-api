@@ -91,11 +91,11 @@ impl TryFrom<String> for NodeType {
 impl NodeTypeProperty {
     pub fn to_json(&self) -> Result<String, ApiError> {
         let json_str = format!(
-            "{{ \"name\": \"{}\", \"label\": \"{}\", \"default\": \"{}\", \"type:\": \"{}\" }}",
+            "{{ \"name\": \"{}\", \"ui_type\": \"{}\", \"default\": \"{}\", \"disabled:\": \"{}\" }}",
             self.name,
-            self.label,
+            self.ui_type,
             self.default.as_ref().ok_or_else(required("default"))?,
-            self.r#type
+            self.disabled
         );
         Ok(json_str)
     }
@@ -105,7 +105,7 @@ impl NodeTypeProperty {
     }
 
     pub fn get_label(&self) -> &str {
-        &self.label
+        &self.name
     }
 
     pub fn get_default(&self) -> Option<&str> {
@@ -113,7 +113,7 @@ impl NodeTypeProperty {
     }
 
     pub fn get_property_type(&self) -> &str {
-        &self.r#type
+        &self.ui_type
     }
 }
 
