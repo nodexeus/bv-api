@@ -50,6 +50,20 @@ impl NodeKeyFile {
         .await
         .map_err(ApiError::from)
     }
+
+    pub async fn delete(node_id: Uuid, db: &PgPool) -> ApiResult<Self> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            DELETE FROM node_key_files 
+            WHERE node_id = $1
+            RETURNING *
+        "#,
+        )
+        .bind(node_id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
+    }
 }
 
 #[tonic::async_trait]

@@ -147,4 +147,20 @@ impl IpAddress {
 
         Ok(ip_count > 0)
     }
+
+    pub async fn delete(id: Uuid, db: &PgPool) -> ApiResult<Self> {
+        sqlx::query_as::<_, Self>("delete from ip_addresses where id = $1 returning *")
+            .bind(id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
+    pub async fn find_by_node(node_id: Uuid, db: &PgPool) -> ApiResult<Vec<Self>> {
+        sqlx::query_as::<_, Self>("select * from ip_addresses where id = $1")
+            .bind(node_id)
+            .fetch_all(db)
+            .await
+            .map_err(ApiError::from)
+    }
 }

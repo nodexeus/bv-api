@@ -295,6 +295,22 @@ impl Node {
         .map_err(ApiError::from)
     }
 
+    // TODO: Check role if user is allowed to delete the node
+    pub async fn belongs_to_user_org(org_id: Uuid, user_id: Uuid, db: &PgPool) -> Result<bool> {
+        let cnt: i32 = sqlx::query_scalar(
+            r#"
+            SELECT count(*)::int FROM orgs_users WHERE org_id = $1 and user_id = $2 
+            "#,
+        )
+        .bind(org_id)
+        .bind(user_id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)?;
+
+        Ok(cnt > 0)
+    }
+
     pub async fn find_all_by_filter(
         org_id: Uuid,
         filter: NodeFilter,
