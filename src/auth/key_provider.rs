@@ -13,6 +13,8 @@ pub enum KeyProviderError {
     Empty,
     #[error("Env var couldn't be loaded: {0}")]
     DotenvError(#[from] dotenv::Error),
+    #[error("Key couldn't be loaded from disk: {0}")]
+    Disk(#[from] std::io::Error),
     #[error("Unexpected error: {0}")]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -68,13 +70,7 @@ impl KeyProvider {
 
     fn get_key_value(name: &str) -> KeyProviderResult {
         let path = format!("{}/{}", Self::get_env_value("SECRETS_ROOT")?, name);
-        let value = fs::read_to_string(&path).map(KeyValue::new).map_err(|e| {
-            KeyProviderError::UnexpectedError(anyhow!(
-                "Couldn't read secret {} from disk: {}",
-                e,
-                path
-            ))
-        })?;
+        let value = fs::read_to_string(&path).map(KeyValue::new)?;
 
         Ok(value)
     }
@@ -88,27 +84,33 @@ mod tests {
 
     #[test]
     fn can_read_secret_from_env() -> anyhow::Result<()> {
-        std::env::set_var("JWT_SECRET", "123123");
+        temp_env::with_vars(vec![("JWT_SECRET", Some("123123"))], || {
+            let key = KeyProvider::get_secret(TokenType::UserAuth).unwrap();
 
-        let key = KeyProvider::get_secret(TokenType::UserAuth)?;
-
-        assert_eq!("123123".to_string(), key.to_string());
+            assert_eq!("123123".to_string(), key.to_string());
+        });
 
         Ok(())
     }
 
     #[test]
     fn can_read_secret_from_file() -> anyhow::Result<()> {
-        std::env::set_var("JWT_SECRET", "098080");
-        std::env::set_var("SECRETS_ROOT", "/tmp");
-        let path = "/tmp/JWT_SECRET";
-        fs::write(path, b"123123")?;
+        temp_env::with_vars(
+            vec![
+                ("JWT_SECRET", Some("098080")),
+                ("SECRETS_ROOT", Some("/tmp")),
+            ],
+            || {
+                let path = "/tmp/JWT_SECRET";
+                fs::write(path, b"123123").unwrap();
 
-        let key = KeyProvider::get_secret(TokenType::UserAuth)?;
+                let key = KeyProvider::get_secret(TokenType::UserAuth).unwrap();
 
-        assert_eq!("123123".to_string(), key.to_string());
+                assert_eq!("123123".to_string(), key.to_string());
 
-        fs::remove_file(path)?;
+                fs::remove_file(path).unwrap();
+            },
+        );
 
         Ok(())
     }
