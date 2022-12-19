@@ -106,7 +106,7 @@ export type NodeProperties = {
 const disabled_self_hosted: Property = {
     name: 'self-hosted',
     ui_type: UiType.Switch,
-    default: false,
+    default: "false",
     disabled: true,
 };
 
@@ -187,7 +187,8 @@ const eth_validator: NodeType = {
     ],
 };
 
-const supported_nodes: SupportedNodeTypes = [eth_validator];
+//const supported_nodes: SupportedNodeTypes = [eth_validator];
+const supported_nodes: SupportedNodeTypes = [hnt_validator, hnt_miner];
 const path = './supported_node_types.json';
 const json = JSON.stringify(supported_nodes);
 
