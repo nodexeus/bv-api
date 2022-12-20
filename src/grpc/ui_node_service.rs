@@ -189,6 +189,30 @@ impl NodeService for NodeServiceImpl {
                 IpAddress::delete(ip.id, &self.db).await?;
             }
 
+            // Send delete node command
+            let req = CommandRequest {
+                cmd: HostCmd::DeleteNode,
+                sub_cmd: None,
+                resource_id: node_id,
+            };
+            let del_cmd = Command::create(node.host_id, req, &self.db).await?;
+            let payload = NotificationPayload::new(del_cmd.id);
+            let notification = ChannelNotification::Command(payload);
+
+            // Sending commands receiver (in command_flow.rs)
+            self.notifier
+                .commands_sender()
+                .send(notification)
+                .map_err(internal)?;
+            let payload = NotificationPayload::new(node.id);
+            let notification = ChannelNotification::Node(payload);
+
+            // Sending notification to nodes receiver (in ui_update_service.rs)
+            self.notifier
+                .nodes_sender()
+                .send(notification)
+                .map_err(internal)?;
+
             Ok(response_with_refresh_token::<()>(refresh_token, ())?)
         } else {
             Err(Status::permission_denied("User cannot delete node"))
