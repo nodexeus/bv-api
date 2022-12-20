@@ -127,7 +127,9 @@ impl NodeType {
             .iter()
             .map(|p| p.to_json())
             .collect();
-        let json_str = format!("{{ \"id\": {}, \"properties\": [{}] }}", self.id, props?);
+        // TODO: Replace this hack
+        let props = props?.replace("}{", "},{");
+        let json_str = format!("{{ \"id\": {}, \"properties\": [{}] }}", self.id, props);
         Ok(json_str)
     }
 
