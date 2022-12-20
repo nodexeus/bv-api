@@ -56,7 +56,7 @@ export type Property = {
     // Type of UI element to input value
     ui_type: UiType,
     // Optional default value
-    default: any | null,
+    default: string,
     // Indicates whether the field should be read-only
     disabled: boolean,
 };
@@ -120,7 +120,7 @@ const hnt_miner: NodeType = {
         {
             name: 'keystore-file',
             ui_type: UiType.KeyUpload,
-            default: null,
+            default: "",
             disabled: false,
         },
         disabled_self_hosted
@@ -133,7 +133,7 @@ const hnt_validator: NodeType = {
         {
             name: 'keystore-file',
             ui_type: UiType.KeyUpload,
-            default: null,
+            default: "",
             disabled: false,
         },
         disabled_self_hosted
@@ -150,37 +150,37 @@ const eth_validator: NodeType = {
         {
             name: 'keystore-file-1',
             ui_type: UiType.KeyUpload,
-            default: null,
+            default: "",
             disabled: false,
         },
         {
             name: 'keystore-file-2',
             ui_type: UiType.KeyUpload,
-            default: null,
+            default: "",
             disabled: false,
         },
         {
             name: 'keystore-file-3',
             ui_type: UiType.KeyUpload,
-            default: null,
+            default: "",
             disabled: false,
         },
         {
             name: 'voting-pwd',
             ui_type: UiType.VotingKeyPwd,
-            default: null,
+            default: "",
             disabled: false,
         },
         {
             name: 'fee-recipient',
             ui_type: UiType.WalletAddress,
-            default: null,
+            default: "",
             disabled: false,
         },
         {
             name: 'mev-boost',
             ui_type: UiType.Switch,
-            default: null,
+            default: "",
             disabled: false,
         },
         disabled_self_hosted,
