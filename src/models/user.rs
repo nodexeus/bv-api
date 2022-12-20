@@ -412,9 +412,11 @@ impl User {
     /// Mark user deleted if no more nodes belong to it
     pub async fn delete(id: Uuid, db: &PgPool) -> Result<Self> {
         sqlx::query_as::<_, User>(
-            r#"UPDATE users SET 
+            r#"UPDATE users u SET
                     deleted_at = now()
-                WHERE id = $1 RETURNING *"#,
+                WHERE id = $1
+                    AND (SELECT (COUNT(*) > 0) as delete_me from nodes LEFT JOIN orgs_users ou on u.id = ou.user_id)
+                RETURNING *"#,
         )
         .bind(id)
         .fetch_one(db)
