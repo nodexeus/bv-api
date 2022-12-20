@@ -132,7 +132,7 @@ impl User {
     /// Returns the number of validators in "Staking"
     pub async fn staking_count(&self, db: &PgPool) -> Result<i64> {
         let row: (i64,) = sqlx::query_as(
-            "SELECT count(*) FROM validators where user_id = $1 AND stake_status = $2",
+            "SELECT count(*) FROM validators where user_id = $1 AND stake_status = $2 AND deleted_at IS NULL",
         )
         .bind(self.id)
         .bind(StakeStatus::Staking)
@@ -151,7 +151,7 @@ impl User {
 
     pub async fn find_all_pay_address(db: &PgPool) -> Result<Vec<UserPayAddress>> {
         sqlx::query_as::<_, UserPayAddress>(
-            "SELECT id, pay_address FROM users where pay_address is not NULL",
+            "SELECT id, pay_address FROM users where pay_address is not NULL AND deleted_at IS NULL",
         )
         .fetch_all(db)
         .await
@@ -174,7 +174,7 @@ impl User {
             FROM
                 users
             WHERE
-                users.id = $1
+                users.id = $1 AND deleted_at IS NULL
         "##)
         .bind(user_id)
         .fetch_one(db)
@@ -198,6 +198,7 @@ impl User {
                     users.created_at as joined_at
                 FROM
                     users
+                WHERE deleted_at IS NULL
                 ORDER BY
                     users.email
             "##
@@ -208,19 +209,23 @@ impl User {
     }
 
     pub async fn find_by_email(email: &str, db: &PgPool) -> Result<Self> {
-        sqlx::query_as(r#"SELECT * FROM users WHERE LOWER(email) = LOWER($1) limit 1"#)
-            .bind(email)
-            .fetch_one(db)
-            .await
-            .map_err(ApiError::from)
+        sqlx::query_as(
+            r#"SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL limit 1"#,
+        )
+        .bind(email)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
     }
 
     pub async fn find_by_refresh(refresh: &str, db: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE refresh = $1 limit 1")
-            .bind(refresh)
-            .fetch_one(db)
-            .await
-            .map_err(ApiError::from)
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM users WHERE refresh = $1 AND deleted_at IS NULL limit 1",
+        )
+        .bind(refresh)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
     }
 
     pub async fn update_password(&self, password: &str, db: &PgPool) -> Result<Self> {
@@ -231,7 +236,7 @@ impl User {
             .hash
         {
             return sqlx::query_as::<_, Self>(
-                "UPDATE users set hashword = $1, salt = $2 WHERE id = $3 RETURNING *",
+                "UPDATE users set hashword = $1, salt = $2 WHERE id = $3 AND deleted_at IS NULL RETURNING *",
             )
             .bind(hashword.to_string())
             .bind(salt.as_str())
@@ -363,7 +368,7 @@ impl User {
                     fee_bps = COALESCE($3, fee_bps),
                     staking_quota = COALESCE($4, staking_quota),
                     refresh = COALESCE($5, refresh)
-                WHERE id = $6 RETURNING *"#,
+                WHERE id = $6 AND deleted_at IS NULL RETURNING *"#,
         )
         .bind(fields.first_name)
         .bind(fields.last_name)
@@ -383,7 +388,7 @@ impl User {
         sqlx::query_as::<_, User>(
             r#"UPDATE users SET 
                     confirmed_at = now()
-                WHERE id = $1 and confirmed_at IS NULL RETURNING *"#,
+                WHERE id = $1 and confirmed_at IS NULL AND deleted_at IS NULL RETURNING *"#,
         )
         .bind(id)
         .fetch_one(db)
@@ -394,7 +399,7 @@ impl User {
     pub async fn is_confirmed(id: Uuid, db: &PgPool) -> Result<bool> {
         let result: i32 = sqlx::query_scalar(
             r#"SELECT count(*)::int 
-            FROM users WHERE id = $1 AND confirmed_at IS NOT NULL"#,
+            FROM users WHERE id = $1 AND confirmed_at IS NOT NULL AND deleted_at IS NULL"#,
         )
         .bind(id)
         .fetch_one(db)
@@ -402,6 +407,19 @@ impl User {
         .map_err(ApiError::from)?;
 
         Ok(result == 1)
+    }
+
+    /// Mark user deleted if no more nodes belong to it
+    pub async fn delete(id: Uuid, db: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, User>(
+            r#"UPDATE users SET 
+                    deleted_at = now()
+                WHERE id = $1 RETURNING *"#,
+        )
+        .bind(id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
     }
 
     pub fn preferred_language(&self) -> &str {
@@ -414,11 +432,13 @@ impl User {
 #[axum::async_trait]
 impl FindableById for User {
     async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE id = $1 limit 1")
-            .bind(id)
-            .fetch_one(db)
-            .await
-            .map_err(ApiError::from)
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL limit 1",
+        )
+        .bind(id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
     }
 }
 

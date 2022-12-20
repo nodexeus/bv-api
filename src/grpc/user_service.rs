@@ -2,9 +2,9 @@ use crate::auth::{JwtToken, TokenRole, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::user_service_server::UserService;
 use crate::grpc::blockjoy_ui::{
-    CreateUserRequest, CreateUserResponse, GetConfigurationRequest, GetConfigurationResponse,
-    GetUserRequest, GetUserResponse, ResponseMeta, UpdateUserRequest, UpdateUserResponse,
-    UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
+    CreateUserRequest, CreateUserResponse, DeleteUserRequest, GetConfigurationRequest,
+    GetConfigurationResponse, GetUserRequest, GetUserResponse, ResponseMeta, UpdateUserRequest,
+    UpdateUserResponse, UpsertConfigurationRequest, UpsertConfigurationResponse, User as GrpcUser,
 };
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::mail::MailClient;
@@ -97,6 +97,19 @@ impl UserService for UserServiceImpl {
                 "You are not allowed to update this user",
             ))
         }
+    }
+
+    async fn delete(&self, request: Request<DeleteUserRequest>) -> Result<Response<()>, Status> {
+        let refresh_token = get_refresh_token(&request);
+        let token = request
+            .extensions()
+            .get::<UserAuthToken>()
+            .ok_or_else(required("auth token"))?;
+        let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
+
+        User::delete(user_id, &self.db).await?;
+
+        Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }
 
     async fn upsert_configuration(
