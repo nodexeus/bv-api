@@ -1,6 +1,7 @@
 mod setup;
 
 use api::grpc::blockjoy_ui::{self, user_service_client, GetUserRequest};
+use api::models;
 use tonic::transport;
 
 type Service = user_service_client::UserServiceClient<transport::Channel>;
@@ -8,10 +9,60 @@ type Service = user_service_client::UserServiceClient<transport::Channel>;
 #[tokio::test]
 async fn responds_ok_with_valid_token_for_get() {
     let tester = setup::Tester::new().await;
-    let req = blockjoy_ui::GetUserRequest {
+    let req = GetUserRequest {
         meta: Some(tester.meta()),
     };
     tester.send_admin(Service::get, req).await.unwrap();
+}
+
+#[tokio::test]
+async fn responds_not_found_with_valid_token_for_delete() {
+    let tester = setup::Tester::new().await;
+    let req = blockjoy_ui::DeleteUserRequest {
+        meta: Some(tester.meta()),
+    };
+    match tester.send_admin(Service::delete, req).await {
+        Ok(_) => panic!("This shouldn't work"),
+        Err(status) => assert_eq!(status.code(), tonic::Code::NotFound),
+    }
+}
+
+#[tokio::test]
+async fn responds_ok_with_valid_token_for_delete() {
+    let tester = setup::Tester::new().await;
+    // create a node
+    let blockchain = tester.blockchain().await;
+    let host = tester.host().await;
+    let user = tester.admin_user().await;
+    let org = tester.org_for(&user).await;
+    let req = models::NodeCreateRequest {
+        host_id: host.id,
+        org_id: org.id,
+        blockchain_id: blockchain.id,
+        node_type: sqlx::types::Json(models::NodeType::special_type(
+            models::NodeTypeKey::Validator,
+        )),
+        chain_status: models::NodeChainStatus::Unknown,
+        sync_status: models::NodeSyncStatus::Syncing,
+        container_status: models::ContainerStatus::Installing,
+        address: None,
+        wallet_address: None,
+        block_height: None,
+        groups: None,
+        node_data: None,
+        ip_addr: None,
+        ip_gateway: Some("192.168.0.1".into()),
+        name: None,
+        version: None,
+        staking_status: None,
+        self_update: false,
+    };
+    let _ = models::Node::create(&req, tester.pool()).await.unwrap();
+    let req = blockjoy_ui::DeleteUserRequest {
+        meta: Some(tester.meta()),
+    };
+
+    assert!(tester.send_admin(Service::delete, req).await.is_ok())
 }
 
 #[tokio::test]
