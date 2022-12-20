@@ -11,6 +11,7 @@ p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/UpdatePassword, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/UpdateUIPassword, POST
 p, master_admin, /blockjoy.api.ui_v1.UserService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.UserService/Update, POST
+p, master_admin, /blockjoy.api.ui_v1.UserService/Delete, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Update, POST
