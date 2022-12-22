@@ -39,7 +39,7 @@ async fn responds_ok_with_valid_token_for_delete() {
         host_id: host.id,
         org_id: org.id,
         blockchain_id: blockchain.id,
-        node_type: sqlx::types::Json(models::NodeType::special_type(
+        node_type: sqlx::types::Json(models::NodeProperties::special_type(
             models::NodeTypeKey::Validator,
         )),
         chain_status: models::NodeChainStatus::Unknown,

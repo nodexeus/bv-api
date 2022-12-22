@@ -2,7 +2,7 @@ mod setup;
 
 use api::models::{
     ContainerStatus, CreateNodeKeyFileRequest, Node, NodeChainStatus, NodeCreateRequest,
-    NodeKeyFile, NodeSyncStatus, NodeType, NodeTypeKey,
+    NodeKeyFile, NodeProperties, NodeSyncStatus, NodeTypeKey,
 };
 use sqlx::types::Json;
 
@@ -17,7 +17,7 @@ async fn can_create_key_file() -> anyhow::Result<()> {
         host_id: host.id,
         org_id: org.id,
         blockchain_id: blockchain.id,
-        node_type: Json(NodeType::special_type(NodeTypeKey::Api)),
+        node_type: Json(NodeProperties::special_type(NodeTypeKey::Api)),
         chain_status: NodeChainStatus::Unknown,
         sync_status: NodeSyncStatus::Syncing,
         container_status: ContainerStatus::Installing,
@@ -75,7 +75,7 @@ async fn deletes_key_file_if_node_is_deleted() -> anyhow::Result<()> {
         host_id: host.id,
         org_id: org.id,
         blockchain_id: blockchain.id,
-        node_type: Json(NodeType::special_type(NodeTypeKey::Api)),
+        node_type: Json(NodeProperties::special_type(NodeTypeKey::Api)),
         chain_status: NodeChainStatus::Unknown,
         sync_status: NodeSyncStatus::Syncing,
         container_status: ContainerStatus::Installing,

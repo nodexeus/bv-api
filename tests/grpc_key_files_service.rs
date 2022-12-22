@@ -35,7 +35,9 @@ async fn responds_ok_with_valid_node_id() {
         host_id: host.id,
         org_id: tester.org().await.id,
         blockchain_id: tester.blockchain().await.id,
-        node_type: Json(models::NodeType::special_type(models::NodeTypeKey::Api)),
+        node_type: Json(models::NodeProperties::special_type(
+            models::NodeTypeKey::Api,
+        )),
         chain_status: models::NodeChainStatus::Unknown,
         sync_status: models::NodeSyncStatus::Syncing,
         container_status: models::ContainerStatus::Installing,
@@ -104,7 +106,9 @@ async fn responds_ok_with_valid_node_id_for_save() {
         host_id: host.id,
         org_id: tester.org().await.id,
         blockchain_id: tester.blockchain().await.id,
-        node_type: Json(models::NodeType::special_type(models::NodeTypeKey::Api)),
+        node_type: Json(models::NodeProperties::special_type(
+            models::NodeTypeKey::Api,
+        )),
         chain_status: models::NodeChainStatus::Unknown,
         sync_status: models::NodeSyncStatus::Syncing,
         container_status: models::ContainerStatus::Installing,
@@ -146,7 +150,9 @@ async fn responds_error_with_same_node_id_name_twice_for_save() {
         host_id: host.id,
         org_id: tester.org().await.id,
         blockchain_id: tester.blockchain().await.id,
-        node_type: Json(models::NodeType::special_type(models::NodeTypeKey::Api)),
+        node_type: Json(models::NodeProperties::special_type(
+            models::NodeTypeKey::Api,
+        )),
         chain_status: models::NodeChainStatus::Unknown,
         sync_status: models::NodeSyncStatus::Syncing,
         container_status: models::ContainerStatus::Installing,
