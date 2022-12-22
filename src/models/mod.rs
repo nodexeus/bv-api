@@ -15,6 +15,7 @@ mod blacklist_token;
 mod ip_address;
 mod node_key_file;
 mod node_type;
+mod node_property_value;
 pub mod validator;
 
 use crate::errors::Result as ApiResult;
