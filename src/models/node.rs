@@ -2,6 +2,7 @@ use super::{node_type::*, PgQuery};
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::{self, NodeInfo as GrpcNodeInfo};
 use crate::grpc::helpers::internal;
+use crate::models::node_property_value::NodeProperties;
 use crate::models::{validator::Validator, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
@@ -158,7 +159,7 @@ pub struct Node {
     pub ip_addr: Option<String>,
     pub ip_gateway: Option<String>,
     pub blockchain_id: Uuid,
-    pub node_type: Json<NodeType>,
+    pub node_type: Json<NodeProperties>,
     pub address: Option<String>,
     pub wallet_address: Option<String>,
     pub block_height: Option<i64>,

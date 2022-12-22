@@ -14,8 +14,8 @@ mod user;
 mod blacklist_token;
 mod ip_address;
 mod node_key_file;
-mod node_type;
 mod node_property_value;
+mod node_type;
 pub mod validator;
 
 use crate::errors::Result as ApiResult;

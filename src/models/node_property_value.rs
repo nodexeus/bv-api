@@ -2,8 +2,8 @@ use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgHasArrayType;
 
+use crate::errors::ApiError;
 use crate::models::NodeTypeKey;
-use crate::{errors::ApiError, grpc::helpers::required};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Getters)]
 pub struct NodePropertyValue {
@@ -39,12 +39,14 @@ impl TryFrom<String> for NodeProperties {
 impl NodePropertyValue {
     pub fn to_json(&self) -> Result<String, ApiError> {
         let json_str = format!(
-            "{{ \"name\": \"{}\", \"ui_type\": \"{}\", \"default\": \"{}\", \"disabled:\": \"{}\", \"required\": \"{}\" }}",
+            "{{ \"name\": \"{}\", \"ui_type\": \"{}\", \"label\": \"{}\", \"description\": \"{}\", \"disabled:\": \"{}\", \"required\": \"{}\", \"value\": \"{}\" }}",
             self.name,
             self.ui_type,
-            self.default.as_ref().ok_or_else(required("default"))?,
+            self.label,
+            self.description,
             self.disabled,
             self.required,
+            self.value.clone().unwrap_or_default(),
         );
         Ok(json_str)
     }
