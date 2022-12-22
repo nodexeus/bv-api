@@ -46,7 +46,7 @@ impl NodePropertyValue {
             self.description,
             self.disabled,
             self.required,
-            self.value.clone().unwrap_or_default(),
+            self.value.as_ref().unwrap_or(&String::new()),
         );
         Ok(json_str)
     }
