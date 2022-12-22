@@ -66,6 +66,7 @@ pub struct NodeTypeProperty {
     ui_type: String,
     default: Option<String>,
     disabled: bool,
+    required: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,11 +92,12 @@ impl TryFrom<String> for NodeType {
 impl NodeTypeProperty {
     pub fn to_json(&self) -> Result<String, ApiError> {
         let json_str = format!(
-            "{{ \"name\": \"{}\", \"ui_type\": \"{}\", \"default\": \"{}\", \"disabled:\": \"{}\" }}",
+            "{{ \"name\": \"{}\", \"ui_type\": \"{}\", \"default\": \"{}\", \"disabled:\": \"{}\", \"required\": \"{}\" }}",
             self.name,
             self.ui_type,
             self.default.as_ref().ok_or_else(required("default"))?,
-            self.disabled
+            self.disabled,
+            self.required,
         );
         Ok(json_str)
     }
