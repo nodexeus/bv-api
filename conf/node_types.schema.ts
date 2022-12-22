@@ -59,6 +59,8 @@ export type Property = {
     default: string,
     // Indicates whether the field should be read-only
     disabled: boolean,
+    // Indicates whether the field is required
+    required: boolean,
 };
 
 /**
@@ -108,6 +110,7 @@ const disabled_self_hosted: Property = {
     ui_type: UiType.Switch,
     default: "false",
     disabled: true,
+    required: true,
 };
 
 ////////////////////////////////////////////////////
@@ -122,6 +125,7 @@ const hnt_miner: NodeType = {
             ui_type: UiType.KeyUpload,
             default: "",
             disabled: false,
+            required: true,
         },
         disabled_self_hosted
     ],
@@ -135,6 +139,7 @@ const hnt_validator: NodeType = {
             ui_type: UiType.KeyUpload,
             default: "",
             disabled: false,
+            required: true,
         },
         disabled_self_hosted
     ],
@@ -152,48 +157,60 @@ const eth_validator: NodeType = {
             ui_type: UiType.KeyUpload,
             default: "",
             disabled: false,
+            required: true,
         },
         {
             name: 'keystore-file-2',
             ui_type: UiType.KeyUpload,
             default: "",
             disabled: false,
+            required: false,
         },
         {
             name: 'keystore-file-3',
             ui_type: UiType.KeyUpload,
             default: "",
             disabled: false,
+            required: false,
         },
         {
             name: 'voting-pwd',
             ui_type: UiType.VotingKeyPwd,
             default: "",
             disabled: false,
+            required: false,
         },
         {
             name: 'fee-recipient',
             ui_type: UiType.WalletAddress,
             default: "",
             disabled: false,
+            required: true,
         },
         {
             name: 'mev-boost',
             ui_type: UiType.Switch,
             default: "",
             disabled: false,
+            required: false,
         },
         disabled_self_hosted,
     ],
 };
 
-//const supported_nodes: SupportedNodeTypes = [eth_validator];
-const supported_nodes: SupportedNodeTypes = [hnt_validator, hnt_miner];
-const path = './supported_node_types.json';
-const json = JSON.stringify(supported_nodes);
+function write_json(chain: string, node_types: SupportedNodeTypes) {
+    const path = `./${chain}_supported_node_types.json`;
+    let json = JSON.stringify(node_types);
 
-Deno.writeTextFile(path, json).then(() => {
-    console.log(`Created JSON file in ${path}`);
-}).catch((e) => {
-    console.error(`Failed writing JSON file in ${path}: ${e}`);
-});
+    Deno.writeTextFile(path, json).then(() => {
+        console.log(`Created JSON file in ${path}`);
+    }).catch((e) => {
+        console.error(`Failed writing JSON file in ${path}: ${e}`);
+    });
+}
+
+// Write HNT node types
+write_json("HNT", [hnt_validator, hnt_miner]);
+
+// Write ETH node types
+write_json("ETH", [eth_validator]);
