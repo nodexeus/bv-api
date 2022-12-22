@@ -28,7 +28,9 @@ async fn responds_ok_with_id_for_get() {
         host_id: host.id,
         org_id: org.id,
         blockchain_id: blockchain.id,
-        node_type: sqlx::types::Json(models::NodeType::special_type(models::NodeTypeKey::Api)),
+        node_type: sqlx::types::Json(models::NodeProperties::special_type(
+            models::NodeTypeKey::Api,
+        )),
         chain_status: models::NodeChainStatus::Unknown,
         sync_status: models::NodeSyncStatus::Syncing,
         container_status: models::ContainerStatus::Installing,
@@ -118,7 +120,7 @@ async fn responds_ok_with_valid_data_for_update() {
         host_id: host.id,
         org_id: org.id,
         blockchain_id: blockchain.id,
-        node_type: sqlx::types::Json(models::NodeType::special_type(
+        node_type: sqlx::types::Json(models::NodeProperties::special_type(
             models::NodeTypeKey::Validator,
         )),
         chain_status: models::NodeChainStatus::Unknown,
@@ -193,7 +195,7 @@ async fn responds_ok_with_valid_data_for_delete() {
         host_id: host.id,
         org_id: org.id,
         blockchain_id: blockchain.id,
-        node_type: sqlx::types::Json(models::NodeType::special_type(
+        node_type: sqlx::types::Json(models::NodeProperties::special_type(
             models::NodeTypeKey::Validator,
         )),
         chain_status: models::NodeChainStatus::Unknown,

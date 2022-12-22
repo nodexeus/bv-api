@@ -29,6 +29,7 @@ pub use invoice::*;
 pub use ip_address::*;
 pub use node::*;
 pub use node_key_file::*;
+pub use node_property_value::*;
 pub use node_type::*;
 pub use org::*;
 pub use payment::*;

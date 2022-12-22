@@ -1,8 +1,8 @@
 mod setup;
 
 use api::models::{
-    ContainerStatus, Node, NodeChainStatus, NodeCreateRequest, NodeFilter, NodeSyncStatus,
-    NodeType, NodeTypeKey,
+    ContainerStatus, Node, NodeChainStatus, NodeCreateRequest, NodeFilter, NodeProperties,
+    NodeSyncStatus, NodeTypeKey,
 };
 use sqlx::types::Json;
 
@@ -17,7 +17,7 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         host_id: host.id,
         org_id: org.id,
         blockchain_id: blockchain.id,
-        node_type: Json(NodeType::special_type(NodeTypeKey::Api)),
+        node_type: Json(NodeProperties::special_type(NodeTypeKey::Api)),
         chain_status: NodeChainStatus::Unknown,
         sync_status: NodeSyncStatus::Syncing,
         container_status: ContainerStatus::Installing,
