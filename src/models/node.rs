@@ -465,7 +465,7 @@ pub struct NodeCreateRequest {
     pub ip_addr: Option<String>,
     pub ip_gateway: Option<String>,
     pub blockchain_id: Uuid,
-    pub node_type: Json<NodeType>,
+    pub node_type: Json<NodeProperties>,
     pub address: Option<String>,
     pub wallet_address: Option<String>,
     pub block_height: Option<i64>,

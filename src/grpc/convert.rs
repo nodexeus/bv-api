@@ -529,7 +529,8 @@ pub mod from {
                     .r#type
                     .ok_or_else(required("node.type"))?
                     .try_into()
-                    .map(sqlx::types::Json)?,
+                    .map(sqlx::types::Json)
+                    .map_err(|_| ApiError::validation("Node property JSON is invalid"))?,
                 address: node.address.map(String::from),
                 wallet_address: node.wallet_address.map(String::from),
                 block_height: node.block_height.map(i64::from),
