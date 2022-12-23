@@ -131,6 +131,17 @@ impl IpAddress {
         Self::update(fields, db).await
     }
 
+    /// Helper assigned IP address identified by `ìd` to host identified by `host_id`
+    pub async fn unassign(id: Uuid, host_id: Uuid, db: &PgPool) -> ApiResult<Self> {
+        let fields = IpAddressSelectiveUpdate {
+            id,
+            host_id: Some(host_id),
+            assigned: Some(false),
+        };
+
+        Self::update(fields, db).await
+    }
+
     pub fn in_range(ip: IpAddr, from: IpAddr, to: IpAddr) -> bool {
         !(ip < from || ip > to)
     }
@@ -156,10 +167,12 @@ impl IpAddress {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_node(node_id: Uuid, db: &PgPool) -> ApiResult<Vec<Self>> {
-        sqlx::query_as::<_, Self>("select * from ip_addresses where id = $1")
-            .bind(node_id)
-            .fetch_all(db)
+    pub async fn find_by_node(node_ip: String, db: &PgPool) -> ApiResult<Self> {
+        let node_ip: IpAddr = node_ip.parse()?;
+
+        sqlx::query_as::<_, Self>("select * from ip_addresses where ip = $1 limit 1")
+            .bind(node_ip)
+            .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }

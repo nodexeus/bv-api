@@ -206,7 +206,7 @@ async fn responds_ok_with_valid_data_for_delete() {
         block_height: None,
         groups: None,
         node_data: None,
-        ip_addr: None,
+        ip_addr: Some("192.168.0.10".into()),
         ip_gateway: Some("192.168.0.1".into()),
         name: None,
         version: None,
