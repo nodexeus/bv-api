@@ -11,7 +11,6 @@ use crate::grpc::notification::{ChannelNotification, ChannelNotifier, Notificati
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models::{
     Command, CommandRequest, Host, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo,
-    NodeKeyFile,
 };
 use crate::server::DbPool;
 use std::sync::Arc;
@@ -173,21 +172,14 @@ impl NodeService for NodeServiceImpl {
 
         if Node::belongs_to_user_org(node.org_id, *token.id(), &self.db).await? {
             // 1. Delete node, if the node belongs to the current user
+            // Key files are deleted automatically because of 'on delete cascade' in tables DDL
             Node::delete(node_id, &self.db).await?;
 
-            // 2. Delete all key files
-            let key_files = NodeKeyFile::find_by_node(node_id, &self.db).await?;
+            let host_id = node.host_id;
+            // 2. Do NOT delete reserved IP addresses, but set assigned to false
+            let ip = IpAddress::find_by_node(node.ip_addr.unwrap_or_default(), &self.db).await?;
 
-            for key in key_files {
-                NodeKeyFile::delete(key.id, &self.db).await?;
-            }
-
-            // 3. Delete reserved IP addresses
-            let ips = IpAddress::find_by_node(node_id, &self.db).await?;
-
-            for ip in ips {
-                IpAddress::delete(ip.id, &self.db).await?;
-            }
+            IpAddress::unassign(ip.id, host_id, &self.db).await?;
 
             // Send delete node command
             let req = CommandRequest {
