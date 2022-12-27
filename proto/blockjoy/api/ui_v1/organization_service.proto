@@ -6,6 +6,7 @@ import "common.proto";
 
 message GetOrganizationsRequest {
   RequestMeta meta = 1;
+  optional string org_id = 2;
 }
 
 message GetOrganizationsResponse {
