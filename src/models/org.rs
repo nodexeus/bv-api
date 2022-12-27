@@ -1,3 +1,4 @@
+use crate::auth::FindableById;
 use crate::errors::{ApiError, Result};
 use crate::models::User;
 use chrono::{DateTime, Utc};
@@ -25,6 +26,20 @@ pub struct Org {
     pub member_count: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[tonic::async_trait]
+impl FindableById for Org {
+    async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        sqlx::query_as("SELECT * FROM orgs where id = $1")
+            .bind(id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
+    }
 }
 
 impl Org {

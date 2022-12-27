@@ -1,4 +1,4 @@
-use crate::auth::UserAuthToken;
+use crate::auth::{FindableById, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationService;
 use crate::grpc::blockjoy_ui::{
@@ -37,7 +37,18 @@ impl OrganizationService for OrganizationServiceImpl {
         let token = try_get_token::<_, UserAuthToken>(&request)?;
         let user_id = *token.id();
         let inner = request.into_inner();
-        let organizations: Vec<Org> = Org::find_all_by_user(user_id, &self.db).await?;
+        let org_id = inner.org_id;
+
+        let organizations: Vec<Org> = match org_id {
+            Some(org_id) => vec![
+                Org::find_by_id(
+                    org_id.parse().map_err(|e| ApiError::UuidParseError(e))?,
+                    &self.db,
+                )
+                .await?,
+            ],
+            None => Org::find_all_by_user(user_id, &self.db).await?,
+        };
         let organizations: Result<_, ApiError> =
             organizations.iter().map(Organization::try_from).collect();
         let inner = GetOrganizationsResponse {
@@ -145,14 +156,6 @@ impl OrganizationService for OrganizationServiceImpl {
 
             Ok(Response::new(inner))
         }
-    }
-
-    /// TODO: Will be implemented in PR https://github.com/blockjoy/blockvisor-api/pull/111
-    async fn restore(
-        &self,
-        _request: Request<RestoreOrganizationRequest>,
-    ) -> Result<Response<RestoreOrganizationResponse>, Status> {
-        todo!()
     }
 
     async fn members(
