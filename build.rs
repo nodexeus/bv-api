@@ -1,7 +1,7 @@
 //! Build file generating gRPC stubs
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_build::configure()
+fn main() {
+    if let Err(e) = tonic_build::configure()
         .build_server(true)
         // needed for integration tests
         .build_client(true)
@@ -10,6 +10,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Backend API
                 "command_flow.proto",
                 "host_service.proto",
+                "key_file_service.proto",
+                "metrics.proto",
                 // UI API
                 "authentication_service.proto",
                 "billing_service.proto",
@@ -24,7 +26,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "user_service.proto",
             ],
             &["proto/blockjoy/api/v1", "proto/blockjoy/api/ui_v1"],
-        )?;
-
-    Ok(())
+        )
+    {
+        eprintln!("Building protos failed with:\n{e}");
+        std::process::exit(1);
+    }
 }

@@ -13,6 +13,8 @@ mod user;
 // name ambiguities with another crate
 mod blacklist_token;
 mod ip_address;
+mod node_key_file;
+mod node_property_value;
 mod node_type;
 pub mod validator;
 
@@ -26,6 +28,8 @@ pub use info::*;
 pub use invoice::*;
 pub use ip_address::*;
 pub use node::*;
+pub use node_key_file::*;
+pub use node_property_value::*;
 pub use node_type::*;
 pub use org::*;
 pub use payment::*;
@@ -34,6 +38,8 @@ pub use user::*;
 
 pub const STAKE_QUOTA_DEFAULT: i64 = 5;
 pub const FEE_BPS_DEFAULT: i64 = 300;
+
+type PgQuery<'a> = sqlx::query::Query<'a, sqlx::Postgres, sqlx::postgres::PgArguments>;
 
 #[tonic::async_trait]
 pub trait UpdateInfo<T, R> {

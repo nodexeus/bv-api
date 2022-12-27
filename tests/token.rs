@@ -4,26 +4,8 @@ use axum::http::header::AUTHORIZATION;
 use axum::http::Request;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use std::str::FromStr;
-use std::time::{SystemTime, UNIX_EPOCH};
-use test_macros::*;
 use uuid::Uuid;
 
-struct TestData {
-    pub(crate) now: i64,
-}
-
-fn setup() -> TestData {
-    let start = SystemTime::now();
-
-    TestData {
-        now: start
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs() as i64,
-    }
-}
-
-#[before(call = "setup")]
 #[test]
 fn should_encode_token() -> anyhow::Result<()> {
     let test_secret = "123456";
@@ -46,7 +28,6 @@ fn should_encode_token() -> anyhow::Result<()> {
     })
 }
 
-#[before(call = "setup")]
 #[test]
 fn should_decode_valid_token() -> anyhow::Result<()> {
     let test_secret = "123456";
@@ -54,7 +35,7 @@ fn should_decode_valid_token() -> anyhow::Result<()> {
         let id = Uuid::new_v4();
         let claim = TokenClaim::new(
             id,
-            _before_values.now,
+            chrono::Utc::now().timestamp(),
             TokenType::UserAuth,
             TokenRole::User,
             None,
@@ -78,7 +59,6 @@ fn should_decode_valid_token() -> anyhow::Result<()> {
     })
 }
 
-#[before(call = "setup")]
 #[test]
 fn should_panic_on_decode_expired_token() {
     let test_secret = "123456";
@@ -103,7 +83,6 @@ fn should_panic_on_decode_expired_token() {
     });
 }
 
-#[before(call = "setup")]
 #[test]
 #[should_panic]
 fn should_panic_with_invalid_token() {
@@ -116,7 +95,6 @@ fn should_panic_with_invalid_token() {
     let _ = UserAuthToken::from_request(&request).unwrap();
 }
 
-#[before(call = "setup")]
 #[test]
 fn should_not_work_with_empty_token() {
     let request = Request::builder()
@@ -129,29 +107,29 @@ fn should_not_work_with_empty_token() {
     assert!(UserAuthToken::from_request(&request).is_err());
 }
 
-#[before(call = "setup")]
 #[test]
 fn should_get_valid_token() -> anyhow::Result<()> {
-    let id = Uuid::new_v4();
-    let claim = TokenClaim::new(
-        id,
-        ExpirationProvider::expiration(TokenType::UserAuth),
-        TokenType::UserAuth,
-        TokenRole::User,
-        None,
-    );
-    let token = UserAuthToken::try_new(claim)?;
-    let encoded = base64::encode(token.encode().unwrap());
-    let request = Request::builder()
-        .header(AUTHORIZATION, format!("Bearer {}", encoded))
-        .uri("/")
-        .method("GET")
-        .body(())?;
-    let token = UserAuthToken::from_request(&request).unwrap();
-
-    assert_eq!(*token.id(), id);
-
-    Ok(())
+    let test_secret = "123456";
+    temp_env::with_var("JWT_SECRET", Some(test_secret), || {
+        let id = Uuid::new_v4();
+        let claim = TokenClaim::new(
+            id,
+            ExpirationProvider::expiration(TokenType::UserAuth),
+            TokenType::UserAuth,
+            TokenRole::User,
+            None,
+        );
+        let token = UserAuthToken::try_new(claim)?;
+        let encoded = base64::encode(token.encode().unwrap());
+        let request = Request::builder()
+            .header(AUTHORIZATION, format!("Bearer {}", encoded))
+            .uri("/")
+            .method("GET")
+            .body(())?;
+        let token = UserAuthToken::from_request(&request).unwrap();
+        assert_eq!(*token.id(), id);
+        Ok(())
+    })
 }
 
 #[test]

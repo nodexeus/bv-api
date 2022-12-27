@@ -3,6 +3,8 @@ pub mod command_flow;
 pub mod convert;
 pub mod helpers;
 pub mod host_service;
+pub mod key_file_service;
+pub mod metrics_service;
 pub mod notification;
 pub mod organization_service;
 pub mod ui_blockchain_service;
@@ -24,6 +26,7 @@ pub mod blockjoy_ui {
     tonic::include_proto!("blockjoy.api.ui_v1");
 }
 
+use self::blockjoy::metrics_service_server::MetricsServiceServer;
 use crate::auth::middleware::AuthorizationService;
 use crate::auth::{
     unauthenticated_paths::UnauthenticatedPaths, Authorization, JwtToken, TokenType,
@@ -32,6 +35,7 @@ use crate::auth::{
 use crate::errors::Result as ApiResult;
 use crate::grpc::authentication_service::AuthenticationServiceImpl;
 use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
+use crate::grpc::blockjoy::key_files_server::KeyFilesServer;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationServiceServer;
 use crate::grpc::blockjoy_ui::blockchain_service_server::BlockchainServiceServer;
 use crate::grpc::blockjoy_ui::command_service_server::CommandServiceServer;
@@ -43,6 +47,8 @@ use crate::grpc::blockjoy_ui::organization_service_server::OrganizationServiceSe
 use crate::grpc::blockjoy_ui::update_service_server::UpdateServiceServer;
 use crate::grpc::blockjoy_ui::user_service_server::UserServiceServer;
 use crate::grpc::command_flow::CommandFlowServerImpl;
+use crate::grpc::key_file_service::KeyFileServiceImpl;
+use crate::grpc::metrics_service::MetricsServiceImpl;
 use crate::grpc::notification::ChannelNotifier;
 use crate::grpc::organization_service::OrganizationServiceImpl;
 use crate::grpc::ui_blockchain_service::BlockchainServiceImpl;
@@ -107,6 +113,8 @@ pub async fn server(
     let h_service = HostsServer::new(HostsServiceImpl::new(db.clone()));
     let c_service =
         CommandFlowServer::new(CommandFlowServerImpl::new(db.clone(), notifier.clone()));
+    let k_service = KeyFilesServer::new(KeyFileServiceImpl::new(db.clone()));
+    let m_service = MetricsServiceServer::new(MetricsServiceImpl::new(db.clone()));
     let ui_auth_service =
         AuthenticationServiceServer::new(AuthenticationServiceImpl::new(db.clone()));
     let ui_org_service = OrganizationServiceServer::new(OrganizationServiceImpl::new(db.clone()));
@@ -142,6 +150,8 @@ pub async fn server(
         .concurrency_limit_per_connection(rate_limiting_settings())
         .add_service(h_service)
         .add_service(c_service)
+        .add_service(k_service)
+        .add_service(m_service)
         .add_service(ui_auth_service)
         .add_service(ui_org_service)
         .add_service(ui_user_service)

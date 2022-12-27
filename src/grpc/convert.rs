@@ -1,10 +1,11 @@
 use crate::errors::Result as ApiResult;
+use crate::grpc::blockjoy::container_image::StatusName;
 use crate::grpc::blockjoy::{
     command, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
     NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
 };
-use crate::grpc::helpers::{image_url_from_node, required};
-use crate::models::{Blockchain, Command, HostCmd, Node};
+use crate::grpc::helpers::required;
+use crate::models::{Blockchain, Command, HostCmd, Node, NodeTypeKey};
 use crate::server::DbPool;
 
 pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<GrpcCommand> {
@@ -48,7 +49,14 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
             let node = Node::find_by_id(cmd.resource_id, db).await?;
             let blockchain = Blockchain::find_by_id(node.blockchain_id, db).await?;
             let image = ContainerImage {
-                url: image_url_from_node(&node, blockchain.name),
+                protocol: blockchain.name,
+                node_type: NodeTypeKey::str_from_value(node.node_type.0.get_id()).to_lowercase(),
+                node_version: node
+                    .version
+                    .clone()
+                    .unwrap_or_else(|| "latest".to_string())
+                    .to_lowercase(),
+                status: StatusName::Development.into(),
             };
             let create_cmd = NodeCreate {
                 name: node.name.unwrap_or_default(),
@@ -57,6 +65,7 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
                 r#type: node.node_type.to_json()?,
                 ip: node.ip_addr.ok_or_else(required("node.ip_addr"))?,
                 gateway: node.ip_gateway.ok_or_else(required("node.ip_gateway"))?,
+                self_update: node.self_update,
             };
 
             Some(node_command::Command::Create(create_cmd))
@@ -80,15 +89,18 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
 pub mod from {
     use crate::errors::ApiError;
     use crate::grpc::blockjoy::HostInfo;
+    use crate::grpc::blockjoy::Keyfile;
+    use crate::grpc::blockjoy_ui::FilterCriteria;
     use crate::grpc::blockjoy_ui::{
         self, node::NodeStatus as GrpcNodeStatus, node::StakingStatus as GrpcStakingStatus,
         node::SyncStatus as GrpcSyncStatus, Host as GrpcHost, HostProvision as GrpcHostProvision,
         Node as GrpcNode, Organization, User as GrpcUiUser,
     };
     use crate::grpc::helpers::required;
+    use crate::models::NodeFilter;
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
-        NodeCreateRequest, NodeInfo, NodeStakingStatus, NodeSyncStatus, Org, User,
+        NodeCreateRequest, NodeInfo, NodeKeyFile, NodeStakingStatus, NodeSyncStatus, Org, User,
         UserSelectiveUpdate,
     };
     use crate::models::{Host, HostSelectiveUpdate};
@@ -97,6 +109,8 @@ pub mod from {
     use serde_json::Value;
     use std::i64;
     use std::net::AddrParseError;
+    use std::str::FromStr;
+    use std::string::FromUtf8Error;
     use tonic::{Code, Status};
     use uuid::Uuid;
 
@@ -129,7 +143,7 @@ pub mod from {
     impl From<HostSelectiveUpdate> for HostInfo {
         fn from(update: HostSelectiveUpdate) -> Self {
             Self {
-                id: None,
+                id: Some(update.id.to_string()),
                 name: update.name,
                 version: update.version,
                 location: update.location,
@@ -146,11 +160,28 @@ pub mod from {
         }
     }
 
+    impl TryFrom<FilterCriteria> for NodeFilter {
+        type Error = ();
+
+        fn try_from(value: FilterCriteria) -> Result<Self, Self::Error> {
+            Ok(Self {
+                status: value.states,
+                node_types: value.node_types,
+                blockchains: value
+                    .blockchain_ids
+                    .iter()
+                    .map(|id| Uuid::from_str(id.as_str()).unwrap_or_default())
+                    .collect(),
+            })
+        }
+    }
+
     impl TryFrom<GrpcHost> for HostSelectiveUpdate {
         type Error = ApiError;
 
         fn try_from(host: GrpcHost) -> Result<Self, Self::Error> {
             let updater = Self {
+                id: host.id.ok_or_else(required("update.id"))?.parse()?,
                 org_id: host
                     .org_id
                     .map(|id| Uuid::parse_str(id.as_str()))
@@ -169,6 +200,7 @@ pub mod from {
                 ip_range_from: None,
                 ip_range_to: None,
                 ip_gateway: None,
+                ..Default::default()
             };
             Ok(updater)
         }
@@ -402,6 +434,7 @@ pub mod from {
                 status: Some(GrpcNodeStatus::from(node.chain_status).into()),
                 staking_status: Some(GrpcStakingStatus::from(node.staking_status).into()),
                 sync_status: Some(GrpcSyncStatus::from(node.sync_status).into()),
+                self_update: Some(node.self_update),
             };
             Ok(grpc_node)
         }
@@ -440,6 +473,7 @@ pub mod from {
                     .into(),
                 ),
                 sync_status: Some(GrpcSyncStatus::from(req.sync_status).into()),
+                self_update: Some(req.self_update),
             };
             Ok(node)
         }
@@ -450,6 +484,19 @@ pub mod from {
 
         fn try_from(req: NodeCreateRequest) -> Result<Self, Self::Error> {
             Self::try_from(&req)
+        }
+    }
+
+    impl TryFrom<Keyfile> for NodeKeyFile {
+        type Error = ApiError;
+
+        fn try_from(value: Keyfile) -> Result<Self, Self::Error> {
+            Ok(Self {
+                name: value.name,
+                content: String::from_utf8(value.content)
+                    .map_err(|e: FromUtf8Error| ApiError::UnexpectedError(anyhow!(e)))?,
+                ..Default::default()
+            })
         }
     }
 
@@ -482,7 +529,8 @@ pub mod from {
                     .r#type
                     .ok_or_else(required("node.type"))?
                     .try_into()
-                    .map(sqlx::types::Json)?,
+                    .map(sqlx::types::Json)
+                    .map_err(|_| ApiError::validation("Node property JSON is invalid"))?,
                 address: node.address.map(String::from),
                 wallet_address: node.wallet_address.map(String::from),
                 block_height: node.block_height.map(i64::from),
@@ -494,7 +542,9 @@ pub mod from {
                 sync_status: NodeSyncStatus::Unknown,
                 staking_status: Some(NodeStakingStatus::Unknown),
                 container_status: ContainerStatus::Unknown,
+                self_update: node.self_update.unwrap_or(false),
             };
+
             Ok(req)
         }
     }
@@ -512,6 +562,7 @@ pub mod from {
                 sync_status: None,
                 staking_status: None,
                 container_status: None,
+                self_update: node.self_update.unwrap_or(false),
             };
             Ok(node_info)
         }
@@ -593,6 +644,17 @@ pub mod from {
                 updated_at: Some(try_dt_to_ts(model.updated_at)?),
             };
             Ok(blockchain)
+        }
+    }
+
+    impl TryFrom<NodeKeyFile> for Keyfile {
+        type Error = ApiError;
+
+        fn try_from(value: NodeKeyFile) -> Result<Self, Self::Error> {
+            Ok(Self {
+                name: value.name.clone(),
+                content: value.content.into_bytes(),
+            })
         }
     }
 }

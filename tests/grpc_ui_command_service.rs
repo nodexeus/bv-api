@@ -1,337 +1,310 @@
-#[allow(dead_code)]
 mod setup;
 
-use api::auth::{JwtToken, TokenRole, TokenType, UserAuthToken};
-use api::grpc::blockjoy_ui::command_service_client::CommandServiceClient;
-use api::grpc::blockjoy_ui::{CommandRequest as GrpcCommandRequest, RequestMeta};
-use api::models::User;
-use setup::setup;
-use std::sync::Arc;
-use test_macros::*;
-use tonic::transport::Channel;
-use tonic::{Request, Status};
-use uuid::Uuid;
+use api::grpc::blockjoy_ui::{self, command_service_client};
+use tonic::transport;
 
-macro_rules! test_response_ok {
-    ($func:tt, $db: expr) => {{
-        let request_meta = RequestMeta {
-            id: Some(Uuid::new_v4().to_string()),
-            token: None,
-            fields: vec![],
-            pagination: None,
-        };
-        let host = $db.test_host().await;
-        let user = $db.admin_user().await;
-        let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User).unwrap();
-        let inner = GrpcCommandRequest {
-            meta: Some(request_meta),
-            id: host.id.to_string(),
-            params: vec![],
-        };
-        let mut request = Request::new(inner);
+type Service = command_service_client::CommandServiceClient<transport::Channel>;
 
-        request.metadata_mut().insert(
-            "authorization",
-            format!("Bearer {}", token.to_base64().unwrap()).parse().unwrap(),
-        );
-        request.metadata_mut().insert(
-        "cookie",
-        format!(
-            "refresh={}",
-            $db.user_refresh_token(*token.id()).encode().unwrap()
-        )
-        .parse()
-        .unwrap());
-
-        assert_grpc_request! { $func, request, tonic::Code::Ok, $db, CommandServiceClient<Channel> };
-    }}
+/// Returns a semtantically invalid command. This can be used to assert for status codes to your
+/// liking.
+async fn valid_command() -> (setup::Tester, blockjoy_ui::CommandRequest) {
+    let tester = setup::Tester::new().await;
+    let req = blockjoy_ui::CommandRequest {
+        meta: Some(tester.meta()),
+        id: tester.host().await.id.to_string(),
+        params: vec![],
+    };
+    (tester, req)
 }
 
-macro_rules! test_response_internal {
-    ($func:tt, $db: expr) => {{
-        let request_meta = RequestMeta {
-            id: Some(Uuid::new_v4().to_string()),
-            token: None,
-            fields: vec![],
-            pagination: None,
-        };
-        let host = $db.test_host().await;
-        let user = $db.admin_user().await;
-        let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User).unwrap();
-        let inner = GrpcCommandRequest {
-            meta: Some(request_meta),
-            id: host.id.to_string(),
-            params: vec![],
-        };
-        let mut request = Request::new(inner);
-
-        request.metadata_mut().insert(
-            "authorization",
-            format!("Bearer {}", token.to_base64().unwrap()).parse().unwrap(),
-        );
-        request.metadata_mut().insert(
-        "cookie",
-        format!(
-            "refresh={}",
-            $db.user_refresh_token(*token.id()).encode().unwrap()
-        )
-        .parse()
-        .unwrap());
-
-        assert_grpc_request! { $func, request, tonic::Code::Internal, $db, CommandServiceClient<Channel> };
-    }}
+/// Returns a semtantically invalid command. This can be used to assert for InvalidArgument
+/// responses.
+async fn invalid_command() -> (setup::Tester, blockjoy_ui::CommandRequest) {
+    let tester = setup::Tester::new().await;
+    let req = blockjoy_ui::CommandRequest {
+        meta: Some(tester.meta()),
+        id: "".to_string(),
+        params: vec![],
+    };
+    (tester, req)
 }
 
-macro_rules! test_response_invalid_argument {
-    ($func:tt, $db: expr) => {{
-        let request_meta = RequestMeta {
-            id: Some(Uuid::new_v4().to_string()),
-            token: None,
-            fields: vec![],
-            pagination: None,
-        };
-        let user = $db.admin_user().await;
-        let token = UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User).unwrap();
-        let inner = GrpcCommandRequest {
-            meta: Some(request_meta),
-            id: "".to_string(),
-            params: vec![],
-        };
-        let mut request = Request::new(inner);
-
-        request.metadata_mut().insert(
-            "authorization",
-            format!("Bearer {}", token.to_base64().unwrap()).parse().unwrap(),
-        );
-        request.metadata_mut().insert(
-        "cookie",
-        format!(
-            "refresh={}",
-            $db.user_refresh_token(*token.id()).encode().unwrap()
-        )
-        .parse()
-        .unwrap());
-
-        assert_grpc_request! { $func, request, tonic::Code::InvalidArgument, $db, CommandServiceClient<Channel> };
-    }}
-}
-
-#[before(call = "setup")]
-// #[tokio::test]
 /// TODO
+#[tokio::test]
+#[ignore]
 async fn responds_ok_for_create_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_ok! { create_node, db }
+    let (tester, req) = valid_command().await;
+    tester.send_admin(Service::create_node, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_internal_for_create_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_internal! { create_node, db }
+    let (tester, req) = valid_command().await;
+    let status = tester
+        .send_admin(Service::create_node, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_for_create_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_invalid_argument! { create_node, db }
+async fn responds_invalid_argument_for_create_node() {
+    let (tester, req) = invalid_command().await;
+    let status = tester
+        .send_admin(Service::create_node, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
-// #[tokio::test]
 /// TODO
+#[tokio::test]
+#[ignore]
 async fn responds_ok_for_delete_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_ok! { delete_node, db }
+    let (tester, req) = valid_command().await;
+    tester.send_admin(Service::delete_node, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_internal_for_delete_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_internal! { delete_node, db }
+    let (tester, req) = valid_command().await;
+    let status = tester
+        .send_admin(Service::delete_node, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_for_delete_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_invalid_argument! { delete_node, db }
+async fn responds_invalid_argument_for_delete_node() {
+    let (tester, req) = invalid_command().await;
+    let status = tester
+        .send_admin(Service::delete_node, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
-// #[tokio::test]
 /// TODO
+#[tokio::test]
+#[ignore]
 async fn responds_ok_for_start_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_ok! { start_node, db }
+    let (tester, req) = valid_command().await;
+    tester.send_admin(Service::start_node, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_internal_for_start_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_internal! { start_node, db }
+    let (tester, req) = valid_command().await;
+    let status = tester
+        .send_admin(Service::start_node, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_for_start_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_invalid_argument! { start_node, db }
+async fn responds_invalid_argument_for_start_node() {
+    let (tester, req) = invalid_command().await;
+    let status = tester
+        .send_admin(Service::start_node, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
-// #[tokio::test]
 /// TODO
+#[tokio::test]
+#[ignore]
 async fn responds_ok_for_stop_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_ok! { stop_node, db }
+    let (tester, req) = valid_command().await;
+    tester.send_admin(Service::stop_node, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_internal_for_stop_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_internal! { stop_node, db }
+    let (tester, req) = valid_command().await;
+    let status = tester
+        .send_admin(Service::stop_node, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_for_stop_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_invalid_argument! { stop_node, db }
+async fn responds_invalid_argument_for_stop_node() {
+    let (tester, req) = invalid_command().await;
+    let status = tester
+        .send_admin(Service::stop_node, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
-// #[tokio::test]
 /// TODO
+#[tokio::test]
+#[ignore]
 async fn responds_ok_for_restart_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_ok! { restart_node, db }
+    let (tester, req) = valid_command().await;
+    tester.send_admin(Service::restart_node, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_internal_for_restart_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_internal! { restart_node, db }
+    let (tester, req) = valid_command().await;
+    let status = tester
+        .send_admin(Service::restart_node, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_for_restart_node() {
-    let db = Arc::new(_before_values.await);
-    test_response_invalid_argument! { restart_node, db }
+async fn responds_invalid_argument_for_restart_node() {
+    let (tester, req) = invalid_command().await;
+    let status = tester
+        .send_admin(Service::restart_node, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
-// #[tokio::test]
 /// TODO
+#[tokio::test]
+#[ignore]
 async fn responds_ok_for_create_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_ok! { create_host, db }
+    let (tester, req) = valid_command().await;
+    tester.send_admin(Service::create_host, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_internal_for_create_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_internal! { create_host, db }
+    let (tester, req) = valid_command().await;
+    let status = tester
+        .send_admin(Service::create_host, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_for_create_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_invalid_argument! { create_host, db }
+async fn responds_invalid_argument_for_create_host() {
+    let (tester, req) = invalid_command().await;
+    let status = tester
+        .send_admin(Service::create_host, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
-// #[tokio::test]
 /// TODO
+#[tokio::test]
+#[ignore]
 async fn responds_ok_for_delete_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_ok! { delete_host, db }
+    let (tester, req) = valid_command().await;
+    tester.send_admin(Service::delete_host, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_internal_for_delete_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_internal! { delete_host, db }
+    let (tester, req) = valid_command().await;
+    let status = tester
+        .send_admin(Service::delete_host, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_for_delete_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_invalid_argument! { delete_host, db }
+async fn responds_invalid_argument_for_delete_host() {
+    let (tester, req) = invalid_command().await;
+    let status = tester
+        .send_admin(Service::delete_host, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
-// #[tokio::test]
 /// TODO
+#[tokio::test]
+#[ignore]
 async fn responds_ok_for_start_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_ok! { start_host, db }
+    let (tester, req) = valid_command().await;
+    tester.send_admin(Service::start_host, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_internal_for_start_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_internal! { start_host, db }
+    let (tester, req) = valid_command().await;
+    let status = tester
+        .send_admin(Service::start_host, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_for_start_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_invalid_argument! { start_host, db }
+async fn responds_invalid_argument_for_start_host() {
+    let (tester, req) = invalid_command().await;
+    let status = tester
+        .send_admin(Service::start_host, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
-// #[tokio::test]
 /// TODO
+#[tokio::test]
+#[ignore]
 async fn responds_ok_for_stop_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_ok! { stop_host, db }
+    let (tester, req) = valid_command().await;
+    tester.send_admin(Service::stop_host, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_internal_for_stop_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_internal! { stop_host, db }
+    let (tester, req) = valid_command().await;
+    let status = tester
+        .send_admin(Service::stop_host, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_for_stop_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_invalid_argument! { stop_host, db }
+async fn responds_invalid_argument_for_stop_host() {
+    let (tester, req) = invalid_command().await;
+    let status = tester
+        .send_admin(Service::stop_host, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
 
-#[before(call = "setup")]
-// #[tokio::test]
 /// TODO
+#[tokio::test]
+#[ignore]
 async fn responds_ok_for_restart_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_ok! { restart_host, db }
+    let (tester, req) = valid_command().await;
+    tester.send_admin(Service::restart_host, req).await.unwrap();
 }
 
-#[before(call = "setup")]
 #[tokio::test]
 async fn responds_internal_for_restart_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_internal! { restart_host, db }
+    let (tester, req) = valid_command().await;
+    let status = tester
+        .send_admin(Service::restart_host, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
 }
 
-#[before(call = "setup")]
 #[tokio::test]
-async fn responds_not_found_for_restart_host() {
-    let db = Arc::new(_before_values.await);
-    test_response_invalid_argument! { restart_host, db }
+async fn responds_invalid_argument_for_restart_host() {
+    let (tester, req) = invalid_command().await;
+    let status = tester
+        .send_admin(Service::restart_host, req)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }

@@ -30,7 +30,6 @@ mod test {
 
     impl Drop for TestDb {
         fn drop(&mut self) {
-            println!("Dropping!");
             let test_db_name = self.test_db_name.clone();
             let main_db_url = self.main_db_url.clone();
             tokio::task::spawn(Self::tear_down(test_db_name, main_db_url));
@@ -52,7 +51,7 @@ mod test {
 
             let db_url_prefix =
                 std::env::var("DATABASE_URL_NAKED").expect("Missing DATABASE_URL_NAKED");
-            let db_url = dbg!(format!("{db_url_prefix}/{db_name}"));
+            let db_url = format!("{db_url_prefix}/{db_name}");
             /*if db_url.contains("digitalocean") {
                 panic!("Attempting to use production db?");
             }*/
@@ -101,10 +100,7 @@ mod test {
                 .execute(&self.pool)
                 .await
                 .expect("could not update info in test setup");
-            sqlx::query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('1fdbf4c3-ff16-489a-8d3d-87c8620b963c','Helium', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]')")
-            .execute(&self.pool)
-            .await
-            .expect("Error inserting blockchain");
+            /*
             sqlx::query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('fd5e2a49-f741-4eb2-a8b1-ee6222146ced','DeletedChain', 'deleted', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]')")
             .execute(&self.pool)
             .await
@@ -121,10 +117,6 @@ mod test {
             .execute(&self.pool)
             .await
             .expect("Error inserting blockchain");
-            sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Etherium PoS', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []},{\"id\": 8,\"properties\": []},{\"id\": 3,\"properties\": []},{\"id\": 9,\"properties\": []},{\"id\": 7,\"properties\": []}]');")
-            .execute(&self.pool)
-            .await
-            .expect("Error inserting blockchain");
             sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Lightning', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
             .execute(&self.pool)
             .await
@@ -133,6 +125,20 @@ mod test {
             .execute(&self.pool)
             .await
             .expect("Error inserting blockchain");
+             */
+
+            sqlx::query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('1fdbf4c3-ff16-489a-8d3d-87c8620b963c','Helium', 'production', '[]')")
+                .execute(&self.pool)
+                .await
+                .expect("Error inserting blockchain");
+            sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Etherium PoS', 'production', '[{\"id\":3,\"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]},{\"id\":1,\"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]}]');")
+                .execute(&self.pool)
+                .await
+                .expect("Error inserting blockchain");
+            sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Helium', 'production', '[{\"id\":3,\"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]},{\"id\":1,\"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]}]');")
+                .execute(&self.pool)
+                .await
+                .expect("Error inserting blockchain");
 
             let user = models::UserRequest {
                 email: "test@here.com".into(),
@@ -147,11 +153,11 @@ mod test {
                 .expect("Could not create test user in db.");
 
             sqlx::query(
-            "UPDATE users set pay_address = '123456', staking_quota = 3 where email = 'test@here.com'",
-        )
-        .execute(&self.pool)
-        .await
-        .expect("could not set user's pay address for user test user in sql");
+                "UPDATE users set pay_address = '123456', staking_quota = 3 where email = 'test@here.com'",
+            )
+            .execute(&self.pool)
+            .await
+            .expect("could not set user's pay address for user test user in sql");
 
             sqlx::query("INSERT INTO invoices (user_id, earnings, fee_bps, validators_count, amount, starts_at, ends_at, is_paid) values ($1, 99, 200, 1, 1000000000, now(), now(), false)")
             .bind(user.id)

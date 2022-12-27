@@ -53,6 +53,9 @@ pub enum ApiError {
 
     #[error("Given user is not yet confirmed")]
     UserConfirmationError,
+
+    #[error("Cannot parse IP address: {0}")]
+    IpParseError(#[from] std::net::AddrParseError),
 }
 
 impl ApiError {
@@ -117,10 +120,10 @@ pub fn error_chain_fmt(
     e: &impl std::error::Error,
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {
-    writeln!(f, "{}\n", e)?;
+    write!(f, "{}", e)?;
     let mut current = e.source();
     while let Some(cause) = current {
-        writeln!(f, "Caused by:\n\t{}", cause)?;
+        write!(f, "\n\tCaused by:{}", cause)?;
         current = cause.source();
     }
     Ok(())

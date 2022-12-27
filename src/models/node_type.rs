@@ -63,9 +63,10 @@ impl From<NodeTypeKey> for i32 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeTypeProperty {
     name: String,
-    label: String,
+    ui_type: String,
     default: Option<String>,
-    r#type: String,
+    disabled: bool,
+    required: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,11 +92,12 @@ impl TryFrom<String> for NodeType {
 impl NodeTypeProperty {
     pub fn to_json(&self) -> Result<String, ApiError> {
         let json_str = format!(
-            "{{ \"name\": \"{}\", \"label\": \"{}\", \"default\": \"{}\", \"type:\": \"{}\" }}",
+            "{{ \"name\": \"{}\", \"ui_type\": \"{}\", \"default\": \"{}\", \"disabled:\": \"{}\", \"required\": \"{}\" }}",
             self.name,
-            self.label,
+            self.ui_type,
             self.default.as_ref().ok_or_else(required("default"))?,
-            self.r#type
+            self.disabled,
+            self.required,
         );
         Ok(json_str)
     }
@@ -105,7 +107,7 @@ impl NodeTypeProperty {
     }
 
     pub fn get_label(&self) -> &str {
-        &self.label
+        &self.name
     }
 
     pub fn get_default(&self) -> Option<&str> {
@@ -113,7 +115,7 @@ impl NodeTypeProperty {
     }
 
     pub fn get_property_type(&self) -> &str {
-        &self.r#type
+        &self.ui_type
     }
 }
 
@@ -127,7 +129,9 @@ impl NodeType {
             .iter()
             .map(|p| p.to_json())
             .collect();
-        let json_str = format!("{{ \"id\": {}, \"properties\": [{}] }}", self.id, props?);
+        // TODO: Replace this hack
+        let props = props?.replace("}{", "},{");
+        let json_str = format!("{{ \"id\": {}, \"properties\": [{}] }}", self.id, props);
         Ok(json_str)
     }
 

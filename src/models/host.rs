@@ -1,7 +1,7 @@
-use super::{validator::Validator, Node, NodeProvision};
+use super::{validator::Validator, Node, NodeProvision, PgQuery};
 use crate::auth::{FindableById, HostAuthToken, Identifiable, JwtToken, Owned, TokenError};
 use crate::errors::{ApiError, Result};
-use crate::grpc::blockjoy::HostInfo;
+use crate::grpc::blockjoy::{self, HostInfo};
 use crate::grpc::helpers::required;
 use crate::models::validator::ValidatorRequest;
 use crate::models::{IpAddress, IpAddressRangeRequest, UpdateInfo};
@@ -280,7 +280,7 @@ impl Host {
         Ok(host)
     }
 
-    pub async fn update_all(id: Uuid, fields: HostSelectiveUpdate, db: &PgPool) -> Result<Self> {
+    pub async fn update_all(fields: HostSelectiveUpdate, db: &PgPool) -> Result<Self> {
         let mut tx = db.begin().await?;
         let host = sqlx::query(
             r#"UPDATE hosts SET 
@@ -310,7 +310,7 @@ impl Host {
         .bind(fields.ip_addr)
         .bind(fields.val_ip_addrs)
         .bind(fields.status)
-        .bind(id)
+        .bind(fields.id)
         .map(|row| Self::try_from(row).unwrap_or_default())
         .fetch_one(&mut tx)
         .await?;
@@ -388,7 +388,7 @@ impl Owned<Host, ()> for Host {
 #[tonic::async_trait]
 impl UpdateInfo<HostInfo, Host> for Host {
     async fn update_info(info: HostInfo, db: &PgPool) -> Result<Host> {
-        let id = Uuid::parse_str(info.id.unwrap_or_default().as_str())?;
+        let id: Uuid = info.id.ok_or_else(required("info.id"))?.parse()?;
         let mut tx = db.begin().await?;
         let host = sqlx::query(
             r##"UPDATE hosts SET
@@ -415,13 +415,12 @@ impl UpdateInfo<HostInfo, Host> for Host {
         .bind(info.os_version)
         .bind(info.ip)
         .bind(id)
-        .map(|row| Self::try_from(row).unwrap_or_default())
         .fetch_one(&mut tx)
         .await?;
 
         tx.commit().await?;
 
-        Ok(host)
+        host.try_into()
     }
 }
 
@@ -446,6 +445,7 @@ pub struct HostRequest {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct HostSelectiveUpdate {
+    pub id: Uuid,
     pub org_id: Option<Uuid>,
     pub name: Option<String>,
     pub version: Option<String>,
@@ -461,6 +461,103 @@ pub struct HostSelectiveUpdate {
     pub ip_range_from: Option<IpAddr>,
     pub ip_range_to: Option<IpAddr>,
     pub ip_gateway: Option<IpAddr>,
+
+    // -- These fields are related to the metrics of the host --
+    pub used_cpu: Option<i32>,
+    pub used_memory: Option<i64>,
+    pub used_disk_space: Option<i64>,
+    pub load_one: Option<f64>,
+    pub load_five: Option<f64>,
+    pub load_fifteen: Option<f64>,
+    pub network_received: Option<i64>,
+    pub network_sent: Option<i64>,
+    pub uptime: Option<i64>,
+}
+
+impl HostSelectiveUpdate {
+    /// Performs a selective update of only the columns related to metrics of the provided nodes.
+    pub async fn update_metrics(updates: Vec<Self>, db: &PgPool) -> Result<()> {
+        type PgBuilder = sqlx::QueryBuilder<'static, sqlx::Postgres>;
+
+        // We first start the query out by declaring which fields to update.
+        let mut query_builder = PgBuilder::new(
+            "UPDATE hosts SET
+                used_cpu = row.used_cpu,
+                used_memory = row.used_memory,
+                used_disk_space = row.used_disk_space,
+                load_one = row.load_one,
+                load_five = row.load_five,
+                load_fifteen = row.load_fifteen,
+                network_received = row.network_received,
+                network_sent = row.network_sent,
+                uptime = row.uptime
+            FROM (
+                ",
+        );
+
+        // Now we bind a variable number of parameters
+        query_builder.push_values(updates.iter(), |mut builder, update| {
+            builder
+                .push_bind(update.id)
+                .push_bind(update.used_cpu)
+                .push_bind(update.used_memory)
+                .push_bind(update.used_disk_space)
+                .push_bind(update.load_one)
+                .push_bind(update.load_five)
+                .push_bind(update.load_fifteen)
+                .push_bind(update.network_received)
+                .push_bind(update.network_sent)
+                .push_bind(update.uptime);
+        });
+        // We finish the query by specifying which bind parameters mean what. NOTE: When adding
+        // bind parameters they MUST be bound in the same order as they are specified below. Not
+        // doing so results in incorrectly interpreted queries.
+        query_builder.push(
+            "
+            ) AS row(
+                id, used_cpu, used_memory, used_disk_space, load_one, load_five, load_fifteen,
+                network_received, network_sent, uptime
+            ) WHERE
+                hosts.id = row.id::uuid;",
+        );
+        let template = sqlx::query(query_builder.sql());
+        let query = updates.into_iter().fold(template, Self::bind_to);
+        query.execute(db).await?;
+        Ok(())
+    }
+
+    pub fn from_metrics(id: String, metric: blockjoy::HostMetrics) -> Result<Self> {
+        let id = id.parse()?;
+        Ok(Self {
+            id,
+            used_cpu: metric.used_cpu.map(i32::try_from).transpose()?,
+            used_memory: metric.used_memory.map(i64::try_from).transpose()?,
+            used_disk_space: metric.used_disk_space.map(i64::try_from).transpose()?,
+            load_one: metric.load_one,
+            load_five: metric.load_five,
+            load_fifteen: metric.load_fifteen,
+            network_received: metric.network_received.map(i64::try_from).transpose()?,
+            network_sent: metric.network_sent.map(i64::try_from).transpose()?,
+            uptime: metric.uptime.map(i64::try_from).transpose()?,
+            ..Default::default()
+        })
+    }
+
+    /// Binds the params in `params` to the provided query in the correct order, then returns the
+    /// modified query. Since this is order-dependent, this function is private.
+    fn bind_to(query: PgQuery<'_>, params: Self) -> PgQuery<'_> {
+        query
+            .bind(params.id)
+            .bind(params.used_cpu)
+            .bind(params.used_memory)
+            .bind(params.used_disk_space)
+            .bind(params.load_one)
+            .bind(params.load_five)
+            .bind(params.load_fifteen)
+            .bind(params.network_received)
+            .bind(params.network_sent)
+            .bind(params.uptime)
+    }
 }
 
 impl From<HostCreateRequest> for HostRequest {
@@ -485,25 +582,12 @@ impl From<HostCreateRequest> for HostRequest {
     }
 }
 
-impl From<HostInfo> for HostSelectiveUpdate {
-    fn from(info: HostInfo) -> Self {
-        let from = if info.ip_range_from.is_some() {
-            info.ip_range_from.unwrap().parse::<IpAddr>().ok()
-        } else {
-            None
-        };
-        let to = if info.ip_range_to.is_some() {
-            info.ip_range_to.unwrap().parse::<IpAddr>().ok()
-        } else {
-            None
-        };
-        let gateway = if info.ip_gateway.is_some() {
-            info.ip_gateway.unwrap().parse::<IpAddr>().ok()
-        } else {
-            None
-        };
+impl TryFrom<HostInfo> for HostSelectiveUpdate {
+    type Error = ApiError;
 
-        Self {
+    fn try_from(info: HostInfo) -> Result<Self, Self::Error> {
+        let update = Self {
+            id: info.id.ok_or_else(required("info.id"))?.parse()?,
             org_id: None,
             name: info.name,
             version: info.version,
@@ -516,10 +600,12 @@ impl From<HostInfo> for HostSelectiveUpdate {
             ip_addr: info.ip,
             val_ip_addrs: None,
             status: None,
-            ip_range_from: from,
-            ip_range_to: to,
-            ip_gateway: gateway,
-        }
+            ip_range_from: info.ip_range_from.map(|ip| ip.parse()).transpose()?,
+            ip_range_to: info.ip_range_to.map(|ip| ip.parse()).transpose()?,
+            ip_gateway: info.ip_gateway.map(|ip| ip.parse()).transpose()?,
+            ..Default::default()
+        };
+        Ok(update)
     }
 }
 

@@ -147,6 +147,14 @@ impl OrganizationService for OrganizationServiceImpl {
         }
     }
 
+    /// TODO: Will be implemented in PR https://github.com/blockjoy/blockvisor-api/pull/111
+    async fn restore(
+        &self,
+        _request: Request<RestoreOrganizationRequest>,
+    ) -> Result<Response<RestoreOrganizationResponse>, Status> {
+        todo!()
+    }
+
     async fn members(
         &self,
         request: Request<OrganizationMemberRequest>,

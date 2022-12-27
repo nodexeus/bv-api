@@ -1,3 +1,4 @@
+use crate::auth::key_provider::KeyProvider;
 use crate::grpc::server as grpc_server;
 use crate::http::server as http_server;
 use crate::hybrid_server::hybrid as hybrid_server;
@@ -8,8 +9,7 @@ use std::time::Duration;
 pub type DbPool = Arc<PgPool>;
 
 pub async fn start() -> anyhow::Result<()> {
-    let db_url = std::env::var("DATABASE_URL").expect("Missing DATABASE_URL");
-
+    let db_url = KeyProvider::get_var("DATABASE_URL")?.to_string();
     let db_max_conn: u32 = std::env::var("DB_MAX_CONN")
         .ok()
         .and_then(|s| s.parse().ok())

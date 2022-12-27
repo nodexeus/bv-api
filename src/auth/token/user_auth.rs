@@ -6,7 +6,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 /// The claims of the token to be stored (encrypted) on the client side
-#[derive(Debug, serde::Deserialize, serde::Serialize, Getters)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Getters)]
 pub struct UserAuthToken {
     id: Uuid,
     exp: i64,
@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn returns_true_for_expired_token() -> anyhow::Result<()> {
         let id = Uuid::new_v4();
-        let exp = (Utc::now().timestamp() - 60000_i64) as i64;
+        let exp = Utc::now().timestamp() - 60000_i64;
         let claim = TokenClaim::new(id, exp, TokenType::UserAuth, TokenRole::User, None);
         let token = UserAuthToken::try_new(claim)?;
 

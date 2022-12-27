@@ -1,5 +1,9 @@
 p, master_admin, /blockjoy.api.v1.Hosts/InfoUpdate, POST
 p, master_admin, /blockjoy.api.v1.Hosts/Delete, POST
+p, master_admin, /blockjoy.api.v1.KeyFiles/Get, POST
+p, master_admin, /blockjoy.api.v1.KeyFiles/Save, POST
+p, master_admin, /blockjoy.api.v1.MetricsService/Node, POST
+p, master_admin, /blockjoy.api.v1.MetricsService/Host, POST
 p, master_admin, /blockjoy.api.v1.CommandFlow/Commands, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/Confirm, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/Refresh, POST
@@ -7,6 +11,7 @@ p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/UpdatePassword, POST
 p, master_admin, /blockjoy.api.ui_v1.AuthenticationService/UpdateUIPassword, POST
 p, master_admin, /blockjoy.api.ui_v1.UserService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.UserService/Update, POST
+p, master_admin, /blockjoy.api.ui_v1.UserService/Delete, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Update, POST
@@ -23,6 +28,7 @@ p, master_admin, /blockjoy.api.ui_v1.NodeService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.NodeService/List, POST
 p, master_admin, /blockjoy.api.ui_v1.NodeService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.NodeService/Update, POST
+p, master_admin, /blockjoy.api.ui_v1.NodeService/Delete, POST
 p, master_admin, /blockjoy.api.ui_v1.CommandService/CreateNode, POST
 p, master_admin, /blockjoy.api.ui_v1.CommandService/DeleteNode, POST
 p, master_admin, /blockjoy.api.ui_v1.CommandService/StartNode, POST

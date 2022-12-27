@@ -1,5 +1,5 @@
-use super::helpers::try_get_token;
-use crate::auth::{FindableById, HostAuthToken, JwtToken, TokenRole, TokenType, UserAuthToken};
+use super::helpers::{self, try_get_token};
+use crate::auth::{HostAuthToken, JwtToken, TokenRole, TokenType};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy::hosts_server::Hosts;
 use crate::grpc::blockjoy::{
@@ -7,7 +7,7 @@ use crate::grpc::blockjoy::{
     ProvisionHostRequest, ProvisionHostResponse,
 };
 use crate::grpc::convert::into::IntoData;
-use crate::models::{Host, HostProvision, HostSelectiveUpdate};
+use crate::models::{Host, HostProvision};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -34,7 +34,7 @@ impl Hosts for HostsServiceImpl {
         let host = HostProvision::claim_by_grpc_provision(otp, inner, &self.db)
             .await
             .map_err(|e| Status::not_found(format!("Host provision not found: {e:?}")))?;
-        let token: UserAuthToken =
+        let token: HostAuthToken =
             JwtToken::create_token_for::<Host>(&host, TokenType::HostAuth, TokenRole::Service)?;
         let token = token.encode()?;
         let result = ProvisionHostResponse {
@@ -50,11 +50,19 @@ impl Hosts for HostsServiceImpl {
         &self,
         request: Request<HostInfoUpdateRequest>,
     ) -> Result<Response<HostInfoUpdateResponse>, Status> {
+        let host_token_id = *try_get_token::<_, HostAuthToken>(&request)?.id();
         let (request_id, info) = request.into_data()?;
-        let request_host_id = Uuid::parse_str(info.id.clone().unwrap_or_default().as_str())
+        let request_host_id = info
+            .id
+            .as_deref()
+            .ok_or_else(helpers::required("info.id"))?
+            .parse()
             .map_err(ApiError::from)?;
-        let host = Host::find_by_id(request_host_id, &self.db).await?;
-        Host::update_all(host.id, HostSelectiveUpdate::from(info), &self.db)
+        if host_token_id != request_host_id {
+            let msg = format!("Not allowed to delete host '{request_host_id}'");
+            return Err(Status::permission_denied(msg));
+        }
+        Host::update_all(info.try_into()?, &self.db)
             .await
             .map_err(|e| Status::not_found(format!("Host {request_host_id} not found. {e}")))?;
         let result = HostInfoUpdateResponse {
