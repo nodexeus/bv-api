@@ -1,3 +1,4 @@
+use crate::auth::FindableById;
 use crate::errors::{ApiError, Result};
 use crate::models::User;
 use chrono::{DateTime, Utc};
@@ -27,6 +28,20 @@ pub struct Org {
     pub updated_at: DateTime<Utc>,
 }
 
+#[tonic::async_trait]
+impl FindableById for Org {
+    async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        sqlx::query_as("SELECT * FROM orgs where id = $1 and deleted_at IS NULL")
+            .bind(id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
+    }
+}
+
 impl Org {
     pub async fn find_all(db: &PgPool) -> Result<Vec<Org>> {
         sqlx::query_as("SELECT * FROM orgs ORDER BY id LIMIT 1")
@@ -49,7 +64,7 @@ impl Org {
             ON 
                 orgs.id = orgs_users.org_id 
             WHERE 
-                orgs_users.user_id = $1 AND orgs.id = $2
+                orgs_users.user_id = $1 AND orgs.id = $2 and orgs.deleted_at IS NULL
             "##,
         )
         .bind(user_id)
@@ -73,7 +88,7 @@ impl Org {
             ON
                 orgs.id = orgs_users.org_id
             WHERE
-                orgs_users.user_id = $1
+                orgs_users.user_id = $1 and orgs.deleted_at IS NULL
             ORDER BY
                 lower(orgs.name)
             "##,
@@ -208,23 +223,42 @@ impl Org {
 
     /// Updates an organization
     pub async fn update(id: Uuid, req: OrgRequest, user_id: &Uuid, db: &PgPool) -> Result<Self> {
-        let org = sqlx::query_as::<_, Org>("UPDATE orgs SET name = $1 WHERE id = $2 RETURNING *")
-            .bind(&req.name)
-            .bind(id)
-            .fetch_one(db)
-            .await?;
+        let org = sqlx::query_as::<_, Org>(
+            "UPDATE orgs SET name = $1 WHERE id = $2 and orgs.deleted_at IS NULL RETURNING *",
+        )
+        .bind(&req.name)
+        .bind(id)
+        .fetch_one(db)
+        .await?;
 
         Self::find_by_user(&org.id, user_id, db).await
     }
 
-    /// Deletes the given organization
-    pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
-        let deleted_orgs = sqlx::query("DELETE FROM orgs WHERE id = $1 AND is_personal = false")
-            .bind(id)
-            .execute(db)
-            .await?;
+    /// Marks the the given organization as deleted
+    pub async fn delete(id: Uuid, db: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, Org>(
+            r#"
+            UPDATE orgs SET deleted_at = now() 
+            WHERE id = $1 AND is_personal = false
+            "#,
+        )
+        .bind(id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
+    }
 
-        Ok(deleted_orgs.rows_affected())
+    /// Unmarks the the given organization as deleted
+    pub async fn restore(id: Uuid, db: &PgPool) -> Result<Self> {
+        sqlx::query_as::<_, Org>(
+            r#"
+            UPDATE orgs SET deleted_at = NULL 
+            WHERE id = $1 AND is_personal = false"#,
+        )
+        .bind(id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
     }
 }
 

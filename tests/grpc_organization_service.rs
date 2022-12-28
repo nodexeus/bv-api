@@ -27,6 +27,19 @@ async fn responds_ok_for_create() {
 async fn responds_ok_for_get() {
     let tester = setup::Tester::new().await;
     let req = blockjoy_ui::GetOrganizationsRequest {
+        org_id: None,
+        meta: Some(tester.meta()),
+    };
+    tester.send_admin(Service::get, req).await.unwrap();
+}
+
+#[tokio::test]
+async fn responds_ok_for_single_get() {
+    let tester = setup::Tester::new().await;
+    let admin = tester.admin_user().await;
+    let org_id = tester.org_for(&admin).await.id.to_string();
+    let req = blockjoy_ui::GetOrganizationsRequest {
+        org_id: Some(org_id),
         meta: Some(tester.meta()),
     };
     tester.send_admin(Service::get, req).await.unwrap();
@@ -53,7 +66,7 @@ async fn responds_ok_for_update() {
 }
 
 #[tokio::test]
-async fn responds_ok_for_delete() {
+async fn responds_error_for_delete_on_personal_org() {
     let tester = setup::Tester::new().await;
     let user = tester.admin_user().await;
     let org_id = tester.org_for(&user).await.id.to_string();
@@ -61,7 +74,12 @@ async fn responds_ok_for_delete() {
         meta: Some(tester.meta()),
         id: org_id,
     };
-    tester.send_admin(Service::delete, req).await.unwrap();
+    let result = tester.send_admin(Service::delete, req).await;
+
+    match result {
+        Err(status) => assert_eq!(status.code(), tonic::Code::NotFound),
+        Ok(_) => panic!("This may not work"),
+    }
 }
 
 #[tokio::test]

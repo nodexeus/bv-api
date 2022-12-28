@@ -1,4 +1,4 @@
-use crate::auth::UserAuthToken;
+use crate::auth::{FindableById, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationService;
 use crate::grpc::blockjoy_ui::{
@@ -10,7 +10,7 @@ use crate::grpc::blockjoy_ui::{
 };
 use crate::grpc::helpers::pagination_parameters;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
-use crate::models::{Org, OrgRequest};
+use crate::models::{Org, OrgRequest, OrgRole};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -37,7 +37,15 @@ impl OrganizationService for OrganizationServiceImpl {
         let token = try_get_token::<_, UserAuthToken>(&request)?;
         let user_id = *token.id();
         let inner = request.into_inner();
-        let organizations: Vec<Org> = Org::find_all_by_user(user_id, &self.db).await?;
+        let org_id = inner.org_id;
+
+        let organizations: Vec<Org> = match org_id {
+            Some(org_id) => vec![
+                Org::find_by_id(org_id.parse().map_err(ApiError::UuidParseError)?, &self.db)
+                    .await?,
+            ],
+            None => Org::find_all_by_user(user_id, &self.db).await?,
+        };
         let organizations: Result<_, ApiError> =
             organizations.iter().map(Organization::try_from).collect();
         let inner = GetOrganizationsResponse {
@@ -101,23 +109,52 @@ impl OrganizationService for OrganizationServiceImpl {
         let user_id = *token.id();
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
+        let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
 
-        if !Org::is_member(&user_id, &org_id, &self.db).await? {
-            let msg = "User is not member of given organization";
-            return Err(Status::permission_denied(msg));
+        // Only owner or admins may delete orgs
+        match member.role {
+            OrgRole::Member => Err(Status::permission_denied(format!(
+                "User {} has no sufficient privileges to delete org {}",
+                user_id, org_id
+            ))),
+            OrgRole::Owner | OrgRole::Admin => {
+                Org::delete(org_id, &self.db).await?;
+
+                let meta = ResponseMeta::from_meta(inner.meta);
+                let inner = DeleteOrganizationResponse { meta: Some(meta) };
+
+                Ok(response_with_refresh_token(refresh_token, inner)?)
+            }
         }
-        Org::delete(org_id, &self.db).await?;
-        let meta = ResponseMeta::from_meta(inner.meta);
-        let inner = DeleteOrganizationResponse { meta: Some(meta) };
-        Ok(response_with_refresh_token(refresh_token, inner)?)
     }
 
-    /// TODO: Will be implemented in PR https://github.com/blockjoy/blockvisor-api/pull/111
     async fn restore(
         &self,
-        _request: Request<RestoreOrganizationRequest>,
+        request: Request<RestoreOrganizationRequest>,
     ) -> Result<Response<RestoreOrganizationResponse>, Status> {
-        todo!()
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user_id = *token.id();
+        let inner = request.into_inner();
+        let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
+        let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
+
+        match member.role {
+            OrgRole::Member => Err(Status::permission_denied(format!(
+                "User {} has no sufficient privileges to restore org {}",
+                user_id, org_id
+            ))),
+            // Only owner or admins may restore orgs
+            OrgRole::Owner | OrgRole::Admin => {
+                let org = Org::restore(org_id, &self.db).await?;
+                let meta = ResponseMeta::from_meta(inner.meta);
+                let inner = RestoreOrganizationResponse {
+                    meta: Some(meta),
+                    organization: Some(org.try_into()?),
+                };
+
+                Ok(Response::new(inner))
+            }
+        }
     }
 
     async fn members(
