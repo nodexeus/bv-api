@@ -138,21 +138,22 @@ impl OrganizationService for OrganizationServiceImpl {
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
         let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
 
-        // Only owner or admins may restore orgs
-        if member.role == OrgRole::Member {
-            Err(Status::permission_denied(format!(
+        match member.role {
+            OrgRole::Member => Err(Status::permission_denied(format!(
                 "User {} has no sufficient privileges to restore org {}",
                 user_id, org_id
-            )))
-        } else {
-            let org = Org::restore(org_id, &self.db).await?;
-            let meta = ResponseMeta::from_meta(inner.meta);
-            let inner = RestoreOrganizationResponse {
-                meta: Some(meta),
-                organization: Some(org.try_into()?),
-            };
+            ))),
+            // Only owner or admins may restore orgs
+            OrgRole::Owner | OrgRole::Admin => {
+                let org = Org::restore(org_id, &self.db).await?;
+                let meta = ResponseMeta::from_meta(inner.meta);
+                let inner = RestoreOrganizationResponse {
+                    meta: Some(meta),
+                    organization: Some(org.try_into()?),
+                };
 
-            Ok(Response::new(inner))
+                Ok(Response::new(inner))
+            }
         }
     }
 
