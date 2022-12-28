@@ -2,7 +2,6 @@ use crate::auth::{
     FindableById, JwtToken, PwdResetToken, RegistrationConfirmationToken, TokenRole, TokenType,
     UserAuthToken, UserRefreshToken,
 };
-use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, ConfirmRegistrationRequest, ConfirmRegistrationResponse, LoginUserRequest,
@@ -43,10 +42,13 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let user = User::login(inner.clone(), &self.db)
             .await
             .map_err(|e| Status::unauthenticated(e.to_string()))?;
-        let refresh_token = user
-            .refresh
-            .clone()
-            .ok_or(ApiError::UserConfirmationError)?;
+
+        // On login, the refresh token gets renewed anyhow
+        // @see https://app.shortcut.com/blockjoy/story/609/ability-to-login-after-refresh-token-has-expired
+        tracing::debug!("Renewing user refresh token");
+        let refresh_token = UserRefreshToken::create(user.id).encode()?;
+        User::refresh(user.id, refresh_token.clone(), &self.db).await?;
+
         let auth_token =
             UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?;
 

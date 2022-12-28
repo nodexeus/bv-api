@@ -178,6 +178,7 @@ pub fn response_with_refresh_token<ResponseBody>(
     let mut response = tonic::Response::new(inner);
 
     if !token.is_empty() {
+        // here auth fails, if refresh token is expired
         let refresh_token = UserRefreshToken::from_encoded::<UserRefreshToken>(
             token.as_str(),
             TokenType::UserRefresh,
