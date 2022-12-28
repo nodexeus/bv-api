@@ -41,11 +41,8 @@ impl OrganizationService for OrganizationServiceImpl {
 
         let organizations: Vec<Org> = match org_id {
             Some(org_id) => vec![
-                Org::find_by_id(
-                    org_id.parse().map_err(|e| ApiError::UuidParseError(e))?,
-                    &self.db,
-                )
-                .await?,
+                Org::find_by_id(org_id.parse().map_err(ApiError::UuidParseError)?, &self.db)
+                    .await?,
             ],
             None => Org::find_all_by_user(user_id, &self.db).await?,
         };
@@ -115,18 +112,19 @@ impl OrganizationService for OrganizationServiceImpl {
         let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
 
         // Only owner or admins may delete orgs
-        if member.role == OrgRole::Member {
-            Err(Status::permission_denied(format!(
+        match member.role {
+            OrgRole::Member => Err(Status::permission_denied(format!(
                 "User {} has no sufficient privileges to delete org {}",
                 user_id, org_id
-            )))
-        } else {
-            Org::delete(org_id, &self.db).await?;
+            ))),
+            OrgRole::Owner | OrgRole::Admin => {
+                Org::delete(org_id, &self.db).await?;
 
-            let meta = ResponseMeta::from_meta(inner.meta);
-            let inner = DeleteOrganizationResponse { meta: Some(meta) };
+                let meta = ResponseMeta::from_meta(inner.meta);
+                let inner = DeleteOrganizationResponse { meta: Some(meta) };
 
-            Ok(response_with_refresh_token(refresh_token, inner)?)
+                Ok(response_with_refresh_token(refresh_token, inner)?)
+            }
         }
     }
 

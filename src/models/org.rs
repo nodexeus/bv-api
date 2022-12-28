@@ -34,7 +34,7 @@ impl FindableById for Org {
     where
         Self: Sized,
     {
-        sqlx::query_as("SELECT * FROM orgs where id = $1")
+        sqlx::query_as("SELECT * FROM orgs where id = $1 and deleted_at IS NULL")
             .bind(id)
             .fetch_one(db)
             .await
