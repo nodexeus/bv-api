@@ -47,6 +47,7 @@ impl KeyProvider {
             TokenType::HostRefresh => Self::get_retriever()("REFRESH_SECRET"),
             TokenType::RegistrationConfirmation => Self::get_retriever()("CONFIRMATION_SECRET"),
             TokenType::PwdReset => Self::get_retriever()("PWD_RESET_SECRET"),
+            TokenType::Invitation => Self::get_retriever()("INVITATION_SECRET"),
         };
 
         let key = key?;

@@ -98,6 +98,8 @@ pub enum TokenError {
     KeyError(#[from] KeyProviderError),
     #[error("Refresh token can't be read: {0:?}")]
     RefreshTokenError(#[from] anyhow::Error),
+    #[error("Invitation token invalid: {0:?}")]
+    Invitation(anyhow::Error),
     #[error("Invalid role in claim")]
     RoleError,
 }
@@ -293,6 +295,7 @@ pub enum AnyToken {
     UserRefresh(UserRefreshToken),
     HostRefresh(HostRefreshToken),
     RegistrationConfirmation(RegistrationConfirmationToken),
+    Invitation(InvitationToken),
 }
 
 impl AnyToken {
@@ -313,6 +316,7 @@ impl AnyToken {
             TokenType::RegistrationConfirmation => {
                 RegistrationConfirmation(RegistrationConfirmationToken::from_str(&token)?)
             }
+            TokenType::Invitation => Invitation(InvitationToken::from_str(&token)?),
         };
 
         Ok(token)
