@@ -1,4 +1,4 @@
-use crate::auth::{FindableById, InvitationToken};
+use crate::auth::{FindableById, InvitationToken, JwtToken, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::invitation_service_server::InvitationService;
 use crate::grpc::blockjoy_ui::{
@@ -8,7 +8,7 @@ use crate::grpc::blockjoy_ui::{
 };
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
-use crate::models::{Invitation, User};
+use crate::models::{Invitation, Org, User};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -30,9 +30,10 @@ impl InvitationService for InvitationServiceImpl {
         request: Request<CreateInvitationRequest>,
     ) -> Result<Response<CreateInvitationResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
+        let creator_id = try_get_token::<_, UserAuthToken>(&request)?.get_id();
         let inner = request.into_inner();
         let invitation = GrpcInvitation {
-            created_by_id: None,
+            created_by_id: Some(creator_id.to_string()),
             created_for_org_id: Some(inner.created_for_org_id),
             invitee_email: Some(inner.invitee_email),
             created_at: None,
@@ -50,14 +51,19 @@ impl InvitationService for InvitationServiceImpl {
         Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
-    /// TODO: Currently users can list pending invitations for other orgs by guessing the ID
+    /// Role is already checked by policies
     async fn list_pending(
         &self,
         request: Request<ListPendingInvitationRequest>,
     ) -> Result<Response<InvitationsResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
+        let user_id = try_get_token::<_, UserAuthToken>(&request)?.get_id();
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
+
+        // Check if user belongs to org, the role is already checked by the auth middleware
+        Org::find_org_user(&user_id, &org_id, &self.db).await?;
+
         let invitations: Vec<GrpcInvitation> = Invitation::pending(org_id, &self.db)
             .await?
             .iter()
@@ -78,10 +84,10 @@ impl InvitationService for InvitationServiceImpl {
         request: Request<ListReceivedInvitationRequest>,
     ) -> Result<Response<InvitationsResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, InvitationToken>(&request)?;
-        let email = token.email().to_string();
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user = User::find_by_id(token.get_id(), &self.db).await?;
         let inner = request.into_inner();
-        let invitations: Vec<GrpcInvitation> = Invitation::received(email, &self.db)
+        let invitations: Vec<GrpcInvitation> = Invitation::received(user.email, &self.db)
             .await?
             .iter()
             .map(|i| i.try_into().unwrap_or_default())
@@ -120,8 +126,17 @@ impl InvitationService for InvitationServiceImpl {
     }
 
     async fn revoke(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
-        let token = try_get_token::<_, InvitationToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
         let invitation_id = *token.id();
+        let invitation = Invitation::find_by_id(invitation_id, &self.db).await?;
+
+        // Check if user belongs to org, the role is already checked by the auth middleware
+        Org::find_org_user(
+            &invitation.created_by_id,
+            &invitation.created_for_org_id,
+            &self.db,
+        )
+        .await?;
 
         Invitation::revoke(invitation_id, &self.db).await?;
 
