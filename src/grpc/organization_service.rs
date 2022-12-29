@@ -3,10 +3,10 @@ use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationService;
 use crate::grpc::blockjoy_ui::{
     CreateOrganizationRequest, CreateOrganizationResponse, DeleteOrganizationRequest,
-    DeleteOrganizationResponse, GetOrganizationsRequest, GetOrganizationsResponse, Organization,
-    OrganizationMemberRequest, OrganizationMemberResponse, ResponseMeta,
-    RestoreOrganizationRequest, RestoreOrganizationResponse, UpdateOrganizationRequest,
-    UpdateOrganizationResponse, User as GrpcUiUser,
+    DeleteOrganizationResponse, GetOrganizationsRequest, GetOrganizationsResponse,
+    LeaveOrganizationRequest, Organization, OrganizationMemberRequest, OrganizationMemberResponse,
+    RemoveMemberRequest, ResponseMeta, RestoreOrganizationRequest, RestoreOrganizationResponse,
+    UpdateOrganizationRequest, UpdateOrganizationResponse, User as GrpcUiUser,
 };
 use crate::grpc::helpers::pagination_parameters;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
@@ -175,5 +175,45 @@ impl OrganizationService for OrganizationServiceImpl {
         };
 
         Ok(response_with_refresh_token(refresh_token, inner)?)
+    }
+
+    async fn remove_member(
+        &self,
+        request: Request<RemoveMemberRequest>,
+    ) -> Result<Response<()>, Status> {
+        let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let caller_id = *token.id();
+        let inner = request.into_inner();
+        let user_id = Uuid::parse_str(inner.user_id.as_str()).map_err(ApiError::from)?;
+        let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
+        let member = Org::find_org_user(&caller_id, &org_id, &self.db).await?;
+
+        match member.role {
+            OrgRole::Member => Err(Status::permission_denied(format!(
+                "User {} has no sufficient privileges to remove other user {} from org {}",
+                caller_id, user_id, org_id
+            ))),
+            OrgRole::Owner | OrgRole::Admin => {
+                Org::remove_org_user(&user_id, &org_id, &self.db).await?;
+
+                Ok(response_with_refresh_token::<()>(refresh_token, ())?)
+            }
+        }
+    }
+
+    async fn leave(
+        &self,
+        request: Request<LeaveOrganizationRequest>,
+    ) -> Result<Response<()>, Status> {
+        let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user_id = *token.id();
+        let inner = request.into_inner();
+        let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
+
+        Org::remove_org_user(&user_id, &org_id, &self.db).await?;
+
+        Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }
 }
