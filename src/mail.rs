@@ -55,6 +55,26 @@ impl MailClient {
         self.send_mail(&templates, user, Some(context)).await
     }
 
+    pub async fn invitation(&self, invitation: &models::Invitation) -> errors::Result<()> {
+        const TEMPLATES: &str = include_str!("../mails/invite_user.toml");
+        // SAFETY: assume we can write toml and also protected by test
+        let templates = toml::from_str(TEMPLATES)
+            .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
+        let confirmation_token = InvitationToken::create_token_for(
+            invitation,
+            TokenType::RegistrationConfirmation,
+            TokenRole::User,
+        )?
+        .encode()?;
+        let base_url =
+            dotenv::var("UI_BASE_URL").map_err(|e| anyhow!("UI_BASE_URL can't be read: {e}"))?;
+        let link = format!("{}/verified?token={}", base_url, confirmation_token);
+        let mut context = HashMap::new();
+        context.insert("link".to_owned(), link);
+
+        self.send_mail(&templates, user, Some(context)).await
+    }
+
     /// Sends a password reset email to the specified user, containing a JWT that they can use to
     /// authenticate themselves to reset their password.
     pub async fn reset_password(&self, user: &models::User, _db: &PgPool) -> errors::Result<()> {
