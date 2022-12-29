@@ -3,6 +3,7 @@ syntax = "proto3";
 package blockjoy.api.ui_v1;
 
 import "common.proto";
+import "google/protobuf/empty.proto";
 
 message GetOrganizationsRequest {
   RequestMeta meta = 1;
@@ -61,6 +62,17 @@ message RestoreOrganizationResponse {
   Organization organization = 2;
 }
 
+message RemoveMemberRequest {
+  RequestMeta meta = 1;
+  string user_id = 2;
+  string org_id = 3;
+}
+
+message LeaveOrganizationRequest {
+  RequestMeta meta = 1;
+  string org_id = 2;
+}
+
 /* Manage organizations */
 service OrganizationService {
   /* Get all the organizations for a user. All users automatically get a private (internal) organization */
@@ -75,4 +87,8 @@ service OrganizationService {
   rpc Restore(RestoreOrganizationRequest) returns (RestoreOrganizationResponse) {}
   /* Retrieve organization members */
   rpc Members(OrganizationMemberRequest) returns (OrganizationMemberResponse) {}
+  /* Remove organization member */
+  rpc RemoveMember(RemoveMemberRequest) returns (google.protobuf.Empty) {}
+  /* Leave an organization the user is member of */
+  rpc Leave(LeaveOrganizationRequest) returns (google.protobuf.Empty) {}
 }
