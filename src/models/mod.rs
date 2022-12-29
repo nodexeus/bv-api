@@ -12,6 +12,7 @@ mod user;
 // needs to be brought into namespace like this because of
 // name ambiguities with another crate
 mod blacklist_token;
+mod invitation;
 mod ip_address;
 mod node_key_file;
 mod node_property_value;
@@ -25,6 +26,7 @@ pub use broadcast::*;
 pub use command::*;
 pub use host::*;
 pub use info::*;
+pub use invitation::*;
 pub use invoice::*;
 pub use ip_address::*;
 pub use node::*;
