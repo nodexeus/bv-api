@@ -287,4 +287,5 @@ message Invitation {
   optional google.protobuf.Timestamp created_at = 4;
   optional google.protobuf.Timestamp accepted_at = 5;
   optional google.protobuf.Timestamp declined_at = 6;
+  optional google.protobuf.Timestamp expires_at = 7;
 }
