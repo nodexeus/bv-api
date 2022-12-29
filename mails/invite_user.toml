@@ -644,6 +644,7 @@ html = """
     Volg deze link om de uitnodiging te accepteren: <a href="{{accept_link}}">aanvaarden</a>
     Klik op <a href="{{decline_link}}">hier</a> om te weigeren.
   </p>
+  <p>Je uitnodiging vervalt automatisch op {{expiration}}.</p>
   <br/><br/>
   <p>Hartelijk dank!</p>
 

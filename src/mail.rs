@@ -62,6 +62,7 @@ impl MailClient {
         invitation: &models::Invitation,
         inviter: &models::User,
         invitee: &models::User,
+        expiration: String,
     ) -> errors::Result<()> {
         const TEMPLATES: &str = include_str!("../mails/invite_user.toml");
         // SAFETY: assume we can write toml and also protected by test
@@ -80,6 +81,7 @@ impl MailClient {
         context.insert("inviter".to_owned(), inviter);
         context.insert("accept_link".to_owned(), accept_link);
         context.insert("decline_link".to_owned(), decline_link);
+        context.insert("expiration".to_owned(), expiration);
 
         self.send_mail(&templates, invitee, Some(context)).await
     }
