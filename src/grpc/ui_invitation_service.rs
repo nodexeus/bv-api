@@ -50,6 +50,7 @@ impl InvitationService for InvitationServiceImpl {
         Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
+    /// TODO: Currently users can list pending invitations for other orgs by guessing the ID
     async fn list_pending(
         &self,
         request: Request<ListPendingInvitationRequest>,
@@ -72,15 +73,14 @@ impl InvitationService for InvitationServiceImpl {
         Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
-    /// TODO: Currently users can list received invitations for other users by guessing the ID
     async fn list_received(
         &self,
         request: Request<ListReceivedInvitationRequest>,
     ) -> Result<Response<InvitationsResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, InvitationToken>(&request)?;
+        let email = token.email().to_string();
         let inner = request.into_inner();
-        let user_id = Uuid::parse_str(inner.user_id.as_str()).map_err(ApiError::from)?;
-        let email = User::find_by_id(user_id, &self.db).await?.email;
         let invitations: Vec<GrpcInvitation> = Invitation::received(email, &self.db)
             .await?
             .iter()
