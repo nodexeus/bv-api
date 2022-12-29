@@ -278,3 +278,13 @@ message Blockchain {
   bool supports_broadcast = 13;
   string supported_nodes_types = 14;
 }
+
+/* User invitation */
+message Invitation {
+  optional string created_by_id = 1;
+  optional string created_for_org_id = 2;
+  optional string invitee_email = 3;
+  optional google.protobuf.Timestamp created_at = 4;
+  optional google.protobuf.Timestamp accepted_at = 5;
+  optional google.protobuf.Timestamp declined_at = 6;
+}
