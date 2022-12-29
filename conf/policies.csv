@@ -18,6 +18,8 @@ p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Update, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Delete, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Restore, POST
 p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Members, POST
+p, master_admin, /blockjoy.api.ui_v1.OrganizationService/RemoveMember, POST
+p, master_admin, /blockjoy.api.ui_v1.OrganizationService/Leave, POST
 p, master_admin, /blockjoy.api.ui_v1.HostService/Get, POST
 p, master_admin, /blockjoy.api.ui_v1.HostService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.HostService/Update, POST
