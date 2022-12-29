@@ -12,6 +12,7 @@ pub mod ui_command_service;
 pub mod ui_dashboard_service;
 pub mod ui_host_provision_service;
 pub mod ui_host_service;
+pub mod ui_invitation_service;
 pub mod ui_node_service;
 pub mod ui_update_service;
 pub mod user_service;
