@@ -72,7 +72,7 @@ impl MailClient {
         let base_url =
             dotenv::var("UI_BASE_URL").map_err(|e| anyhow!("UI_BASE_URL can't be read: {e}"))?;
         let accept_link = format!("{}/accept-invite?token={}", base_url, confirmation_token);
-        let decline_link = format!("{}/accept-invite?token={}", base_url, confirmation_token);
+        let decline_link = format!("{}/decline-invite?token={}", base_url, confirmation_token);
         let inviter = format!(
             "{} {} ({})",
             inviter.first_name, inviter.last_name, inviter.email
