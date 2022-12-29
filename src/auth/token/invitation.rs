@@ -58,7 +58,7 @@ impl JwtToken for InvitationToken {
             role: claim.role,
             email: claim
                 .data
-                .ok_or_else(|| TokenError::Invitation(anyhow!("Invalid data: {:?}", claim.data)))?
+                .ok_or_else(|| TokenError::Invitation(anyhow!("Invalid claim")))?
                 .get("invitee_email")
                 .ok_or_else(|| TokenError::Invitation(anyhow!("Invitee email can't be empty")))?
                 .to_string(),
