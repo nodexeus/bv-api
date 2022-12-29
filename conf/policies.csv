@@ -46,6 +46,12 @@ p, master_admin, /blockjoy.api.ui_v1.UpdateService/Updates, POST
 p, master_admin, /blockjoy.api.ui_v1.DashboardService/Metrics, POST
 p, master_admin, /blockjoy.api.ui_v1.BlockchainService/List, POST
 p, master_admin, /blockjoy.api.ui_v1.BlockchainService/Get, POST
+p, master_admin, /blockjoy.api.ui_v1.InvitationService/Create, POST
+p, master_admin, /blockjoy.api.ui_v1.InvitationService/ListPending, POST
+p, master_admin, /blockjoy.api.ui_v1.InvitationService/ListReceived, POST
+p, master_admin, /blockjoy.api.ui_v1.InvitationService/Accept, POST
+p, master_admin, /blockjoy.api.ui_v1.InvitationService/Decline, POST
+p, master_admin, /blockjoy.api.ui_v1.InvitationService/Revoke, POST
 
 
 g, admin, master_admin
