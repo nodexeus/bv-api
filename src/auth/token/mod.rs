@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 mod host_auth;
 mod host_refresh;
+mod invitation;
 mod pwd_reset;
 mod registration_confirmation;
 mod user_auth;
@@ -29,9 +30,9 @@ use crate::errors::{ApiError, Result as ApiResult};
 use crate::models::{Host, User};
 use crate::server::DbPool;
 pub use {
-    host_auth::HostAuthToken, host_refresh::HostRefreshToken, pwd_reset::PwdResetToken,
-    registration_confirmation::RegistrationConfirmationToken, user_auth::UserAuthToken,
-    user_refresh::UserRefreshToken,
+    host_auth::HostAuthToken, host_refresh::HostRefreshToken, invitation::InvitationToken,
+    pwd_reset::PwdResetToken, registration_confirmation::RegistrationConfirmationToken,
+    user_auth::UserAuthToken, user_refresh::UserRefreshToken,
 };
 
 pub type TokenResult<T> = Result<T, TokenError>;
@@ -124,6 +125,8 @@ pub enum TokenType {
     PwdReset,
     /// This is the token used for confirming a new users registration
     RegistrationConfirmation,
+    /// This is the token used for inviting users to an org
+    Invitation,
 }
 
 impl Display for TokenType {
@@ -135,6 +138,7 @@ impl Display for TokenType {
             Self::HostRefresh => write!(f, "host_refresh"),
             Self::PwdReset => write!(f, "pwd_reset"),
             Self::RegistrationConfirmation => write!(f, "registration_confirmation"),
+            Self::Invitation => write!(f, "invitation"),
         }
     }
 }
