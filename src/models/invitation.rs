@@ -1,3 +1,4 @@
+use crate::auth::FindableById;
 use crate::errors::{ApiError, Result as ApiResult};
 use crate::grpc::blockjoy_ui::Invitation as GrpcInvitation;
 use anyhow::anyhow;
@@ -17,15 +18,21 @@ pub struct Invitation {
     pub(crate) declined_at: DateTime<Utc>,
 }
 
-impl Invitation {
-    pub async fn get_by_token(token: String, db: &PgPool) -> ApiResult<Self> {
-        sqlx::query_as("SELECT * FROM invitations where token = $1")
-            .bind(token)
+#[tonic::async_trait]
+impl FindableById for Invitation {
+    async fn find_by_id(id: Uuid, db: &PgPool) -> ApiResult<Self>
+    where
+        Self: Sized,
+    {
+        sqlx::query_as("select * from invitations where id = $1")
+            .bind(id)
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
+}
 
+impl Invitation {
     pub async fn create(invitation: &GrpcInvitation, db: &PgPool) -> ApiResult<Self> {
         let creator_id = Uuid::from_slice(
             invitation
@@ -60,5 +67,51 @@ impl Invitation {
         .fetch_one(db)
         .await
         .map_err(ApiError::from)
+    }
+
+    pub async fn pending(org_id: Uuid, db: &PgPool) -> ApiResult<Vec<Self>> {
+        sqlx::query_as(
+            r#"select * from invitations 
+                    where created_for_org_id = $1 and accepted_at is null and declined_at is null"#,
+        )
+        .bind(org_id)
+        .fetch_all(db)
+        .await
+        .map_err(ApiError::from)
+    }
+
+    pub async fn received(email: String, db: &PgPool) -> ApiResult<Vec<Self>> {
+        sqlx::query_as(
+            r#"select * from invitations 
+                    where invitee_email = $1 and accepted_at is null and declined_at is null"#,
+        )
+        .bind(email)
+        .fetch_all(db)
+        .await
+        .map_err(ApiError::from)
+    }
+
+    pub async fn accept(id: Uuid, db: &PgPool) -> ApiResult<Self> {
+        sqlx::query_as("update invitations set accepted_at = now() where id = $1 returning *")
+            .bind(id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
+    pub async fn decline(id: Uuid, db: &PgPool) -> ApiResult<Self> {
+        sqlx::query_as("update invitations set declined_at = now() where id = $1 returning *")
+            .bind(id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
+    pub async fn revoke(id: Uuid, db: &PgPool) -> ApiResult<Self> {
+        sqlx::query_as("delete from invitations where id = $1 returning *")
+            .bind(id)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
     }
 }
