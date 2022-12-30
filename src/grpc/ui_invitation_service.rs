@@ -132,9 +132,18 @@ impl InvitationService for InvitationServiceImpl {
     }
 
     async fn revoke(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
+        let refresh_token = get_refresh_token(&request);
         let token = try_get_token::<_, UserAuthToken>(&request)?;
-        let invitation_id = *token.id();
-        let invitation = Invitation::find_by_id(invitation_id, &self.db).await?;
+        let user_id = *token.id();
+        let grpc_invitation = request
+            .into_inner()
+            .invitation
+            .ok_or_else(|| Status::invalid_argument("invitation missing"))?;
+        let invitee_email = grpc_invitation
+            .invitee_email
+            .ok_or_else(|| Status::invalid_argument("invitee email missing"))?;
+        let invitation =
+            Invitation::find_by_creator_for_email(user_id, invitee_email, &self.db).await?;
 
         // Check if user belongs to org, the role is already checked by the auth middleware
         Org::find_org_user(
@@ -144,11 +153,8 @@ impl InvitationService for InvitationServiceImpl {
         )
         .await?;
 
-        Invitation::revoke(invitation_id, &self.db).await?;
+        Invitation::revoke(invitation.id, &self.db).await?;
 
-        Ok(response_with_refresh_token::<()>(
-            get_refresh_token(&request),
-            (),
-        )?)
+        Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }
 }
