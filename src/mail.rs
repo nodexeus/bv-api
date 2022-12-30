@@ -1,7 +1,9 @@
 use anyhow::anyhow;
 use sqlx::PgPool;
 
-use crate::auth::{JwtToken, PwdResetToken, RegistrationConfirmationToken, TokenRole, TokenType};
+use crate::auth::{
+    InvitationToken, JwtToken, PwdResetToken, RegistrationConfirmationToken, TokenRole, TokenType,
+};
 use crate::{errors, models};
 use std::collections::HashMap;
 
@@ -53,6 +55,35 @@ impl MailClient {
         context.insert("link".to_owned(), link);
 
         self.send_mail(&templates, user, Some(context)).await
+    }
+
+    pub async fn invitation(
+        &self,
+        invitation: &models::Invitation,
+        inviter: &models::User,
+        invitee: &models::User,
+        expiration: String,
+    ) -> errors::Result<()> {
+        const TEMPLATES: &str = include_str!("../mails/invite_user.toml");
+        // SAFETY: assume we can write toml and also protected by test
+        let templates = toml::from_str(TEMPLATES)
+            .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
+        let confirmation_token = InvitationToken::create_for_invitation(invitation)?.encode()?;
+        let base_url =
+            dotenv::var("UI_BASE_URL").map_err(|e| anyhow!("UI_BASE_URL can't be read: {e}"))?;
+        let accept_link = format!("{}/accept-invite?token={}", base_url, confirmation_token);
+        let decline_link = format!("{}/decline-invite?token={}", base_url, confirmation_token);
+        let inviter = format!(
+            "{} {} ({})",
+            inviter.first_name, inviter.last_name, inviter.email
+        );
+        let mut context = HashMap::new();
+        context.insert("inviter".to_owned(), inviter);
+        context.insert("accept_link".to_owned(), accept_link);
+        context.insert("decline_link".to_owned(), decline_link);
+        context.insert("expiration".to_owned(), expiration);
+
+        self.send_mail(&templates, invitee, Some(context)).await
     }
 
     /// Sends a password reset email to the specified user, containing a JWT that they can use to

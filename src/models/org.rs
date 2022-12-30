@@ -194,6 +194,17 @@ impl Org {
         Ok(org_user)
     }
 
+    pub async fn remove_org_user(user_id: &Uuid, org_id: &Uuid, db: &PgPool) -> Result<OrgUser> {
+        sqlx::query_as::<_, OrgUser>(
+            "DELETE FROM orgs_users WHERE org_id = $1 AND user_id = $2 RETURNING *",
+        )
+        .bind(org_id)
+        .bind(user_id)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
+    }
+
     /// Creates a new organization
     pub async fn create(req: &OrgRequest, user_id: &Uuid, db: &PgPool) -> Result<Org> {
         let org_id = Uuid::new_v4();

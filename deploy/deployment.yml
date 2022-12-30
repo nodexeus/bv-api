@@ -141,6 +141,7 @@ data:
   PWD_RESET_TOKEN_EXPIRATION_MINS_USER: "5"
   REFRESH_EXPIRATION_MINS_HOST: "525600"
   REGISTRATION_CONFIRMATION_MINS_USER: "30"
+  INVITATION_MINS_USER: "10080"
   INTERNAL_BUFFER_SIZE: "128"
   PAGINATION_MAX_ITEMS: "10"
   REQUEST_CONCURRENCY_LIMIT: "128"
@@ -189,6 +190,8 @@ spec:
             name: pwdrefresh
         - secretRef:
             name: pwdconfirm
+        - secretRef:
+            name: invitation
 ---
 apiVersion: v1
 kind: Service

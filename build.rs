@@ -19,6 +19,7 @@ fn main() {
                 "command_service.proto",
                 "dashboard_service.proto",
                 "host_provision_service.proto",
+                "invitation_service.proto",
                 "fe_host_service.proto",
                 "node_service.proto",
                 "organization_service.proto",
