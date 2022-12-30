@@ -3,19 +3,21 @@ use crate::errors::{ApiError, Result as ApiResult};
 use crate::grpc::blockjoy_ui::Invitation as GrpcInvitation;
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
+use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
+use std::str::FromStr;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, FromRow)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, FromRow, Getters)]
 pub struct Invitation {
     pub(crate) id: Uuid,
-    pub(crate) created_by_id: Uuid,
-    pub(crate) created_for_org_id: Uuid,
+    pub(crate) created_by_user: Uuid,
+    pub(crate) created_for_org: Uuid,
     pub(crate) invitee_email: String,
     pub(crate) created_at: DateTime<Utc>,
-    pub(crate) accepted_at: DateTime<Utc>,
-    pub(crate) declined_at: DateTime<Utc>,
+    pub(crate) accepted_at: Option<DateTime<Utc>>,
+    pub(crate) declined_at: Option<DateTime<Utc>>,
 }
 
 #[tonic::async_trait]
@@ -34,20 +36,26 @@ impl FindableById for Invitation {
 
 impl Invitation {
     pub async fn create(invitation: &GrpcInvitation, db: &PgPool) -> ApiResult<Self> {
-        let creator_id = Uuid::from_slice(
+        let creator_id = Uuid::from_str(
             invitation
                 .created_by_id
                 .as_ref()
-                .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Creator ID required")))?
-                .as_bytes(),
-        )?;
-        let org_id = Uuid::from_slice(
+                .unwrap_or(&String::new())
+                .as_str(),
+        )
+        .map_err(|e| ApiError::UnexpectedError(anyhow!("Creator ID required: {e}")))?;
+        let org_id = Uuid::from_str(
             invitation
                 .created_for_org_id
                 .as_ref()
-                .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Org ID required")))?
-                .as_bytes(),
-        )?;
+                .unwrap_or(&String::new())
+                .as_str(),
+        )
+        .map_err(|e| ApiError::UnexpectedError(anyhow!("Org ID required: {e}")))?;
+        let email = invitation
+            .invitee_email
+            .as_ref()
+            .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Invitee email required")))?;
 
         sqlx::query_as(
             r#"INSERT INTO invitations
@@ -58,12 +66,7 @@ impl Invitation {
         )
         .bind(creator_id)
         .bind(org_id)
-        .bind(
-            invitation
-                .invitee_email
-                .as_ref()
-                .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Invitee email required")))?,
-        )
+        .bind(email)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)

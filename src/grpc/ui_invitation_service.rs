@@ -132,8 +132,8 @@ impl InvitationService for InvitationServiceImpl {
 
         // Check if user belongs to org, the role is already checked by the auth middleware
         Org::find_org_user(
-            &invitation.created_by_id,
-            &invitation.created_for_org_id,
+            &invitation.created_by_user,
+            &invitation.created_for_org,
             &self.db,
         )
         .await?;

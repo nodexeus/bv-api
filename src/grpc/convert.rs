@@ -171,12 +171,12 @@ pub mod from {
 
         fn try_from(value: &Invitation) -> Result<Self, Self::Error> {
             Ok(Self {
-                created_by_id: Some(value.created_by_id.to_string()),
-                created_for_org_id: Some(value.created_for_org_id.to_string()),
+                created_by_id: Some(value.created_by_user.to_string()),
+                created_for_org_id: Some(value.created_for_org.to_string()),
                 invitee_email: Some(value.invitee_email.clone()),
                 created_at: Some(try_dt_to_ts(value.created_at)?),
-                accepted_at: Some(try_dt_to_ts(value.accepted_at)?),
-                declined_at: Some(try_dt_to_ts(value.declined_at)?),
+                accepted_at: Some(try_dt_to_ts(value.accepted_at.unwrap_or_default())?),
+                declined_at: Some(try_dt_to_ts(value.declined_at.unwrap_or_default())?),
             })
         }
     }
