@@ -123,7 +123,7 @@ impl MailClient {
         let mail = sendgrid::Mail {
             to: vec![to],
             from: "no-reply@blockjoy.com",
-            subject: "Password Reset",
+            subject: "A message from BlockJoy",
             html: &html,
             text: &text,
             from_name: "BlockJoy",
