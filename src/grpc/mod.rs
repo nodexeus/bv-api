@@ -43,6 +43,7 @@ use crate::grpc::blockjoy_ui::command_service_server::CommandServiceServer;
 use crate::grpc::blockjoy_ui::dashboard_service_server::DashboardServiceServer;
 use crate::grpc::blockjoy_ui::host_provision_service_server::HostProvisionServiceServer;
 use crate::grpc::blockjoy_ui::host_service_server::HostServiceServer;
+use crate::grpc::blockjoy_ui::invitation_service_server::InvitationServiceServer;
 use crate::grpc::blockjoy_ui::node_service_server::NodeServiceServer;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationServiceServer;
 use crate::grpc::blockjoy_ui::update_service_server::UpdateServiceServer;
@@ -57,6 +58,7 @@ use crate::grpc::ui_command_service::CommandServiceImpl;
 use crate::grpc::ui_dashboard_service::DashboardServiceImpl;
 use crate::grpc::ui_host_provision_service::HostProvisionServiceImpl;
 use crate::grpc::ui_host_service::HostServiceImpl;
+use crate::grpc::ui_invitation_service::InvitationServiceImpl;
 use crate::grpc::ui_node_service::NodeServiceImpl;
 use crate::grpc::ui_update_service::UpdateServiceImpl;
 use crate::grpc::user_service::UserServiceImpl;
@@ -131,6 +133,8 @@ pub async fn server(
     let ui_dashboard_service = DashboardServiceServer::new(DashboardServiceImpl::new(db.clone()));
     let ui_blockchain_service =
         BlockchainServiceServer::new(BlockchainServiceImpl::new(db.clone()));
+    let ui_invitation_service =
+        InvitationServiceServer::new(InvitationServiceImpl::new(db.clone()));
 
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
@@ -163,6 +167,7 @@ pub async fn server(
         .add_service(ui_update_service)
         .add_service(ui_dashboard_service)
         .add_service(ui_blockchain_service)
+        .add_service(ui_invitation_service)
 }
 
 fn rate_limiting_settings() -> usize {

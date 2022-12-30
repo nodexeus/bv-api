@@ -8,6 +8,7 @@ use api::grpc::blockjoy_ui::command_service_client::CommandServiceClient;
 use api::grpc::blockjoy_ui::dashboard_service_client::DashboardServiceClient;
 use api::grpc::blockjoy_ui::host_provision_service_client::HostProvisionServiceClient;
 use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
+use api::grpc::blockjoy_ui::invitation_service_client::InvitationServiceClient;
 use api::grpc::blockjoy_ui::node_service_client::NodeServiceClient;
 use api::grpc::blockjoy_ui::organization_service_client::OrganizationServiceClient;
 use api::grpc::blockjoy_ui::update_service_client::UpdateServiceClient;
@@ -97,6 +98,12 @@ impl GrpcClient<Channel> for KeyFilesClient<Channel> {
 }
 
 impl GrpcClient<Channel> for MetricsServiceClient<Channel> {
+    fn create(channel: Channel) -> Self {
+        Self::new(channel)
+    }
+}
+
+impl GrpcClient<Channel> for InvitationServiceClient<Channel> {
     fn create(channel: Channel) -> Self {
         Self::new(channel)
     }

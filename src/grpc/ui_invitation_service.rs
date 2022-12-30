@@ -8,7 +8,7 @@ use crate::grpc::blockjoy_ui::{
 };
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
-use crate::models::{Invitation, Org, User};
+use crate::models::{Invitation, Org, OrgRole, User};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -51,7 +51,7 @@ impl InvitationService for InvitationServiceImpl {
         Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
-    /// Role is already checked by policies
+    /// TODO: Role should be checked by policies
     async fn list_pending(
         &self,
         request: Request<ListPendingInvitationRequest>,
@@ -60,23 +60,29 @@ impl InvitationService for InvitationServiceImpl {
         let user_id = try_get_token::<_, UserAuthToken>(&request)?.get_id();
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
+        let org_user = Org::find_org_user(&user_id, &org_id, &self.db).await?;
 
-        // Check if user belongs to org, the role is already checked by the auth middleware
-        Org::find_org_user(&user_id, &org_id, &self.db).await?;
+        match org_user.role {
+            OrgRole::Member => Err(Status::permission_denied(format!(
+                "User {} is not allowed to list pending invitations on org {}",
+                user_id, org_id
+            ))),
+            OrgRole::Admin | OrgRole::Owner => {
+                let invitations: Vec<GrpcInvitation> = Invitation::pending(org_id, &self.db)
+                    .await?
+                    .iter()
+                    .map(|i| i.try_into().unwrap_or_default())
+                    .collect();
 
-        let invitations: Vec<GrpcInvitation> = Invitation::pending(org_id, &self.db)
-            .await?
-            .iter()
-            .map(|i| i.try_into().unwrap_or_default())
-            .collect();
+                let response_meta = ResponseMeta::from_meta(inner.meta);
+                let response = InvitationsResponse {
+                    meta: Some(response_meta),
+                    invitations,
+                };
 
-        let response_meta = ResponseMeta::from_meta(inner.meta);
-        let response = InvitationsResponse {
-            meta: Some(response_meta),
-            invitations,
-        };
-
-        Ok(response_with_refresh_token(refresh_token, response)?)
+                Ok(response_with_refresh_token(refresh_token, response)?)
+            }
+        }
     }
 
     async fn list_received(
