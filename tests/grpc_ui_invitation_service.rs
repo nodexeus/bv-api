@@ -1,6 +1,7 @@
 mod setup;
 
 use crate::setup::Tester;
+use api::auth::InvitationToken;
 use api::grpc::blockjoy_ui::{self, invitation_service_client, Invitation as GrpcInvitation};
 use api::models;
 use tonic::transport;
@@ -78,6 +79,78 @@ async fn responds_ok_for_list_received() -> anyhow::Result<()> {
         models::Invitation::received(invitation.invitee_email().to_string(), &tester.pool).await?;
 
     assert_eq!(invitations.len(), 1);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn responds_ok_for_accept() -> anyhow::Result<()> {
+    let tester = Tester::new().await;
+    let invitation = create_invitation(&tester).await?;
+    let token = InvitationToken::create_for_invitation(&invitation)?;
+    let grpc_invitation = GrpcInvitation {
+        created_by_id: Some(invitation.created_by_user().to_string()),
+        created_for_org_id: Some(invitation.created_for_org().to_string()),
+        invitee_email: Some(invitation.invitee_email().to_string()),
+        created_at: None,
+        accepted_at: None,
+        declined_at: None,
+    };
+    let req = blockjoy_ui::InvitationRequest {
+        meta: Some(tester.meta()),
+        invitation: Some(grpc_invitation),
+    };
+
+    tester
+        .send_with(Service::accept, req, token, setup::DummyRefresh)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn responds_ok_for_decline() -> anyhow::Result<()> {
+    let tester = Tester::new().await;
+    let invitation = create_invitation(&tester).await?;
+    let token = InvitationToken::create_for_invitation(&invitation)?;
+    let grpc_invitation = GrpcInvitation {
+        created_by_id: Some(invitation.created_by_user().to_string()),
+        created_for_org_id: Some(invitation.created_for_org().to_string()),
+        invitee_email: Some(invitation.invitee_email().to_string()),
+        created_at: None,
+        accepted_at: None,
+        declined_at: None,
+    };
+    let req = blockjoy_ui::InvitationRequest {
+        meta: Some(tester.meta()),
+        invitation: Some(grpc_invitation),
+    };
+
+    tester
+        .send_with(Service::decline, req, token, setup::DummyRefresh)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn responds_ok_for_revoke() -> anyhow::Result<()> {
+    let tester = Tester::new().await;
+    let invitation = create_invitation(&tester).await?;
+    let grpc_invitation = GrpcInvitation {
+        created_by_id: Some(invitation.created_by_user().to_string()),
+        created_for_org_id: Some(invitation.created_for_org().to_string()),
+        invitee_email: Some(invitation.invitee_email().to_string()),
+        created_at: None,
+        accepted_at: None,
+        declined_at: None,
+    };
+    let req = blockjoy_ui::InvitationRequest {
+        meta: Some(tester.meta()),
+        invitation: Some(grpc_invitation),
+    };
+
+    tester.send_admin(Service::revoke, req).await?;
 
     Ok(())
 }

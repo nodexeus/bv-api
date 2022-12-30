@@ -35,6 +35,22 @@ impl FindableById for Invitation {
 }
 
 impl Invitation {
+    pub async fn find_by_creator_for_email(
+        creator_id: Uuid,
+        invitee_email: String,
+        db: &PgPool,
+    ) -> ApiResult<Self> {
+        sqlx::query_as(
+            r#"select * from invitations 
+                    where created_by_user = $1 and invitee_email = $2 and accepted_at is null and declined_at is null"#,
+        )
+            .bind(creator_id)
+            .bind(invitee_email)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
+    }
+
     pub async fn create(invitation: &GrpcInvitation, db: &PgPool) -> ApiResult<Self> {
         let creator_id = Uuid::from_str(
             invitation
