@@ -8,6 +8,7 @@ use crate::grpc::blockjoy_ui::{
 };
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::mail::MailClient;
 use crate::models::{Invitation, Org, OrgRole, User};
 use crate::server::DbPool;
 use tonic::{Request, Response, Status};
@@ -31,6 +32,7 @@ impl InvitationService for InvitationServiceImpl {
     ) -> Result<Response<CreateInvitationResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
         let creator_id = try_get_token::<_, UserAuthToken>(&request)?.get_id();
+        let creator = User::find_by_id(creator_id, &self.db).await?;
         let inner = request.into_inner();
         let invitation = GrpcInvitation {
             created_by_id: Some(creator_id.to_string()),
@@ -41,12 +43,16 @@ impl InvitationService for InvitationServiceImpl {
             declined_at: None,
         };
 
-        Invitation::create(&invitation, &self.db).await?;
+        let db_invitation = Invitation::create(&invitation, &self.db).await?;
 
         let response_meta = ResponseMeta::from_meta(inner.meta);
         let response = CreateInvitationResponse {
             meta: Some(response_meta),
         };
+
+        MailClient::new()
+            .invitation(&db_invitation, &creator, creator, "1 week".to_string())
+            .await?;
 
         Ok(response_with_refresh_token(refresh_token, response)?)
     }
