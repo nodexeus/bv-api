@@ -190,6 +190,8 @@ spec:
             name: pwdrefresh
         - secretRef:
             name: pwdconfirm
+        - secretRef:
+            name: invitation
 ---
 apiVersion: v1
 kind: Service
