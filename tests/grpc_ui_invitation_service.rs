@@ -3,7 +3,6 @@ mod setup;
 use crate::setup::Tester;
 use api::grpc::blockjoy_ui::{self, invitation_service_client, Invitation as GrpcInvitation};
 use api::models;
-use api::models::User;
 use tonic::transport;
 
 type Service = invitation_service_client::InvitationServiceClient<transport::Channel>;
@@ -25,7 +24,7 @@ async fn create_invitation(tester: &Tester) -> anyhow::Result<models::Invitation
 
 #[tokio::test]
 async fn responds_ok_for_create() -> anyhow::Result<()> {
-    let tester = setup::Tester::new().await;
+    let tester = Tester::new().await;
     let org_id = tester.org().await.id;
     let req = blockjoy_ui::CreateInvitationRequest {
         meta: Some(tester.meta()),
