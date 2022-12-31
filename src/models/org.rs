@@ -90,6 +90,7 @@ impl Org {
             WHERE
                 orgs_users.user_id = $1 and orgs.deleted_at IS NULL
             ORDER BY
+                orgs.is_personal desc,
                 lower(orgs.name)
             "##,
         )
