@@ -67,7 +67,7 @@ async fn responds_ok_for_list_pending() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn responds_ok_for_list_received() -> anyhow::Result<()> {
-    let tester = πTester::new().await;
+    let tester = Tester::new().await;
     let invitation = create_invitation(&tester).await?;
     let req = blockjoy_ui::ListReceivedInvitationRequest {
         meta: Some(tester.meta()),
