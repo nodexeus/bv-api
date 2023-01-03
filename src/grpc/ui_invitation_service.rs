@@ -41,6 +41,8 @@ impl InvitationService for InvitationServiceImpl {
             created_at: None,
             accepted_at: None,
             declined_at: None,
+            created_by_user_name: None,
+            created_for_org_name: None,
         };
 
         let db_invitation = Invitation::create(&invitation, &self.db).await?;

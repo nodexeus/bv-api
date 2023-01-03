@@ -1,6 +1,7 @@
 use crate::auth::FindableById;
 use crate::errors::{ApiError, Result as ApiResult};
 use crate::grpc::blockjoy_ui::Invitation as GrpcInvitation;
+use crate::models::{Org, User};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
@@ -62,6 +63,7 @@ impl Invitation {
                 .as_str(),
         )
         .map_err(|e| ApiError::UnexpectedError(anyhow!("Creator ID required: {e}")))?;
+        let creator = User::find_by_id(creator_id, db).await?;
         let org_id = Uuid::from_str(
             invitation
                 .created_for_org_id
@@ -70,6 +72,7 @@ impl Invitation {
                 .as_str(),
         )
         .map_err(|e| ApiError::UnexpectedError(anyhow!("Org ID required: {e}")))?;
+        let for_org = Org::find_by_id(org_id, db).await?;
         let email = invitation
             .invitee_email
             .as_ref()
@@ -77,14 +80,16 @@ impl Invitation {
 
         sqlx::query_as(
             r#"INSERT INTO invitations
-                (created_by_user, created_for_org, invitee_email)
+                (created_by_user, created_for_org, invitee_email, created_by_user_name, created_for_org_name)
                 values 
-                ($1,$2,$3)
+                ($1,$2,$3,$4,$5)
                 RETURNING *"#,
         )
         .bind(creator_id)
         .bind(org_id)
         .bind(email)
+        .bind(format!("{} {} ({})", creator.first_name, creator.last_name, creator.email))
+        .bind(for_org.name)
         .fetch_one(db)
         .await
         .map_err(ApiError::from)

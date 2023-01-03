@@ -13,6 +13,8 @@ async fn cannot_create_invitation_without_valid_props() -> anyhow::Result<()> {
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: None,
+        created_for_org_name: None,
     };
 
     match Invitation::create(&grpc_invitation, &tester.pool).await {
@@ -33,6 +35,8 @@ async fn can_create_invitation_with_valid_props() -> anyhow::Result<()> {
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: Some("hugo".to_string()),
+        created_for_org_name: Some("boss".to_string()),
     };
     let invitation = Invitation::create(&grpc_invitation, &tester.pool).await?;
 
@@ -53,6 +57,8 @@ async fn can_list_pending_invitations() -> anyhow::Result<()> {
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: Some("hugo".to_string()),
+        created_for_org_name: Some("boss".to_string()),
     };
     Invitation::create(&grpc_invitation, &tester.pool).await?;
     let invitations = Invitation::pending(org.id, &tester.pool).await?;
@@ -74,6 +80,8 @@ async fn can_list_received_invitations() -> anyhow::Result<()> {
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: Some("hugo".to_string()),
+        created_for_org_name: Some("boss".to_string()),
     };
     Invitation::create(&grpc_invitation, &tester.pool).await?;
 
@@ -96,6 +104,8 @@ async fn can_accept_invitation() -> anyhow::Result<()> {
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: Some("hugo".to_string()),
+        created_for_org_name: Some("boss".to_string()),
     };
     let invitation = Invitation::create(&grpc_invitation, &tester.pool).await?;
     let invitation = Invitation::accept(invitation.id().to_owned(), &tester.pool).await?;
@@ -117,6 +127,8 @@ async fn can_decline_invitation() -> anyhow::Result<()> {
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: Some("hugo".to_string()),
+        created_for_org_name: Some("boss".to_string()),
     };
     let invitation = Invitation::create(&grpc_invitation, &tester.pool).await?;
     let invitation = Invitation::decline(invitation.id().to_owned(), &tester.pool).await?;
@@ -138,6 +150,8 @@ async fn can_revoke_invitation() -> anyhow::Result<()> {
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: Some("hugo".to_string()),
+        created_for_org_name: Some("boss".to_string()),
     };
     let invitation = Invitation::create(&grpc_invitation, &tester.pool).await?;
     let invitation_id = invitation.id().to_owned();
