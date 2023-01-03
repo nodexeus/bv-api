@@ -13,7 +13,9 @@ use uuid::Uuid;
 pub struct Invitation {
     pub(crate) id: Uuid,
     pub(crate) created_by_user: Uuid,
+    pub(crate) created_by_user_name: String,
     pub(crate) created_for_org: Uuid,
+    pub(crate) created_for_org_name: String,
     pub(crate) invitee_email: String,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) accepted_at: Option<DateTime<Utc>>,
