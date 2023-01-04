@@ -129,8 +129,24 @@ impl InvitationService for InvitationServiceImpl {
     }
 
     async fn accept(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
-        let token = try_get_token::<_, InvitationToken>(&request)?;
-        let invitation_id = *token.id();
+        let refresh_token = get_refresh_token(&request);
+        let invitation_id = match try_get_token::<_, InvitationToken>(&request) {
+            Ok(token) => {
+                tracing::debug!("Found invitation token");
+
+                *token.id()
+            }
+            Err(_) => {
+                tracing::debug!("No invitation token available, trying user auth token");
+
+                let inner = request.into_inner();
+                let invitation_id = inner
+                    .invitation_id
+                    .ok_or_else(|| Status::permission_denied("No valid token found"))?;
+
+                Uuid::parse_str(invitation_id.as_str()).map_err(ApiError::from)?
+            }
+        };
 
         let invitation = Invitation::accept(invitation_id, &self.db).await?;
         let new_member = User::find_by_email(invitation.invitee_email(), &self.db).await?;
@@ -143,10 +159,7 @@ impl InvitationService for InvitationServiceImpl {
         )
         .await?;
 
-        Ok(response_with_refresh_token::<()>(
-            get_refresh_token(&request),
-            (),
-        )?)
+        Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }
 
     async fn decline(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
