@@ -1,4 +1,5 @@
 use super::blockjoy_ui::ResponseMeta;
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::dashboard_service_server::DashboardService;
 use crate::grpc::blockjoy_ui::{metric, DashboardMetricsRequest, DashboardMetricsResponse, Metric};
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
@@ -25,7 +26,7 @@ impl DashboardService for DashboardServiceImpl {
     ) -> Result<Response<DashboardMetricsResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
-        let org_id = uuid::Uuid::from_str(inner.org_id.as_str())?;
+        let org_id = uuid::Uuid::from_str(inner.org_id.as_str()).map_err(ApiError::from)?;
         let mut metrics: Vec<Metric> = Vec::with_capacity(2);
 
         if let Ok(running_nodes) = Node::running_nodes_count(&org_id, &self.db).await {
