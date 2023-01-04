@@ -51,23 +51,33 @@ impl InvitationService for InvitationServiceImpl {
         let response = CreateInvitationResponse {
             meta: Some(response_meta),
         };
-        let invitee = User {
-            id: Default::default(),
-            email: db_invitation.invitee_email.clone(),
-            first_name: "".to_string(),
-            last_name: "".to_string(),
-            hashword: "".to_string(),
-            salt: "".to_string(),
-            refresh: None,
-            fee_bps: 0,
-            staking_quota: 0,
-            created_at: Default::default(),
-            confirmed_at: None,
-        };
 
-        MailClient::new()
-            .invitation(&db_invitation, &creator, &invitee, "1 week".to_string())
-            .await?;
+        match User::find_by_email(&db_invitation.invitee_email, &self.db).await {
+            Ok(user) => {
+                MailClient::new()
+                    .invitation_for_registered(&creator, &user, "1 week".to_string())
+                    .await?
+            }
+            Err(_) => {
+                let invitee = User {
+                    id: Default::default(),
+                    email: db_invitation.invitee_email.clone(),
+                    first_name: "".to_string(),
+                    last_name: "".to_string(),
+                    hashword: "".to_string(),
+                    salt: "".to_string(),
+                    refresh: None,
+                    fee_bps: 0,
+                    staking_quota: 0,
+                    created_at: Default::default(),
+                    confirmed_at: None,
+                };
+
+                MailClient::new()
+                    .invitation(&db_invitation, &creator, &invitee, "1 week".to_string())
+                    .await?
+            }
+        }
 
         Ok(response_with_refresh_token(refresh_token, response)?)
     }
@@ -142,7 +152,7 @@ impl InvitationService for InvitationServiceImpl {
                 let inner = request.into_inner();
                 let invitation_id = inner
                     .invitation_id
-                    .ok_or_else(|| Status::permission_denied("No valid token found"))?;
+                    .ok_or_else(|| Status::permission_denied("No valid invitation ID found"))?;
 
                 Uuid::parse_str(invitation_id.as_str()).map_err(ApiError::from)?
             }
