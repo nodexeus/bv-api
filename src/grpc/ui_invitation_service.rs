@@ -132,7 +132,16 @@ impl InvitationService for InvitationServiceImpl {
         let token = try_get_token::<_, InvitationToken>(&request)?;
         let invitation_id = *token.id();
 
-        Invitation::accept(invitation_id, &self.db).await?;
+        let invitation = Invitation::accept(invitation_id, &self.db).await?;
+        let new_member = User::find_by_email(invitation.invitee_email(), &self.db).await?;
+
+        Org::add_member(
+            &new_member.id,
+            invitation.created_for_org(),
+            OrgRole::Member,
+            &self.db,
+        )
+        .await?;
 
         Ok(response_with_refresh_token::<()>(
             get_refresh_token(&request),
