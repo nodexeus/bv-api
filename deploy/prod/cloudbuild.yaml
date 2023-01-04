@@ -13,7 +13,7 @@ steps:
   - -c
   - |
     gcloud config set deploy/region us-east1
-    gcloud deploy apply --file deploy/main/clouddeploy.yaml
+    gcloud deploy apply --file deploy/prod/clouddeploy.yaml
     gcloud deploy releases create rel-${SHORT_SHA} \
                         --delivery-pipeline blockvisor-api-prod \
                         --description "$(git log -1  --pretty='%s')" \
