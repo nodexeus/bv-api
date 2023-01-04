@@ -10,6 +10,7 @@ async fn responds_unauthenticated_with_invalid_token_for_metrics() {
     let tester = setup::Tester::new().await;
     let req = blockjoy_ui::DashboardMetricsRequest {
         meta: Some(tester.meta()),
+        org_id: tester.org().await.id.to_string(),
     };
     let (auth, refresh) = (setup::DummyToken("some-invalid-token"), setup::DummyRefresh);
     let status = tester
@@ -22,8 +23,11 @@ async fn responds_unauthenticated_with_invalid_token_for_metrics() {
 #[tokio::test]
 async fn responds_ok_with_valid_token_for_metrics() {
     let tester = setup::Tester::new().await;
+    let admin = tester.admin_user().await;
+    let org = tester.org_for(&admin).await;
     let req = blockjoy_ui::DashboardMetricsRequest {
         meta: Some(tester.meta()),
+        org_id: org.id.to_string(),
     };
     tester.send_admin(Service::metrics, req).await.unwrap();
 }
@@ -31,8 +35,11 @@ async fn responds_ok_with_valid_token_for_metrics() {
 #[tokio::test]
 async fn responds_valid_values_for_metrics() {
     let tester = setup::Tester::new().await;
+    let admin = tester.admin_user().await;
+    let org = tester.org_for(&admin).await;
     let req = blockjoy_ui::DashboardMetricsRequest {
         meta: Some(tester.meta()),
+        org_id: org.id.to_string(),
     };
     let resp = tester.send_admin(Service::metrics, req).await.unwrap();
     let metrics = resp.metrics;
