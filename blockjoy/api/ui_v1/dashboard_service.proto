@@ -6,6 +6,7 @@ import "common.proto";
 
 message DashboardMetricsRequest {
   RequestMeta meta = 1;
+  string org_id = 2;
 }
 
 message DashboardMetricsResponse {
