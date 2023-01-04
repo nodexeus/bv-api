@@ -18,6 +18,8 @@ async fn create_invitation(tester: &Tester) -> anyhow::Result<models::Invitation
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: Some("hugo".to_string()),
+        created_for_org_name: Some("boss".to_string()),
     };
 
     Ok(models::Invitation::create(&grpc_invitation, &tester.pool).await?)
@@ -46,7 +48,7 @@ async fn responds_ok_for_create() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn responds_ok_for_list_pending() -> anyhow::Result<()> {
-    let tester = setup::Tester::new().await;
+    let tester = Tester::new().await;
     let invitation = create_invitation(&tester).await?;
     let req = blockjoy_ui::ListPendingInvitationRequest {
         meta: Some(tester.meta()),
@@ -65,7 +67,7 @@ async fn responds_ok_for_list_pending() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn responds_ok_for_list_received() -> anyhow::Result<()> {
-    let tester = setup::Tester::new().await;
+    let tester = Tester::new().await;
     let invitation = create_invitation(&tester).await?;
     let req = blockjoy_ui::ListReceivedInvitationRequest {
         meta: Some(tester.meta()),
@@ -95,6 +97,8 @@ async fn responds_ok_for_accept() -> anyhow::Result<()> {
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: Some("hugo".to_string()),
+        created_for_org_name: Some("boss".to_string()),
     };
     let req = blockjoy_ui::InvitationRequest {
         meta: Some(tester.meta()),
@@ -120,6 +124,8 @@ async fn responds_ok_for_decline() -> anyhow::Result<()> {
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: Some("hugo".to_string()),
+        created_for_org_name: Some("boss".to_string()),
     };
     let req = blockjoy_ui::InvitationRequest {
         meta: Some(tester.meta()),
@@ -144,6 +150,8 @@ async fn responds_ok_for_revoke() -> anyhow::Result<()> {
         created_at: None,
         accepted_at: None,
         declined_at: None,
+        created_by_user_name: Some("hugo".to_string()),
+        created_for_org_name: Some("boss".to_string()),
     };
     let req = blockjoy_ui::InvitationRequest {
         meta: Some(tester.meta()),
