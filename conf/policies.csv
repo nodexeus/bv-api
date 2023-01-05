@@ -50,7 +50,9 @@ p, master_admin, /blockjoy.api.ui_v1.InvitationService/Create, POST
 p, master_admin, /blockjoy.api.ui_v1.InvitationService/ListPending, POST
 p, master_admin, /blockjoy.api.ui_v1.InvitationService/ListReceived, POST
 p, members, /blockjoy.api.ui_v1.InvitationService/Accept, POST
+p, members, /blockjoy.api.ui_v1.InvitationService/Accept, POST
 p, members, /blockjoy.api.ui_v1.InvitationService/Decline, POST
+p, master_admin, /blockjoy.api.ui_v1.InvitationService/Decline, POST
 p, master_admin, /blockjoy.api.ui_v1.InvitationService/Revoke, POST
 
 

@@ -22,6 +22,31 @@ impl InvitationServiceImpl {
     pub fn new(db: DbPool) -> Self {
         Self { db }
     }
+
+    fn get_refresh_token_invitation_id_from_request(
+        request: Request<InvitationRequest>,
+    ) -> Result<(String, Uuid), Status> {
+        let refresh_token = get_refresh_token(&request);
+        let invitation_id = match try_get_token::<_, InvitationToken>(&request) {
+            Ok(token) => {
+                tracing::debug!("Found invitation token");
+
+                *token.id()
+            }
+            Err(_) => {
+                tracing::debug!("No invitation token available, trying user auth token");
+
+                let inner = request.into_inner();
+                let invitation_id = inner
+                    .invitation_id
+                    .ok_or_else(|| Status::permission_denied("No valid invitation ID found"))?;
+
+                Uuid::parse_str(invitation_id.as_str()).map_err(ApiError::from)?
+            }
+        };
+
+        Ok((refresh_token, invitation_id))
+    }
 }
 
 #[tonic::async_trait]
@@ -51,23 +76,33 @@ impl InvitationService for InvitationServiceImpl {
         let response = CreateInvitationResponse {
             meta: Some(response_meta),
         };
-        let invitee = User {
-            id: Default::default(),
-            email: db_invitation.invitee_email.clone(),
-            first_name: "".to_string(),
-            last_name: "".to_string(),
-            hashword: "".to_string(),
-            salt: "".to_string(),
-            refresh: None,
-            fee_bps: 0,
-            staking_quota: 0,
-            created_at: Default::default(),
-            confirmed_at: None,
-        };
 
-        MailClient::new()
-            .invitation(&db_invitation, &creator, &invitee, "1 week".to_string())
-            .await?;
+        match User::find_by_email(&db_invitation.invitee_email, &self.db).await {
+            Ok(user) => {
+                MailClient::new()
+                    .invitation_for_registered(&creator, &user, "1 week".to_string())
+                    .await?
+            }
+            Err(_) => {
+                let invitee = User {
+                    id: Default::default(),
+                    email: db_invitation.invitee_email.clone(),
+                    first_name: "".to_string(),
+                    last_name: "".to_string(),
+                    hashword: "".to_string(),
+                    salt: "".to_string(),
+                    refresh: None,
+                    fee_bps: 0,
+                    staking_quota: 0,
+                    created_at: Default::default(),
+                    confirmed_at: None,
+                };
+
+                MailClient::new()
+                    .invitation(&db_invitation, &creator, &invitee, "1 week".to_string())
+                    .await?
+            }
+        }
 
         Ok(response_with_refresh_token(refresh_token, response)?)
     }
@@ -129,27 +164,30 @@ impl InvitationService for InvitationServiceImpl {
     }
 
     async fn accept(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
-        let token = try_get_token::<_, InvitationToken>(&request)?;
-        let invitation_id = *token.id();
+        let (refresh_token, invitation_id) =
+            InvitationServiceImpl::get_refresh_token_invitation_id_from_request(request)?;
+        let invitation = Invitation::accept(invitation_id, &self.db).await?;
+        // Only registered users can accept an invitation
+        let new_member = User::find_by_email(invitation.invitee_email(), &self.db).await?;
 
-        Invitation::accept(invitation_id, &self.db).await?;
+        Org::add_member(
+            &new_member.id,
+            invitation.created_for_org(),
+            OrgRole::Member,
+            &self.db,
+        )
+        .await?;
 
-        Ok(response_with_refresh_token::<()>(
-            get_refresh_token(&request),
-            (),
-        )?)
+        Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }
 
     async fn decline(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
-        let token = try_get_token::<_, InvitationToken>(&request)?;
-        let invitation_id = *token.id();
+        let (refresh_token, invitation_id) =
+            InvitationServiceImpl::get_refresh_token_invitation_id_from_request(request)?;
 
         Invitation::decline(invitation_id, &self.db).await?;
 
-        Ok(response_with_refresh_token::<()>(
-            get_refresh_token(&request),
-            (),
-        )?)
+        Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }
 
     async fn revoke(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {

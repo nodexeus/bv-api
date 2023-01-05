@@ -98,7 +98,9 @@ impl Invitation {
     pub async fn pending(org_id: Uuid, db: &PgPool) -> ApiResult<Vec<Self>> {
         sqlx::query_as(
             r#"select * from invitations 
-                    where created_for_org = $1 and accepted_at is null and declined_at is null"#,
+                    where created_for_org = $1 and accepted_at is null and declined_at is null
+                    order by created_at desc
+                    "#,
         )
         .bind(org_id)
         .fetch_all(db)
@@ -109,7 +111,9 @@ impl Invitation {
     pub async fn received(email: String, db: &PgPool) -> ApiResult<Vec<Self>> {
         sqlx::query_as(
             r#"select * from invitations 
-                    where invitee_email = $1 and accepted_at is null and declined_at is null"#,
+                    where invitee_email = $1 and accepted_at is null and declined_at is null
+                    order by created_at desc
+                    "#,
         )
         .bind(email)
         .fetch_all(db)

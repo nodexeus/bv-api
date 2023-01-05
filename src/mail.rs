@@ -57,6 +57,31 @@ impl MailClient {
         self.send_mail(&templates, user, Some(context)).await
     }
 
+    pub async fn invitation_for_registered(
+        &self,
+        inviter: &models::User,
+        invitee: &models::User,
+        expiration: String,
+    ) -> errors::Result<()> {
+        const TEMPLATES: &str = include_str!("../mails/invite_registered_user.toml");
+        // SAFETY: assume we can write toml and also protected by test
+        let templates = toml::from_str(TEMPLATES)
+            .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
+        let base_url =
+            dotenv::var("UI_BASE_URL").map_err(|e| anyhow!("UI_BASE_URL can't be read: {e}"))?;
+        let link = format!("{}/invite-registered?uid={}", base_url, invitee.id);
+        let inviter = format!(
+            "{} {} ({})",
+            inviter.first_name, inviter.last_name, inviter.email
+        );
+        let mut context = HashMap::new();
+        context.insert("inviter".to_owned(), inviter);
+        context.insert("link".to_owned(), link);
+        context.insert("expiration".to_owned(), expiration);
+
+        self.send_mail(&templates, invitee, Some(context)).await
+    }
+
     pub async fn invitation(
         &self,
         invitation: &models::Invitation,

@@ -33,6 +33,7 @@ message InvitationsResponse {
 message InvitationRequest {
   RequestMeta meta = 1;
   Invitation invitation = 2;
+  optional string invitation_id = 3;
 }
 
 /* Manage invitations */
