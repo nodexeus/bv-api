@@ -129,6 +129,8 @@ pub enum TokenType {
     RegistrationConfirmation,
     /// This is the token used for inviting users to an org
     Invitation,
+    /// Token used for communication with cookbook
+    Cookbook,
 }
 
 impl Display for TokenType {
@@ -141,6 +143,7 @@ impl Display for TokenType {
             Self::PwdReset => write!(f, "pwd_reset"),
             Self::RegistrationConfirmation => write!(f, "registration_confirmation"),
             Self::Invitation => write!(f, "invitation"),
+            Self::Cookbook => write!(f, "cookbook"),
         }
     }
 }
@@ -317,6 +320,7 @@ impl AnyToken {
                 RegistrationConfirmation(RegistrationConfirmationToken::from_str(&token)?)
             }
             TokenType::Invitation => Invitation(InvitationToken::from_str(&token)?),
+            TokenType::Cookbook => return Err(TokenError::Invalid),
         };
 
         Ok(token)

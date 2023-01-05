@@ -1,3 +1,4 @@
+use crate::auth::key_provider::KeyProviderError;
 use crate::auth::TokenError;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -56,6 +57,9 @@ pub enum ApiError {
 
     #[error("Cannot parse IP address: {0}")]
     IpParseError(#[from] std::net::AddrParseError),
+
+    #[error("Error reading key: {0}")]
+    Key(KeyProviderError),
 }
 
 impl ApiError {

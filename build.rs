@@ -7,6 +7,8 @@ fn main() {
         .build_client(true)
         .compile(
             &[
+                // Cookbook API
+                "service.proto",
                 // Backend API
                 "command_flow.proto",
                 "host_service.proto",
@@ -26,7 +28,11 @@ fn main() {
                 "update_service.proto",
                 "user_service.proto",
             ],
-            &["proto/blockjoy/api/v1", "proto/blockjoy/api/ui_v1"],
+            &[
+                "cookbook_protos",
+                "proto/blockjoy/api/v1",
+                "proto/blockjoy/api/ui_v1",
+            ],
         )
     {
         eprintln!("Building protos failed with:\n{e}");

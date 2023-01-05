@@ -1,9 +1,10 @@
 use super::{node_type::*, PgQuery};
+use crate::cookbook::get_hw_requirements;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::{self, NodeInfo as GrpcNodeInfo};
 use crate::grpc::helpers::internal;
 use crate::models::node_property_value::NodeProperties;
-use crate::models::{validator::Validator, UpdateInfo};
+use crate::models::{validator::Validator, Blockchain, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -196,6 +197,9 @@ impl Node {
 
     pub async fn create(req: &NodeCreateRequest, db: &PgPool) -> Result<Node> {
         let mut tx = db.begin().await?;
+        let chain = Blockchain::find_by_id(req.blockchain_id, db).await?;
+        let node_type = NodeTypeKey::str_from_value(req.node_type.get_id());
+        let requirements = get_hw_requirements(chain.name, node_type, None).await?;
         let node = sqlx::query_as::<_, Node>(
             r#"INSERT INTO nodes (
                     org_id, 
@@ -213,8 +217,11 @@ impl Node {
                     chain_status,
                     sync_status,
                     ip_gateway,
-                    self_update
-                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *"#,
+                    self_update,
+                    vcpu_count,
+                    mem_size_mb,
+                    disk_size_gb,
+                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *"#,
         )
         .bind(req.org_id)
         .bind(req.host_id)
@@ -232,6 +239,10 @@ impl Node {
         .bind(req.sync_status)
         .bind(&req.ip_gateway)
         .bind(req.self_update)
+        // TODO: Ensure calculation is correct
+        .bind(requirements.vcpu_count)
+        .bind(requirements.mem_size_mb)
+        .bind(requirements.disk_size_gb)
         .fetch_one(&mut tx)
         .await
         //.map_err(ApiError::from)?;
