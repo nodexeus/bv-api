@@ -22,6 +22,31 @@ impl InvitationServiceImpl {
     pub fn new(db: DbPool) -> Self {
         Self { db }
     }
+
+    fn get_refresh_token_invitation_id_from_request(
+        request: Request<InvitationRequest>,
+    ) -> Result<(String, Uuid), Status> {
+        let refresh_token = get_refresh_token(&request);
+        let invitation_id = match try_get_token::<_, InvitationToken>(&request) {
+            Ok(token) => {
+                tracing::debug!("Found invitation token");
+
+                *token.id()
+            }
+            Err(_) => {
+                tracing::debug!("No invitation token available, trying user auth token");
+
+                let inner = request.into_inner();
+                let invitation_id = inner
+                    .invitation_id
+                    .ok_or_else(|| Status::permission_denied("No valid invitation ID found"))?;
+
+                Uuid::parse_str(invitation_id.as_str()).map_err(ApiError::from)?
+            }
+        };
+
+        Ok((refresh_token, invitation_id))
+    }
 }
 
 #[tonic::async_trait]
@@ -139,26 +164,10 @@ impl InvitationService for InvitationServiceImpl {
     }
 
     async fn accept(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
-        let refresh_token = get_refresh_token(&request);
-        let invitation_id = match try_get_token::<_, InvitationToken>(&request) {
-            Ok(token) => {
-                tracing::debug!("Found invitation token");
-
-                *token.id()
-            }
-            Err(_) => {
-                tracing::debug!("No invitation token available, trying user auth token");
-
-                let inner = request.into_inner();
-                let invitation_id = inner
-                    .invitation_id
-                    .ok_or_else(|| Status::permission_denied("No valid invitation ID found"))?;
-
-                Uuid::parse_str(invitation_id.as_str()).map_err(ApiError::from)?
-            }
-        };
-
+        let (refresh_token, invitation_id) =
+            InvitationServiceImpl::get_refresh_token_invitation_id_from_request(request)?;
         let invitation = Invitation::accept(invitation_id, &self.db).await?;
+        // Only registered users can accept an invitation
         let new_member = User::find_by_email(invitation.invitee_email(), &self.db).await?;
 
         Org::add_member(
@@ -173,15 +182,12 @@ impl InvitationService for InvitationServiceImpl {
     }
 
     async fn decline(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
-        let token = try_get_token::<_, InvitationToken>(&request)?;
-        let invitation_id = *token.id();
+        let (refresh_token, invitation_id) =
+            InvitationServiceImpl::get_refresh_token_invitation_id_from_request(request)?;
 
         Invitation::decline(invitation_id, &self.db).await?;
 
-        Ok(response_with_refresh_token::<()>(
-            get_refresh_token(&request),
-            (),
-        )?)
+        Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }
 
     async fn revoke(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {

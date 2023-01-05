@@ -10,16 +10,19 @@ type Service = invitation_service_client::InvitationServiceClient<transport::Cha
 
 async fn create_invitation(tester: &Tester) -> anyhow::Result<models::Invitation> {
     let user = tester.admin_user().await;
-    let org = tester.org_for(&user).await;
+    let org = tester.org().await;
     let grpc_invitation = GrpcInvitation {
         created_by_id: Some(user.id.to_string()),
         created_for_org_id: Some(org.id.to_string()),
-        invitee_email: Some("hugo@boss.com".to_string()),
+        invitee_email: Some(user.email.clone()),
         created_at: None,
         accepted_at: None,
         declined_at: None,
-        created_by_user_name: Some("hugo".to_string()),
-        created_for_org_name: Some("boss".to_string()),
+        created_by_user_name: Some(format!(
+            "{} {} ({})",
+            user.first_name, user.last_name, user.email
+        )),
+        created_for_org_name: Some(org.name),
     };
 
     Ok(models::Invitation::create(&grpc_invitation, &tester.pool).await?)
@@ -103,6 +106,7 @@ async fn responds_ok_for_accept() -> anyhow::Result<()> {
     let req = blockjoy_ui::InvitationRequest {
         meta: Some(tester.meta()),
         invitation: Some(grpc_invitation),
+        invitation_id: None,
     };
 
     tester
@@ -117,6 +121,7 @@ async fn responds_ok_for_decline() -> anyhow::Result<()> {
     let tester = Tester::new().await;
     let invitation = create_invitation(&tester).await?;
     let token = InvitationToken::create_for_invitation(&invitation)?;
+
     let grpc_invitation = GrpcInvitation {
         created_by_id: Some(invitation.created_by_user().to_string()),
         created_for_org_id: Some(invitation.created_for_org().to_string()),
@@ -130,6 +135,7 @@ async fn responds_ok_for_decline() -> anyhow::Result<()> {
     let req = blockjoy_ui::InvitationRequest {
         meta: Some(tester.meta()),
         invitation: Some(grpc_invitation),
+        invitation_id: None,
     };
 
     tester
@@ -156,6 +162,7 @@ async fn responds_ok_for_revoke() -> anyhow::Result<()> {
     let req = blockjoy_ui::InvitationRequest {
         meta: Some(tester.meta()),
         invitation: Some(grpc_invitation),
+        invitation_id: None,
     };
 
     tester.send_admin(Service::revoke, req).await?;
