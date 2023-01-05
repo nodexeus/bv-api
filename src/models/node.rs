@@ -173,6 +173,9 @@ pub struct Node {
     pub self_update: bool,
     pub block_age: Option<i64>,
     pub consensus: Option<bool>,
+    pub vcpu_count: i64,
+    pub mem_size_mb: i64,
+    pub disk_size_gb: i64,
 }
 
 #[derive(Clone, Debug)]
@@ -475,6 +478,9 @@ pub struct NodeCreateRequest {
     pub staking_status: Option<NodeStakingStatus>,
     pub container_status: ContainerStatus,
     pub self_update: bool,
+    pub vcpu_count: i64,
+    pub mem_size_mb: i64,
+    pub disk_size_gb: i64,
 }
 
 pub struct NodeUpdateRequest {

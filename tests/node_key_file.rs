@@ -32,6 +32,9 @@ async fn can_create_key_file() -> anyhow::Result<()> {
         version: None,
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
     let node = Node::create(&req, tester.pool()).await.unwrap();
     let req = CreateNodeKeyFileRequest {
@@ -90,6 +93,9 @@ async fn deletes_key_file_if_node_is_deleted() -> anyhow::Result<()> {
         version: None,
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
     let node = Node::create(&req, tester.pool()).await.unwrap();
     let req = CreateNodeKeyFileRequest {

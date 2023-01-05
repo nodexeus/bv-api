@@ -32,6 +32,9 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         version: None,
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
 
     Node::create(&req, tester.pool()).await?;
