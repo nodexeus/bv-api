@@ -783,7 +783,7 @@ impl HostProvision {
     /// Wrapper for HostProvision::claim, taking ProvisionHostRequest received via gRPC instead of HostCreateRequest
     pub async fn claim_by_grpc_provision(
         otp: &str,
-        request: πblockjoy::ProvisionHostRequest,
+        request: blockjoy::ProvisionHostRequest,
         db: &PgPool,
     ) -> Result<Host> {
         let request = HostCreateRequest::try_from(request)?;
