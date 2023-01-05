@@ -1,9 +1,10 @@
 mod setup;
 
 use crate::setup::Tester;
-use api::auth::InvitationToken;
+use api::auth::{FindableById, InvitationToken};
 use api::grpc::blockjoy_ui::{self, invitation_service_client, Invitation as GrpcInvitation};
 use api::models;
+use api::models::{Org, OrgRole};
 use tonic::transport;
 
 type Service = invitation_service_client::InvitationServiceClient<transport::Channel>;
@@ -53,11 +54,15 @@ async fn responds_ok_for_create() -> anyhow::Result<()> {
 async fn responds_ok_for_list_pending() -> anyhow::Result<()> {
     let tester = Tester::new().await;
     let invitation = create_invitation(&tester).await?;
+    let user = tester.admin_user().await;
+    let org = tester.org_for(&user).await;
     let req = blockjoy_ui::ListPendingInvitationRequest {
         meta: Some(tester.meta()),
-        org_id: invitation.created_for_org().to_string(),
+        org_id: org.id.to_string(),
     };
 
+    dbg!(&invitation);
+    dbg!(&req);
     tester.send_admin(Service::list_pending, req).await?;
 
     let invitations =
@@ -149,6 +154,9 @@ async fn responds_ok_for_decline() -> anyhow::Result<()> {
 async fn responds_ok_for_revoke() -> anyhow::Result<()> {
     let tester = Tester::new().await;
     let invitation = create_invitation(&tester).await?;
+    let user = tester.admin_user().await;
+    let org = Org::find_by_id(invitation.created_for_org().to_owned(), tester.pool()).await?;
+    Org::add_member(&user.id, &org.id, OrgRole::Admin, tester.pool()).await?;
     let grpc_invitation = GrpcInvitation {
         created_by_id: Some(invitation.created_by_user().to_string()),
         created_for_org_id: Some(invitation.created_for_org().to_string()),
