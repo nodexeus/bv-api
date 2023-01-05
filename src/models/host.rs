@@ -1,5 +1,6 @@
 use super::{validator::Validator, Node, NodeProvision, PgQuery};
 use crate::auth::{FindableById, HostAuthToken, Identifiable, JwtToken, Owned, TokenError};
+use crate::cookbook::HardwareRequirements;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::{self, HostInfo};
 use crate::grpc::helpers::required;
@@ -352,6 +353,28 @@ impl Host {
             None => vec![],
         }
     }
+
+    pub async fn get_next_available_host_id(
+        requirements: HardwareRequirements,
+        db: &PgPool,
+    ) -> Result<Uuid> {
+        let host = sqlx::query(
+            r#"
+            SELECT hosts.id, (hosts.cpu_count - SUM(nodes.vcpu_count)) as cpus, (hosts.mem_size - SUM(nodes.mem_size_mb)) as mem_size, (hosts.disk_size - SUM(nodes.disk_size_gb)) as disk_size FROM hosts
+            LEFT JOIN nodes on hosts.id = nodes.id
+            GROUP BY hosts.id
+            ORDER BY cpus desc, mem_size desc, disk_size desc
+            LIMIT 1
+        "#,
+        )
+        .bind(requirements.vcpu_count)
+        .bind(requirements.mem_size_mb)
+        .bind(requirements.disk_size_gb)
+        .fetch_one(db)
+        .await?;
+
+        Ok(host.get(0))
+    }
 }
 
 #[axum::async_trait]
@@ -609,10 +632,10 @@ impl TryFrom<HostInfo> for HostSelectiveUpdate {
     }
 }
 
-impl TryFrom<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest {
+impl TryFrom<blockjoy::ProvisionHostRequest> for HostCreateRequest {
     type Error = ApiError;
 
-    fn try_from(request: crate::grpc::blockjoy::ProvisionHostRequest) -> Result<Self> {
+    fn try_from(request: blockjoy::ProvisionHostRequest) -> Result<Self> {
         let host_info = request.info.ok_or_else(required("info"))?;
         let ip_range_from = if host_info.ip_range_from.is_some() {
             Some(
@@ -760,7 +783,7 @@ impl HostProvision {
     /// Wrapper for HostProvision::claim, taking ProvisionHostRequest received via gRPC instead of HostCreateRequest
     pub async fn claim_by_grpc_provision(
         otp: &str,
-        request: crate::grpc::blockjoy::ProvisionHostRequest,
+        request: πblockjoy::ProvisionHostRequest,
         db: &PgPool,
     ) -> Result<Host> {
         let request = HostCreateRequest::try_from(request)?;
