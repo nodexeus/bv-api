@@ -4,7 +4,7 @@ use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::{self, NodeInfo as GrpcNodeInfo};
 use crate::grpc::helpers::internal;
 use crate::models::node_property_value::NodeProperties;
-use crate::models::{validator::Validator, Blockchain, UpdateInfo};
+use crate::models::{validator::Validator, Blockchain, Host, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -200,6 +200,7 @@ impl Node {
         let chain = Blockchain::find_by_id(req.blockchain_id, db).await?;
         let node_type = NodeTypeKey::str_from_value(req.node_type.get_id());
         let requirements = get_hw_requirements(chain.name, node_type, None).await?;
+        let host_id = Host::get_next_available_host_id(requirements, db).await?;
         let node = sqlx::query_as::<_, Node>(
             r#"INSERT INTO nodes (
                     org_id, 
@@ -224,7 +225,7 @@ impl Node {
                 ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *"#,
         )
         .bind(req.org_id)
-        .bind(req.host_id)
+        .bind(host_id)
         .bind(&req.name)
         .bind(&req.groups)
         .bind(&req.version)
@@ -472,6 +473,7 @@ pub struct NodeProvision {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeCreateRequest {
     pub org_id: Uuid,
+    // TODO: Remove obsolete host ID as it will be selected automatically (at least for managed nodes)
     pub host_id: Uuid,
     pub name: Option<String>,
     pub groups: Option<String>,

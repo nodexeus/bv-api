@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use derive_getters::Getters;
 use tonic::Request;
 
-#[derive(Getters)]
+#[derive(Getters, Clone, Copy)]
 pub struct HardwareRequirements {
     pub(crate) vcpu_count: i64,
     pub(crate) mem_size_mb: i64,
