@@ -13,6 +13,7 @@ async fn create_invitation(tester: &Tester) -> anyhow::Result<models::Invitation
     let user = tester.admin_user().await;
     let org = tester.org().await;
     let grpc_invitation = GrpcInvitation {
+        id: None,
         created_by_id: Some(user.id.to_string()),
         created_for_org_id: Some(org.id.to_string()),
         invitee_email: Some(user.email.clone()),
@@ -99,6 +100,7 @@ async fn responds_ok_for_accept() -> anyhow::Result<()> {
     let invitation = create_invitation(&tester).await?;
     let token = InvitationToken::create_for_invitation(&invitation)?;
     let grpc_invitation = GrpcInvitation {
+        id: Some(invitation.id().to_string()),
         created_by_id: Some(invitation.created_by_user().to_string()),
         created_for_org_id: Some(invitation.created_for_org().to_string()),
         invitee_email: Some(invitation.invitee_email().to_string()),
@@ -111,7 +113,6 @@ async fn responds_ok_for_accept() -> anyhow::Result<()> {
     let req = blockjoy_ui::InvitationRequest {
         meta: Some(tester.meta()),
         invitation: Some(grpc_invitation),
-        invitation_id: None,
     };
 
     tester
@@ -128,6 +129,7 @@ async fn responds_ok_for_decline() -> anyhow::Result<()> {
     let token = InvitationToken::create_for_invitation(&invitation)?;
 
     let grpc_invitation = GrpcInvitation {
+        id: Some(invitation.id().to_string()),
         created_by_id: Some(invitation.created_by_user().to_string()),
         created_for_org_id: Some(invitation.created_for_org().to_string()),
         invitee_email: Some(invitation.invitee_email().to_string()),
@@ -140,7 +142,6 @@ async fn responds_ok_for_decline() -> anyhow::Result<()> {
     let req = blockjoy_ui::InvitationRequest {
         meta: Some(tester.meta()),
         invitation: Some(grpc_invitation),
-        invitation_id: None,
     };
 
     tester
@@ -158,6 +159,7 @@ async fn responds_ok_for_revoke() -> anyhow::Result<()> {
     let org = Org::find_by_id(invitation.created_for_org().to_owned(), tester.pool()).await?;
     Org::add_member(&user.id, &org.id, OrgRole::Admin, tester.pool()).await?;
     let grpc_invitation = GrpcInvitation {
+        id: Some(invitation.id().to_string()),
         created_by_id: Some(invitation.created_by_user().to_string()),
         created_for_org_id: Some(invitation.created_for_org().to_string()),
         invitee_email: Some(invitation.invitee_email().to_string()),
@@ -170,7 +172,6 @@ async fn responds_ok_for_revoke() -> anyhow::Result<()> {
     let req = blockjoy_ui::InvitationRequest {
         meta: Some(tester.meta()),
         invitation: Some(grpc_invitation),
-        invitation_id: None,
     };
 
     tester.send_admin(Service::revoke, req).await?;
