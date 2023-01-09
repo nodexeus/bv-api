@@ -38,7 +38,9 @@ impl InvitationServiceImpl {
 
                 let inner = request.into_inner();
                 let invitation_id = inner
-                    .invitation_id
+                    .invitation
+                    .ok_or_else(|| Status::permission_denied("No valid invitation found"))?
+                    .id
                     .ok_or_else(|| Status::permission_denied("No valid invitation ID found"))?;
 
                 Uuid::parse_str(invitation_id.as_str()).map_err(ApiError::from)?
@@ -60,6 +62,7 @@ impl InvitationService for InvitationServiceImpl {
         let creator = User::find_by_id(creator_id, &self.db).await?;
         let inner = request.into_inner();
         let invitation = GrpcInvitation {
+            id: None,
             created_by_id: Some(creator_id.to_string()),
             created_for_org_id: Some(inner.created_for_org_id),
             invitee_email: Some(inner.invitee_email),

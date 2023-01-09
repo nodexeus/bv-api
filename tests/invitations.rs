@@ -7,6 +7,7 @@ use api::models::Invitation;
 async fn cannot_create_invitation_without_valid_props() -> anyhow::Result<()> {
     let tester = setup::Tester::new().await;
     let grpc_invitation = GrpcInvitation {
+        id: None,
         created_by_id: None,
         created_for_org_id: None,
         invitee_email: None,
@@ -29,6 +30,7 @@ async fn can_create_invitation_with_valid_props() -> anyhow::Result<()> {
     let user = tester.admin_user().await;
     let org = tester.org().await;
     let grpc_invitation = GrpcInvitation {
+        id: None,
         created_by_id: Some(user.id.to_string()),
         created_for_org_id: Some(org.id.to_string()),
         invitee_email: Some("hugo@boss.com".to_string()),
@@ -51,6 +53,7 @@ async fn can_list_pending_invitations() -> anyhow::Result<()> {
     let user = tester.admin_user().await;
     let org = tester.org().await;
     let grpc_invitation = GrpcInvitation {
+        id: None,
         created_by_id: Some(user.id.to_string()),
         created_for_org_id: Some(org.id.to_string()),
         invitee_email: Some("hugo@boss.com".to_string()),
@@ -74,6 +77,7 @@ async fn can_list_received_invitations() -> anyhow::Result<()> {
     let user = tester.admin_user().await;
     let org = tester.org().await;
     let grpc_invitation = GrpcInvitation {
+        id: None,
         created_by_id: Some(user.id.to_string()),
         created_for_org_id: Some(org.id.to_string()),
         invitee_email: Some("hugo@boss.com".to_string()),
@@ -98,6 +102,7 @@ async fn can_accept_invitation() -> anyhow::Result<()> {
     let user = tester.admin_user().await;
     let org = tester.org().await;
     let grpc_invitation = GrpcInvitation {
+        id: None,
         created_by_id: Some(user.id.to_string()),
         created_for_org_id: Some(org.id.to_string()),
         invitee_email: Some("hugo@boss.com".to_string()),
@@ -121,6 +126,7 @@ async fn can_decline_invitation() -> anyhow::Result<()> {
     let user = tester.admin_user().await;
     let org = tester.org().await;
     let grpc_invitation = GrpcInvitation {
+        id: None,
         created_by_id: Some(user.id.to_string()),
         created_for_org_id: Some(org.id.to_string()),
         invitee_email: Some("hugo@boss.com".to_string()),
@@ -144,6 +150,7 @@ async fn can_revoke_invitation() -> anyhow::Result<()> {
     let user = tester.admin_user().await;
     let org = tester.org().await;
     let grpc_invitation = GrpcInvitation {
+        id: None,
         created_by_id: Some(user.id.to_string()),
         created_for_org_id: Some(org.id.to_string()),
         invitee_email: Some("hugo@boss.com".to_string()),
