@@ -49,6 +49,7 @@ impl KeyProvider {
             TokenType::RegistrationConfirmation => "CONFIRMATION_SECRET",
             TokenType::PwdReset => "PWD_RESET_SECRET",
             TokenType::Invitation => "INVITATION_SECRET",
+            TokenType::Cookbook => "COOKBOOK_TOKEN",
         };
 
         let key = Self::get_retriever()(paramname)?;

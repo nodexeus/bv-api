@@ -372,44 +372,42 @@ impl Host {
         }
     }
 
-    /// TODO: check the dimensions of memory/disk space
-    /// TODO: vcpu = cpu * 2
+    /// Calculates which host should be the next to be assigned a new node
+    /// Calculation is done by calculating the utilization % of the 3 main metrics,
+    /// deducted by the nodes requirements. The results are ordered descending and the first host ID
+    /// will be returned
     pub async fn get_next_available_host_id(
         requirements: HardwareRequirements,
         db: &PgPool,
     ) -> Result<Uuid> {
         let host = sqlx::query(
             r#"
-            SELECT id
-            FROM hosts
-            ORDER BY (used_cpu - $1) desc, (used_memory - $2) desc, (used_disk_space - $3) desc
-            LIMIT 1;
-            "#,
-        )
-        .bind(requirements.vcpu_count)
-        .bind(requirements.mem_size_mb)
-        .bind(requirements.disk_size_gb)
-        .fetch_one(db)
-        .await?;
-
-        /*
-        let host = sqlx::query(
-            r#"
-            SELECT hosts.id, (hosts.cpu_count - SUM(nodes.vcpu_count)) as cpus, (hosts.mem_size - SUM(nodes.mem_size_mb)) as mem_size, (hosts.disk_size - SUM(nodes.disk_size_gb)) as disk_size FROM hosts
-            LEFT JOIN nodes on hosts.id = nodes.id
+            SELECT hosts.id, (hosts.mem_size - SUM(nodes.mem_size_mb)) as mem_size, (hosts.disk_size - SUM(nodes.disk_size_gb)) as disk_size FROM hosts
+            LEFT JOIN nodes on hosts.id = nodes.host_id
             GROUP BY hosts.id
-            ORDER BY cpus desc, mem_size desc, disk_size desc
+            ORDER BY disk_size desc, mem_size desc
             LIMIT 1
         "#,
         )
-        .bind(requirements.vcpu_count)
-        .bind(requirements.mem_size_mb)
-        .bind(requirements.disk_size_gb)
         .fetch_one(db)
         .await?;
-         */
+        let host_id = host.get::<Uuid, _>(0);
 
-        Ok(host.get(0))
+        // Trace warnings, if the selected host doesn't seem to have enough resources
+        if requirements.disk_size_gb().pow(3) > host.get(2) {
+            tracing::warn!(
+                "Host {} doesn't seem to have enough disk space available",
+                host_id
+            );
+        }
+        if requirements.mem_size_mb().pow(2) > host.get(1) {
+            tracing::warn!(
+                "Host {} doesn't seem to have enough memory available",
+                host_id
+            );
+        }
+
+        Ok(host_id)
     }
 }
 
