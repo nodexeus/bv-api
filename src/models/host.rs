@@ -372,10 +372,27 @@ impl Host {
         }
     }
 
+    /// TODO: check the dimensions of memory/disk space
+    /// TODO: vcpu = cpu * 2
     pub async fn get_next_available_host_id(
         requirements: HardwareRequirements,
         db: &PgPool,
     ) -> Result<Uuid> {
+        let host = sqlx::query(
+            r#"
+            SELECT id
+            FROM hosts
+            ORDER BY (used_cpu - $1) desc, (used_memory - $2) desc, (used_disk_space - $3) desc
+            LIMIT 1;
+            "#,
+        )
+        .bind(requirements.vcpu_count)
+        .bind(requirements.mem_size_mb)
+        .bind(requirements.disk_size_gb)
+        .fetch_one(db)
+        .await?;
+
+        /*
         let host = sqlx::query(
             r#"
             SELECT hosts.id, (hosts.cpu_count - SUM(nodes.vcpu_count)) as cpus, (hosts.mem_size - SUM(nodes.mem_size_mb)) as mem_size, (hosts.disk_size - SUM(nodes.disk_size_gb)) as disk_size FROM hosts
@@ -390,6 +407,7 @@ impl Host {
         .bind(requirements.disk_size_gb)
         .fetch_one(db)
         .await?;
+         */
 
         Ok(host.get(0))
     }
