@@ -182,6 +182,23 @@ impl Org {
         }
     }
 
+    pub async fn add_member(
+        user_id: &Uuid,
+        org_id: &Uuid,
+        role: OrgRole,
+        db: &PgPool,
+    ) -> Result<OrgUser> {
+        sqlx::query_as::<_, OrgUser>(
+            "INSERT INTO orgs_users (org_id, user_id, role) values ($1, $2, $3) RETURNING *",
+        )
+        .bind(org_id)
+        .bind(user_id)
+        .bind(role)
+        .fetch_one(db)
+        .await
+        .map_err(ApiError::from)
+    }
+
     /// Returns the user role in the organization
     pub async fn find_org_user(user_id: &Uuid, org_id: &Uuid, db: &PgPool) -> Result<OrgUser> {
         let org_user = sqlx::query_as::<_, OrgUser>(
@@ -216,8 +233,7 @@ impl Org {
         .bind(org_id)
         .bind(&req.name)
         .fetch_one(&mut tx)
-        .await
-        .map_err(ApiError::from)?;
+        .await?;
 
         let _org_user = sqlx::query(
             "INSERT INTO orgs_users (org_id, user_id, role) values($1, $2, 'owner') RETURNING *",

@@ -171,6 +171,7 @@ pub mod from {
 
         fn try_from(value: &Invitation) -> Result<Self, Self::Error> {
             Ok(Self {
+                id: Some(value.id.to_string()),
                 created_by_id: Some(value.created_by_user.to_string()),
                 created_by_user_name: Some(value.created_by_user_name.clone()),
                 created_for_org_id: Some(value.created_for_org.to_string()),
