@@ -72,6 +72,7 @@ pub struct NodeTypeProperty {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeType {
     id: i32,
+    version: String,
     properties: Option<Vec<NodeTypeProperty>>,
 }
 
@@ -138,6 +139,7 @@ impl NodeType {
     pub fn special_type(id: NodeTypeKey) -> Self {
         Self {
             id: id.into(),
+            version: "".into(),
             properties: Some(vec![]),
         }
     }
