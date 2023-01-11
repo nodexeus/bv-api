@@ -372,10 +372,9 @@ impl Host {
         }
     }
 
-    /// Calculates which host should be the next to be assigned a new node
-    /// Calculation is done by calculating the utilization % of the 3 main metrics,
-    /// deducted by the nodes requirements. The results are ordered descending and the first host ID
-    /// will be returned
+    /// We sum up all nodes values assigned to a host and deduct that from the total the host has
+    /// We don't consider CPUs in the selection, hard disk is more important than memory. The result
+    /// is ordered by disk_size and mem_size the first one in the list is returned
     pub async fn get_next_available_host_id(
         requirements: HardwareRequirements,
         db: &PgPool,
