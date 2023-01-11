@@ -319,7 +319,6 @@ impl Host {
         .fetch_one(db)
         .await?;
         let host_id = host.get::<Uuid, _>("h_id");
-        dbg!(&host_id);
         let disk_size: i64 = host.try_get("disk_size").unwrap_or_default();
         let mem_size: i64 = host.try_get("mem_size").unwrap_or_default();
 
