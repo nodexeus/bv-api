@@ -3,7 +3,7 @@ use crate::grpc::helpers::required;
 use anyhow::anyhow;
 use ipnet::{IpAddrRange, Ipv4AddrRange};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 use uuid::Uuid;
@@ -59,7 +59,10 @@ impl IpAddress {
         .map_err(ApiError::from)
     }
 
-    pub async fn create_range(req: IpAddressRangeRequest, db: &PgPool) -> ApiResult<Vec<Self>> {
+    pub async fn create_range(
+        req: IpAddressRangeRequest,
+        tx: &mut Transaction<'_, Postgres>,
+    ) -> ApiResult<Vec<Self>> {
         // Type IpAddr is required by sqlx, so we have to convert to Ipv4Addr forth/back
         let start_range = Ipv4Addr::from_str(req.from.to_string().as_str())
             .map_err(|e| ApiError::UnexpectedError(anyhow!(e)))?;
@@ -67,7 +70,6 @@ impl IpAddress {
             .map_err(|e| ApiError::UnexpectedError(anyhow!(e)))?;
         let ip_addrs = IpAddrRange::from(Ipv4AddrRange::new(start_range, stop_range));
         let mut created: Vec<Self> = vec![];
-        let mut tx = db.begin().await?;
 
         for ip in ip_addrs {
             tracing::debug!("creating ip {} for host {:?}", ip, req.host_id);
@@ -79,13 +81,11 @@ impl IpAddress {
                 )
                 .bind(ip)
                 .bind(req.host_id)
-                .fetch_one(&mut tx)
+                .fetch_one(&mut *tx)
                 .await
                 .map_err(ApiError::from)?,
             );
         }
-
-        tx.commit().await?;
 
         Ok(created)
     }

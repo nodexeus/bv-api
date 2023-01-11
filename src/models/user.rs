@@ -6,7 +6,7 @@ use crate::auth::{
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::LoginUserRequest;
 use crate::mail::MailClient;
-use crate::models::{org::Org, validator::StakeStatus, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
+use crate::models::{org::Org, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
 use anyhow::anyhow;
 use argon2::{
     password_hash::{PasswordHasher, SaltString},
@@ -125,23 +125,6 @@ impl User {
         client.reset_password(self, db).await
     }
 
-    pub async fn can_stake(&self, db: &PgPool, count: i64) -> Result<bool> {
-        Ok(self.staking_quota >= (self.staking_count(db).await? + count))
-    }
-
-    /// Returns the number of validators in "Staking"
-    pub async fn staking_count(&self, db: &PgPool) -> Result<i64> {
-        let row: (i64,) = sqlx::query_as(
-            "SELECT count(*) FROM validators where user_id = $1 AND stake_status = $2 AND deleted_at IS NULL",
-        )
-        .bind(self.id)
-        .bind(StakeStatus::Staking)
-        .fetch_one(db)
-        .await?;
-
-        Ok(row.0)
-    }
-
     pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM users")
             .fetch_all(db)
@@ -152,56 +135,6 @@ impl User {
     pub async fn find_all_pay_address(db: &PgPool) -> Result<Vec<UserPayAddress>> {
         sqlx::query_as::<_, UserPayAddress>(
             "SELECT id, pay_address FROM users where pay_address is not NULL AND deleted_at IS NULL",
-        )
-        .fetch_all(db)
-        .await
-        .map_err(ApiError::from)
-    }
-
-    pub async fn find_summary_by_user(db: &PgPool, user_id: Uuid) -> Result<UserSummary> {
-        Ok(sqlx::query_as::<_, UserSummary>(r##"
-            SELECT 
-                users.id, 
-                email,
-                pay_address,
-                staking_quota,
-                fee_bps,
-                (SELECT count(*) from validators where validators.user_id=users.id)::BIGINT as validator_count,
-                COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0)::BIGINT as rewards_total,
-                COALESCE((SELECT sum(invoices.amount) FROM invoices where invoices.user_id = users.id), 0)::BIGINT as invoices_total,
-                COALESCE((SELECT sum(payments.amount) FROM payments where payments.user_id = users.id), 0)::BIGINT as payments_total,
-                users.created_at as joined_at
-            FROM
-                users
-            WHERE
-                users.id = $1 AND deleted_at IS NULL
-        "##)
-        .bind(user_id)
-        .fetch_one(db)
-        .await?)
-    }
-
-    /// Gets a summary list of all users
-    pub async fn find_all_summary(db: &PgPool) -> Result<Vec<UserSummary>> {
-        sqlx::query_as::<_, UserSummary>(
-            r##"
-                SELECT 
-                    users.id, 
-                    email,
-                    pay_address,
-                    staking_quota,
-                    fee_bps,
-                    (SELECT count(*) from validators where validators.user_id=users.id)::BIGINT as validator_count,
-                    COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0)::BIGINT as rewards_total,
-                    COALESCE((SELECT sum(invoices.amount) FROM invoices where invoices.user_id = users.id), 0)::BIGINT as invoices_total,
-                    COALESCE((SELECT sum(payments.amount) FROM payments where payments.user_id = users.id), 0)::BIGINT as payments_total,
-                    users.created_at as joined_at
-                FROM
-                    users
-                WHERE deleted_at IS NULL
-                ORDER BY
-                    users.email
-            "##
         )
         .fetch_all(db)
         .await
@@ -336,25 +269,6 @@ impl User {
         };
 
         Self::update_all(id, fields, db).await
-    }
-
-    /// QR Code data for specific invoice
-    pub async fn get_qr_by_id(db: &PgPool, user_id: Uuid) -> Result<String> {
-        let user_summary = Self::find_summary_by_user(db, user_id).await?;
-
-        let mut bal = user_summary.balance();
-        if bal < 0 {
-            bal = 0;
-        }
-
-        if let Some(pay_address) = user_summary.pay_address.as_ref() {
-            let hnt = bal as f64 / 100000000.00;
-            return Ok(format!(
-                r#"{{"type":"payment","address":"{pay_address}","amount":{hnt:.8}}}"#,
-            ));
-        }
-
-        Err(ApiError::UnexpectedError(anyhow!("No Balance")))
     }
 
     pub async fn update_all(id: Uuid, fields: UserSelectiveUpdate, db: &PgPool) -> Result<Self> {
