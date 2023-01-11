@@ -11,8 +11,9 @@ async fn should_create_ip_range() -> anyhow::Result<()> {
         "192.129.0.20".parse().unwrap(),
         Some(host.id),
     )?;
-    let range = IpAddress::create_range(req, tester.pool()).await?;
-
+    let mut tx = tester.pool.begin().await?;
+    let range = IpAddress::create_range(req, &mut tx).await?;
+    tx.commit().await?;
     assert_eq!(range.len(), 11);
 
     Ok(())

@@ -205,7 +205,9 @@ impl Host {
             host.ip_range_to.ok_or_else(required("ip.range.to"))?,
             Some(host.id),
         )?;
-        IpAddress::create_range(req, db).await?;
+        IpAddress::create_range(req, &mut tx).await?;
+
+        tx.commit().await?;
 
         Ok(host)
     }
@@ -549,10 +551,10 @@ impl TryFrom<HostInfo> for HostSelectiveUpdate {
     }
 }
 
-impl TryFrom<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest {
+impl TryFrom<blockjoy::ProvisionHostRequest> for HostCreateRequest {
     type Error = ApiError;
 
-    fn try_from(request: crate::grpc::blockjoy::ProvisionHostRequest) -> Result<Self> {
+    fn try_from(request: blockjoy::ProvisionHostRequest) -> Result<Self> {
         let host_info = request.info.ok_or_else(required("info"))?;
         let ip_range_from = if host_info.ip_range_from.is_some() {
             Some(
@@ -692,7 +694,7 @@ impl HostProvision {
     /// Wrapper for HostProvision::claim, taking ProvisionHostRequest received via gRPC instead of HostCreateRequest
     pub async fn claim_by_grpc_provision(
         otp: &str,
-        request: crate::grpc::blockjoy::ProvisionHostRequest,
+        request: blockjoy::ProvisionHostRequest,
         db: &PgPool,
     ) -> Result<Host> {
         let request = HostCreateRequest::try_from(request)?;

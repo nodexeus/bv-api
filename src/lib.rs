@@ -148,9 +148,21 @@ mod test {
                 password_confirm: "abc12345".into(),
             };
 
+            let admin = models::UserRequest {
+                email: "admin@here.com".into(),
+                first_name: "Master".into(),
+                last_name: "Admin".into(),
+                password: "abc12345".into(),
+                password_confirm: "abc12345".into(),
+            };
+
             let user = models::User::create(user, &self.pool, None)
                 .await
                 .expect("Could not create test user in db.");
+
+            let _ = models::User::create(admin, &self.pool, None)
+                .await
+                .expect("Could not create admin user in db.");
 
             sqlx::query(
                 "UPDATE users set pay_address = '123456', staking_quota = 3 where email = 'test@here.com'",
