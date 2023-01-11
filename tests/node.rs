@@ -17,7 +17,7 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         host_id: host.id,
         org_id: org.id,
         blockchain_id: blockchain.id,
-        node_type: Json(NodeProperties::special_type(NodeTypeKey::Api)),
+        node_type: Json(NodeProperties::special_type(NodeTypeKey::Validator)),
         chain_status: NodeChainStatus::Unknown,
         sync_status: NodeSyncStatus::Syncing,
         container_status: ContainerStatus::Installing,
@@ -29,9 +29,12 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         ip_addr: None,
         ip_gateway: Some("192.168.0.1".into()),
         name: None,
-        version: None,
+        version: Some("0.0.1".into()),
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
 
     Node::create(&req, tester.pool()).await?;

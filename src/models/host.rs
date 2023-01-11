@@ -1,5 +1,6 @@
 use super::{Node, NodeProvision, PgQuery};
 use crate::auth::{FindableById, HostAuthToken, Identifiable, JwtToken, Owned, TokenError};
+use crate::cookbook::HardwareRequirements;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::{self, HostInfo};
 use crate::grpc::helpers::required;
@@ -297,6 +298,45 @@ impl Host {
 
         tx.commit().await?;
         Ok(deleted.rows_affected())
+    }
+
+    /// We sum up all nodes values assigned to a host and deduct that from the total the host has
+    /// We don't consider CPUs in the selection, hard disk is more important than memory. The result
+    /// is ordered by disk_size and mem_size the first one in the list is returned
+    pub async fn get_next_available_host_id(
+        requirements: HardwareRequirements,
+        db: &PgPool,
+    ) -> Result<Uuid> {
+        let host = sqlx::query(
+            r#"
+            SELECT hosts.id as h_id, (hosts.mem_size - SUM(nodes.mem_size_mb)) as mem_size, (hosts.disk_size - SUM(nodes.disk_size_gb)) as disk_size FROM hosts
+            LEFT JOIN nodes on hosts.id = nodes.host_id
+            GROUP BY hosts.id
+            ORDER BY disk_size desc, mem_size desc
+            LIMIT 1
+        "#,
+        )
+        .fetch_one(db)
+        .await?;
+        let host_id = host.get::<Uuid, _>("h_id");
+        let disk_size: i64 = host.try_get("disk_size").unwrap_or_default();
+        let mem_size: i64 = host.try_get("mem_size").unwrap_or_default();
+
+        // Trace warnings, if the selected host doesn't seem to have enough resources
+        if *requirements.disk_size_gb() > disk_size / 1024i64.pow(3) {
+            tracing::warn!(
+                "Host {} doesn't seem to have enough disk space available",
+                host_id
+            );
+        }
+        if *requirements.mem_size_mb() > mem_size / 1024i64.pow(2) {
+            tracing::warn!(
+                "Host {} doesn't seem to have enough memory available",
+                host_id
+            );
+        }
+
+        Ok(host_id)
     }
 }
 
@@ -664,7 +704,7 @@ impl HostProvision {
             .map_err(|_| ApiError::from(anyhow::anyhow!("Couldn't parse nodes")))?;
 
         let mut host_provision = sqlx::query_as::<_, HostProvision>(
-            r#"INSERT INTO host_provisions (id, nodes, ip_range_from, ip_range_to, ip_gateway) 
+            r#"INSERT INTO host_provisions (id, nodes, ip_range_from, ip_range_to, ip_gateway)
                    values ($1, $2, $3, $4, $5) RETURNING *"#,
         )
         .bind(Self::generate_token())

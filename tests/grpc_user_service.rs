@@ -53,9 +53,12 @@ async fn responds_ok_with_valid_token_for_delete() {
         ip_addr: None,
         ip_gateway: Some("192.168.0.1".into()),
         name: None,
-        version: None,
+        version: Some("0.0.1".into()),
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
     let _ = models::Node::create(&req, tester.pool()).await.unwrap();
     let req = blockjoy_ui::DeleteUserRequest {

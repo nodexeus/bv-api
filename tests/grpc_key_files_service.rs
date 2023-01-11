@@ -36,7 +36,7 @@ async fn responds_ok_with_valid_node_id() {
         org_id: tester.org().await.id,
         blockchain_id: tester.blockchain().await.id,
         node_type: Json(models::NodeProperties::special_type(
-            models::NodeTypeKey::Api,
+            models::NodeTypeKey::Validator,
         )),
         chain_status: models::NodeChainStatus::Unknown,
         sync_status: models::NodeSyncStatus::Syncing,
@@ -49,9 +49,12 @@ async fn responds_ok_with_valid_node_id() {
         ip_addr: None,
         ip_gateway: Some("192.168.0.1".into()),
         name: None,
-        version: None,
+        version: Some("0.0.1".into()),
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
     let node = models::Node::create(&req, tester.pool()).await.unwrap();
     let req = models::CreateNodeKeyFileRequest {
@@ -107,7 +110,7 @@ async fn responds_ok_with_valid_node_id_for_save() {
         org_id: tester.org().await.id,
         blockchain_id: tester.blockchain().await.id,
         node_type: Json(models::NodeProperties::special_type(
-            models::NodeTypeKey::Api,
+            models::NodeTypeKey::Validator,
         )),
         chain_status: models::NodeChainStatus::Unknown,
         sync_status: models::NodeSyncStatus::Syncing,
@@ -120,9 +123,12 @@ async fn responds_ok_with_valid_node_id_for_save() {
         ip_addr: None,
         ip_gateway: Some("192.168.0.1".into()),
         name: None,
-        version: None,
+        version: Some("0.0.1".into()),
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
     let node = models::Node::create(&req, tester.pool()).await.unwrap();
     let key_file = blockjoy::Keyfile {
@@ -151,7 +157,7 @@ async fn responds_error_with_same_node_id_name_twice_for_save() {
         org_id: tester.org().await.id,
         blockchain_id: tester.blockchain().await.id,
         node_type: Json(models::NodeProperties::special_type(
-            models::NodeTypeKey::Api,
+            models::NodeTypeKey::Validator,
         )),
         chain_status: models::NodeChainStatus::Unknown,
         sync_status: models::NodeSyncStatus::Syncing,
@@ -164,9 +170,12 @@ async fn responds_error_with_same_node_id_name_twice_for_save() {
         ip_addr: None,
         ip_gateway: Some("192.168.0.1".into()),
         name: None,
-        version: None,
+        version: Some("0.0.1".to_string()),
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
     let node = models::Node::create(&req, tester.pool()).await.unwrap();
     let key_file = blockjoy::Keyfile {

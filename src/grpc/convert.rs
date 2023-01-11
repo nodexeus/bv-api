@@ -575,6 +575,9 @@ pub mod from {
                 staking_status: Some(NodeStakingStatus::Unknown),
                 container_status: ContainerStatus::Unknown,
                 self_update: node.self_update.unwrap_or(false),
+                vcpu_count: 0,
+                mem_size_mb: 0,
+                disk_size_gb: 0,
             };
 
             Ok(req)

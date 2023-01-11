@@ -29,7 +29,7 @@ async fn responds_ok_with_id_for_get() {
         org_id: org.id,
         blockchain_id: blockchain.id,
         node_type: sqlx::types::Json(models::NodeProperties::special_type(
-            models::NodeTypeKey::Api,
+            models::NodeTypeKey::Validator,
         )),
         chain_status: models::NodeChainStatus::Unknown,
         sync_status: models::NodeSyncStatus::Syncing,
@@ -42,9 +42,12 @@ async fn responds_ok_with_id_for_get() {
         ip_addr: None,
         ip_gateway: Some("192.168.0.1".into()),
         name: None,
-        version: None,
+        version: Some("0.0.1".into()),
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
     let node = models::Node::create(&req, tester.pool()).await.unwrap();
     let req = blockjoy_ui::GetNodeRequest {
@@ -68,7 +71,7 @@ async fn responds_ok_with_valid_data_for_create() {
         blockchain_id: Some(blockchain.id.to_string()),
         status: Some(node::NodeStatus::UndefinedApplicationStatus as i32),
         r#type: Some(
-            models::NodeType::special_type(models::NodeTypeKey::Api)
+            models::NodeType::special_type(models::NodeTypeKey::Validator)
                 .to_json()
                 .unwrap(),
         ),
@@ -77,6 +80,7 @@ async fn responds_ok_with_valid_data_for_create() {
         staking_status: None,
         sync_status: Some(models::NodeSyncStatus::Unknown as i32),
         self_update: None,
+        version: Some("0.0.1".into()),
         ..Default::default()
     };
     let req = blockjoy_ui::CreateNodeRequest {
@@ -134,9 +138,12 @@ async fn responds_ok_with_valid_data_for_update() {
         ip_addr: None,
         ip_gateway: Some("192.168.0.1".into()),
         name: None,
-        version: None,
+        version: Some("0.0.1".into()),
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
     let db_node = models::Node::create(&req, tester.pool()).await.unwrap();
     let node = blockjoy_ui::Node {
@@ -209,9 +216,12 @@ async fn responds_ok_with_valid_data_for_delete() {
         ip_addr: Some("192.168.0.10".into()),
         ip_gateway: Some("192.168.0.1".into()),
         name: None,
-        version: None,
+        version: Some("0.0.1".into()),
         staking_status: None,
         self_update: false,
+        vcpu_count: 0,
+        mem_size_mb: 0,
+        disk_size_gb: 0,
     };
     let db_node = models::Node::create(&req, tester.pool()).await.unwrap();
     let req = blockjoy_ui::DeleteNodeRequest {

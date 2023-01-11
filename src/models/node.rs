@@ -1,8 +1,9 @@
 use super::{node_type::*, PgQuery};
+use crate::cookbook::get_hw_requirements;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::{self, NodeInfo as GrpcNodeInfo};
 use crate::models::node_property_value::NodeProperties;
-use crate::models::UpdateInfo;
+use crate::models::{Blockchain, Host, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -171,6 +172,9 @@ pub struct Node {
     pub self_update: bool,
     pub block_age: Option<i64>,
     pub consensus: Option<bool>,
+    pub vcpu_count: i64,
+    pub mem_size_mb: i64,
+    pub disk_size_gb: i64,
 }
 
 #[derive(Clone, Debug)]
@@ -191,6 +195,10 @@ impl Node {
 
     pub async fn create(req: &NodeCreateRequest, db: &PgPool) -> Result<Node> {
         let mut tx = db.begin().await?;
+        let chain = Blockchain::find_by_id(req.blockchain_id, db).await?;
+        let node_type = NodeTypeKey::str_from_value(req.node_type.get_id());
+        let requirements = get_hw_requirements(chain.name, node_type, req.version.clone()).await?;
+        let host_id = Host::get_next_available_host_id(requirements, db).await?;
         let node = sqlx::query_as::<_, Node>(
             r#"INSERT INTO nodes (
                     org_id, 
@@ -208,11 +216,14 @@ impl Node {
                     chain_status,
                     sync_status,
                     ip_gateway,
-                    self_update
-                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *"#,
+                    self_update,
+                    vcpu_count,
+                    mem_size_mb,
+                    disk_size_gb
+                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *"#,
         )
         .bind(req.org_id)
-        .bind(req.host_id)
+        .bind(host_id)
         .bind(&req.name)
         .bind(&req.groups)
         .bind(&req.version)
@@ -227,9 +238,11 @@ impl Node {
         .bind(req.sync_status)
         .bind(&req.ip_gateway)
         .bind(req.self_update)
+        .bind(requirements.vcpu_count)
+        .bind(requirements.mem_size_mb)
+        .bind(requirements.disk_size_gb)
         .fetch_one(&mut tx)
         .await
-        //.map_err(ApiError::from)?;
         .map_err(|e| {
             tracing::error!("Error creating node: {}", e);
             ApiError::from(e)
@@ -454,6 +467,7 @@ pub struct NodeProvision {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeCreateRequest {
     pub org_id: Uuid,
+    // TODO: Remove obsolete host ID as it will be selected automatically (at least for managed nodes)
     pub host_id: Uuid,
     pub name: Option<String>,
     pub groups: Option<String>,
@@ -471,6 +485,9 @@ pub struct NodeCreateRequest {
     pub staking_status: Option<NodeStakingStatus>,
     pub container_status: ContainerStatus,
     pub self_update: bool,
+    pub vcpu_count: i64,
+    pub mem_size_mb: i64,
+    pub disk_size_gb: i64,
 }
 
 pub struct NodeUpdateRequest {
