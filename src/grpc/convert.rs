@@ -226,10 +226,6 @@ pub mod from {
         fn try_from(host: GrpcHost) -> Result<Self, Self::Error> {
             let updater = Self {
                 id: host.id.ok_or_else(required("update.id"))?.parse()?,
-                org_id: host
-                    .org_id
-                    .map(|id| Uuid::parse_str(id.as_str()))
-                    .transpose()?,
                 name: host.name,
                 version: host.version,
                 location: host.location,
@@ -239,7 +235,6 @@ pub mod from {
                 os: host.os,
                 os_version: host.os_version,
                 ip_addr: host.ip,
-                val_ip_addrs: None,
                 status: None,
                 ip_range_from: None,
                 ip_range_to: None,
@@ -256,7 +251,6 @@ pub mod from {
         fn try_from(hp: HostProvision) -> Result<Self, Self::Error> {
             let hp = Self {
                 id: Some(hp.id),
-                org_id: hp.org_id.to_string(),
                 host_id: hp.host_id.map(|id| id.to_string()),
                 created_at: Some(try_dt_to_ts(hp.created_at)?),
                 claimed_at: hp.claimed_at.map(try_dt_to_ts).transpose()?,
@@ -283,10 +277,6 @@ pub mod from {
 
         fn try_from(host: GrpcHost) -> Result<Self, Self::Error> {
             let req = Self {
-                org_id: host
-                    .org_id
-                    .map(|id| Uuid::parse_str(id.as_str()))
-                    .transpose()?,
                 name: host.name.ok_or_else(required("host.name"))?,
                 version: host.version,
                 location: host.location,
@@ -296,7 +286,6 @@ pub mod from {
                 os: host.os,
                 os_version: host.os_version,
                 ip_addr: host.ip.ok_or_else(required("host.ip"))?,
-                val_ip_addrs: None,
                 status: ConnectionStatus::Online,
                 ip_range_from: Some(
                     host.ip_range_from
@@ -423,7 +412,6 @@ pub mod from {
 
             let grpc_host = Self {
                 id: Some(host.id.to_string()),
-                org_id: host.org_id.map(|id| id.to_string()),
                 name: Some(host.name.clone()),
                 version: host.version.clone().map(String::from),
                 location: host.location.clone().map(String::from),

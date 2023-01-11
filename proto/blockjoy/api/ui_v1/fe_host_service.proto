@@ -9,8 +9,7 @@ message GetHostsRequest {
 
   oneof param {
     string id = 2;
-    string org_id = 3;
-    string token = 4;
+    string token = 3;
   }
 }
 

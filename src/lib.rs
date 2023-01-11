@@ -16,7 +16,7 @@ mod test {
     use crate::auth::{
         HostRefreshToken, JwtToken, TokenClaim, TokenRole, TokenType, UserRefreshToken,
     };
-    use crate::models::{self, validator};
+    use crate::models::{self};
     use rand::Rng;
     use sqlx::Connection;
     use std::net::IpAddr;
@@ -149,9 +149,21 @@ mod test {
                 password_confirm: "abc12345".into(),
             };
 
+            let admin = models::UserRequest {
+                email: "admin@here.com".into(),
+                first_name: "Master".into(),
+                last_name: "Admin".into(),
+                password: "abc12345".into(),
+                password_confirm: "abc12345".into(),
+            };
+
             let user = models::User::create(user, &self.pool, None)
                 .await
                 .expect("Could not create test user in db.");
+
+            let _ = models::User::create(admin, &self.pool, None)
+                .await
+                .expect("Could not create admin user in db.");
 
             sqlx::query(
                 "UPDATE users set pay_address = '123456', staking_quota = 3 where email = 'test@here.com'",
@@ -166,25 +178,7 @@ mod test {
             .await
             .expect("could insert test invoice into db");
 
-            let user = models::UserRequest {
-                email: "admin@here.com".into(),
-                first_name: "Mister".into(),
-                last_name: "Sister".into(),
-                password: "abc12345".into(),
-                password_confirm: "abc12345".into(),
-            };
-
-            let admin = models::User::create(user, &self.pool, Some(TokenRole::Admin))
-                .await
-                .expect("Could not create test user in db.");
-
-            let orgs = models::Org::find_all_by_user(admin.id, &self.pool)
-                .await
-                .unwrap();
-            let org = orgs.first().unwrap();
-
             let host = models::HostRequest {
-                org_id: Some(org.id),
                 name: "Host-1".into(),
                 version: Some("0.1.0".into()),
                 location: Some("Virginia".into()),
@@ -194,40 +188,17 @@ mod test {
                 os: None,
                 os_version: None,
                 ip_addr: "192.168.1.1".into(),
-                val_ip_addrs: Some(
-                    "192.168.0.1, 192.168.0.2, 192.168.0.3, 192.168.0.4, 192.168.0.5".into(),
-                ),
                 status: models::ConnectionStatus::Online,
                 ip_range_from: Some(IpAddr::from_str("192.168.0.10").expect("invalid ip")),
                 ip_range_to: Some(IpAddr::from_str("192.168.0.100").expect("invalid ip")),
                 ip_gateway: Some(IpAddr::from_str("192.168.0.1").expect("invalid ip")),
             };
 
-            let host = models::Host::create(host, &self.pool)
+            let _ = models::Host::create(host, &self.pool)
                 .await
                 .expect("Could not create test host in db.");
 
-            let status = validator::ValidatorStatusRequest {
-                version: None,
-                block_height: None,
-                status: validator::ValidatorStatus::Synced,
-            };
-
-            for v in host.validators.expect("No validators.") {
-                let _ = validator::Validator::update_status(v.id, status.clone(), &self.pool)
-                    .await
-                    .expect("Error updating validator status in db during setup.");
-                let _ = validator::Validator::update_stake_status(
-                    v.id,
-                    validator::StakeStatus::Available,
-                    &self.pool,
-                )
-                .await
-                .expect("Error updating validator stake status in db during setup.");
-            }
-
             let host = models::HostRequest {
-                org_id: None,
                 name: "Host-2".into(),
                 version: Some("0.1.0".into()),
                 location: Some("Ohio".into()),
@@ -237,37 +208,15 @@ mod test {
                 os: None,
                 os_version: None,
                 ip_addr: "192.168.2.1".into(),
-                val_ip_addrs: Some(
-                    "192.168.3.1, 192.168.3.2, 192.168.3.3, 192.168.3.4, 192.168.3.5".into(),
-                ),
                 status: models::ConnectionStatus::Online,
                 ip_range_from: Some(IpAddr::from_str("192.12.0.10").expect("invalid ip")),
                 ip_range_to: Some(IpAddr::from_str("192.12.0.20").expect("invalid ip")),
                 ip_gateway: Some(IpAddr::from_str("192.12.0.1").expect("invalid ip")),
             };
 
-            let host = models::Host::create(host, &self.pool)
+            let _ = models::Host::create(host, &self.pool)
                 .await
                 .expect("Could not create test host in db.");
-
-            let status = validator::ValidatorStatusRequest {
-                version: None,
-                block_height: None,
-                status: validator::ValidatorStatus::Synced,
-            };
-
-            for v in host.validators.expect("No validators.") {
-                let _ = validator::Validator::update_status(v.id, status.clone(), &self.pool)
-                    .await
-                    .expect("Error updating validator status in db during setup.");
-                let _ = validator::Validator::update_stake_status(
-                    v.id,
-                    validator::StakeStatus::Available,
-                    &self.pool,
-                )
-                .await
-                .expect("Error updating validator stake status in db during setup.");
-            }
         }
 
         pub async fn test_host(&self) -> models::Host {

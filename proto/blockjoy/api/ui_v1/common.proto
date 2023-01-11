@@ -78,35 +78,33 @@ message Host {
   }
 
   optional string id = 1;
-  optional string org_id = 2;
-  optional string name = 3;
-  optional string version = 4;
-  optional string location = 5;
-  optional int64 cpu_count = 6;
-  optional int64 mem_size = 7;
-  optional int64 disk_size = 8;
-  optional string os = 9;
-  optional string os_version = 10;
-  optional string ip = 11;
-  optional HostStatus status = 12;
-  repeated Node nodes = 13;
-  optional google.protobuf.Timestamp created_at = 14;
-  optional string ip_range_from = 15;
-  optional string ip_range_to = 16;
-  optional string ip_gateway = 17;
+  optional string name = 2;
+  optional string version = 3;
+  optional string location = 4;
+  optional int64 cpu_count = 5;
+  optional int64 mem_size = 6;
+  optional int64 disk_size = 7;
+  optional string os = 8;
+  optional string os_version = 9;
+  optional string ip = 10;
+  optional HostStatus status = 11;
+  repeated Node nodes = 12;
+  optional google.protobuf.Timestamp created_at = 13;
+  optional string ip_range_from = 14;
+  optional string ip_range_to = 15;
+  optional string ip_gateway = 16;
 }
 
 /* HostProvision entity */
 message HostProvision {
   optional string id = 1;
-  string org_id = 2;
-  optional string host_id = 3;
-  optional google.protobuf.Timestamp created_at = 4;
-  optional google.protobuf.Timestamp claimed_at = 5;
-  optional string install_cmd = 6;
-  string ip_range_from = 7;
-  string ip_range_to = 8;
-  string ip_gateway = 9;
+  optional string host_id = 2;
+  optional google.protobuf.Timestamp created_at = 3;
+  optional google.protobuf.Timestamp claimed_at = 4;
+  optional string install_cmd = 5;
+  string ip_range_from = 6;
+  string ip_range_to = 7;
+  string ip_gateway = 8;
 }
 
 /* Blockchain node representation */
