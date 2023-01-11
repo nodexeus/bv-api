@@ -44,7 +44,7 @@ pub async fn get_hw_requirements(
 
     request.metadata_mut().insert(
         "authorization",
-        cb_token.parse().map_err(|e| {
+        format!("Bearer {}", cb_token).parse().map_err(|e| {
             ApiError::UnexpectedError(anyhow!("Can't set cookbook auth header: {e}"))
         })?,
     );

@@ -309,7 +309,7 @@ impl Host {
     ) -> Result<Uuid> {
         let host = sqlx::query(
             r#"
-            SELECT hosts.id, (hosts.mem_size - SUM(nodes.mem_size_mb)) as mem_size, (hosts.disk_size - SUM(nodes.disk_size_gb)) as disk_size FROM hosts
+            SELECT hosts.id as h_id, (hosts.mem_size - SUM(nodes.mem_size_mb)) as mem_size, (hosts.disk_size - SUM(nodes.disk_size_gb)) as disk_size FROM hosts
             LEFT JOIN nodes on hosts.id = nodes.host_id
             GROUP BY hosts.id
             ORDER BY disk_size desc, mem_size desc
@@ -318,16 +318,19 @@ impl Host {
         )
         .fetch_one(db)
         .await?;
-        let host_id = host.get::<Uuid, _>(0);
+        let host_id = host.get::<Uuid, _>("h_id");
+        dbg!(&host_id);
+        let disk_size: i64 = host.try_get("disk_size").unwrap_or_default();
+        let mem_size: i64 = host.try_get("mem_size").unwrap_or_default();
 
         // Trace warnings, if the selected host doesn't seem to have enough resources
-        if requirements.disk_size_gb().pow(3) > host.get(2) {
+        if requirements.disk_size_gb().pow(3) > disk_size {
             tracing::warn!(
                 "Host {} doesn't seem to have enough disk space available",
                 host_id
             );
         }
-        if requirements.mem_size_mb().pow(2) > host.get(1) {
+        if requirements.mem_size_mb().pow(2) > mem_size {
             tracing::warn!(
                 "Host {} doesn't seem to have enough memory available",
                 host_id

@@ -197,7 +197,7 @@ impl Node {
         let mut tx = db.begin().await?;
         let chain = Blockchain::find_by_id(req.blockchain_id, db).await?;
         let node_type = NodeTypeKey::str_from_value(req.node_type.get_id());
-        let requirements = get_hw_requirements(chain.name, node_type, None).await?;
+        let requirements = get_hw_requirements(chain.name, node_type, req.version.clone()).await?;
         let host_id = Host::get_next_available_host_id(requirements, db).await?;
         let node = sqlx::query_as::<_, Node>(
             r#"INSERT INTO nodes (
