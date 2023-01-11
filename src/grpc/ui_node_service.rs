@@ -1,5 +1,5 @@
 use super::helpers::{internal, required};
-use crate::auth::{FindableById, UserAuthToken};
+use crate::auth::UserAuthToken;
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
@@ -10,7 +10,7 @@ use crate::grpc::blockjoy_ui::{
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models::{
-    Command, CommandRequest, Host, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo,
+    Command, CommandRequest, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo,
 };
 use crate::server::DbPool;
 use std::sync::Arc;
@@ -97,24 +97,14 @@ impl NodeService for NodeServiceImpl {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let mut fields: NodeCreateRequest = inner.node.ok_or_else(required("node"))?.try_into()?;
-        let host = Host::find_by_id(fields.host_id, &self.db).await?;
-        // Set IPs retrieved from system
-        fields.ip_gateway = host.ip_gateway.map(|ip| ip.to_string());
-        fields.ip_addr = Some(
-            IpAddress::next_for_host(fields.host_id, &self.db)
-                .await?
-                .ip
-                .to_string(),
-        );
-
-        let node = Node::create(&fields, &self.db).await?;
+        let node = Node::create(&mut fields, &self.db).await?;
         let req = CommandRequest {
             cmd: HostCmd::CreateNode,
             sub_cmd: None,
             resource_id: node.id,
         };
 
-        let cmd = Command::create(fields.host_id, req, &self.db).await?;
+        let cmd = Command::create(node.host_id, req, &self.db).await?;
         let payload = NotificationPayload::new(cmd.id);
         let notification = ChannelNotification::Command(payload);
 

@@ -1,9 +1,10 @@
 use super::{node_type::*, PgQuery};
+use crate::auth::FindableById;
 use crate::cookbook::get_hw_requirements;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::{self, NodeInfo as GrpcNodeInfo};
 use crate::models::node_property_value::NodeProperties;
-use crate::models::{Blockchain, Host, UpdateInfo};
+use crate::models::{Blockchain, Host, IpAddress, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -193,12 +194,17 @@ impl Node {
             .map_err(ApiError::from)
     }
 
-    pub async fn create(req: &NodeCreateRequest, db: &PgPool) -> Result<Node> {
+    pub async fn create(req: &mut NodeCreateRequest, db: &PgPool) -> Result<Node> {
         let mut tx = db.begin().await?;
         let chain = Blockchain::find_by_id(req.blockchain_id, db).await?;
         let node_type = NodeTypeKey::str_from_value(req.node_type.get_id());
         let requirements = get_hw_requirements(chain.name, node_type, req.version.clone()).await?;
         let host_id = Host::get_next_available_host_id(requirements, db).await?;
+        let host = Host::find_by_id(host_id, db).await?;
+
+        req.ip_gateway = host.ip_gateway.map(|ip| ip.to_string());
+        req.ip_addr = Some(IpAddress::next_for_host(host_id, db).await?.ip.to_string());
+
         let node = sqlx::query_as::<_, Node>(
             r#"INSERT INTO nodes (
                     org_id, 
@@ -467,8 +473,6 @@ pub struct NodeProvision {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeCreateRequest {
     pub org_id: Uuid,
-    // TODO: Remove obsolete host ID as it will be selected automatically (at least for managed nodes)
-    pub host_id: Uuid,
     pub name: Option<String>,
     pub groups: Option<String>,
     pub version: Option<String>,

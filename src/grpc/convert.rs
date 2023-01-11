@@ -482,7 +482,7 @@ pub mod from {
             let node = Self {
                 id: None,
                 org_id: Some(req.org_id.to_string()),
-                host_id: Some(req.host_id.to_string()),
+                host_id: None,
                 blockchain_id: Some(req.blockchain_id.to_string()),
                 name: Some(petname::petname(3, "_")),
                 // TODO
@@ -540,11 +540,6 @@ pub mod from {
                 org_id: Uuid::parse_str(
                     node.org_id
                         .ok_or_else(|| ApiError::validation("GrpcNode.org_id is required"))?
-                        .as_str(),
-                )?,
-                host_id: Uuid::parse_str(
-                    node.host_id
-                        .ok_or_else(|| ApiError::validation("GrpcNode.host_id is required"))?
                         .as_str(),
                 )?,
                 name: Some(petname::petname(3, "_")),

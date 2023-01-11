@@ -9,12 +9,10 @@ use sqlx::types::Json;
 #[tokio::test]
 async fn can_create_key_file() -> anyhow::Result<()> {
     let tester = setup::Tester::new().await;
-    let host = tester.test_host().await;
     let blockchain = tester.blockchain().await;
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
-    let req = NodeCreateRequest {
-        host_id: host.id,
+    let mut req = NodeCreateRequest {
         org_id: org.id,
         blockchain_id: blockchain.id,
         node_type: Json(NodeProperties::special_type(NodeTypeKey::Validator)),
@@ -36,7 +34,7 @@ async fn can_create_key_file() -> anyhow::Result<()> {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let node = Node::create(&req, tester.pool()).await.unwrap();
+    let node = Node::create(&mut req, tester.pool()).await.unwrap();
     let req = CreateNodeKeyFileRequest {
         name: "my-key.txt".to_string(),
         content:
@@ -70,12 +68,10 @@ async fn cannot_create_key_file_for_unknown_node() -> anyhow::Result<()> {
 #[tokio::test]
 async fn deletes_key_file_if_node_is_deleted() -> anyhow::Result<()> {
     let tester = setup::Tester::new().await;
-    let host = tester.test_host().await;
     let blockchain = tester.blockchain().await;
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
-    let req = NodeCreateRequest {
-        host_id: host.id,
+    let mut req = NodeCreateRequest {
         org_id: org.id,
         blockchain_id: blockchain.id,
         node_type: Json(NodeProperties::special_type(NodeTypeKey::Validator)),
@@ -97,7 +93,7 @@ async fn deletes_key_file_if_node_is_deleted() -> anyhow::Result<()> {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let node = Node::create(&req, tester.pool()).await.unwrap();
+    let node = Node::create(&mut req, tester.pool()).await.unwrap();
     let req = CreateNodeKeyFileRequest {
         name: "my-key.txt".to_string(),
         content:

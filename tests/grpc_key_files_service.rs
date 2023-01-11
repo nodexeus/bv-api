@@ -31,8 +31,7 @@ async fn responds_ok_with_valid_node_id() {
     let host = tester.host().await;
     let auth = tester.host_token(&host);
     let refresh = tester.refresh_for(&auth);
-    let req = models::NodeCreateRequest {
-        host_id: host.id,
+    let mut req = models::NodeCreateRequest {
         org_id: tester.org().await.id,
         blockchain_id: tester.blockchain().await.id,
         node_type: Json(models::NodeProperties::special_type(
@@ -56,7 +55,7 @@ async fn responds_ok_with_valid_node_id() {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let node = models::Node::create(&req, tester.pool()).await.unwrap();
+    let node = models::Node::create(&mut req, tester.pool()).await.unwrap();
     let req = models::CreateNodeKeyFileRequest {
         name: "my-key.txt".to_string(),
         content:
@@ -105,8 +104,7 @@ async fn responds_ok_with_valid_node_id_for_save() {
     let host = tester.host().await;
     let auth = tester.host_token(&host);
     let refresh = tester.refresh_for(&auth);
-    let req = models::NodeCreateRequest {
-        host_id: host.id,
+    let mut req = models::NodeCreateRequest {
         org_id: tester.org().await.id,
         blockchain_id: tester.blockchain().await.id,
         node_type: Json(models::NodeProperties::special_type(
@@ -130,7 +128,7 @@ async fn responds_ok_with_valid_node_id_for_save() {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let node = models::Node::create(&req, tester.pool()).await.unwrap();
+    let node = models::Node::create(&mut req, tester.pool()).await.unwrap();
     let key_file = blockjoy::Keyfile {
         name: "new keyfile".to_string(),
         content: "üöäß@niesfiefasd".to_string().into_bytes(),
@@ -152,8 +150,7 @@ async fn responds_error_with_same_node_id_name_twice_for_save() {
     let host = tester.host().await;
     let auth = tester.host_token(&host);
     let refresh = tester.refresh_for(&auth);
-    let req = models::NodeCreateRequest {
-        host_id: host.id,
+    let mut req = models::NodeCreateRequest {
         org_id: tester.org().await.id,
         blockchain_id: tester.blockchain().await.id,
         node_type: Json(models::NodeProperties::special_type(
@@ -177,7 +174,7 @@ async fn responds_error_with_same_node_id_name_twice_for_save() {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let node = models::Node::create(&req, tester.pool()).await.unwrap();
+    let node = models::Node::create(&mut req, tester.pool()).await.unwrap();
     let key_file = blockjoy::Keyfile {
         name: "new keyfile".to_string(),
         content: "üöäß@niesfiefasd".to_string().into_bytes(),
