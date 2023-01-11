@@ -324,13 +324,13 @@ impl Host {
         let mem_size: i64 = host.try_get("mem_size").unwrap_or_default();
 
         // Trace warnings, if the selected host doesn't seem to have enough resources
-        if requirements.disk_size_gb().pow(3) > disk_size {
+        if *requirements.disk_size_gb() > disk_size / 1024i64.pow(3) {
             tracing::warn!(
                 "Host {} doesn't seem to have enough disk space available",
                 host_id
             );
         }
-        if requirements.mem_size_mb().pow(2) > mem_size {
+        if *requirements.mem_size_mb() > mem_size / 1024i64.pow(2) {
             tracing::warn!(
                 "Host {} doesn't seem to have enough memory available",
                 host_id
