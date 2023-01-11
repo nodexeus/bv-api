@@ -49,7 +49,6 @@ impl HostProvisionService for HostProvisionServiceImpl {
             .host_provision
             .ok_or_else(required("host_provision"))?;
         let req = HostProvisionRequest {
-            org_id: Uuid::parse_str(provision.org_id.as_str()).map_err(ApiError::from)?,
             nodes: None,
             ip_range_from: provision
                 .ip_range_from

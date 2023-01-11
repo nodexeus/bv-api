@@ -15,7 +15,7 @@ mod test {
     use crate::auth::{
         HostRefreshToken, JwtToken, TokenClaim, TokenRole, TokenType, UserRefreshToken,
     };
-    use crate::models::{self, validator};
+    use crate::models::{self};
     use rand::Rng;
     use sqlx::Connection;
     use std::net::IpAddr;
@@ -183,7 +183,6 @@ mod test {
             let org = orgs.first().unwrap();
 
             let host = models::HostRequest {
-                org_id: Some(org.id),
                 name: "Host-1".into(),
                 version: Some("0.1.0".into()),
                 location: Some("Virginia".into()),

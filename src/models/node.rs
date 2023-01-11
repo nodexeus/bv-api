@@ -3,7 +3,7 @@ use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::{self, NodeInfo as GrpcNodeInfo};
 use crate::grpc::helpers::internal;
 use crate::models::node_property_value::NodeProperties;
-use crate::models::{validator::Validator, UpdateInfo};
+use crate::models::UpdateInfo;
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

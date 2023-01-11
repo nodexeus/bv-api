@@ -6,7 +6,7 @@ use crate::auth::{
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::LoginUserRequest;
 use crate::mail::MailClient;
-use crate::models::{org::Org, validator::StakeStatus, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
+use crate::models::{org::Org, FEE_BPS_DEFAULT, STAKE_QUOTA_DEFAULT};
 use anyhow::anyhow;
 use argon2::{
     password_hash::{PasswordHasher, SaltString},
@@ -127,19 +127,6 @@ impl User {
 
     pub async fn can_stake(&self, db: &PgPool, count: i64) -> Result<bool> {
         Ok(self.staking_quota >= (self.staking_count(db).await? + count))
-    }
-
-    /// Returns the number of validators in "Staking"
-    pub async fn staking_count(&self, db: &PgPool) -> Result<i64> {
-        let row: (i64,) = sqlx::query_as(
-            "SELECT count(*) FROM validators where user_id = $1 AND stake_status = $2 AND deleted_at IS NULL",
-        )
-        .bind(self.id)
-        .bind(StakeStatus::Staking)
-        .fetch_one(db)
-        .await?;
-
-        Ok(row.0)
     }
 
     pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
