@@ -164,7 +164,7 @@ impl Host {
         }
 
         let mut tx = db.begin().await?;
-        let mut host = sqlx::query(
+        let host = sqlx::query(
             r#"INSERT INTO hosts 
             (
                 name,

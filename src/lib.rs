@@ -205,27 +205,7 @@ mod test {
                 .await
                 .expect("Could not create test host in db.");
 
-            let status = validator::ValidatorStatusRequest {
-                version: None,
-                block_height: None,
-                status: validator::ValidatorStatus::Synced,
-            };
-
-            for v in host.validators.expect("No validators.") {
-                let _ = validator::Validator::update_status(v.id, status.clone(), &self.pool)
-                    .await
-                    .expect("Error updating validator status in db during setup.");
-                let _ = validator::Validator::update_stake_status(
-                    v.id,
-                    validator::StakeStatus::Available,
-                    &self.pool,
-                )
-                .await
-                .expect("Error updating validator stake status in db during setup.");
-            }
-
             let host = models::HostRequest {
-                org_id: None,
                 name: "Host-2".into(),
                 version: Some("0.1.0".into()),
                 location: Some("Ohio".into()),
@@ -247,25 +227,6 @@ mod test {
             let host = models::Host::create(host, &self.pool)
                 .await
                 .expect("Could not create test host in db.");
-
-            let status = validator::ValidatorStatusRequest {
-                version: None,
-                block_height: None,
-                status: validator::ValidatorStatus::Synced,
-            };
-
-            for v in host.validators.expect("No validators.") {
-                let _ = validator::Validator::update_status(v.id, status.clone(), &self.pool)
-                    .await
-                    .expect("Error updating validator status in db during setup.");
-                let _ = validator::Validator::update_stake_status(
-                    v.id,
-                    validator::StakeStatus::Available,
-                    &self.pool,
-                )
-                .await
-                .expect("Error updating validator stake status in db during setup.");
-            }
         }
 
         pub async fn test_host(&self) -> models::Host {

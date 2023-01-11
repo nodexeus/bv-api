@@ -53,16 +53,6 @@ impl HostService for HostServiceImpl {
                 .try_into()?],
                 ResponseMeta::new(request_id.unwrap_or_default()),
             ),
-            Param::OrgId(org_id) => {
-                let org_id = Uuid::parse_str(org_id.as_str()).map_err(ApiError::from)?;
-                let hosts = Host::find_by_org_paginated(org_id, limit, offset, &self.db).await?;
-                let hosts: Result<_, ApiError> = hosts.iter().map(GrpcHost::try_from).collect();
-
-                (
-                    hosts?,
-                    ResponseMeta::new(request_id.unwrap_or_default()).with_pagination(),
-                )
-            }
             Param::Token(token) => {
                 let token: HostAuthToken =
                     HostAuthToken::from_encoded(token.as_str(), TokenType::HostAuth, true)?;

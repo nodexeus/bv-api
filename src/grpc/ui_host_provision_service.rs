@@ -11,7 +11,6 @@ use crate::server::DbPool;
 use anyhow::anyhow;
 use std::net::AddrParseError;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 
 pub struct HostProvisionServiceImpl {
     db: DbPool,

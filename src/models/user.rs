@@ -125,10 +125,6 @@ impl User {
         client.reset_password(self, db).await
     }
 
-    pub async fn can_stake(&self, db: &PgPool, count: i64) -> Result<bool> {
-        Ok(self.staking_quota >= (self.staking_count(db).await? + count))
-    }
-
     pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM users")
             .fetch_all(db)
