@@ -9,12 +9,10 @@ use sqlx::types::Json;
 #[tokio::test]
 async fn can_filter_nodes() -> anyhow::Result<()> {
     let tester = setup::Tester::new().await;
-    let host = tester.test_host().await;
     let blockchain = tester.blockchain().await;
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
-    let req = NodeCreateRequest {
-        host_id: host.id,
+    let mut req = NodeCreateRequest {
         org_id: org.id,
         blockchain_id: blockchain.id,
         node_type: Json(NodeProperties::special_type(NodeTypeKey::Validator)),
@@ -37,7 +35,7 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         disk_size_gb: 0,
     };
 
-    Node::create(&req, tester.pool()).await?;
+    Node::create(&mut req, tester.pool()).await?;
 
     let filter = NodeFilter {
         status: vec!["unknown".to_string()],

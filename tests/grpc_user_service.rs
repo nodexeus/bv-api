@@ -32,11 +32,9 @@ async fn responds_ok_with_valid_token_for_delete() {
     let tester = setup::Tester::new().await;
     // create a node
     let blockchain = tester.blockchain().await;
-    let host = tester.host().await;
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
-    let req = models::NodeCreateRequest {
-        host_id: host.id,
+    let mut req = models::NodeCreateRequest {
         org_id: org.id,
         blockchain_id: blockchain.id,
         node_type: sqlx::types::Json(models::NodeProperties::special_type(
@@ -60,7 +58,7 @@ async fn responds_ok_with_valid_token_for_delete() {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let _ = models::Node::create(&req, tester.pool()).await.unwrap();
+    let _ = models::Node::create(&mut req, tester.pool()).await.unwrap();
     let req = blockjoy_ui::DeleteUserRequest {
         meta: Some(tester.meta()),
     };

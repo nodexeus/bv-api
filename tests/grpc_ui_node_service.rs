@@ -21,11 +21,9 @@ async fn responds_not_found_without_any_for_get() {
 async fn responds_ok_with_id_for_get() {
     let tester = setup::Tester::new().await;
     let blockchain = tester.blockchain().await;
-    let host = tester.host().await;
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
-    let req = models::NodeCreateRequest {
-        host_id: host.id,
+    let mut req = models::NodeCreateRequest {
         org_id: org.id,
         blockchain_id: blockchain.id,
         node_type: sqlx::types::Json(models::NodeProperties::special_type(
@@ -49,7 +47,7 @@ async fn responds_ok_with_id_for_get() {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let node = models::Node::create(&req, tester.pool()).await.unwrap();
+    let node = models::Node::create(&mut req, tester.pool()).await.unwrap();
     let req = blockjoy_ui::GetNodeRequest {
         meta: Some(tester.meta()),
         id: node.id.to_string(),
@@ -117,11 +115,9 @@ async fn responds_invalid_argument_with_invalid_data_for_create() {
 async fn responds_ok_with_valid_data_for_update() {
     let tester = setup::Tester::new().await;
     let blockchain = tester.blockchain().await;
-    let host = tester.host().await;
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
-    let req = models::NodeCreateRequest {
-        host_id: host.id,
+    let mut req = models::NodeCreateRequest {
         org_id: org.id,
         blockchain_id: blockchain.id,
         node_type: sqlx::types::Json(models::NodeProperties::special_type(
@@ -145,7 +141,7 @@ async fn responds_ok_with_valid_data_for_update() {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let db_node = models::Node::create(&req, tester.pool()).await.unwrap();
+    let db_node = models::Node::create(&mut req, tester.pool()).await.unwrap();
     let node = blockjoy_ui::Node {
         id: Some(db_node.id.to_string()),
         name: Some("stri-bu".to_string()),
@@ -195,11 +191,9 @@ async fn responds_not_found_with_invalid_id_for_update() {
 async fn responds_ok_with_valid_data_for_delete() {
     let tester = setup::Tester::new().await;
     let blockchain = tester.blockchain().await;
-    let host = tester.host().await;
     let user = tester.admin_user().await;
     let org = tester.org_for(&user).await;
-    let req = models::NodeCreateRequest {
-        host_id: host.id,
+    let mut req = models::NodeCreateRequest {
         org_id: org.id,
         blockchain_id: blockchain.id,
         node_type: sqlx::types::Json(models::NodeProperties::special_type(
@@ -223,7 +217,7 @@ async fn responds_ok_with_valid_data_for_delete() {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let db_node = models::Node::create(&req, tester.pool()).await.unwrap();
+    let db_node = models::Node::create(&mut req, tester.pool()).await.unwrap();
     let req = blockjoy_ui::DeleteNodeRequest {
         meta: Some(tester.meta()),
         id: db_node.id.to_string(),
