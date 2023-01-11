@@ -300,13 +300,6 @@ impl Host {
         Ok(deleted.rows_affected())
     }
 
-    pub fn validator_ips(&self) -> Vec<String> {
-        match &self.val_ip_addrs {
-            Some(s) => s.split(',').map(|ip| ip.trim().to_string()).collect(),
-            None => vec![],
-        }
-    }
-
     /// We sum up all nodes values assigned to a host and deduct that from the total the host has
     /// We don't consider CPUs in the selection, hard disk is more important than memory. The result
     /// is ordered by disk_size and mem_size the first one in the list is returned
