@@ -238,13 +238,11 @@ impl Node {
         .bind(req.sync_status)
         .bind(&req.ip_gateway)
         .bind(req.self_update)
-        // TODO: Ensure calculation is correct
         .bind(requirements.vcpu_count)
         .bind(requirements.mem_size_mb)
         .bind(requirements.disk_size_gb)
         .fetch_one(&mut tx)
         .await
-        //.map_err(ApiError::from)?;
         .map_err(|e| {
             tracing::error!("Error creating node: {}", e);
             ApiError::from(e)
