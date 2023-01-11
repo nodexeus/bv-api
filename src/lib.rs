@@ -165,23 +165,6 @@ mod test {
             .await
             .expect("could insert test invoice into db");
 
-            let user = models::UserRequest {
-                email: "admin@here.com".into(),
-                first_name: "Mister".into(),
-                last_name: "Sister".into(),
-                password: "abc12345".into(),
-                password_confirm: "abc12345".into(),
-            };
-
-            let admin = models::User::create(user, &self.pool, Some(TokenRole::Admin))
-                .await
-                .expect("Could not create test user in db.");
-
-            let orgs = models::Org::find_all_by_user(admin.id, &self.pool)
-                .await
-                .unwrap();
-            let org = orgs.first().unwrap();
-
             let host = models::HostRequest {
                 name: "Host-1".into(),
                 version: Some("0.1.0".into()),
@@ -192,16 +175,13 @@ mod test {
                 os: None,
                 os_version: None,
                 ip_addr: "192.168.1.1".into(),
-                val_ip_addrs: Some(
-                    "192.168.0.1, 192.168.0.2, 192.168.0.3, 192.168.0.4, 192.168.0.5".into(),
-                ),
                 status: models::ConnectionStatus::Online,
                 ip_range_from: Some(IpAddr::from_str("192.168.0.10").expect("invalid ip")),
                 ip_range_to: Some(IpAddr::from_str("192.168.0.100").expect("invalid ip")),
                 ip_gateway: Some(IpAddr::from_str("192.168.0.1").expect("invalid ip")),
             };
 
-            let host = models::Host::create(host, &self.pool)
+            let _ = models::Host::create(host, &self.pool)
                 .await
                 .expect("Could not create test host in db.");
 
@@ -215,16 +195,13 @@ mod test {
                 os: None,
                 os_version: None,
                 ip_addr: "192.168.2.1".into(),
-                val_ip_addrs: Some(
-                    "192.168.3.1, 192.168.3.2, 192.168.3.3, 192.168.3.4, 192.168.3.5".into(),
-                ),
                 status: models::ConnectionStatus::Online,
                 ip_range_from: Some(IpAddr::from_str("192.12.0.10").expect("invalid ip")),
                 ip_range_to: Some(IpAddr::from_str("192.12.0.20").expect("invalid ip")),
                 ip_gateway: Some(IpAddr::from_str("192.12.0.1").expect("invalid ip")),
             };
 
-            let host = models::Host::create(host, &self.pool)
+            let _ = models::Host::create(host, &self.pool)
                 .await
                 .expect("Could not create test host in db.");
         }

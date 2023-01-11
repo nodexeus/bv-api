@@ -21,10 +21,7 @@ async fn responds_not_found_without_valid_id_for_get() {
 #[tokio::test]
 async fn responds_ok_with_valid_id_for_get() {
     let tester = setup::Tester::new().await;
-    let user = tester.admin_user().await;
-    let org = tester.org_for(&user).await;
     let req = models::HostProvisionRequest {
-        org_id: org.id,
         nodes: None,
         ip_gateway: "192.168.0.1".parse().unwrap(),
         ip_range_from: "192.168.0.10".parse().unwrap(),
@@ -54,10 +51,7 @@ async fn responds_error_with_invalid_provision_for_create() {
 #[tokio::test]
 async fn responds_ok_with_valid_provision_for_create() {
     let tester = setup::Tester::new().await;
-    let user = tester.admin_user().await;
-    let org = tester.org_for(&user).await;
     let provision = blockjoy_ui::HostProvision {
-        org_id: org.id.to_string(),
         ip_gateway: String::from("192.168.0.1"),
         ip_range_from: String::from("192.168.0.10"),
         ip_range_to: String::from("192.168.0.100"),

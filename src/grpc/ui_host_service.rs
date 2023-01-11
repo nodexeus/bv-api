@@ -4,10 +4,9 @@ use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::host_service_server::HostService;
 use crate::grpc::blockjoy_ui::{
     get_hosts_request, CreateHostRequest, CreateHostResponse, DeleteHostRequest,
-    DeleteHostResponse, GetHostsRequest, GetHostsResponse, Host as GrpcHost, UpdateHostRequest,
-    UpdateHostResponse,
+    DeleteHostResponse, GetHostsRequest, GetHostsResponse, UpdateHostRequest, UpdateHostResponse,
 };
-use crate::grpc::helpers::{pagination_parameters, required};
+use crate::grpc::helpers::required;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models::{Host, HostRequest, HostSelectiveUpdate};
 use crate::server::DbPool;
@@ -41,7 +40,6 @@ impl HostService for HostServiceImpl {
         let inner = request.into_inner();
         let meta = inner.meta.ok_or_else(required("meta"))?;
         let request_id = meta.id;
-        let (limit, offset) = pagination_parameters(meta.pagination)?;
         let param = inner.param.ok_or_else(required("param"))?;
         let (hosts, response_meta) = match param {
             Param::Id(id) => (

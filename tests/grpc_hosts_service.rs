@@ -164,9 +164,7 @@ async fn responds_not_found_for_provision() {
 #[tokio::test]
 async fn responds_ok_for_provision() {
     let tester = setup::Tester::new().await;
-    let org_id = tester.org().await.id;
     let host_provision_request = models::HostProvisionRequest {
-        org_id,
         nodes: None,
         ip_gateway: "172.168.0.1".parse().unwrap(),
         ip_range_from: "172.168.0.10".parse().unwrap(),

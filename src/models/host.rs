@@ -43,7 +43,6 @@ pub struct Host {
     pub os_version: Option<String>,
     pub location: Option<String>,
     pub ip_addr: String,
-    pub val_ip_addrs: Option<String>,
     pub status: ConnectionStatus, //TODO: change to is_online:bool
     pub nodes: Option<Vec<Node>>,
     pub created_at: DateTime<Utc>,
@@ -78,7 +77,6 @@ impl TryFrom<PgRow> for Host {
             version: row.try_get("version")?,
             location: row.try_get("location")?,
             ip_addr: row.try_get("ip_addr")?,
-            val_ip_addrs: row.try_get("val_ip_addrs")?,
             status: row.try_get("status")?,
             nodes: None,
             created_at: row.try_get("created_at")?,
@@ -171,7 +169,6 @@ impl Host {
                 version,
                 location,
                 ip_addr,
-                val_ip_addrs,
                 status,
                 cpu_count,
                 mem_size,
@@ -183,13 +180,12 @@ impl Host {
                 ip_range_to
             ) 
             VALUES 
-            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *"#,
+            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *"#,
         )
         .bind(req.name)
         .bind(req.version)
         .bind(req.location)
         .bind(req.ip_addr)
-        .bind(req.val_ip_addrs)
         .bind(req.status)
         .bind(req.cpu_count)
         .bind(req.mem_size)
@@ -300,14 +296,6 @@ impl Host {
         tx.commit().await?;
         Ok(deleted.rows_affected())
     }
-
-    #[deprecated(since = "0.2.0", note = "deprecated, validators are no longer used")]
-    pub fn validator_ips(&self) -> Vec<String> {
-        match &self.val_ip_addrs {
-            Some(s) => s.split(',').map(|ip| ip.trim().to_string()).collect(),
-            None => vec![],
-        }
-    }
 }
 
 #[axum::async_trait]
@@ -389,7 +377,6 @@ pub struct HostRequest {
     pub os: Option<String>,
     pub os_version: Option<String>,
     pub ip_addr: String,
-    pub val_ip_addrs: Option<String>,
     pub status: ConnectionStatus,
     pub ip_range_from: Option<IpAddr>,
     pub ip_range_to: Option<IpAddr>,
@@ -408,7 +395,6 @@ pub struct HostSelectiveUpdate {
     pub os: Option<String>,
     pub os_version: Option<String>,
     pub ip_addr: Option<String>,
-    pub val_ip_addrs: Option<String>,
     pub status: Option<ConnectionStatus>,
     pub ip_range_from: Option<IpAddr>,
     pub ip_range_to: Option<IpAddr>,
@@ -530,7 +516,6 @@ impl From<HostCreateRequest> for HostRequest {
             os: host.os,
             os_version: host.os_version,
             ip_addr: host.ip_addr,
-            val_ip_addrs: host.val_ip_addrs,
             status: ConnectionStatus::Offline,
             ip_range_from: host.ip_range_from,
             ip_range_to: host.ip_range_to,
@@ -554,7 +539,6 @@ impl TryFrom<HostInfo> for HostSelectiveUpdate {
             os: info.os,
             os_version: info.os_version,
             ip_addr: info.ip,
-            val_ip_addrs: None,
             status: None,
             ip_range_from: info.ip_range_from.map(|ip| ip.parse()).transpose()?,
             ip_range_to: info.ip_range_to.map(|ip| ip.parse()).transpose()?,
@@ -628,7 +612,6 @@ impl TryFrom<crate::grpc::blockjoy::ProvisionHostRequest> for HostCreateRequest 
             os: host_info.os,
             os_version: host_info.os_version,
             ip_addr: host_info.ip.ok_or_else(required("info.ip"))?,
-            val_ip_addrs: None,
             ip_range_from,
             ip_range_to,
             ip_gateway,
@@ -648,7 +631,6 @@ pub struct HostCreateRequest {
     pub os: Option<String>,
     pub os_version: Option<String>,
     pub ip_addr: String,
-    pub val_ip_addrs: Option<String>,
     pub ip_range_from: Option<IpAddr>,
     pub ip_range_to: Option<IpAddr>,
     pub ip_gateway: Option<IpAddr>,
@@ -729,7 +711,6 @@ impl HostProvision {
             return Err(anyhow::anyhow!("Host provision has already been claimed.").into());
         }
 
-        req.val_ip_addrs = None;
         req.ip_range_from = Some(
             host_provision
                 .ip_range_from

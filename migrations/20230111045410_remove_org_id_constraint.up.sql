@@ -2,6 +2,7 @@ alter table host_provisions
     drop column if exists org_id;
 
 alter table hosts
+    drop column if exists val_ip_addrs,
     drop column if exists org_id;
 
 DO $$ BEGIN
@@ -10,4 +11,4 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-drop table validators;
+drop table if exists validators;

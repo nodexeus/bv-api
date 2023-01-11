@@ -235,7 +235,6 @@ pub mod from {
                 os: host.os,
                 os_version: host.os_version,
                 ip_addr: host.ip,
-                val_ip_addrs: None,
                 status: None,
                 ip_range_from: None,
                 ip_range_to: None,
@@ -287,7 +286,6 @@ pub mod from {
                 os: host.os,
                 os_version: host.os_version,
                 ip_addr: host.ip.ok_or_else(required("host.ip"))?,
-                val_ip_addrs: None,
                 status: ConnectionStatus::Online,
                 ip_range_from: Some(
                     host.ip_range_from

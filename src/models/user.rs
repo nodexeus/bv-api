@@ -141,56 +141,6 @@ impl User {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_summary_by_user(db: &PgPool, user_id: Uuid) -> Result<UserSummary> {
-        Ok(sqlx::query_as::<_, UserSummary>(r##"
-            SELECT 
-                users.id, 
-                email,
-                pay_address,
-                staking_quota,
-                fee_bps,
-                (SELECT count(*) from validators where validators.user_id=users.id)::BIGINT as validator_count,
-                COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0)::BIGINT as rewards_total,
-                COALESCE((SELECT sum(invoices.amount) FROM invoices where invoices.user_id = users.id), 0)::BIGINT as invoices_total,
-                COALESCE((SELECT sum(payments.amount) FROM payments where payments.user_id = users.id), 0)::BIGINT as payments_total,
-                users.created_at as joined_at
-            FROM
-                users
-            WHERE
-                users.id = $1 AND deleted_at IS NULL
-        "##)
-        .bind(user_id)
-        .fetch_one(db)
-        .await?)
-    }
-
-    /// Gets a summary list of all users
-    pub async fn find_all_summary(db: &PgPool) -> Result<Vec<UserSummary>> {
-        sqlx::query_as::<_, UserSummary>(
-            r##"
-                SELECT 
-                    users.id, 
-                    email,
-                    pay_address,
-                    staking_quota,
-                    fee_bps,
-                    (SELECT count(*) from validators where validators.user_id=users.id)::BIGINT as validator_count,
-                    COALESCE((SELECT sum(rewards.amount) from rewards where rewards.user_id=users.id), 0)::BIGINT as rewards_total,
-                    COALESCE((SELECT sum(invoices.amount) FROM invoices where invoices.user_id = users.id), 0)::BIGINT as invoices_total,
-                    COALESCE((SELECT sum(payments.amount) FROM payments where payments.user_id = users.id), 0)::BIGINT as payments_total,
-                    users.created_at as joined_at
-                FROM
-                    users
-                WHERE deleted_at IS NULL
-                ORDER BY
-                    users.email
-            "##
-        )
-        .fetch_all(db)
-        .await
-        .map_err(ApiError::from)
-    }
-
     pub async fn find_by_email(email: &str, db: &PgPool) -> Result<Self> {
         sqlx::query_as(
             r#"SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL limit 1"#,
@@ -319,25 +269,6 @@ impl User {
         };
 
         Self::update_all(id, fields, db).await
-    }
-
-    /// QR Code data for specific invoice
-    pub async fn get_qr_by_id(db: &PgPool, user_id: Uuid) -> Result<String> {
-        let user_summary = Self::find_summary_by_user(db, user_id).await?;
-
-        let mut bal = user_summary.balance();
-        if bal < 0 {
-            bal = 0;
-        }
-
-        if let Some(pay_address) = user_summary.pay_address.as_ref() {
-            let hnt = bal as f64 / 100000000.00;
-            return Ok(format!(
-                r#"{{"type":"payment","address":"{pay_address}","amount":{hnt:.8}}}"#,
-            ));
-        }
-
-        Err(ApiError::UnexpectedError(anyhow!("No Balance")))
     }
 
     pub async fn update_all(id: Uuid, fields: UserSelectiveUpdate, db: &PgPool) -> Result<Self> {
