@@ -23,7 +23,7 @@ impl ExpirationProvider {
                 Self::get_expiration_from_dotenv("REFRESH_EXPIRATION_MINS_HOST")
             }
             TokenType::Invitation => Self::get_expiration_from_dotenv("INVITATION_MINS_USER"),
-            TokenType::Cookbook => Ok(0),
+            TokenType::Cookbook => Ok(1),
         };
 
         value.unwrap_or(0)
