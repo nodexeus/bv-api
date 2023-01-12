@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use sqlx::PgPool;
 
+use crate::auth::key_provider::KeyProvider;
 use crate::auth::{
     InvitationToken, JwtToken, PwdResetToken, RegistrationConfirmationToken, TokenRole, TokenType,
 };
@@ -14,8 +15,8 @@ pub struct MailClient {
 impl MailClient {
     pub fn new() -> Self {
         // Don't fail if API key wasn't found
-        let sg_api_key = match dotenv::var("SENDGRID_API_KEY") {
-            Ok(key) => key,
+        let sg_api_key = match KeyProvider::get_var("SENDGRID_API_KEY") {
+            Ok(key) => key.to_string(),
             Err(e) => {
                 tracing::error!("Couldn't read SENDGRID_API_KEY env var: {}", e);
                 String::default()
