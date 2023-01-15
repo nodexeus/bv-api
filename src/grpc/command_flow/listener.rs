@@ -4,7 +4,6 @@ use crate::grpc::{blockjoy, convert, notification};
 use crate::models;
 use anyhow::anyhow;
 use futures_util::StreamExt;
-use std::sync;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{broadcast, mpsc};
 
@@ -23,7 +22,7 @@ type Message = Result<blockjoy::Command, tonic::Status>;
 pub fn channels(
     host_id: uuid::Uuid,
     host_messages: broadcast::Receiver<notification::ChannelNotification>,
-    db: sync::Arc<sqlx::PgPool>,
+    db: models::DbPool,
 ) -> (mpsc::Receiver<Message>, HostListener, UserListener) {
     let (stop_tx, stop_rx) = mpsc::channel(1);
     let (tx, rx) = mpsc::channel(buffer_size());
@@ -63,7 +62,7 @@ pub struct HostListener {
     /// When this channel yields a message we can stop listening.
     stop: mpsc::Receiver<()>,
     /// A reference to a database pool.
-    db: sync::Arc<sqlx::PgPool>,
+    db: models::DbPool,
 }
 
 impl HostListener {
@@ -92,7 +91,9 @@ impl HostListener {
             }
         }
         // Connection broke
-        models::Host::toggle_online(self.host_id, false, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        models::Host::toggle_online(self.host_id, false, &mut tx).await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -106,7 +107,7 @@ impl HostListener {
         tracing::info!("Notification is a command notification: {notification:?}");
 
         let cmd_id = notification.get_id();
-        let command = models::Command::find_by_id(cmd_id, &self.db).await;
+        let command = models::Command::find_by_id(cmd_id, &mut self.db.conn().await?).await;
 
         tracing::info!("Testing for command with ID {cmd_id}");
 
@@ -160,7 +161,7 @@ pub struct UserListener {
     /// messages, since it will never stop on its own.
     stop: mpsc::Sender<()>,
     /// A database pool.
-    db: sync::Arc<sqlx::PgPool>,
+    db: models::DbPool,
 }
 
 impl UserListener {
@@ -182,35 +183,40 @@ impl UserListener {
             .map_err(|_| tonic::Status::internal("Channel error"))?;
 
         // Connection broke or closed
-        models::Host::toggle_online(self.host_id, false, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        models::Host::toggle_online(self.host_id, false, &mut tx).await?;
+        tx.commit().await?;
         Ok(())
     }
 
     async fn process_info_update(&self, update: blockjoy::InfoUpdate) -> Result<()> {
         use blockjoy::info_update::Info;
 
+        let mut tx = self.db.begin().await?;
         match update.info.ok_or_else(required("update.info"))? {
             Info::Command(cmd_info) => {
-                let res = Self::update_info::<models::Command, _>(cmd_info, &self.db).await;
-                self.handle_err(res).await
+                let res = Self::update_info::<models::Command, _>(cmd_info, &mut tx).await;
+                self.handle_err(res).await?;
             }
             Info::Host(host_info) => {
-                let res = Self::update_info::<models::Host, _>(host_info, &self.db).await;
-                self.handle_err(res).await
+                let res = Self::update_info::<models::Host, _>(host_info, &mut tx).await;
+                self.handle_err(res).await?;
             }
             Info::Node(node_info) => {
-                let res = Self::update_info::<models::Node, _>(node_info, &self.db).await;
-                self.handle_err(res).await
+                let res = Self::update_info::<models::Node, _>(node_info, &mut tx).await;
+                self.handle_err(res).await?;
             }
         }
+        tx.commit().await?;
+        Ok(())
     }
 
     /// Actually perform info update on an identified resource
-    async fn update_info<R, T>(info: T, db: &sqlx::PgPool) -> Result<R>
+    async fn update_info<R, T>(info: T, tx: &mut models::DbTrx<'_>) -> Result<R>
     where
         R: models::UpdateInfo<T, R>,
     {
-        R::update_info(info, db).await
+        R::update_info(info, tx).await
     }
 
     /// This function is used by `process_info_update` to send messages about failures to the user.

@@ -3,17 +3,17 @@ use crate::grpc::blockjoy::key_files_server::KeyFiles;
 use crate::grpc::blockjoy::{
     KeyFilesGetRequest, KeyFilesGetResponse, KeyFilesSaveRequest, KeyFilesSaveResponse,
 };
+use crate::models;
 use crate::models::{CreateNodeKeyFileRequest, Node, NodeKeyFile};
-use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 pub struct KeyFileServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
 }
 
 impl KeyFileServiceImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: models::DbPool) -> Self {
         Self { db }
     }
 
@@ -32,7 +32,8 @@ impl KeyFiles for KeyFileServiceImpl {
         let inner = request.into_inner();
         let node_id = KeyFileServiceImpl::uuid_from_string(inner.node_id)?;
         let request_id = inner.request_id.clone();
-        let key_files = NodeKeyFile::find_by_node(node_id, &self.db).await?;
+        let mut conn = self.db.conn().await?;
+        let key_files = NodeKeyFile::find_by_node(node_id, &mut conn).await?;
 
         // Ensure we return "Not found" if no key files could be found
         if key_files.is_empty() {
@@ -58,8 +59,9 @@ impl KeyFiles for KeyFileServiceImpl {
         let node_id = KeyFileServiceImpl::uuid_from_string(inner.node_id)?;
         let request_id = inner.request_id.clone();
 
+        let mut tx = self.db.begin().await?;
         // Explicitly check, if node exists
-        Node::find_by_id(node_id, &self.db)
+        Node::find_by_id(node_id, &mut tx)
             .await
             .map_err(|_| Status::not_found("Node not found"))?;
 
@@ -72,8 +74,10 @@ impl KeyFiles for KeyFileServiceImpl {
                 node_id,
             };
 
-            NodeKeyFile::create(req, &self.db).await?;
+            NodeKeyFile::create(req, &mut tx).await?;
         }
+
+        tx.commit().await?;
 
         let response = KeyFilesSaveResponse {
             origin_request_id: request_id,

@@ -2,7 +2,7 @@ use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -23,26 +23,29 @@ pub struct BroadcastFilter {
 }
 
 impl BroadcastFilter {
-    pub async fn find_by_id(id: &Uuid, db: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>("SELECT * FROM broadcast_filters where id = $1")
+    pub async fn find_by_id(id: &Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+        sqlx::query_as("SELECT * FROM broadcast_filters where id = $1")
             .bind(id)
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_org_id(org_id: &Uuid, db: &PgPool) -> Result<Vec<Self>> {
-        sqlx::query_as::<_, Self>("SELECT * FROM broadcast_filters where org_id = $1")
+    pub async fn find_all_by_org_id(
+        org_id: &Uuid,
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> Result<Vec<Self>> {
+        sqlx::query_as("SELECT * FROM broadcast_filters where org_id = $1")
             .bind(org_id)
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn create(req: &BroadcastFilterRequest, db: &PgPool) -> Result<Self> {
+    pub async fn create(req: &BroadcastFilterRequest, tx: &mut super::DbTrx<'_>) -> Result<Self> {
         req.validate()
             .map_err(|e| ApiError::ValidationError(e.to_string()))?;
-        sqlx::query_as::<_, Self>(
+        sqlx::query_as(
             r##"
             INSERT INTO broadcast_filters
                 (blockchain_id, org_id, name, addresses, callback_url, auth_token, txn_types, is_active)
@@ -58,15 +61,19 @@ impl BroadcastFilter {
         .bind(&req.auth_token)
         .bind(Json(&req.txn_types))
         .bind(req.is_active)
-        .fetch_one(db)
+        .fetch_one(tx)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn update(id: &Uuid, req: &BroadcastFilterRequest, db: &PgPool) -> Result<Self> {
+    pub async fn update(
+        id: &Uuid,
+        req: &BroadcastFilterRequest,
+        tx: &mut super::DbTrx<'_>,
+    ) -> Result<Self> {
         req.validate()
             .map_err(|e| ApiError::ValidationError(e.to_string()))?;
-        sqlx::query_as::<_, Self>(
+        sqlx::query_as(
             r##"
             UPDATE broadcast_filters
                 SET blockchain_id=$1, org_id=$2, name=$3, addresses=$4, callback_url=$5, auth_token=$6, txn_types=$7, is_active=$8
@@ -83,15 +90,15 @@ impl BroadcastFilter {
         .bind(Json(&req.txn_types))
         .bind(req.is_active)
         .bind(id)
-        .fetch_one(db)
+        .fetch_one(tx)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn delete(id: &Uuid, db: &PgPool) -> Result<()> {
-        let _ = sqlx::query("DELETE FROM broadcast_filters WHERE id = $1")
+    pub async fn delete(id: &Uuid, tx: &mut super::DbTrx<'_>) -> Result<()> {
+        sqlx::query("DELETE FROM broadcast_filters WHERE id = $1")
             .bind(id)
-            .execute(db)
+            .execute(tx)
             .await?;
 
         Ok(())

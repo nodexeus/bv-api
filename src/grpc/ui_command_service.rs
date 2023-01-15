@@ -3,20 +3,20 @@ use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
 use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, Parameter, ResponseMeta};
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
+use crate::models;
 use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd};
-use crate::server::DbPool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 pub struct CommandServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
     notifier: Arc<ChannelNotifier>,
 }
 
 impl CommandServiceImpl {
-    pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
+    pub fn new(db: models::DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         Self { db, notifier }
     }
 
@@ -33,7 +33,11 @@ impl CommandServiceImpl {
             sub_cmd,
             resource_id,
         };
-        Ok(Command::create(host_id, req, &self.db).await?)
+
+        let mut tx = self.db.begin().await?;
+        let cmd = Command::create(host_id, req, &mut tx).await?;
+        tx.commit().await?;
+        Ok(cmd)
     }
 
     fn send_notification(

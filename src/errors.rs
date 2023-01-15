@@ -16,8 +16,8 @@ pub enum ApiError {
     #[error("Record not found.")]
     NotFoundError(sqlx::Error),
 
-    #[error("Duplicate resource conflict.")]
-    DuplicateResource,
+    #[error("Duplicate resource conflict on constraint {constraint}.")]
+    DuplicateResource { constraint: String },
 
     #[error("invalid authentication credentials")]
     InvalidAuthentication(anyhow::Error),
@@ -79,7 +79,17 @@ impl From<sqlx::Error> for ApiError {
         match e {
             sqlx::Error::RowNotFound => Self::NotFoundError(e),
             sqlx::Error::Database(dbe) if dbe.to_string().contains("duplicate key value") => {
-                Self::DuplicateResource
+                Self::DuplicateResource {
+                    // The string will look like:
+                    // 'duplicate key blabla violation "node_key_files_name_node_id_key"'
+                    // So we take the part after the first ", and before the second ".
+                    constraint: dbe
+                        .to_string()
+                        .split('"')
+                        .nth(1)
+                        .unwrap_or("No contraint was given")
+                        .to_owned(),
+                }
             }
             _ => Self::UnexpectedError(anyhow::Error::from(e)),
         }
@@ -97,7 +107,7 @@ impl IntoResponse for ApiError {
         let status_code = match self {
             ApiError::ValidationError(_) => StatusCode::BAD_REQUEST,
             ApiError::NotFoundError(_) => StatusCode::NOT_FOUND,
-            ApiError::DuplicateResource => StatusCode::CONFLICT,
+            ApiError::DuplicateResource { .. } => StatusCode::CONFLICT,
             ApiError::InvalidAuthentication(_) => StatusCode::UNAUTHORIZED,
             ApiError::InsufficientPermissionsError => StatusCode::FORBIDDEN,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

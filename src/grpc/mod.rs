@@ -62,12 +62,11 @@ use crate::grpc::ui_invitation_service::InvitationServiceImpl;
 use crate::grpc::ui_node_service::NodeServiceImpl;
 use crate::grpc::ui_update_service::UpdateServiceImpl;
 use crate::grpc::user_service::UserServiceImpl;
-use crate::server::DbPool;
+use crate::models;
 use axum::Extension;
 use blockjoy::hosts_server::HostsServer;
 use chrono::NaiveDateTime;
 use host_service::HostsServiceImpl;
-use sqlx::PgPool;
 use std::env;
 use std::sync::Arc;
 use tonic::metadata::errors::InvalidMetadataValue;
@@ -80,7 +79,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
 pub async fn server(
-    db: DbPool,
+    db: models::DbPool,
 ) -> Router<
     Stack<
         Stack<
@@ -90,7 +89,7 @@ pub async fn server(
                 Stack<
                     Extension<UnauthenticatedPaths>,
                     Stack<
-                        Extension<Arc<PgPool>>,
+                        Extension<models::DbPool>,
                         Stack<TraceLayer<SharedClassifier<GrpcErrorsAsFailures>>, Identity>,
                     >,
                 >,

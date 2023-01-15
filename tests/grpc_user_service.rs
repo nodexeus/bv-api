@@ -58,7 +58,9 @@ async fn responds_ok_with_valid_token_for_delete() {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let _ = models::Node::create(&mut req, tester.pool()).await.unwrap();
+    let mut tx = tester.begin().await;
+    models::Node::create(&mut req, &mut tx).await.unwrap();
+    tx.commit().await.unwrap();
     let req = blockjoy_ui::DeleteUserRequest {
         meta: Some(tester.meta()),
     };

@@ -6,8 +6,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
-use std::str::FromStr;
+use sqlx::FromRow;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, FromRow, Getters)]
@@ -25,7 +24,7 @@ pub struct Invitation {
 
 #[tonic::async_trait]
 impl FindableById for Invitation {
-    async fn find_by_id(id: Uuid, db: &PgPool) -> ApiResult<Self>
+    async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Self>
     where
         Self: Sized,
     {
@@ -41,7 +40,7 @@ impl Invitation {
     pub async fn find_by_creator_for_email(
         creator_id: Uuid,
         invitee_email: String,
-        db: &PgPool,
+        db: impl sqlx::PgExecutor<'_>,
     ) -> ApiResult<Self> {
         sqlx::query_as(
             r#"select * from invitations 
@@ -54,25 +53,21 @@ impl Invitation {
             .map_err(ApiError::from)
     }
 
-    pub async fn create(invitation: &GrpcInvitation, db: &PgPool) -> ApiResult<Self> {
-        let creator_id = Uuid::from_str(
-            invitation
-                .created_by_id
-                .as_ref()
-                .unwrap_or(&String::new())
-                .as_str(),
-        )
-        .map_err(|e| ApiError::UnexpectedError(anyhow!("Creator ID required: {e}")))?;
-        let creator = User::find_by_id(creator_id, db).await?;
-        let org_id = Uuid::from_str(
-            invitation
-                .created_for_org_id
-                .as_ref()
-                .unwrap_or(&String::new())
-                .as_str(),
-        )
-        .map_err(|e| ApiError::UnexpectedError(anyhow!("Org ID required: {e}")))?;
-        let for_org = Org::find_by_id(org_id, db).await?;
+    pub async fn create(invitation: &GrpcInvitation, tx: &mut super::DbTrx<'_>) -> ApiResult<Self> {
+        let creator_id = invitation
+            .created_by_id
+            .as_deref()
+            .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Creator ID required")))?
+            .parse()
+            .map_err(|e| ApiError::UnexpectedError(anyhow!("Creator ID not valid: {e}")))?;
+        let creator = User::find_by_id(creator_id, &mut *tx).await?;
+        let org_id = invitation
+            .created_for_org_id
+            .as_deref()
+            .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Org ID required")))?
+            .parse()
+            .map_err(|e| ApiError::UnexpectedError(anyhow!("Org ID not valid: {e}")))?;
+        let for_org = Org::find_by_id(org_id, &mut *tx).await?;
         let email = invitation
             .invitee_email
             .as_ref()
@@ -90,12 +85,12 @@ impl Invitation {
         .bind(email)
         .bind(format!("{} {} ({})", creator.first_name, creator.last_name, creator.email))
         .bind(for_org.name)
-        .fetch_one(db)
+        .fetch_one(tx)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn pending(org_id: Uuid, db: &PgPool) -> ApiResult<Vec<Self>> {
+    pub async fn pending(org_id: Uuid, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Vec<Self>> {
         sqlx::query_as(
             r#"select * from invitations 
                     where created_for_org = $1 and accepted_at is null and declined_at is null
@@ -108,7 +103,7 @@ impl Invitation {
         .map_err(ApiError::from)
     }
 
-    pub async fn received(email: String, db: &PgPool) -> ApiResult<Vec<Self>> {
+    pub async fn received(email: &str, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Vec<Self>> {
         sqlx::query_as(
             r#"select * from invitations 
                     where invitee_email = $1 and accepted_at is null and declined_at is null
@@ -121,26 +116,26 @@ impl Invitation {
         .map_err(ApiError::from)
     }
 
-    pub async fn accept(id: Uuid, db: &PgPool) -> ApiResult<Self> {
+    pub async fn accept(id: Uuid, tx: &mut super::DbTrx<'_>) -> ApiResult<Self> {
         sqlx::query_as("update invitations set accepted_at = now() where id = $1 returning *")
             .bind(id)
-            .fetch_one(db)
+            .fetch_one(tx)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn decline(id: Uuid, db: &PgPool) -> ApiResult<Self> {
+    pub async fn decline(id: Uuid, tx: &mut super::DbTrx<'_>) -> ApiResult<Self> {
         sqlx::query_as("update invitations set declined_at = now() where id = $1 returning *")
             .bind(id)
-            .fetch_one(db)
+            .fetch_one(tx)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn revoke(id: Uuid, db: &PgPool) -> ApiResult<Self> {
+    pub async fn revoke(id: Uuid, tx: &mut super::DbTrx<'_>) -> ApiResult<Self> {
         sqlx::query_as("delete from invitations where id = $1 returning *")
             .bind(id)
-            .fetch_one(db)
+            .fetch_one(tx)
             .await
             .map_err(ApiError::from)
     }

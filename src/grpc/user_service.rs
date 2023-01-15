@@ -8,19 +8,19 @@ use crate::grpc::blockjoy_ui::{
 };
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::mail::MailClient;
+use crate::models;
 use crate::models::{User, UserRequest};
-use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use super::helpers::{required, try_get_token};
 
 pub struct UserServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
 }
 
 impl UserServiceImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: models::DbPool) -> Self {
         Self { db }
     }
 }
@@ -33,7 +33,8 @@ impl UserService for UserServiceImpl {
     ) -> Result<Response<GetUserResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
         let token = try_get_token::<_, UserAuthToken>(&request)?;
-        let user = token.try_get_user(*token.id(), &self.db).await?;
+        let mut conn = self.db.conn().await?;
+        let user = token.try_get_user(*token.id(), &mut conn).await?;
         let inner = request.into_inner();
         let response = GetUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
@@ -56,7 +57,9 @@ impl UserService for UserServiceImpl {
             password: inner.password,
             password_confirm: inner.password_confirmation,
         };
-        let new_user = User::create(user_request, &self.db, Some(TokenRole::User)).await?;
+        let mut tx = self.db.begin().await?;
+        let new_user = User::create(user_request, Some(TokenRole::User), &mut tx).await?;
+        tx.commit().await?;
         let meta = ResponseMeta::from_meta(inner.meta).with_message(new_user.id);
         let response = CreateUserResponse { meta: Some(meta) };
 
@@ -76,15 +79,17 @@ impl UserService for UserServiceImpl {
             .extensions()
             .get::<UserAuthToken>()
             .ok_or_else(required("auth token"))?;
-        let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
+        let mut tx = self.db.begin().await?;
+        let user_id = token.try_get_user(*token.id(), &mut tx).await?.id;
         let inner = request.into_inner();
         let user = inner.user.ok_or_else(required("user"))?;
 
         // Check if current user is the same as the one to be updated
         if user_id == Uuid::parse_str(user.id()).map_err(ApiError::from)? {
-            let user: GrpcUser = User::update_all(user_id, user.into(), &self.db)
+            let user: GrpcUser = User::update_all(user_id, user.into(), &mut tx)
                 .await?
                 .try_into()?;
+            tx.commit().await?;
             let response_meta = ResponseMeta::from_meta(inner.meta);
             let response = UpdateUserResponse {
                 meta: Some(response_meta),
@@ -105,9 +110,13 @@ impl UserService for UserServiceImpl {
             .extensions()
             .get::<UserAuthToken>()
             .ok_or_else(required("auth token"))?;
-        let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
+        let mut tx = self.db.begin().await?;
+        let user_id = token.try_get_user(*token.id(), &mut tx).await?.id;
+        tx.commit().await?;
 
-        User::delete(user_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        User::delete(user_id, &mut tx).await?;
+        tx.commit().await?;
 
         Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }

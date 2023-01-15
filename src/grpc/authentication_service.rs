@@ -11,8 +11,8 @@ use crate::grpc::blockjoy_ui::{
 use crate::grpc::helpers::required;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::mail::MailClient;
+use crate::models;
 use crate::models::User;
-use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 
 use super::blockjoy_ui::{
@@ -22,11 +22,11 @@ use super::blockjoy_ui::{
 use super::helpers::try_get_token;
 
 pub struct AuthenticationServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
 }
 
 impl AuthenticationServiceImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: models::DbPool) -> Self {
         Self { db }
     }
 }
@@ -39,7 +39,8 @@ impl AuthenticationService for AuthenticationServiceImpl {
     ) -> Result<Response<LoginUserResponse>, Status> {
         let inner = request.into_inner();
         // User::login checks if user is confirmed before testing for valid login credentials
-        let user = User::login(inner.clone(), &self.db)
+        let mut tx = self.db.begin().await?;
+        let user = User::login(inner.clone(), &mut tx)
             .await
             .map_err(|e| Status::unauthenticated(e.to_string()))?;
 
@@ -47,7 +48,8 @@ impl AuthenticationService for AuthenticationServiceImpl {
         // @see https://app.shortcut.com/blockjoy/story/609/ability-to-login-after-refresh-token-has-expired
         tracing::debug!("Renewing user refresh token");
         let refresh_token = UserRefreshToken::create(user.id).encode()?;
-        User::refresh(user.id, refresh_token.clone(), &self.db).await?;
+        User::refresh(user.id, refresh_token.clone(), &mut tx).await?;
+        tx.commit().await?;
 
         let auth_token =
             UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?;
@@ -71,7 +73,8 @@ impl AuthenticationService for AuthenticationServiceImpl {
             .get::<RegistrationConfirmationToken>()
             .ok_or_else(required("Registration confirmation token extension"))?;
         let user_id = token.get_id();
-        let user = User::confirm(user_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let user = User::confirm(user_id, &mut tx).await?;
         let auth_token =
             UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?
                 .encode()?;
@@ -82,7 +85,8 @@ impl AuthenticationService for AuthenticationServiceImpl {
         )?
         .encode()?;
 
-        User::refresh(user.id, refresh_token.clone(), &self.db).await?;
+        User::refresh(user.id, refresh_token.clone(), &mut tx).await?;
+        tx.commit().await?;
 
         let response = ConfirmRegistrationResponse {
             meta: Some(ResponseMeta::from_meta(request.into_inner().meta)),
@@ -111,10 +115,12 @@ impl AuthenticationService for AuthenticationServiceImpl {
         // are not going to return an error. This hides whether or not a user is registered with
         // us to the caller of the api, because this info may be sensitive and this endpoint is not
         // protected by any authentication.
-        let user = User::find_by_email(&request.email, &self.db).await;
+        let mut tx = self.db.begin().await?;
+        let user = User::find_by_email(&request.email, &mut tx).await;
         if let Ok(user) = user {
-            let _ = user.email_reset_password(&self.db).await;
+            let _ = user.email_reset_password(&mut tx).await;
         }
+        tx.commit().await?;
 
         let meta = ResponseMeta::new(String::from(""));
         let response = ResetPasswordResponse { meta: Some(meta) };
@@ -131,12 +137,14 @@ impl AuthenticationService for AuthenticationServiceImpl {
             .get::<PwdResetToken>()
             .ok_or_else(|| Status::unauthenticated("Invalid reset token"))?;
         let refresh_token = get_refresh_token(&request);
-        let user_id = token.try_get_user(*token.id(), &self.db).await?.id;
-        let cur_user = User::find_by_id(user_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let user_id = token.try_get_user(*token.id(), &mut tx).await?.id;
         let request = request.into_inner();
-        let _cur_user = cur_user
-            .update_password(&request.password, &self.db)
+        let cur_user = User::find_by_id(user_id, &mut tx)
+            .await?
+            .update_password(&request.password, &mut tx)
             .await?;
+        tx.commit().await?;
         let meta = ResponseMeta::from_meta(request.meta);
         let auth_token =
             UserAuthToken::create_token_for(&cur_user, TokenType::UserAuth, TokenRole::User)?;
@@ -159,17 +167,17 @@ impl AuthenticationService for AuthenticationServiceImpl {
     ) -> Result<Response<UpdateUiPasswordResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
         let token = try_get_token::<_, UserAuthToken>(&request)?;
-        let user = token.try_get_user(*token.id(), &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let user = token.try_get_user(*token.id(), &mut tx).await?;
         let encoded = token
             .encode()
             .map_err(|e| Status::internal(format!("Token encode error {e:?}")))?;
         let inner = request.into_inner();
 
-        match user.verify_password(inner.old_pwd.as_str()) {
+        let resp = match user.verify_password(&inner.old_pwd) {
             Ok(_) => {
-                if inner.new_pwd.as_str() == inner.new_pwd_confirmation.as_str() {
-                    user.update_password(inner.new_pwd.as_str(), &self.db)
-                        .await?;
+                if inner.new_pwd == inner.new_pwd_confirmation {
+                    user.update_password(&inner.new_pwd, &mut tx).await?;
 
                     let response = UpdateUiPasswordResponse {
                         meta: None,
@@ -187,6 +195,8 @@ impl AuthenticationService for AuthenticationServiceImpl {
                 }
             }
             Err(e) => Err(Status::from(e)),
-        }
+        };
+        tx.commit().await?;
+        resp
     }
 }

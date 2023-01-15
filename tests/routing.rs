@@ -1,7 +1,4 @@
-#[allow(dead_code)]
 mod setup;
-
-use std::sync::Arc;
 
 use axum::http::{Request, StatusCode};
 use hyper::Body;
@@ -18,9 +15,9 @@ fn possible_routes() -> Vec<(&'static str, &'static str, StatusCode)> {
 async fn test_possible_routes() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
 
-    let db = Arc::new(api::TestDb::setup().await);
+    let db = api::TestDb::setup().await;
     let routes = possible_routes();
-    let app = api::http::server(std::sync::Arc::new(db.pool.clone())).await;
+    let app = api::http::server(db.pool.clone()).await;
 
     let mut cnt = 1;
 

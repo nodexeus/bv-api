@@ -1,5 +1,5 @@
 use crate::auth::{FindableById, InvitationToken, JwtToken, UserAuthToken};
-use crate::errors::ApiError;
+use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::invitation_service_server::InvitationService;
 use crate::grpc::blockjoy_ui::{
     CreateInvitationRequest, CreateInvitationResponse, Invitation as GrpcInvitation,
@@ -9,17 +9,17 @@ use crate::grpc::blockjoy_ui::{
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::mail::MailClient;
+use crate::models;
 use crate::models::{Invitation, Org, OrgRole, User};
-use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 pub struct InvitationServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
 }
 
 impl InvitationServiceImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: models::DbPool) -> Self {
         Self { db }
     }
 
@@ -59,7 +59,8 @@ impl InvitationService for InvitationServiceImpl {
     ) -> Result<Response<CreateInvitationResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
         let creator_id = try_get_token::<_, UserAuthToken>(&request)?.get_id();
-        let creator = User::find_by_id(creator_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let creator = User::find_by_id(creator_id, &mut tx).await?;
         let inner = request.into_inner();
         let invitation = GrpcInvitation {
             id: None,
@@ -73,15 +74,18 @@ impl InvitationService for InvitationServiceImpl {
             created_for_org_name: None,
         };
 
-        let db_invitation = Invitation::create(&invitation, &self.db).await?;
+        let db_invitation = Invitation::create(&invitation, &mut tx).await?;
 
         let response_meta = ResponseMeta::from_meta(inner.meta);
         let response = CreateInvitationResponse {
             meta: Some(response_meta),
         };
 
-        match User::find_by_email(&db_invitation.invitee_email, &self.db).await {
+        match User::find_by_email(&db_invitation.invitee_email, &mut tx).await {
             Ok(user) => {
+                // Note that here we abort the transaction if sending the email failed. This way we
+                // do not get users in the db that we cannot send emails to. The existence of such
+                // a user would prevent them from trying to recreate again at a later point.
                 MailClient::new()
                     .invitation_for_registered(&creator, &user, "1 week".to_string())
                     .await?
@@ -106,6 +110,7 @@ impl InvitationService for InvitationServiceImpl {
                     .await?
             }
         }
+        tx.commit().await?;
 
         Ok(response_with_refresh_token(refresh_token, response)?)
     }
@@ -118,8 +123,9 @@ impl InvitationService for InvitationServiceImpl {
         let refresh_token = get_refresh_token(&request);
         let user_id = try_get_token::<_, UserAuthToken>(&request)?.get_id();
         let inner = request.into_inner();
-        let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
-        let org_user = Org::find_org_user(&user_id, &org_id, &self.db).await?;
+        let org_id = inner.org_id.parse().map_err(ApiError::from)?;
+        let mut conn = self.db.conn().await?;
+        let org_user = Org::find_org_user(user_id, org_id, &mut conn).await?;
 
         match org_user.role {
             OrgRole::Member => Err(Status::permission_denied(format!(
@@ -127,11 +133,11 @@ impl InvitationService for InvitationServiceImpl {
                 user_id, org_id
             ))),
             OrgRole::Admin | OrgRole::Owner => {
-                let invitations: Vec<GrpcInvitation> = Invitation::pending(org_id, &self.db)
+                let invitations = Invitation::pending(org_id, &mut conn)
                     .await?
-                    .iter()
-                    .map(|i| i.try_into().unwrap_or_default())
-                    .collect();
+                    .into_iter()
+                    .map(|i| i.try_into())
+                    .collect::<Result<_>>()?;
 
                 let response_meta = ResponseMeta::from_meta(inner.meta);
                 let response = InvitationsResponse {
@@ -150,13 +156,14 @@ impl InvitationService for InvitationServiceImpl {
     ) -> Result<Response<InvitationsResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
         let token = try_get_token::<_, UserAuthToken>(&request)?;
-        let user = User::find_by_id(token.get_id(), &self.db).await?;
+        let mut conn = self.db.conn().await?;
+        let user = User::find_by_id(token.get_id(), &mut conn).await?;
         let inner = request.into_inner();
-        let invitations: Vec<GrpcInvitation> = Invitation::received(user.email, &self.db)
+        let invitations = Invitation::received(&user.email, &mut conn)
             .await?
-            .iter()
-            .map(|i| i.try_into().unwrap_or_default())
-            .collect();
+            .into_iter()
+            .map(|i| i.try_into())
+            .collect::<Result<_>>()?;
         let response_meta = ResponseMeta::from_meta(inner.meta);
         let response = InvitationsResponse {
             meta: Some(response_meta),
@@ -169,17 +176,19 @@ impl InvitationService for InvitationServiceImpl {
     async fn accept(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
         let (refresh_token, invitation_id) =
             InvitationServiceImpl::get_refresh_token_invitation_id_from_request(request)?;
-        let invitation = Invitation::accept(invitation_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let invitation = Invitation::accept(invitation_id, &mut tx).await?;
         // Only registered users can accept an invitation
-        let new_member = User::find_by_email(invitation.invitee_email(), &self.db).await?;
+        let new_member = User::find_by_email(invitation.invitee_email(), &mut tx).await?;
 
         Org::add_member(
-            &new_member.id,
-            invitation.created_for_org(),
+            new_member.id,
+            *invitation.created_for_org(),
             OrgRole::Member,
-            &self.db,
+            &mut tx,
         )
         .await?;
+        tx.commit().await?;
 
         Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }
@@ -188,7 +197,9 @@ impl InvitationService for InvitationServiceImpl {
         let (refresh_token, invitation_id) =
             InvitationServiceImpl::get_refresh_token_invitation_id_from_request(request)?;
 
-        Invitation::decline(invitation_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        Invitation::decline(invitation_id, &mut tx).await?;
+        tx.commit().await?;
 
         Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }
@@ -204,18 +215,20 @@ impl InvitationService for InvitationServiceImpl {
         let invitee_email = grpc_invitation
             .invitee_email
             .ok_or_else(|| Status::invalid_argument("invitee email missing"))?;
+        let mut tx = self.db.begin().await?;
         let invitation =
-            Invitation::find_by_creator_for_email(user_id, invitee_email, &self.db).await?;
+            Invitation::find_by_creator_for_email(user_id, invitee_email, &mut tx).await?;
 
         // Check if user belongs to org, the role is already checked by the auth middleware
         Org::find_org_user(
-            &invitation.created_by_user,
-            &invitation.created_for_org,
-            &self.db,
+            invitation.created_by_user,
+            invitation.created_for_org,
+            &mut tx,
         )
         .await?;
 
-        Invitation::revoke(invitation.id, &self.db).await?;
+        Invitation::revoke(invitation.id, &mut tx).await?;
+        tx.commit().await?;
 
         Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }

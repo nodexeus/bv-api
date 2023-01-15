@@ -3,8 +3,7 @@ use crate::auth::{
     Blacklisted, JwtToken, TokenClaim, TokenError, TokenResult, TokenRole, TokenType,
 };
 use crate::errors::Result;
-use crate::models::{BlacklistToken, Invitation};
-use crate::server::DbPool;
+use crate::models::{self, BlacklistToken, Invitation};
 use anyhow::anyhow;
 use derive_getters::Getters;
 use std::collections::HashMap;
@@ -72,14 +71,18 @@ impl JwtToken for InvitationToken {
 
 #[tonic::async_trait]
 impl Blacklisted for InvitationToken {
-    async fn blacklist(&self, db: DbPool) -> TokenResult<bool> {
-        Ok(BlacklistToken::create(self.encode()?, self.token_type, &db)
+    async fn blacklist(&self, tx: &mut models::DbTrx<'_>) -> TokenResult<bool> {
+        Ok(BlacklistToken::create(self.encode()?, self.token_type, tx)
             .await
             .is_ok())
     }
 
-    async fn is_blacklisted(&self, token: String, db: DbPool) -> TokenResult<bool> {
-        Ok(BlacklistToken::is_listed(token, &db).await.is_ok())
+    async fn is_blacklisted(
+        &self,
+        token: String,
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> TokenResult<bool> {
+        Ok(BlacklistToken::is_listed(token, db).await.is_ok())
     }
 }
 

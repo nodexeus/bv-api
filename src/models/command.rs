@@ -3,7 +3,7 @@ use crate::grpc::blockjoy::CommandInfo;
 use crate::models::UpdateInfo;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use std::convert::From;
 use uuid::Uuid;
 
@@ -41,33 +41,41 @@ pub struct Command {
 }
 
 impl Command {
-    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>("SELECT * FROM commands where id = $1")
+    pub async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+        sqlx::query_as("SELECT * FROM commands where id = $1")
             .bind(id)
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_host(host_id: Uuid, db: &PgPool) -> Result<Vec<Command>> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM commands where host_id = $1 ORDER BY created_at DESC",
-        )
-        .bind(host_id)
-        .fetch_all(db)
-        .await
-        .map_err(ApiError::from)
+    pub async fn find_all_by_host(
+        host_id: Uuid,
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> Result<Vec<Command>> {
+        sqlx::query_as("SELECT * FROM commands where host_id = $1 ORDER BY created_at DESC")
+            .bind(host_id)
+            .fetch_all(db)
+            .await
+            .map_err(ApiError::from)
     }
 
-    pub async fn find_pending_by_host(host_id: Uuid, db: &PgPool) -> Result<Vec<Command>> {
-        sqlx::query_as::<_, Self>("SELECT * FROM commands where host_id = $1 AND completed_at IS NULL ORDER BY created_at DESC")
+    pub async fn find_pending_by_host(
+        host_id: Uuid,
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> Result<Vec<Command>> {
+        sqlx::query_as("SELECT * FROM commands where host_id = $1 AND completed_at IS NULL ORDER BY created_at DESC")
             .bind(host_id)
             .fetch_all(db)
             .await.map_err(ApiError::from)
     }
 
-    pub async fn create(host_id: Uuid, command: CommandRequest, db: &PgPool) -> Result<Command> {
-        sqlx::query_as::<_, Self>(
+    pub async fn create(
+        host_id: Uuid,
+        command: CommandRequest,
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> Result<Command> {
+        sqlx::query_as(
             "INSERT INTO commands (host_id, cmd, sub_cmd, resource_id) VALUES ($1, $2, $3, $4) RETURNING *",
         )
         .bind(host_id)
@@ -82,33 +90,30 @@ impl Command {
     pub async fn update_response(
         id: Uuid,
         response: CommandResponseRequest,
-        db: &PgPool,
+        tx: &mut super::DbTrx<'_>,
     ) -> Result<Command> {
-        sqlx::query_as::<_, Self>("UPDATE commands SET response = $1, exit_status = $2, completed_at = now() WHERE id = $3 RETURNING *")
+        sqlx::query_as("UPDATE commands SET response = $1, exit_status = $2, completed_at = now() WHERE id = $3 RETURNING *")
             .bind(response.response)
             .bind(response.exit_status)
             .bind(id)
-            .fetch_one(db)
-            .await.map_err(ApiError::from)
+            .fetch_one(tx)
+            .await
+            .map_err(ApiError::from)
     }
 
-    pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
-        let mut tx = db.begin().await?;
+    pub async fn delete(id: Uuid, tx: &mut super::DbTrx<'_>) -> Result<u64> {
         let deleted = sqlx::query("DELETE FROM commands WHERE id = $1")
             .bind(id)
-            .execute(&mut tx)
+            .execute(tx)
             .await?;
-
-        tx.commit().await?;
         Ok(deleted.rows_affected())
     }
 }
 
 #[tonic::async_trait]
 impl UpdateInfo<CommandInfo, Command> for Command {
-    async fn update_info(info: CommandInfo, db: &PgPool) -> Result<Command> {
+    async fn update_info(info: CommandInfo, tx: &mut super::DbTrx<'_>) -> Result<Command> {
         let id = Uuid::parse_str(info.id.as_str())?;
-        let mut tx = db.begin().await?;
         let cmd = sqlx::query_as::<_, Command>(
             r##"UPDATE commands SET
                          response = COALESCE($1, response),
@@ -120,10 +125,8 @@ impl UpdateInfo<CommandInfo, Command> for Command {
         .bind(info.response)
         .bind(info.exit_code)
         .bind(id)
-        .fetch_one(&mut tx)
+        .fetch_one(tx)
         .await?;
-
-        tx.commit().await?;
 
         Ok(cmd)
     }

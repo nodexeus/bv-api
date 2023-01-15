@@ -4,7 +4,6 @@ use crate::grpc::blockjoy::{command_flow_server::CommandFlow, Command as GrpcCom
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::notification::ChannelNotifier;
 use crate::models;
-use crate::server::DbPool;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -14,12 +13,12 @@ use tonic::{Request, Response, Status, Streaming};
 mod listener;
 
 pub struct CommandFlowServerImpl {
-    db: DbPool,
+    db: models::DbPool,
     notifier: Arc<ChannelNotifier>,
 }
 
 impl CommandFlowServerImpl {
-    pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
+    pub fn new(db: models::DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         Self { db, notifier }
     }
 }
@@ -41,10 +40,12 @@ impl CommandFlow for CommandFlowServerImpl {
     ) -> Result<Response<Self::CommandsStream>, Status> {
         // Token must be added by middleware beforehand
         let token = try_get_token::<_, HostAuthToken>(&request)?;
+        let mut tx = self.db.begin().await?;
         // Get the host that the user wants to listen to from the current login token.
-        let host_id = token.try_get_host(&self.db).await?.id;
+        let host_id = token.try_get_host(&mut tx).await?.id;
         // Set the host as online.
-        models::Host::toggle_online(host_id, true, &self.db).await?;
+        models::Host::toggle_online(host_id, true, &mut tx).await?;
+        tx.commit().await?;
         let update_stream = request.into_inner();
         let (rx, host_listener, user_listener) =
             listener::channels(host_id, self.notifier.commands_receiver(), self.db.clone());
@@ -58,9 +59,8 @@ impl CommandFlow for CommandFlowServerImpl {
 #[cfg(test)]
 mod tests {
     use crate::models::{Host, HostCmd};
-    use crate::TestDb;
+    use crate::{models, TestDb};
     use http::Uri;
-    use sqlx::PgPool;
     use std::convert::TryFrom;
     use std::future::Future;
     use std::sync::Arc;
@@ -81,7 +81,7 @@ mod tests {
     use uuid::Uuid;
 
     async fn server_and_client_stub(
-        db: Arc<PgPool>,
+        pool: models::DbPool,
     ) -> (impl Future<Output = ()>, CommandFlowClient<Channel>) {
         let socket = NamedTempFile::new().unwrap();
         let socket = Arc::new(socket.into_temp_path());
@@ -91,7 +91,7 @@ mod tests {
         let stream = UnixListenerStream::new(uds);
 
         let serve_future = async {
-            let result = crate::grpc::server(db)
+            let result = crate::grpc::server(pool)
                 .await
                 .serve_with_incoming(stream)
                 .await;
@@ -142,12 +142,11 @@ mod tests {
     #[before(call = "setup")]
     #[tokio::test]
     async fn responds_ok_with_valid_token_for_node_command() {
-        let db = Arc::new(_before_values.await);
-        let (serve_future, mut client) = server_and_client_stub(Arc::new(db.pool.clone())).await;
+        let db = _before_values.await;
+        let (serve_future, mut client) = server_and_client_stub(db.pool.clone()).await;
         let host = db.test_host().await;
-        let token =
-            UserAuthToken::create_token_for::<Host>(&host, TokenType::HostAuth, TokenRole::Service)
-                .unwrap();
+        let token = UserAuthToken::create_token_for(&host, TokenType::HostAuth, TokenRole::Service)
+            .unwrap();
 
         let request_future = async move {
             println!("creating request");
@@ -185,12 +184,12 @@ mod tests {
         let create_commands = async move {
             println!("creating commands");
 
-            let hosts = Host::find_all(&db.pool).await.unwrap();
+            let mut tx = db.pool.begin().await.unwrap();
+            let hosts = Host::find_all(&mut tx).await.unwrap();
 
             // create new command so the DB can notify our server about it
             for host in hosts {
                 println!("creating command for host {}", host.id);
-                let mut tx = db.pool.begin().await.unwrap();
 
                 sqlx::query("insert into commands (host_id, cmd, sub_cmd) values ($1, $2, $3)")
                     .bind(host.id)
@@ -200,9 +199,8 @@ mod tests {
                     .execute(&mut tx)
                     .await
                     .expect("Some error at inserting command");
-
-                tx.commit().await.expect("Some error at committing tx");
             }
+            tx.commit().await.expect("Some error at committing tx");
         };
 
         let sleep = time::sleep(Duration::from_secs(1));
@@ -225,8 +223,8 @@ mod tests {
     #[before(call = "setup")]
     #[tokio::test]
     async fn responds_unauthenticated_without_valid_token_for_node_command() {
-        let db = Arc::new(_before_values.await);
-        let (serve_future, mut client) = server_and_client_stub(Arc::new(db.pool.clone())).await;
+        let db = _before_values.await;
+        let (serve_future, mut client) = server_and_client_stub(db.pool.clone()).await;
 
         let request_future = async {
             let in_stream = node_info_requests_iter().take(10);

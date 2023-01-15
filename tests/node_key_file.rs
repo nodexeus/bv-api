@@ -34,7 +34,8 @@ async fn can_create_key_file() -> anyhow::Result<()> {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let node = Node::create(&mut req, tester.pool()).await.unwrap();
+    let mut tx = tester.begin().await;
+    let node = Node::create(&mut req, &mut tx).await.unwrap();
     let req = CreateNodeKeyFileRequest {
         name: "my-key.txt".to_string(),
         content:
@@ -42,7 +43,8 @@ async fn can_create_key_file() -> anyhow::Result<()> {
                 .to_string(),
         node_id: node.id,
     };
-    let file = NodeKeyFile::create(req, tester.pool()).await?;
+    let file = NodeKeyFile::create(req, &mut tx).await?;
+    tx.commit().await.unwrap();
 
     assert_eq!(file.name(), "my-key.txt");
 
@@ -60,8 +62,9 @@ async fn cannot_create_key_file_for_unknown_node() -> anyhow::Result<()> {
         node_id: uuid::Uuid::new_v4(),
     };
 
-    assert!(NodeKeyFile::create(req, tester.pool()).await.is_err());
-
+    let mut tx = tester.begin().await;
+    NodeKeyFile::create(req, &mut tx).await.unwrap_err();
+    tx.commit().await.unwrap();
     Ok(())
 }
 
@@ -93,7 +96,8 @@ async fn deletes_key_file_if_node_is_deleted() -> anyhow::Result<()> {
         mem_size_mb: 0,
         disk_size_gb: 0,
     };
-    let node = Node::create(&mut req, tester.pool()).await.unwrap();
+    let mut tx = tester.begin().await;
+    let node = Node::create(&mut req, &mut tx).await.unwrap();
     let req = CreateNodeKeyFileRequest {
         name: "my-key.txt".to_string(),
         content:
@@ -101,15 +105,16 @@ async fn deletes_key_file_if_node_is_deleted() -> anyhow::Result<()> {
                 .to_string(),
         node_id: node.id,
     };
-    let file = NodeKeyFile::create(req, tester.pool()).await?;
+    let file = NodeKeyFile::create(req, &mut tx).await?;
 
     assert_eq!(file.name(), "my-key.txt");
 
-    Node::delete(node.id, tester.pool()).await?;
+    Node::delete(node.id, &mut tx).await?;
 
     let cnt: i32 = sqlx::query_scalar("select count(*)::int from node_key_files")
-        .fetch_one(tester.pool())
+        .fetch_one(&mut tx)
         .await?;
+    tx.commit().await.unwrap();
 
     assert_eq!(cnt, 0);
 

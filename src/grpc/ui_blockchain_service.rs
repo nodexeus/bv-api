@@ -3,17 +3,15 @@ use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::blockchain_service_server::BlockchainService;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models;
-use crate::server::DbPool;
-use uuid::Uuid;
 
 type Result<T, E = tonic::Status> = std::result::Result<T, E>;
 
 pub struct BlockchainServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
 }
 
 impl BlockchainServiceImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: models::DbPool) -> Self {
         Self { db }
     }
 }
@@ -26,10 +24,12 @@ impl BlockchainService for BlockchainServiceImpl {
     ) -> Result<tonic::Response<blockjoy_ui::GetBlockchainResponse>> {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
-        let id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
-        let blockchain = models::Blockchain::find_by_id(id, &self.db)
+        let id = inner.id.parse().map_err(ApiError::from)?;
+        let mut tx = self.db.begin().await?;
+        let blockchain = models::Blockchain::find_by_id(id, &mut tx)
             .await
             .map_err(|_| tonic::Status::not_found("No such blockchain"))?;
+        tx.commit().await?;
         let response = blockjoy_ui::GetBlockchainResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             blockchain: Some(blockchain.try_into()?),
@@ -43,7 +43,9 @@ impl BlockchainService for BlockchainServiceImpl {
     ) -> Result<tonic::Response<blockjoy_ui::ListBlockchainsResponse>> {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
-        let blockchains = models::Blockchain::find_all(&self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let blockchains = models::Blockchain::find_all(&mut tx).await?;
+        tx.commit().await?;
         let blockchains: Result<Vec<_>, ApiError> =
             blockchains.into_iter().map(|b| b.try_into()).collect();
         let response = blockjoy_ui::ListBlockchainsResponse {

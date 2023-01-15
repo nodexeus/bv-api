@@ -16,15 +16,16 @@ mod test {
     use crate::auth::{
         HostRefreshToken, JwtToken, TokenClaim, TokenRole, TokenType, UserRefreshToken,
     };
-    use crate::models::{self};
+    use crate::models;
     use rand::Rng;
     use sqlx::Connection;
     use std::net::IpAddr;
     use std::str::FromStr;
     use uuid::Uuid;
 
+    #[derive(Clone)]
     pub struct TestDb {
-        pub pool: sqlx::PgPool,
+        pub pool: models::DbPool,
         test_db_name: String,
         main_db_url: String,
     }
@@ -68,11 +69,14 @@ mod test {
                 .expect("Could not create db connection pool.");
 
             let db = TestDb {
-                pool,
+                pool: models::DbPool::new(pool),
                 test_db_name: db_name,
                 main_db_url,
             };
-            sqlx::migrate!("./migrations").run(&db.pool).await.unwrap();
+            sqlx::migrate!("./migrations")
+                .run(&mut db.pool.conn().await.unwrap())
+                .await
+                .unwrap();
             db.seed().await;
             db
         }
@@ -97,47 +101,48 @@ mod test {
 
         /// Seeds the database with some initial data that we need for running tests.
         pub async fn seed(&self) {
+            let mut tx = self.pool.begin().await.unwrap();
             sqlx::query("INSERT INTO info (block_height) VALUES (99)")
-                .execute(&self.pool)
+                .execute(&mut tx)
                 .await
                 .expect("could not update info in test setup");
             /*
             sqlx::query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('fd5e2a49-f741-4eb2-a8b1-ee6222146ced','DeletedChain', 'deleted', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]')")
-            .execute(&self.pool)
+            .execute(&mut tx)
             .await
             .expect("Error inserting blockchain");
             sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Pocket', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]')")
-            .execute(&self.pool)
+            .execute(&mut tx)
             .await
             .expect("Error inserting blockchain");
             sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Cosmos', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
-            .execute(&self.pool)
+            .execute(&mut tx)
             .await
             .expect("Error inserting blockchain");
             sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Etherium', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
-            .execute(&self.pool)
+            .execute(&mut tx)
             .await
             .expect("Error inserting blockchain");
             sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Lightning', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
-            .execute(&self.pool)
+            .execute(&mut tx)
             .await
             .expect("Error inserting blockchain");
             sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Algorand', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
-            .execute(&self.pool)
+            .execute(&mut tx)
             .await
             .expect("Error inserting blockchain");
              */
 
             sqlx::query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('1fdbf4c3-ff16-489a-8d3d-87c8620b963c','Helium', 'production', '[]')")
-                .execute(&self.pool)
+                .execute(&mut tx)
                 .await
                 .expect("Error inserting blockchain");
             sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Etherium PoS', 'production', '[{\"id\":3,\"version\": \"3.3.0\", \"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]},{\"id\":1, \"version\": \"3.3.0\",\"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]}]');")
-                .execute(&self.pool)
+                .execute(&mut tx)
                 .await
                 .expect("Error inserting blockchain");
             sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Helium', 'production', '[{\"id\":3, \"version\": \"0.0.3\",\"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]},{\"id\":1, \"version\": \"0.0.3\",\"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]}]');")
-                .execute(&self.pool)
+                .execute(&mut tx)
                 .await
                 .expect("Error inserting blockchain");
 
@@ -157,24 +162,24 @@ mod test {
                 password_confirm: "abc12345".into(),
             };
 
-            let user = models::User::create(user, &self.pool, None)
+            let user = models::User::create(user, None, &mut tx)
                 .await
                 .expect("Could not create test user in db.");
 
-            let _ = models::User::create(admin, &self.pool, None)
+            let _ = models::User::create(admin, None, &mut tx)
                 .await
                 .expect("Could not create admin user in db.");
 
             sqlx::query(
                 "UPDATE users set pay_address = '123456', staking_quota = 3 where email = 'test@here.com'",
             )
-            .execute(&self.pool)
+            .execute(&mut tx)
             .await
             .expect("could not set user's pay address for user test user in sql");
 
             sqlx::query("INSERT INTO invoices (user_id, earnings, fee_bps, validators_count, amount, starts_at, ends_at, is_paid) values ($1, 99, 200, 1, 1000000000, now(), now(), false)")
             .bind(user.id)
-            .execute(&self.pool)
+            .execute(&mut tx)
             .await
             .expect("could insert test invoice into db");
 
@@ -194,7 +199,7 @@ mod test {
                 ip_gateway: Some(IpAddr::from_str("192.168.0.1").expect("invalid ip")),
             };
 
-            let _ = models::Host::create(host, &self.pool)
+            let _ = models::Host::create(host, &mut tx)
                 .await
                 .expect("Could not create test host in db.");
 
@@ -214,28 +219,28 @@ mod test {
                 ip_gateway: Some(IpAddr::from_str("192.12.0.1").expect("invalid ip")),
             };
 
-            let _ = models::Host::create(host, &self.pool)
+            let _ = models::Host::create(host, &mut tx)
                 .await
                 .expect("Could not create test host in db.");
+            tx.commit().await.unwrap();
         }
 
         pub async fn test_host(&self) -> models::Host {
             sqlx::query("select h.* from hosts h where name = 'Host-1'")
-                .map(|row| models::Host::try_from(row).unwrap_or_default())
-                .fetch_one(&self.pool)
+                .try_map(models::Host::try_from)
+                .fetch_one(&mut self.pool.conn().await.unwrap())
                 .await
                 .unwrap()
         }
 
         pub async fn admin_user(&self) -> models::User {
-            models::User::find_by_email("admin@here.com", &self.pool)
+            models::User::find_by_email("admin@here.com", &mut self.pool.conn().await.unwrap())
                 .await
                 .expect("Could not get admin test user from db.")
         }
 
-        #[allow(dead_code)]
         pub async fn blockchain(&self) -> models::Blockchain {
-            let chains = models::Blockchain::find_all(&self.pool)
+            let chains = models::Blockchain::find_all(&mut self.pool.conn().await.unwrap())
                 .await
                 .expect("To have at least one blockchain");
             chains

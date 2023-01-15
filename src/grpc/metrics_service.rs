@@ -5,15 +5,14 @@
 
 use crate::grpc::blockjoy::{self, metrics_service_server::MetricsService};
 use crate::models;
-use crate::server::DbPool;
 use tonic::Response;
 
 pub struct MetricsServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
 }
 
 impl MetricsServiceImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: models::DbPool) -> Self {
         Self { db }
     }
 }
@@ -33,7 +32,9 @@ impl MetricsService for MetricsServiceImpl {
             .into_iter()
             .map(|(k, v)| models::NodeSelectiveUpdate::from_metrics(k, v))
             .collect::<Result<_, _>>()?;
-        models::NodeSelectiveUpdate::update_metrics(updates, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        models::NodeSelectiveUpdate::update_metrics(updates, &mut tx).await?;
+        tx.commit().await?;
         Ok(tonic::Response::new(()))
     }
 
@@ -47,7 +48,9 @@ impl MetricsService for MetricsServiceImpl {
             .into_iter()
             .map(|(k, v)| models::HostSelectiveUpdate::from_metrics(k, v))
             .collect::<Result<_, _>>()?;
-        models::HostSelectiveUpdate::update_metrics(updates, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        models::HostSelectiveUpdate::update_metrics(updates, &mut tx).await?;
+        tx.commit().await?;
         Ok(tonic::Response::new(()))
     }
 }

@@ -2,11 +2,9 @@ use crate::auth::key_provider::KeyProvider;
 use crate::grpc::server as grpc_server;
 use crate::http::server as http_server;
 use crate::hybrid_server::hybrid as hybrid_server;
-use sqlx::postgres::{PgPool, PgPoolOptions};
-use std::sync::Arc;
+use crate::models;
+use sqlx::postgres::PgPoolOptions;
 use std::time::Duration;
-
-pub type DbPool = Arc<PgPool>;
 
 pub async fn start() -> anyhow::Result<()> {
     let db_url = KeyProvider::get_var("DATABASE_URL")?.to_string();
@@ -23,7 +21,7 @@ pub async fn start() -> anyhow::Result<()> {
     let bind_ip = std::env::var("BIND_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
     let addr = format!("{}:{}", bind_ip, port);
 
-    let db = Arc::new(
+    let db = models::DbPool::new(
         PgPoolOptions::new()
             .max_connections(db_max_conn)
             .min_connections(db_min_conn)
