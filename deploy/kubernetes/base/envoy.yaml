@@ -67,6 +67,6 @@ kind: BackendConfig
 metadata:
   name: envoy
 spec:
-  timeoutSec: 300
+  timeoutSec: 86400
   connectionDraining:
     drainingTimeoutSec: 100
