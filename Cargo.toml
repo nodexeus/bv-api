@@ -12,7 +12,6 @@ lto = true
 opt-level = 'z'
 
 [dependencies]
-angry-purple-tiger = "0.1.0"
 anyhow = "1.0.40"
 argon2 = "0.2.0"
 axum = "0.5.6"
@@ -21,7 +20,6 @@ casbin = { version = "2.0.9", default-features = false, features = ["runtime-tok
 chrono = {version = "0.4.19", features = ["serde"]}
 derive-getters = "0.2.0"
 dotenv = "0.15.0"
-flate2 = "1.0"
 futures-util = "0.3.21"
 h2 = "0.3.13"
 handlebars = "4.3.3"
@@ -35,7 +33,6 @@ petname = "1.1.0"
 pin-project = "1.0.11"
 prost = "0.10.4"
 prost-types = "0.10.1"
-qrcode-generator = "4.1.1"
 rand = "0.8.5"
 random-string = "1.0.0"
 sendgrid = {version = "0.17.4", default-features = false, features = ["rustls", "async"]}
