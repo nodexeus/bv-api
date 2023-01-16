@@ -63,6 +63,29 @@ message RequirementsResponse {
   int64 disk_size_gb = 3;
 }
 
+message Parameter {
+  string name = 1;
+  string value = 2;
+}
+
+message NetworkConfiguration {
+  enum NetType {
+    UndefinedNetType = 0;
+    Dev = 1;
+    Test = 2;
+    Main = 3;
+  }
+
+  string name = 1;
+  string url = 2;
+  NetType net_type = 3;
+  repeated Parameter meta = 4;
+}
+
+message NetConfigurationResponse {
+  repeated NetworkConfiguration configurations = 1;
+}
+
 /* Babel cookbook service */
 service CookBookService {
   /* Retrieve configuration for specific version and state */
@@ -73,6 +96,8 @@ service CookBookService {
   rpc RetrieveKernel(ConfigIdentifier) returns (ArchiveLocation) {}
   /* Retrieve hardware requirements for given identifier */
   rpc Requirements(ConfigIdentifier) returns (RequirementsResponse) {}
+  /* Retrieve net configurations for given chain */
+  rpc NetConfigurations(ConfigIdentifier) returns (NetConfigurationResponse) {}
   /* List all available babel versions */
   rpc ListBabelVersions(BabelVersionsRequest) returns (BabelVersionsResponse) {}
   /* Promote/Demote configuration/image to the desired state */
