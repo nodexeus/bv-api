@@ -15,6 +15,7 @@ metadata:
     kubernetes.io/ingress.global-static-ip-name: blockvisor-api
     networking.gke.io/managed-certificates: blockvisor-api
     kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.allow-http: false
 spec:
   defaultBackend:
     service:
