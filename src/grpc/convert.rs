@@ -448,6 +448,7 @@ pub mod from {
                 id: Some(node.id.to_string()),
                 org_id: Some(node.org_id.to_string()),
                 host_id: Some(node.host_id.to_string()),
+                host_name: Some(node.host_name.clone()),
                 blockchain_id: Some(node.blockchain_id.to_string()),
                 name: node.name.clone(),
                 // TODO: get node groups
@@ -483,6 +484,7 @@ pub mod from {
                 id: None,
                 org_id: Some(req.org_id.to_string()),
                 host_id: None,
+                host_name: Some(req.host_name.clone()),
                 blockchain_id: Some(req.blockchain_id.to_string()),
                 name: Some(petname::petname(3, "_")),
                 // TODO
@@ -542,6 +544,7 @@ pub mod from {
                         .ok_or_else(|| ApiError::validation("GrpcNode.org_id is required"))?
                         .as_str(),
                 )?,
+                host_name: node.host_name.unwrap_or_default(),
                 name: Some(petname::petname(3, "_")),
                 groups: Some(node.groups.join(",")),
                 version: node.version.map(String::from),
