@@ -5,6 +5,7 @@ use crate::grpc::blockjoy_ui::blockchain_service_server::BlockchainService;
 use crate::grpc::blockjoy_ui::Blockchain;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models;
+use crate::models::NodeTypeKey;
 
 type Result<T, E = tonic::Status> = std::result::Result<T, E>;
 
@@ -56,14 +57,12 @@ impl BlockchainService for BlockchainServiceImpl {
             for node_type in node_types {
                 let nets = get_networks(
                     blockchain.name.clone(),
-                    node_type.get_id().to_string(),
+                    NodeTypeKey::str_from_value(node_type.get_id()),
                     Some(node_type.version().to_string()),
                 )
                 .await?;
 
-                g_chain
-                    .networks
-                    .append(&mut nets.iter().map(|c| c.into()).collect());
+                g_chain.networks.extend(nets.iter().map(|c| c.into()));
             }
 
             grpc_blockchains.push(g_chain);
