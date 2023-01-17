@@ -6,7 +6,7 @@ metadata:
   labels:
     app: blockvisor-api
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: blockvisor-api
@@ -56,3 +56,4 @@ spec:
       port: 8080
       targetPort: 8080
 ---
+
