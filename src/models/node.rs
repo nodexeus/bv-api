@@ -176,6 +176,7 @@ pub struct Node {
     pub vcpu_count: i64,
     pub mem_size_mb: i64,
     pub disk_size_gb: i64,
+    pub host_name: String,
 }
 
 #[derive(Clone, Debug)]
@@ -225,8 +226,9 @@ impl Node {
                     self_update,
                     vcpu_count,
                     mem_size_mb,
-                    disk_size_gb
-                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *"#,
+                    disk_size_gb,
+                    host_name
+                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *"#,
         )
         .bind(req.org_id)
         .bind(host_id)
@@ -247,6 +249,7 @@ impl Node {
         .bind(requirements.vcpu_count)
         .bind(requirements.mem_size_mb)
         .bind(requirements.disk_size_gb)
+        .bind(host.name)
         .fetch_one(&mut tx)
         .await
         .map_err(|e| {
@@ -473,6 +476,7 @@ pub struct NodeProvision {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeCreateRequest {
     pub org_id: Uuid,
+    pub host_name: String,
     pub name: Option<String>,
     pub groups: Option<String>,
     pub version: Option<String>,
