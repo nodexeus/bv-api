@@ -57,6 +57,7 @@ async fn responds_ok_with_valid_token_for_delete() {
         vcpu_count: 0,
         mem_size_mb: 0,
         disk_size_gb: 0,
+        host_name: "some host".to_string(),
     };
     let mut tx = tester.begin().await;
     models::Node::create(&mut req, &mut tx).await.unwrap();

@@ -61,7 +61,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
             }),
         };
 
-        Ok(response_with_refresh_token(refresh_token, response)?)
+        Ok(response_with_refresh_token(Some(refresh_token), response)?)
     }
 
     async fn confirm(
@@ -93,7 +93,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
             token: Some(ApiToken { value: auth_token }),
         };
 
-        Ok(response_with_refresh_token(refresh_token, response)?)
+        Ok(response_with_refresh_token(Some(refresh_token), response)?)
     }
 
     async fn refresh(

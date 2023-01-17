@@ -165,23 +165,24 @@ message Node {
   optional string id = 1;
   optional string org_id = 2;
   optional string host_id = 3;
-  optional string blockchain_id = 4;
-  optional string name = 5;
-  repeated string groups = 6;
-  optional string version = 7;
-  optional string ip = 8;
-  optional string type = 9;
-  optional string address = 10;
-  optional string wallet_address = 11;
-  optional int64 block_height = 12;
-  optional bytes node_data = 13;
-  optional google.protobuf.Timestamp created_at = 14;
-  optional google.protobuf.Timestamp updated_at = 15;
-  optional NodeStatus status = 16;
-  optional SyncStatus sync_status = 17;
-  optional StakingStatus staking_status = 18;
-  optional string ip_gateway = 19;
-  optional bool self_update = 20;
+  optional string host_name = 4;
+  optional string blockchain_id = 5;
+  optional string name = 6;
+  repeated string groups = 7;
+  optional string version = 8;
+  optional string ip = 9;
+  optional string type = 10;
+  optional string address = 11;
+  optional string wallet_address = 12;
+  optional int64 block_height = 13;
+  optional bytes node_data = 14;
+  optional google.protobuf.Timestamp created_at = 15;
+  optional google.protobuf.Timestamp updated_at = 16;
+  optional NodeStatus status = 17;
+  optional SyncStatus sync_status = 18;
+  optional StakingStatus staking_status = 19;
+  optional string ip_gateway = 20;
+  optional bool self_update = 21;
 }
 
 /* Organization representation */
@@ -251,6 +252,19 @@ message Parameter {
   string value = 2;
 }
 
+message BlockchainNetwork {
+  enum NetworkType {
+    UnknownNetworkType = 0;
+    Dev = 1;
+    Test = 2;
+    Main = 3;
+  }
+
+  string name = 1;
+  string url = 2;
+  NetworkType net_type = 3;
+}
+
 message Blockchain {
   enum BlockchainStatus {
     UndefinedBlockchainStatus = 0;
@@ -275,6 +289,7 @@ message Blockchain {
   bool supports_staking = 12;
   bool supports_broadcast = 13;
   string supported_nodes_types = 14;
+  repeated BlockchainNetwork networks = 15;
 }
 
 /* User invitation */

@@ -33,7 +33,7 @@ use crate::auth::{
     unauthenticated_paths::UnauthenticatedPaths, Authorization, JwtToken, TokenType,
     UserRefreshToken,
 };
-use crate::errors::Result as ApiResult;
+use crate::errors::{ApiError, Result as ApiResult};
 use crate::grpc::authentication_service::AuthenticationServiceImpl;
 use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
 use crate::grpc::blockjoy::key_files_server::KeyFilesServer;
@@ -63,6 +63,7 @@ use crate::grpc::ui_node_service::NodeServiceImpl;
 use crate::grpc::ui_update_service::UpdateServiceImpl;
 use crate::grpc::user_service::UserServiceImpl;
 use crate::models;
+use anyhow::anyhow;
 use axum::Extension;
 use blockjoy::hosts_server::HostsServer;
 use chrono::NaiveDateTime;
@@ -177,19 +178,21 @@ fn rate_limiting_settings() -> usize {
 }
 
 pub fn response_with_refresh_token<ResponseBody>(
-    token: String,
+    token: Option<String>,
     inner: ResponseBody,
 ) -> ApiResult<tonic::Response<ResponseBody>> {
     let mut response = tonic::Response::new(inner);
 
-    if !token.is_empty() {
+    if let Some(token) = token {
         // here auth fails, if refresh token is expired
         let refresh_token = UserRefreshToken::from_encoded::<UserRefreshToken>(
             token.as_str(),
             TokenType::UserRefresh,
             true,
         )?;
-        let exp = NaiveDateTime::from_timestamp(refresh_token.get_expiration(), 0);
+        let exp = NaiveDateTime::from_timestamp_opt(refresh_token.get_expiration(), 0).ok_or_else(
+            || ApiError::UnexpectedError(anyhow!("Invalid timestamp while creating refresh token")),
+        )?;
         // let exp = "Fri, 09 Jan 2026 03:15:14 GMT";
         let exp = exp.format("%a, %d %b %Y %H:%M:%S GMT").to_string();
 
@@ -212,10 +215,9 @@ pub fn response_with_refresh_token<ResponseBody>(
     Ok(response)
 }
 
-pub fn get_refresh_token<B>(request: &tonic::Request<B>) -> String {
+pub fn get_refresh_token<B>(request: &tonic::Request<B>) -> Option<String> {
     request
         .extensions()
         .get::<UserRefreshToken>()
-        .map(|t| t.encode().map_err(|_| String::new()).unwrap_or_default())
-        .unwrap_or_default()
+        .and_then(|t| t.encode().ok())
 }

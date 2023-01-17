@@ -25,7 +25,7 @@ impl InvitationServiceImpl {
 
     fn get_refresh_token_invitation_id_from_request(
         request: Request<InvitationRequest>,
-    ) -> Result<(String, Uuid), Status> {
+    ) -> Result<(Option<String>, Uuid), Status> {
         let refresh_token = get_refresh_token(&request);
         let invitation_id = match try_get_token::<_, InvitationToken>(&request) {
             Ok(token) => {
