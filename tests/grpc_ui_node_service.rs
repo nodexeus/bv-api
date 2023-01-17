@@ -47,6 +47,7 @@ async fn responds_ok_with_id_for_get() {
         mem_size_mb: 0,
         disk_size_gb: 0,
         host_name: "some host".to_string(),
+        network: "some network".to_string(),
     };
     let mut tx = tester.begin().await;
     let node = models::Node::create(&mut req, &mut tx).await.unwrap();
@@ -82,6 +83,7 @@ async fn responds_ok_with_valid_data_for_create() {
         sync_status: Some(models::NodeSyncStatus::Unknown as i32),
         self_update: None,
         version: Some("0.0.1".into()),
+        network: Some("some network".to_string()),
         ..Default::default()
     };
     let req = blockjoy_ui::CreateNodeRequest {
@@ -144,6 +146,7 @@ async fn responds_ok_with_valid_data_for_update() {
         mem_size_mb: 0,
         disk_size_gb: 0,
         host_name: "some host".to_string(),
+        network: "some network".to_string(),
     };
     let mut tx = tester.begin().await;
     let db_node = models::Node::create(&mut req, &mut tx).await.unwrap();
@@ -223,6 +226,7 @@ async fn responds_ok_with_valid_data_for_delete() {
         mem_size_mb: 0,
         disk_size_gb: 0,
         host_name: "some host".to_string(),
+        network: "some network".to_string(),
     };
     let mut tx = tester.begin().await;
     let db_node = models::Node::create(&mut req, &mut tx).await.unwrap();
