@@ -5,6 +5,7 @@ use crate::grpc::blockjoy_ui::blockchain_service_server::BlockchainService;
 use crate::grpc::blockjoy_ui::Blockchain;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models;
+use crate::models::NodeTypeKey;
 use crate::server::DbPool;
 use uuid::Uuid;
 
@@ -55,7 +56,7 @@ impl BlockchainService for BlockchainServiceImpl {
             for node_type in node_types {
                 let nets = get_networks(
                     blockchain.name.clone(),
-                    node_type.get_id().to_string(),
+                    NodeTypeKey::str_from_value(node_type.get_id()),
                     Some(node_type.version().to_string()),
                 )
                 .await?;
