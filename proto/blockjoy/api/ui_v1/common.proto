@@ -183,6 +183,7 @@ message Node {
   optional StakingStatus staking_status = 19;
   optional string ip_gateway = 20;
   optional bool self_update = 21;
+  optional string network = 22;
 }
 
 /* Organization representation */
