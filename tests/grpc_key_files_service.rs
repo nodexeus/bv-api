@@ -55,6 +55,7 @@ async fn responds_ok_with_valid_node_id() {
         mem_size_mb: 0,
         disk_size_gb: 0,
         host_name: "some host".to_string(),
+        network: "some network".to_string(),
     };
     let mut tx = tester.begin().await;
     let node = models::Node::create(&mut req, &mut tx).await.unwrap();
@@ -129,6 +130,7 @@ async fn responds_ok_with_valid_node_id_for_save() {
         mem_size_mb: 0,
         disk_size_gb: 0,
         host_name: "some host".to_string(),
+        network: "some network".to_string(),
     };
     let mut tx = tester.begin().await;
     let node = models::Node::create(&mut req, &mut tx).await.unwrap();
@@ -178,6 +180,7 @@ async fn responds_error_with_same_node_id_name_twice_for_save() {
         mem_size_mb: 0,
         disk_size_gb: 0,
         host_name: "some host".to_string(),
+        network: "some network".to_string(),
     };
     let mut tx = tester.begin().await;
     let node = models::Node::create(&mut req, &mut tx).await.unwrap();

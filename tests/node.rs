@@ -34,6 +34,7 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         mem_size_mb: 0,
         disk_size_gb: 0,
         host_name: "some host".to_string(),
+        network: "some network".to_string(),
     };
 
     let mut tx = tester.begin().await;

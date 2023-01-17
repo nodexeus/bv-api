@@ -474,6 +474,7 @@ pub mod from {
                 staking_status: Some(GrpcStakingStatus::from(node.staking_status).into()),
                 sync_status: Some(GrpcSyncStatus::from(node.sync_status).into()),
                 self_update: Some(node.self_update),
+                network: Some(node.network.clone()),
             };
             Ok(grpc_node)
         }
@@ -514,6 +515,7 @@ pub mod from {
                 ),
                 sync_status: Some(GrpcSyncStatus::from(req.sync_status).into()),
                 self_update: Some(req.self_update),
+                network: Some(req.network.clone()),
             };
             Ok(node)
         }
@@ -582,6 +584,7 @@ pub mod from {
                 vcpu_count: 0,
                 mem_size_mb: 0,
                 disk_size_gb: 0,
+                network: node.network.ok_or_else(required("node.network"))?,
             };
 
             Ok(req)
