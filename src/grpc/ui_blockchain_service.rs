@@ -61,9 +61,7 @@ impl BlockchainService for BlockchainServiceImpl {
                 )
                 .await?;
 
-                g_chain
-                    .networks
-                    .append(&mut nets.iter().map(|c| c.into()).collect());
+                g_chain.networks.extend(nets.iter().map(|c| c.into()));
             }
 
             grpc_blockchains.push(g_chain);

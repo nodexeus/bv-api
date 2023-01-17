@@ -14,7 +14,7 @@ pub struct HardwareRequirements {
     pub(crate) disk_size_gb: i64,
 }
 
-#[derive(Getters, Clone)]
+#[derive(Getters, Clone, Debug)]
 pub struct BlockchainNetwork {
     pub(crate) name: String,
     pub(crate) url: String,
