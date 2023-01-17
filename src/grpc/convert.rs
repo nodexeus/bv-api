@@ -113,15 +113,17 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
 }
 
 pub mod from {
+    use crate::cookbook::cookbook_grpc::NetworkConfiguration;
     use crate::errors::ApiError;
     use crate::grpc::blockjoy::HostInfo;
     use crate::grpc::blockjoy::Keyfile;
-    use crate::grpc::blockjoy_ui::FilterCriteria;
+    use crate::grpc::blockjoy_ui::blockchain_network::NetworkType;
     use crate::grpc::blockjoy_ui::{
         self, node::NodeStatus as GrpcNodeStatus, node::StakingStatus as GrpcStakingStatus,
         node::SyncStatus as GrpcSyncStatus, Host as GrpcHost, HostProvision as GrpcHostProvision,
         Node as GrpcNode, Organization, User as GrpcUiUser,
     };
+    use crate::grpc::blockjoy_ui::{BlockchainNetwork, FilterCriteria};
     use crate::grpc::helpers::required;
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
@@ -650,33 +652,73 @@ pub mod from {
         }
     }
 
-    impl TryFrom<models::Blockchain> for blockjoy_ui::Blockchain {
+    impl TryFrom<BlockchainNetwork> for crate::cookbook::BlockchainNetwork {
         type Error = ApiError;
 
-        fn try_from(model: models::Blockchain) -> Result<Self, Self::Error> {
-            let json = model.supported_node_types.0;
+        fn try_from(value: BlockchainNetwork) -> Result<Self, Self::Error> {
+            Ok(Self {
+                name: value.name,
+                url: value.url,
+                network_type: NetworkType::from_i32(value.net_type)
+                    .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Unknown network type")))?,
+            })
+        }
+    }
+
+    impl From<&NetworkConfiguration> for crate::cookbook::BlockchainNetwork {
+        fn from(value: &NetworkConfiguration) -> Self {
+            Self {
+                name: value.name.clone(),
+                url: value.url.clone(),
+                network_type: NetworkType::from_i32(value.net_type).unwrap_or_default(),
+            }
+        }
+    }
+
+    impl From<&crate::cookbook::BlockchainNetwork> for BlockchainNetwork {
+        fn from(value: &crate::cookbook::BlockchainNetwork) -> Self {
+            Self {
+                name: value.name.clone(),
+                url: value.url.clone(),
+                net_type: value.network_type.into(),
+            }
+        }
+    }
+
+    impl TryFrom<&models::Blockchain> for blockjoy_ui::Blockchain {
+        type Error = ApiError;
+
+        fn try_from(model: &models::Blockchain) -> Result<Self, Self::Error> {
+            let json = &model.supported_node_types.0;
             let json = serde_json::to_string(&json)
                 .map_err(|e| anyhow!("Could not serialize supported node types: {e}"))?;
 
-            tracing::info!("sending json: {}", json);
-
             let blockchain = Self {
                 id: Some(model.id.to_string()),
-                name: Some(model.name),
-                description: model.description,
+                name: Some(model.name.clone()),
+                description: model.description.clone(),
                 status: model.status as i32,
-                project_url: model.project_url,
-                repo_url: model.repo_url,
+                project_url: model.project_url.clone(),
+                repo_url: model.repo_url.clone(),
                 supports_etl: model.supports_etl,
                 supports_node: model.supports_node,
                 supports_staking: model.supports_staking,
                 supports_broadcast: model.supports_broadcast,
-                version: model.version,
+                version: model.version.clone(),
                 supported_nodes_types: json,
                 created_at: Some(try_dt_to_ts(model.created_at)?),
                 updated_at: Some(try_dt_to_ts(model.updated_at)?),
+                networks: vec![],
             };
             Ok(blockchain)
+        }
+    }
+
+    impl TryFrom<models::Blockchain> for blockjoy_ui::Blockchain {
+        type Error = ApiError;
+
+        fn try_from(model: models::Blockchain) -> Result<Self, Self::Error> {
+            Self::try_from(&model)
         }
     }
 

@@ -1,3 +1,4 @@
+use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgHasArrayType;
 
@@ -69,7 +70,7 @@ pub struct NodeTypeProperty {
     required: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Getters)]
 pub struct NodeType {
     id: i32,
     version: String,

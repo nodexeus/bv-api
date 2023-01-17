@@ -1,6 +1,8 @@
 use super::blockjoy_ui::{self, ResponseMeta};
+use crate::cookbook::get_networks;
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::blockchain_service_server::BlockchainService;
+use crate::grpc::blockjoy_ui::Blockchain;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models;
 use crate::server::DbPool;
@@ -44,11 +46,31 @@ impl BlockchainService for BlockchainServiceImpl {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let blockchains = models::Blockchain::find_all(&self.db).await?;
-        let blockchains: Result<Vec<_>, ApiError> =
-            blockchains.into_iter().map(|b| b.try_into()).collect();
+        let mut grpc_blockchains = vec![];
+
+        for blockchain in &blockchains {
+            let node_types = &blockchain.supported_node_types.0;
+            let mut g_chain: Blockchain = blockchain.try_into()?;
+
+            for node_type in node_types {
+                let nets = get_networks(
+                    blockchain.name.clone(),
+                    node_type.get_id().to_string(),
+                    Some(node_type.version().to_string()),
+                )
+                .await?;
+
+                g_chain
+                    .networks
+                    .append(&mut nets.iter().map(|c| c.into()).collect());
+            }
+
+            grpc_blockchains.push(g_chain);
+        }
+
         let response = blockjoy_ui::ListBlockchainsResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            blockchains: blockchains?,
+            blockchains: grpc_blockchains,
         };
 
         Ok(response_with_refresh_token(refresh_token, response)?)

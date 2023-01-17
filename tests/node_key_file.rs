@@ -33,6 +33,7 @@ async fn can_create_key_file() -> anyhow::Result<()> {
         vcpu_count: 0,
         mem_size_mb: 0,
         disk_size_gb: 0,
+        host_name: "some host".to_string(),
     };
     let node = Node::create(&mut req, tester.pool()).await.unwrap();
     let req = CreateNodeKeyFileRequest {
@@ -92,6 +93,7 @@ async fn deletes_key_file_if_node_is_deleted() -> anyhow::Result<()> {
         vcpu_count: 0,
         mem_size_mb: 0,
         disk_size_gb: 0,
+        host_name: "some host".to_string(),
     };
     let node = Node::create(&mut req, tester.pool()).await.unwrap();
     let req = CreateNodeKeyFileRequest {
