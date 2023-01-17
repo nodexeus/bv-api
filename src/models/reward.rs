@@ -2,7 +2,7 @@ use crate::errors::Result;
 use chrono::{DateTime, Utc};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,7 +20,10 @@ pub struct Reward {
 }
 
 impl Reward {
-    pub async fn summary_by_user(db: &PgPool, user_id: &Uuid) -> Result<RewardSummary> {
+    pub async fn summary_by_user(
+        user_id: Uuid,
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> Result<RewardSummary> {
         let row: RewardSummary = sqlx::query_as(
             r##"SELECT 
                         COALESCE(SUM(amount) FILTER (WHERE txn_time BETWEEN now() - '30 day'::interval AND now()), 0)::BIGINT as last_30,
@@ -38,7 +41,7 @@ impl Reward {
         Ok(row)
     }
 
-    pub async fn create(db: &PgPool, rewards: &[RewardRequest]) -> Result<()> {
+    pub async fn create(rewards: &[RewardRequest], tx: &mut super::DbTrx<'_>) -> Result<()> {
         for reward in rewards {
             if reward.amount < 1 {
                 error!("Reward has zero amount. {:?}", reward);
@@ -52,7 +55,7 @@ impl Reward {
                 .bind(&reward.account)
                 .bind(&reward.validator)
                 .bind(reward.amount)
-                .execute(db)
+                .execute(&mut *tx)
                 .await;
 
             if let Err(e) = res {

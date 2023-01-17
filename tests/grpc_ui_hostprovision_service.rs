@@ -27,9 +27,9 @@ async fn responds_ok_with_valid_id_for_get() {
         ip_range_from: "192.168.0.10".parse().unwrap(),
         ip_range_to: "192.168.0.100".parse().unwrap(),
     };
-    let provision = models::HostProvision::create(req, tester.pool())
-        .await
-        .unwrap();
+    let mut tx = tester.begin().await;
+    let provision = models::HostProvision::create(req, &mut tx).await.unwrap();
+    tx.commit().await.unwrap();
     let req = blockjoy_ui::GetHostProvisionRequest {
         meta: Some(tester.meta()),
         id: Some(provision.id),

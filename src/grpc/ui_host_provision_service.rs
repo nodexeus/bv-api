@@ -6,18 +6,18 @@ use crate::grpc::blockjoy_ui::{
     GetHostProvisionResponse, HostProvision as GrpcHostProvision, ResponseMeta,
 };
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::models;
 use crate::models::{HostProvision, HostProvisionRequest};
-use crate::server::DbPool;
 use anyhow::anyhow;
 use std::net::AddrParseError;
 use tonic::{Request, Response, Status};
 
 pub struct HostProvisionServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
 }
 
 impl HostProvisionServiceImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: models::DbPool) -> Self {
         Self { db }
     }
 }
@@ -30,7 +30,8 @@ impl HostProvisionService for HostProvisionServiceImpl {
     ) -> Result<Response<GetHostProvisionResponse>, Status> {
         let inner = request.into_inner();
         let host_provision_id = inner.id.ok_or_else(required("id"))?;
-        let host_provision = HostProvision::find_by_id(&host_provision_id, &self.db).await?;
+        let mut conn = self.db.conn().await?;
+        let host_provision = HostProvision::find_by_id(&host_provision_id, &mut conn).await?;
         let response = GetHostProvisionResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             host_provisions: vec![GrpcHostProvision::try_from(host_provision)?],
@@ -63,7 +64,9 @@ impl HostProvisionService for HostProvisionServiceImpl {
                 .map_err(|err: AddrParseError| ApiError::UnexpectedError(anyhow!(err)))?,
         };
 
-        let provision = HostProvision::create(req, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let provision = HostProvision::create(req, &mut tx).await?;
+        tx.commit().await?;
         let meta = ResponseMeta::from_meta(inner.meta).with_message(provision.id);
         let response = CreateHostProvisionResponse { meta: Some(meta) };
 

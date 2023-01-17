@@ -7,17 +7,17 @@ use crate::grpc::blockjoy::{
     ProvisionHostRequest, ProvisionHostResponse,
 };
 use crate::grpc::convert::into::IntoData;
+use crate::models;
 use crate::models::{Host, HostProvision};
-use crate::server::DbPool;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 pub struct HostsServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
 }
 
 impl HostsServiceImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: models::DbPool) -> Self {
         Self { db }
     }
 }
@@ -31,9 +31,16 @@ impl Hosts for HostsServiceImpl {
         let inner = request.into_inner();
         let otp = &inner.otp.clone();
         let request_id = inner.request_id.clone();
-        let host = HostProvision::claim_by_grpc_provision(otp, inner, &self.db)
+        let mut tx = self.db.begin().await?;
+        let host = HostProvision::claim_by_grpc_provision(otp, inner, &mut tx)
             .await
-            .map_err(|e| Status::not_found(format!("Host provision not found: {e:?}")))?;
+            .map_err(|e| match e {
+                ApiError::NotFoundError(e) => {
+                    Status::not_found(format!("Host provision not found: {e}"))
+                }
+                _ => Status::internal(format!("Host provision not claimed: {e}")),
+            })?;
+        tx.commit().await?;
         let token: HostAuthToken =
             JwtToken::create_token_for::<Host>(&host, TokenType::HostAuth, TokenRole::Service)?;
         let token = token.encode()?;
@@ -62,9 +69,11 @@ impl Hosts for HostsServiceImpl {
             let msg = format!("Not allowed to delete host '{request_host_id}'");
             return Err(Status::permission_denied(msg));
         }
-        Host::update_all(info.try_into()?, &self.db)
+        let mut tx = self.db.begin().await?;
+        Host::update_all(info.try_into()?, &mut tx)
             .await
             .map_err(|e| Status::not_found(format!("Host {request_host_id} not found. {e}")))?;
+        tx.commit().await?;
         let result = HostInfoUpdateResponse {
             messages: vec![],
             origin_request_id: Some(request_id),
@@ -83,7 +92,9 @@ impl Hosts for HostsServiceImpl {
             let msg = format!("Not allowed to delete host '{host_id}'");
             return Err(Status::permission_denied(msg));
         }
-        Host::delete(host_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        Host::delete(host_id, &mut tx).await?;
+        tx.commit().await?;
         let response = DeleteHostResponse {
             messages: vec![],
             origin_request_id: inner.request_id,

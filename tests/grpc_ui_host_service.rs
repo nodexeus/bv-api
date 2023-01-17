@@ -57,10 +57,14 @@ async fn responds_ok_with_id_for_delete() {
 #[tokio::test]
 async fn responds_ok_with_host_for_update() {
     let tester = setup::Tester::new().await;
+    let mut conn = tester.conn().await;
     let host = tester.host().await;
+    let host = blockjoy_ui::Host::from_model(host, &mut conn)
+        .await
+        .unwrap();
     let req = blockjoy_ui::UpdateHostRequest {
         meta: Some(tester.meta()),
-        host: Some(host.try_into().unwrap()),
+        host: Some(host),
     };
     tester.send_admin(Service::update, req).await.unwrap();
 }

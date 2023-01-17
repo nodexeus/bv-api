@@ -2,7 +2,7 @@ use crate::errors::{ApiError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -36,14 +36,14 @@ pub struct Blockchain {
 }
 
 impl Blockchain {
-    pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Self>> {
         sqlx::query_as("SELECT * FROM blockchains WHERE status <> 'deleted' order by lower(name)")
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
+    pub async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
         sqlx::query_as("SELECT * FROM blockchains WHERE status <> 'deleted' AND id = $1")
             .bind(id)
             .fetch_one(db)

@@ -2,7 +2,7 @@ use crate::auth::FindableById;
 use crate::errors::{ApiError, Result as ApiResult};
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use uuid::Uuid;
 
 #[derive(Clone, Debug)]
@@ -21,8 +21,11 @@ pub struct NodeKeyFile {
 }
 
 impl NodeKeyFile {
-    pub async fn create(req: CreateNodeKeyFileRequest, db: &PgPool) -> ApiResult<Self> {
-        sqlx::query_as::<_, Self>(
+    pub async fn create(
+        req: CreateNodeKeyFileRequest,
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> ApiResult<Self> {
+        sqlx::query_as(
             r#"
             INSERT INTO node_key_files 
                 (name, content, node_id)
@@ -39,8 +42,11 @@ impl NodeKeyFile {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_by_node(node_id: Uuid, db: &PgPool) -> ApiResult<Vec<Self>> {
-        sqlx::query_as::<_, Self>(
+    pub async fn find_by_node(
+        node_id: Uuid,
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> ApiResult<Vec<Self>> {
+        sqlx::query_as(
             r#"
             SELECT * FROM node_key_files WHERE node_id = $1
         "#,
@@ -51,8 +57,8 @@ impl NodeKeyFile {
         .map_err(ApiError::from)
     }
 
-    pub async fn delete(node_id: Uuid, db: &PgPool) -> ApiResult<Self> {
-        sqlx::query_as::<_, Self>(
+    pub async fn delete(node_id: Uuid, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Self> {
+        sqlx::query_as(
             r#"
             DELETE FROM node_key_files 
             WHERE node_id = $1
@@ -68,11 +74,8 @@ impl NodeKeyFile {
 
 #[tonic::async_trait]
 impl FindableById for NodeKeyFile {
-    async fn find_by_id(id: Uuid, db: &PgPool) -> ApiResult<Self>
-    where
-        Self: Sized,
-    {
-        sqlx::query_as::<_, Self>(
+    async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Self> {
+        sqlx::query_as(
             r#"
             SELECT * FROM node_key_files WHERE id = $1
         "#,

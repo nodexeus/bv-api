@@ -1,25 +1,56 @@
 use super::blockjoy_ui::ResponseMeta;
+use super::convert;
 use crate::auth::{FindableById, HostAuthToken, JwtToken, TokenType};
-use crate::errors::ApiError;
+use crate::errors::{self, ApiError};
 use crate::grpc::blockjoy_ui::host_service_server::HostService;
 use crate::grpc::blockjoy_ui::{
-    get_hosts_request, CreateHostRequest, CreateHostResponse, DeleteHostRequest,
+    self, get_hosts_request, CreateHostRequest, CreateHostResponse, DeleteHostRequest,
     DeleteHostResponse, GetHostsRequest, GetHostsResponse, UpdateHostRequest, UpdateHostResponse,
 };
 use crate::grpc::helpers::required;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
-use crate::models::{Host, HostRequest, HostSelectiveUpdate};
-use crate::server::DbPool;
+use crate::models::{self, Host, HostRequest, HostSelectiveUpdate};
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 
 pub struct HostServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
 }
 
 impl HostServiceImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: models::DbPool) -> Self {
         Self { db }
+    }
+}
+
+impl blockjoy_ui::Host {
+    pub async fn from_model<'a>(
+        model: models::Host,
+        db: impl sqlx::PgExecutor<'a>,
+    ) -> errors::Result<Self> {
+        let nodes = models::Node::find_all_by_host(model.id, db).await?;
+        let nodes = nodes
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<errors::Result<_>>()?;
+        let dto = Self {
+            id: Some(model.id.to_string()),
+            name: Some(model.name),
+            version: model.version,
+            location: model.location,
+            cpu_count: model.cpu_count,
+            mem_size: model.mem_size,
+            disk_size: model.disk_size,
+            os: model.os,
+            os_version: model.os_version,
+            ip: Some(model.ip_addr),
+            status: None,
+            nodes,
+            created_at: Some(convert::try_dt_to_ts(model.created_at)?),
+            ip_range_from: model.ip_range_from.map(|ip| ip.to_string()),
+            ip_range_to: model.ip_range_to.map(|ip| ip.to_string()),
+            ip_gateway: model.ip_gateway.map(|ip| ip.to_string()),
+        };
+        Ok(dto)
     }
 }
 
@@ -41,25 +72,21 @@ impl HostService for HostServiceImpl {
         let meta = inner.meta.ok_or_else(required("meta"))?;
         let request_id = meta.id;
         let param = inner.param.ok_or_else(required("param"))?;
-        let (hosts, response_meta) = match param {
-            Param::Id(id) => (
-                vec![Host::find_by_id(
-                    Uuid::parse_str(id.as_str()).map_err(ApiError::from)?,
-                    &self.db,
-                )
-                .await?
-                .try_into()?],
-                ResponseMeta::new(request_id.unwrap_or_default()),
-            ),
+        let mut conn = self.db.conn().await?;
+        let response_meta = ResponseMeta::new(request_id.unwrap_or_default());
+        let hosts = match param {
+            Param::Id(id) => {
+                let host_id = id.parse().map_err(ApiError::from)?;
+                let host = Host::find_by_id(host_id, &mut conn).await?;
+                let host = blockjoy_ui::Host::from_model(host, &mut conn).await?;
+                vec![host]
+            }
             Param::Token(token) => {
                 let token: HostAuthToken =
-                    HostAuthToken::from_encoded(token.as_str(), TokenType::HostAuth, true)?;
-                let host = token.try_get_host(&self.db).await?.try_into()?;
-
-                (
-                    vec![host],
-                    ResponseMeta::new(request_id.unwrap_or_default()),
-                )
+                    HostAuthToken::from_encoded(&token, TokenType::HostAuth, true)?;
+                let host = token.try_get_host(&mut conn).await?;
+                let host = blockjoy_ui::Host::from_model(host, &mut conn).await?;
+                vec![host]
             }
         };
 
@@ -81,8 +108,9 @@ impl HostService for HostServiceImpl {
         let inner = request.into_inner();
         let host = inner.host.ok_or_else(required("host"))?;
         let fields: HostRequest = host.try_into()?;
-
-        Host::create(fields, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        Host::create(fields, &mut tx).await?;
+        tx.commit().await?;
         let response = CreateHostResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
         };
@@ -98,7 +126,9 @@ impl HostService for HostServiceImpl {
         let host = inner.host.ok_or_else(required("host"))?;
         let fields: HostSelectiveUpdate = host.try_into()?;
 
-        Host::update_all(fields, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        Host::update_all(fields, &mut tx).await?;
+        tx.commit().await?;
         let response = UpdateHostResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
         };
@@ -110,8 +140,10 @@ impl HostService for HostServiceImpl {
         request: Request<DeleteHostRequest>,
     ) -> Result<Response<DeleteHostResponse>, Status> {
         let inner = request.into_inner();
-        let host_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
-        Host::delete(host_id, &self.db).await?;
+        let host_id = inner.id.parse().map_err(ApiError::from)?;
+        let mut tx = self.db.begin().await?;
+        Host::delete(host_id, &mut tx).await?;
+        tx.commit().await?;
         let response = DeleteHostResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
         };

@@ -8,7 +8,7 @@ use crate::models::{Blockchain, Host, IpAddress, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{types::Json, FromRow, PgPool, Row};
+use sqlx::{types::Json, FromRow, Row};
 use std::string::ToString;
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
@@ -187,26 +187,25 @@ pub struct NodeFilter {
 }
 
 impl Node {
-    pub async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Node> {
-        sqlx::query_as::<_, Node>("SELECT * FROM nodes where id = $1")
+    pub async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Node> {
+        sqlx::query_as("SELECT * FROM nodes where id = $1")
             .bind(id)
             .fetch_one(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn create(req: &mut NodeCreateRequest, db: &PgPool) -> Result<Node> {
-        let mut tx = db.begin().await?;
-        let chain = Blockchain::find_by_id(req.blockchain_id, db).await?;
+    pub async fn create(req: &mut NodeCreateRequest, tx: &mut super::DbTrx<'_>) -> Result<Node> {
+        let chain = Blockchain::find_by_id(req.blockchain_id, &mut *tx).await?;
         let node_type = NodeTypeKey::str_from_value(req.node_type.get_id());
         let requirements = get_hw_requirements(chain.name, node_type, req.version.clone()).await?;
-        let host_id = Host::get_next_available_host_id(requirements, db).await?;
-        let host = Host::find_by_id(host_id, db).await?;
+        let host_id = Host::get_next_available_host_id(requirements, &mut *tx).await?;
+        let host = Host::find_by_id(host_id, &mut *tx).await?;
 
         req.ip_gateway = host.ip_gateway.map(|ip| ip.to_string());
-        req.ip_addr = Some(IpAddress::next_for_host(host_id, db).await?.ip.to_string());
+        req.ip_addr = Some(IpAddress::next_for_host(host_id, tx).await?.ip.to_string());
 
-        let node = sqlx::query_as::<_, Node>(
+        let node = sqlx::query_as(
             r#"INSERT INTO nodes (
                     org_id, 
                     host_id,
@@ -250,20 +249,22 @@ impl Node {
         .bind(requirements.mem_size_mb)
         .bind(requirements.disk_size_gb)
         .bind(host.name)
-        .fetch_one(&mut tx)
+        .fetch_one(tx)
         .await
         .map_err(|e| {
             tracing::error!("Error creating node: {}", e);
-            ApiError::from(e)
+            e
         })?;
-
-        tx.commit().await?;
 
         Ok(node)
     }
 
-    pub async fn update_info(id: &Uuid, info: &NodeInfo, db: &PgPool) -> Result<Node> {
-        sqlx::query_as::<_, Node>(
+    pub async fn update_info(
+        id: &Uuid,
+        info: &NodeInfo,
+        tx: &mut super::DbTrx<'_>,
+    ) -> Result<Node> {
+        sqlx::query_as(
             r#"UPDATE nodes SET 
                     version = COALESCE($1, version),
                     ip_addr = COALESCE($2, ip_addr),
@@ -282,12 +283,15 @@ impl Node {
         .bind(info.sync_status)
         .bind(info.self_update)
         .bind(id)
-        .fetch_one(db)
+        .fetch_one(tx)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_host(host_id: Uuid, db: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all_by_host(
+        host_id: Uuid,
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM nodes WHERE host_id = $1 order by name DESC")
             .bind(host_id)
             .fetch_all(db)
@@ -299,7 +303,7 @@ impl Node {
         org_id: Uuid,
         offset: i32,
         limit: i32,
-        db: &PgPool,
+        db: impl sqlx::PgExecutor<'_>,
     ) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
@@ -317,7 +321,11 @@ impl Node {
     }
 
     // TODO: Check role if user is allowed to delete the node
-    pub async fn belongs_to_user_org(org_id: Uuid, user_id: Uuid, db: &PgPool) -> Result<bool> {
+    pub async fn belongs_to_user_org(
+        org_id: Uuid,
+        user_id: Uuid,
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> Result<bool> {
         let cnt: i32 = sqlx::query_scalar(
             r#"
             SELECT count(*)::int FROM orgs_users WHERE org_id = $1 and user_id = $2 
@@ -336,7 +344,7 @@ impl Node {
         filter: NodeFilter,
         offset: i32,
         limit: i32,
-        db: &PgPool,
+        db: impl sqlx::PgExecutor<'_>,
     ) -> Result<Vec<Self>> {
         let mut nodes = sqlx::query_as::<_, Self>(
             r#"
@@ -372,7 +380,7 @@ impl Node {
         Ok(nodes)
     }
 
-    pub async fn running_nodes_count(org_id: &Uuid, db: &PgPool) -> Result<i32> {
+    pub async fn running_nodes_count(org_id: &Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<i32> {
         match sqlx::query(
             r#"select COALESCE(count(id)::int, 0) from nodes where chain_status in
                                  (
@@ -404,7 +412,7 @@ impl Node {
         }
     }
 
-    pub async fn halted_nodes_count(org_id: &Uuid, db: &PgPool) -> Result<i32> {
+    pub async fn halted_nodes_count(org_id: &Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<i32> {
         match sqlx::query(
             r#"select COALESCE(count(id)::int, 0) from nodes where chain_status in
                                  (
@@ -426,10 +434,10 @@ impl Node {
         }
     }
 
-    pub async fn delete(node_id: Uuid, db: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>(r#"DELETE FROM nodes WHERE id = $1 RETURNING *"#)
+    pub async fn delete(node_id: Uuid, tx: &mut super::DbTrx<'_>) -> Result<Self> {
+        sqlx::query_as(r#"DELETE FROM nodes WHERE id = $1 RETURNING *"#)
             .bind(node_id)
-            .fetch_one(db)
+            .fetch_one(tx)
             .await
             .map_err(ApiError::from)
     }
@@ -437,7 +445,7 @@ impl Node {
 
 #[tonic::async_trait]
 impl UpdateInfo<GrpcNodeInfo, Node> for Node {
-    async fn update_info(info: GrpcNodeInfo, db: &PgPool) -> Result<Node> {
+    async fn update_info(info: GrpcNodeInfo, tx: &mut super::DbTrx<'_>) -> Result<Node> {
         let req: NodeUpdateRequest = info.try_into()?;
         let node: Node = sqlx::query_as(
             r##"UPDATE nodes SET
@@ -460,7 +468,7 @@ impl UpdateInfo<GrpcNodeInfo, Node> for Node {
         .bind(req.block_height)
         .bind(req.self_update)
         .bind(req.id)
-        .fetch_one(db)
+        .fetch_one(tx)
         .await?;
 
         Ok(node)
@@ -513,7 +521,7 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
     type Error = ApiError;
 
     fn try_from(info: GrpcNodeInfo) -> Result<Self> {
-        let id = Uuid::parse_str(info.id.as_str())?;
+        let id = info.id.as_str().parse()?;
         let req = Self {
             id,
             name: info.name,
@@ -552,7 +560,7 @@ pub struct NodeSelectiveUpdate {
 
 impl NodeSelectiveUpdate {
     /// Performs a selective update of only the columns related to metrics of the provided nodes.
-    pub async fn update_metrics(updates: Vec<Self>, db: &PgPool) -> Result<()> {
+    pub async fn update_metrics(updates: Vec<Self>, tx: &mut super::DbTrx<'_>) -> Result<()> {
         type PgBuilder = sqlx::QueryBuilder<'static, sqlx::Postgres>;
 
         // Lets not perform a malformed query on empty input, but lets instead be fast and
@@ -592,7 +600,7 @@ impl NodeSelectiveUpdate {
         );
         let template = sqlx::query(query_builder.sql());
         let query = updates.into_iter().fold(template, Self::bind_to);
-        query.execute(db).await?;
+        query.execute(tx).await?;
         Ok(())
     }
 

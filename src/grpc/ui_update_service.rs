@@ -2,11 +2,11 @@ use crate::auth::FindableById;
 use crate::grpc::blockjoy_ui::update_notification::Notification;
 use crate::grpc::blockjoy_ui::update_service_server::UpdateService;
 use crate::grpc::blockjoy_ui::{
-    GetUpdatesRequest, GetUpdatesResponse, ResponseMeta, UpdateNotification,
+    self, GetUpdatesRequest, GetUpdatesResponse, ResponseMeta, UpdateNotification,
 };
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier};
+use crate::models;
 use crate::models::{Host, Node};
-use crate::server::DbPool;
 use std::env;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -17,13 +17,13 @@ use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 pub struct UpdateServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
     notifier: Arc<ChannelNotifier>,
     buffer_size: usize,
 }
 
 impl UpdateServiceImpl {
-    pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
+    pub fn new(db: models::DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         let buffer_size: usize = env::var("BIDI_BUFFER_SIZE")
             .ok()
             .and_then(|bs| bs.parse().ok())
@@ -36,17 +36,19 @@ impl UpdateServiceImpl {
         }
     }
 
-    pub async fn host_payload(id: Uuid, db: DbPool) -> Option<Notification> {
-        Host::find_by_id(id, &db)
+    pub async fn host_payload(id: Uuid, db: models::DbPool) -> Option<Notification> {
+        let mut conn = db.conn().await.ok()?;
+        let host = Host::find_by_id(id, &mut conn)
             .await
             .map_err(|e| tracing::error!("Host ID {id} not found: {e}"))
-            .ok()
-            .and_then(|h| h.try_into().ok())
-            .map(Notification::Host)
+            .ok()?;
+        let host = blockjoy_ui::Host::from_model(host, &mut conn).await.ok()?;
+        Some(Notification::Host(host))
     }
 
-    pub async fn node_payload(id: Uuid, db: DbPool) -> Option<Notification> {
-        Node::find_by_id(id, &db)
+    pub async fn node_payload(id: Uuid, db: models::DbPool) -> Option<Notification> {
+        let mut conn = db.conn().await.ok()?;
+        Node::find_by_id(id, &mut conn)
             .await
             .map_err(|e| tracing::error!("Node ID {id} not found: {e}"))
             .ok()

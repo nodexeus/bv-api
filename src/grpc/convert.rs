@@ -1,3 +1,4 @@
+use super::blockjoy::Parameter;
 use crate::errors::Result as ApiResult;
 use crate::grpc::blockjoy::container_image::StatusName;
 use crate::grpc::blockjoy::{
@@ -5,12 +6,14 @@ use crate::grpc::blockjoy::{
     NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
 };
 use crate::grpc::helpers::required;
+use crate::models;
 use crate::models::{Blockchain, Command, HostCmd, Node, NodeTypeKey};
-use crate::server::DbPool;
+use prost_types::Timestamp;
 
-use super::blockjoy::Parameter;
-
-pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<GrpcCommand> {
+pub async fn db_command_to_grpc_command(
+    cmd: Command,
+    db: &models::DbPool,
+) -> ApiResult<GrpcCommand> {
     let mut node_cmd = NodeCommand {
         id: cmd.resource_id.to_string(),
         command: None,
@@ -33,7 +36,8 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
             //     r#type: Some(command::Type::Node(NodeUpgrade {})),
             // }
 
-            let node = Node::find_by_id(cmd.resource_id, db).await?;
+            let mut conn = db.conn().await?;
+            let node = Node::find_by_id(cmd.resource_id, &mut conn).await?;
             let cmd = blockjoy::NodeInfoUpdate {
                 name: node.name,
                 self_update: Some(node.self_update),
@@ -63,8 +67,9 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
         }
         // The following should be HostCommands
         HostCmd::CreateNode => {
-            let node = Node::find_by_id(cmd.resource_id, db).await?;
-            let blockchain = Blockchain::find_by_id(node.blockchain_id, db).await?;
+            let mut conn = db.conn().await?;
+            let node = Node::find_by_id(cmd.resource_id, &mut conn).await?;
+            let blockchain = Blockchain::find_by_id(node.blockchain_id, &mut conn).await?;
             let image = ContainerImage {
                 protocol: blockchain.name,
                 node_type: NodeTypeKey::str_from_value(node.node_type.0.get_id()).to_lowercase(),
@@ -112,7 +117,21 @@ pub async fn db_command_to_grpc_command(cmd: Command, db: &DbPool) -> ApiResult<
     })
 }
 
+/// Function to convert the datetimes from the database into the API representation of a timestamp.
+pub fn try_dt_to_ts(datetime: chrono::DateTime<chrono::Utc>) -> ApiResult<Timestamp> {
+    const NANOS_PER_SEC: i64 = 1_000_000_000;
+    let nanos = datetime.timestamp_nanos();
+    let timestamp = Timestamp {
+        seconds: nanos / NANOS_PER_SEC,
+        // This _should_ never fail because 1_000_000_000 fits into an i32, but using `as` was
+        // hiding this bug in the first place. Therefore I have left the `try_into` call here.
+        nanos: (nanos % NANOS_PER_SEC).try_into()?,
+    };
+    Ok(timestamp)
+}
+
 pub mod from {
+    use super::try_dt_to_ts;
     use crate::cookbook::cookbook_grpc::NetworkConfiguration;
     use crate::errors::ApiError;
     use crate::grpc::blockjoy::HostInfo;
@@ -125,15 +144,14 @@ pub mod from {
     };
     use crate::grpc::blockjoy_ui::{BlockchainNetwork, FilterCriteria};
     use crate::grpc::helpers::required;
+    use crate::models::HostSelectiveUpdate;
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
         NodeCreateRequest, NodeInfo, NodeKeyFile, NodeStakingStatus, NodeSyncStatus, Org, User,
         UserSelectiveUpdate,
     };
-    use crate::models::{Host, HostSelectiveUpdate};
     use crate::models::{Invitation, NodeFilter};
     use anyhow::anyhow;
-    use prost_types::Timestamp;
     use serde_json::Value;
     use std::i64;
     use std::net::AddrParseError;
@@ -141,20 +159,6 @@ pub mod from {
     use std::string::FromUtf8Error;
     use tonic::{Code, Status};
     use uuid::Uuid;
-
-    /// Private function to convert the datetimes from the database into the API representation of
-    /// a timestamp.
-    fn try_dt_to_ts(datetime: chrono::DateTime<chrono::Utc>) -> Result<Timestamp, ApiError> {
-        const NANOS_PER_SEC: i64 = 1_000_000_000;
-        let nanos = datetime.timestamp_nanos();
-        let timestamp = Timestamp {
-            seconds: nanos / NANOS_PER_SEC,
-            // This _should_ never fail because 1_000_000_000 fits into an i32, but using `as` was
-            // hiding this bug in the first place. Therefore I have left the `try_into` call here.
-            nanos: (nanos % NANOS_PER_SEC).try_into()?,
-        };
-        Ok(timestamp)
-    }
 
     impl From<GrpcUiUser> for UserSelectiveUpdate {
         fn from(user: GrpcUiUser) -> Self {
@@ -168,20 +172,20 @@ pub mod from {
         }
     }
 
-    impl TryFrom<&Invitation> for blockjoy_ui::Invitation {
+    impl TryFrom<Invitation> for blockjoy_ui::Invitation {
         type Error = ApiError;
 
-        fn try_from(value: &Invitation) -> Result<Self, Self::Error> {
+        fn try_from(value: Invitation) -> Result<Self, Self::Error> {
             Ok(Self {
                 id: Some(value.id.to_string()),
                 created_by_id: Some(value.created_by_user.to_string()),
-                created_by_user_name: Some(value.created_by_user_name.clone()),
+                created_by_user_name: Some(value.created_by_user_name),
                 created_for_org_id: Some(value.created_for_org.to_string()),
-                created_for_org_name: Some(value.created_for_org_name.clone()),
-                invitee_email: Some(value.invitee_email.clone()),
+                created_for_org_name: Some(value.created_for_org_name),
+                invitee_email: Some(value.invitee_email),
                 created_at: Some(try_dt_to_ts(value.created_at)?),
-                accepted_at: Some(try_dt_to_ts(value.accepted_at.unwrap_or_default())?),
-                declined_at: Some(try_dt_to_ts(value.declined_at.unwrap_or_default())?),
+                accepted_at: value.accepted_at.map(try_dt_to_ts).transpose()?,
+                declined_at: value.declined_at.map(try_dt_to_ts).transpose()?,
             })
         }
     }
@@ -335,7 +339,7 @@ pub mod from {
             match e {
                 ApiError::ValidationError(_) => Status::invalid_argument(msg),
                 ApiError::NotFoundError(_) => Status::not_found(msg),
-                ApiError::DuplicateResource => Status::invalid_argument(msg),
+                ApiError::DuplicateResource { .. } => Status::invalid_argument(msg),
                 ApiError::InvalidAuthentication(_) => Status::unauthenticated(msg),
                 ApiError::InsufficientPermissionsError => Status::permission_denied(msg),
                 ApiError::UuidParseError(_) => Status::invalid_argument(msg),
@@ -396,43 +400,43 @@ pub mod from {
         }
     }
 
-    impl TryFrom<Host> for GrpcHost {
-        type Error = ApiError;
+    // impl TryFrom<Host> for GrpcHost {
+    //     type Error = ApiError;
 
-        fn try_from(host: Host) -> Result<Self, Self::Error> {
-            GrpcHost::try_from(&host)
-        }
-    }
+    //     fn try_from(host: Host) -> Result<Self, Self::Error> {
+    //         GrpcHost::try_from(&host)
+    //     }
+    // }
 
-    impl TryFrom<&Host> for GrpcHost {
-        type Error = ApiError;
+    // impl TryFrom<&Host> for GrpcHost {
+    //     type Error = ApiError;
 
-        fn try_from(host: &Host) -> Result<Self, Self::Error> {
-            let empty: Vec<Node> = vec![];
-            let nodes = host.nodes.as_ref().unwrap_or(&empty);
-            let nodes: Result<_, ApiError> = nodes.iter().map(GrpcNode::try_from).collect();
+    //     fn try_from(host: &Host) -> Result<Self, Self::Error> {
+    //         let empty: Vec<Node> = vec![];
+    //         let nodes = host.nodes.as_ref().unwrap_or(&empty);
+    //         let nodes: Result<_, ApiError> = nodes.iter().map(GrpcNode::try_from).collect();
 
-            let grpc_host = Self {
-                id: Some(host.id.to_string()),
-                name: Some(host.name.clone()),
-                version: host.version.clone().map(String::from),
-                location: host.location.clone().map(String::from),
-                cpu_count: host.cpu_count.map(i64::from),
-                mem_size: host.mem_size.map(i64::from),
-                disk_size: host.disk_size.map(i64::from),
-                os: host.os.clone().map(String::from),
-                os_version: host.os_version.clone().map(String::from),
-                ip: Some(host.ip_addr.clone()),
-                status: None,
-                nodes: nodes?,
-                created_at: Some(try_dt_to_ts(host.created_at)?),
-                ip_range_from: host.ip_range_from.map(|ip| ip.to_string()),
-                ip_range_to: host.ip_range_to.map(|ip| ip.to_string()),
-                ip_gateway: host.ip_gateway.map(|ip| ip.to_string()),
-            };
-            Ok(grpc_host)
-        }
-    }
+    //         let grpc_host = Self {
+    //             id: Some(host.id.to_string()),
+    //             name: Some(host.name.clone()),
+    //             version: host.version.clone().map(String::from),
+    //             location: host.location.clone().map(String::from),
+    //             cpu_count: host.cpu_count.map(i64::from),
+    //             mem_size: host.mem_size.map(i64::from),
+    //             disk_size: host.disk_size.map(i64::from),
+    //             os: host.os.clone().map(String::from),
+    //             os_version: host.os_version.clone().map(String::from),
+    //             ip: Some(host.ip_addr.clone()),
+    //             status: None,
+    //             nodes: nodes?,
+    //             created_at: Some(try_dt_to_ts(host.created_at)?),
+    //             ip_range_from: host.ip_range_from.map(|ip| ip.to_string()),
+    //             ip_range_to: host.ip_range_to.map(|ip| ip.to_string()),
+    //             ip_gateway: host.ip_gateway.map(|ip| ip.to_string()),
+    //         };
+    //         Ok(grpc_host)
+    //     }
+    // }
 
     impl TryFrom<Node> for GrpcNode {
         type Error = ApiError;

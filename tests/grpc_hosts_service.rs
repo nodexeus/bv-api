@@ -170,9 +170,11 @@ async fn responds_ok_for_provision() {
         ip_range_from: "172.168.0.10".parse().unwrap(),
         ip_range_to: "172.168.0.100".parse().unwrap(),
     };
-    let host_provision = models::HostProvision::create(host_provision_request, tester.pool())
+    let mut tx = tester.begin().await;
+    let host_provision = models::HostProvision::create(host_provision_request, &mut tx)
         .await
         .unwrap();
+    tx.commit().await.unwrap();
     let host_info = blockjoy::HostInfo {
         id: Some(uuid::Uuid::new_v4().to_string()),
         name: Some("tester".into()),
@@ -288,13 +290,11 @@ async fn can_update_host_info() {
         ..Default::default()
     };
     let fields = host_info.try_into().unwrap();
-    let update = models::Host::update_all(fields, tester.pool())
-        .await
-        .unwrap();
+    let mut tx = tester.begin().await;
+    let update = models::Host::update_all(fields, &mut tx).await.unwrap();
     assert_eq!(update.name, "tester".to_string());
 
     // Fetch host after update to see if it really worked as expected
-    let mut tx = tester.pool().begin().await.unwrap();
     let row = sqlx::query(r#"SELECT * from hosts where ID = $1"#)
         .bind(host.id)
         .fetch_one(&mut tx)

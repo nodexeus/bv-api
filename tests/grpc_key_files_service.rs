@@ -56,7 +56,8 @@ async fn responds_ok_with_valid_node_id() {
         disk_size_gb: 0,
         host_name: "some host".to_string(),
     };
-    let node = models::Node::create(&mut req, tester.pool()).await.unwrap();
+    let mut tx = tester.begin().await;
+    let node = models::Node::create(&mut req, &mut tx).await.unwrap();
     let req = models::CreateNodeKeyFileRequest {
         name: "my-key.txt".to_string(),
         content:
@@ -64,9 +65,8 @@ async fn responds_ok_with_valid_node_id() {
                 .to_string(),
         node_id: node.id,
     };
-    models::NodeKeyFile::create(req, tester.pool())
-        .await
-        .unwrap();
+    models::NodeKeyFile::create(req, &mut tx).await.unwrap();
+    tx.commit().await.unwrap();
     let req = KeyFilesGetRequest {
         request_id: None,
         node_id: node.id.to_string(),
@@ -130,7 +130,9 @@ async fn responds_ok_with_valid_node_id_for_save() {
         disk_size_gb: 0,
         host_name: "some host".to_string(),
     };
-    let node = models::Node::create(&mut req, tester.pool()).await.unwrap();
+    let mut tx = tester.begin().await;
+    let node = models::Node::create(&mut req, &mut tx).await.unwrap();
+    tx.commit().await.unwrap();
     let key_file = blockjoy::Keyfile {
         name: "new keyfile".to_string(),
         content: "üöäß@niesfiefasd".to_string().into_bytes(),
@@ -177,7 +179,9 @@ async fn responds_error_with_same_node_id_name_twice_for_save() {
         disk_size_gb: 0,
         host_name: "some host".to_string(),
     };
-    let node = models::Node::create(&mut req, tester.pool()).await.unwrap();
+    let mut tx = tester.begin().await;
+    let node = models::Node::create(&mut req, &mut tx).await.unwrap();
+    tx.commit().await.unwrap();
     let key_file = blockjoy::Keyfile {
         name: "new keyfile".to_string(),
         content: "üöäß@niesfiefasd".to_string().into_bytes(),
