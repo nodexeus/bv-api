@@ -9,21 +9,20 @@ use crate::grpc::blockjoy_ui::{
 };
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::models;
 use crate::models::{
     Command, CommandRequest, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo,
 };
-use crate::server::DbPool;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 
 pub struct NodeServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
     notifier: Arc<ChannelNotifier>,
 }
 
 impl NodeServiceImpl {
-    pub fn new(db: DbPool, notifier: Arc<ChannelNotifier>) -> Self {
+    pub fn new(db: models::DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         Self { db, notifier }
     }
 }
@@ -36,8 +35,9 @@ impl NodeService for NodeServiceImpl {
     ) -> Result<Response<GetNodeResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
-        let node_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
-        let node = Node::find_by_id(node_id, &self.db).await?;
+        let node_id = inner.id.parse().map_err(ApiError::from)?;
+        let mut conn = self.db.conn().await?;
+        let node = Node::find_by_id(node_id, &mut conn).await?;
         let response = GetNodeResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             node: Some(node.try_into()?),
@@ -52,7 +52,7 @@ impl NodeService for NodeServiceImpl {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let filters = inner.filter.clone();
-        let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
+        let org_id = inner.org_id.parse().map_err(ApiError::from)?;
         let pagination = inner
             .meta
             .clone()
@@ -62,9 +62,10 @@ impl NodeService for NodeServiceImpl {
             .ok_or_else(|| Status::invalid_argument("Pagination missing"))?;
         let offset = pagination.items_per_page * (pagination.current_page - 1);
 
+        let mut conn = self.db.conn().await?;
         let nodes = match filters {
             None => {
-                Node::find_all_by_org(org_id, offset, pagination.items_per_page, &self.db).await?
+                Node::find_all_by_org(org_id, offset, pagination.items_per_page, &mut conn).await?
             }
             Some(filter) => {
                 let filter = filter
@@ -76,7 +77,7 @@ impl NodeService for NodeServiceImpl {
                     filter,
                     offset,
                     pagination.items_per_page,
-                    &self.db,
+                    &mut conn,
                 )
                 .await?
             }
@@ -97,14 +98,16 @@ impl NodeService for NodeServiceImpl {
         let refresh_token = get_refresh_token(&request);
         let inner = request.into_inner();
         let mut fields: NodeCreateRequest = inner.node.ok_or_else(required("node"))?.try_into()?;
-        let node = Node::create(&mut fields, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let node = Node::create(&mut fields, &mut tx).await?;
         let req = CommandRequest {
             cmd: HostCmd::CreateNode,
             sub_cmd: None,
             resource_id: node.id,
         };
 
-        let cmd = Command::create(node.host_id, req, &self.db).await?;
+        let cmd = Command::create(node.host_id, req, &mut tx).await?;
+        tx.commit().await?;
         let payload = NotificationPayload::new(cmd.id);
         let notification = ChannelNotification::Command(payload);
 
@@ -142,7 +145,9 @@ impl NodeService for NodeServiceImpl {
             .map_err(ApiError::from)?;
         let fields: NodeInfo = node.try_into()?;
 
-        Node::update_info(&node_id, &fields, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        Node::update_info(&node_id, &fields, &mut tx).await?;
+        tx.commit().await?;
         let response = UpdateNodeResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
         };
@@ -158,18 +163,19 @@ impl NodeService for NodeServiceImpl {
             .clone();
         let inner = request.into_inner();
         let node_id = inner.id.parse().map_err(ApiError::from)?;
-        let node = Node::find_by_id(node_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let node = Node::find_by_id(node_id, &mut tx).await?;
 
-        if Node::belongs_to_user_org(node.org_id, *token.id(), &self.db).await? {
+        if Node::belongs_to_user_org(node.org_id, *token.id(), &mut tx).await? {
             // 1. Delete node, if the node belongs to the current user
             // Key files are deleted automatically because of 'on delete cascade' in tables DDL
-            Node::delete(node_id, &self.db).await?;
+            Node::delete(node_id, &mut tx).await?;
 
             let host_id = node.host_id;
             // 2. Do NOT delete reserved IP addresses, but set assigned to false
-            let ip = IpAddress::find_by_node(node.ip_addr.unwrap_or_default(), &self.db).await?;
+            let ip = IpAddress::find_by_node(node.ip_addr.unwrap_or_default(), &mut tx).await?;
 
-            IpAddress::unassign(ip.id, host_id, &self.db).await?;
+            IpAddress::unassign(ip.id, host_id, &mut tx).await?;
 
             // Send delete node command
             let req = CommandRequest {
@@ -177,7 +183,8 @@ impl NodeService for NodeServiceImpl {
                 sub_cmd: None,
                 resource_id: node_id,
             };
-            let del_cmd = Command::create(node.host_id, req, &self.db).await?;
+            let del_cmd = Command::create(node.host_id, req, &mut tx).await?;
+            tx.commit().await?;
             let payload = NotificationPayload::new(del_cmd.id);
             let notification = ChannelNotification::Command(payload);
 

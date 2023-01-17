@@ -18,10 +18,12 @@ async fn cannot_create_invitation_without_valid_props() -> anyhow::Result<()> {
         created_for_org_name: None,
     };
 
-    match Invitation::create(&grpc_invitation, &tester.pool).await {
-        Ok(_) => panic!("This shouldn't work"),
-        Err(_) => Ok(()),
-    }
+    let mut tx = tester.begin().await;
+    Invitation::create(&grpc_invitation, &mut tx)
+        .await
+        .expect_err("This shouldn't work");
+    tx.commit().await?;
+    Ok(())
 }
 
 #[tokio::test]
@@ -40,7 +42,9 @@ async fn can_create_invitation_with_valid_props() -> anyhow::Result<()> {
         created_by_user_name: Some("hugo".to_string()),
         created_for_org_name: Some("boss".to_string()),
     };
-    let invitation = Invitation::create(&grpc_invitation, &tester.pool).await?;
+    let mut tx = tester.begin().await;
+    let invitation = Invitation::create(&grpc_invitation, &mut tx).await?;
+    tx.commit().await.unwrap();
 
     assert!(!invitation.id().to_string().is_empty());
 
@@ -63,8 +67,10 @@ async fn can_list_pending_invitations() -> anyhow::Result<()> {
         created_by_user_name: Some("hugo".to_string()),
         created_for_org_name: Some("boss".to_string()),
     };
-    Invitation::create(&grpc_invitation, &tester.pool).await?;
-    let invitations = Invitation::pending(org.id, &tester.pool).await?;
+    let mut tx = tester.begin().await;
+    Invitation::create(&grpc_invitation, &mut tx).await?;
+    let invitations = Invitation::pending(org.id, &mut tx).await?;
+    tx.commit().await.unwrap();
 
     assert_eq!(invitations.len(), 1);
 
@@ -87,9 +93,10 @@ async fn can_list_received_invitations() -> anyhow::Result<()> {
         created_by_user_name: Some("hugo".to_string()),
         created_for_org_name: Some("boss".to_string()),
     };
-    Invitation::create(&grpc_invitation, &tester.pool).await?;
-
-    let invitations = Invitation::received("hugo@boss.com".to_string(), &tester.pool).await?;
+    let mut tx = tester.begin().await;
+    Invitation::create(&grpc_invitation, &mut tx).await?;
+    let invitations = Invitation::received("hugo@boss.com", &mut tx).await?;
+    tx.commit().await.unwrap();
 
     assert_eq!(invitations.len(), 1);
 
@@ -112,8 +119,10 @@ async fn can_accept_invitation() -> anyhow::Result<()> {
         created_by_user_name: Some("hugo".to_string()),
         created_for_org_name: Some("boss".to_string()),
     };
-    let invitation = Invitation::create(&grpc_invitation, &tester.pool).await?;
-    let invitation = Invitation::accept(invitation.id().to_owned(), &tester.pool).await?;
+    let mut tx = tester.begin().await;
+    let invitation = Invitation::create(&grpc_invitation, &mut tx).await?;
+    let invitation = Invitation::accept(invitation.id().to_owned(), &mut tx).await?;
+    tx.commit().await.unwrap();
 
     assert!(invitation.accepted_at().is_some());
 
@@ -136,8 +145,10 @@ async fn can_decline_invitation() -> anyhow::Result<()> {
         created_by_user_name: Some("hugo".to_string()),
         created_for_org_name: Some("boss".to_string()),
     };
-    let invitation = Invitation::create(&grpc_invitation, &tester.pool).await?;
-    let invitation = Invitation::decline(invitation.id().to_owned(), &tester.pool).await?;
+    let mut tx = tester.begin().await;
+    let invitation = Invitation::create(&grpc_invitation, &mut tx).await?;
+    let invitation = Invitation::decline(invitation.id().to_owned(), &mut tx).await?;
+    tx.commit().await.unwrap();
 
     assert!(invitation.declined_at().is_some());
 
@@ -160,15 +171,17 @@ async fn can_revoke_invitation() -> anyhow::Result<()> {
         created_by_user_name: Some("hugo".to_string()),
         created_for_org_name: Some("boss".to_string()),
     };
-    let invitation = Invitation::create(&grpc_invitation, &tester.pool).await?;
+    let mut tx = tester.begin().await;
+    let invitation = Invitation::create(&grpc_invitation, &mut tx).await?;
     let invitation_id = invitation.id().to_owned();
 
-    Invitation::revoke(invitation_id, &tester.pool).await?;
+    Invitation::revoke(invitation_id, &mut tx).await?;
 
     let cnt: i32 = sqlx::query_scalar("select count(*)::int from invitations where id = $1")
         .bind(invitation_id)
-        .fetch_one(&tester.pool)
+        .fetch_one(&mut tx)
         .await?;
+    tx.commit().await.unwrap();
 
     assert_eq!(cnt, 0);
 

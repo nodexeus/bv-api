@@ -1,4 +1,4 @@
-use super::{Node, NodeProvision, PgQuery};
+use super::{NodeProvision, PgQuery};
 use crate::auth::{FindableById, HostAuthToken, Identifiable, JwtToken, Owned, TokenError};
 use crate::cookbook::HardwareRequirements;
 use crate::errors::{ApiError, Result};
@@ -9,7 +9,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
-use sqlx::{FromRow, PgPool, Row};
+use sqlx::{FromRow, Row};
 use std::convert::From;
 use std::net::IpAddr;
 use uuid::Uuid;
@@ -45,7 +45,6 @@ pub struct Host {
     pub location: Option<String>,
     pub ip_addr: String,
     pub status: ConnectionStatus, //TODO: change to is_online:bool
-    pub nodes: Option<Vec<Node>>,
     pub created_at: DateTime<Utc>,
     pub ip_range_from: Option<IpAddr>,
     pub ip_range_to: Option<IpAddr>,
@@ -79,7 +78,6 @@ impl TryFrom<PgRow> for Host {
             location: row.try_get("location")?,
             ip_addr: row.try_get("ip_addr")?,
             status: row.try_get("status")?,
-            nodes: None,
             created_at: row.try_get("created_at")?,
             ip_range_from: row.try_get("ip_range_from")?,
             ip_range_to: row.try_get("ip_range_to")?,
@@ -111,7 +109,7 @@ impl Host {
         }
     }
 
-    pub async fn toggle_online(id: Uuid, is_online: bool, db: &PgPool) -> Result<()> {
+    pub async fn toggle_online(id: Uuid, is_online: bool, tx: &mut super::DbTrx<'_>) -> Result<()> {
         let status = if is_online {
             ConnectionStatus::Online
         } else {
@@ -121,13 +119,13 @@ impl Host {
         sqlx::query("UPDATE hosts SET status = $1 WHERE id = $2 RETURNING *;")
             .bind(status)
             .bind(id)
-            .fetch_one(db)
+            .fetch_one(tx)
             .await?;
 
         Ok(())
     }
 
-    pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Self>> {
         sqlx::query("SELECT * FROM hosts order by lower(name)")
             .try_map(Self::try_from)
             .fetch_all(db)
@@ -135,7 +133,7 @@ impl Host {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_node(node_id: Uuid, db: &PgPool) -> Result<Self> {
+    pub async fn find_by_node(node_id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
         sqlx::query("SELECT hosts.* FROM nodes INNER JOIN hosts ON nodes.host_id = hosts.id WHERE nodes.id = $1")
             .bind(node_id)
             .try_map(Self::try_from)
@@ -144,7 +142,8 @@ impl Host {
             .map_err(Into::into)
     }
 
-    pub async fn create(req: HostRequest, db: &PgPool) -> Result<Self> {
+    /// Creates a new `Host` in the db, including the necessary related rows.
+    pub async fn create(req: HostRequest, tx: &mut super::DbTrx<'_>) -> Result<Self> {
         // Ensure gateway IP is not amongst the ones created in the IP range
         if IpAddress::in_range(
             req.ip_gateway
@@ -162,7 +161,6 @@ impl Host {
             )));
         }
 
-        let mut tx = db.begin().await?;
         let host = sqlx::query(
             r#"INSERT INTO hosts 
             (
@@ -197,7 +195,7 @@ impl Host {
         .bind(req.ip_range_from)
         .bind(req.ip_range_to)
         .try_map(Self::try_from)
-        .fetch_one(&mut tx)
+        .fetch_one(&mut *tx)
         .await?;
 
         // Create IP range for new host
@@ -206,16 +204,13 @@ impl Host {
             host.ip_range_to.ok_or_else(required("ip.range.to"))?,
             Some(host.id),
         )?;
-        IpAddress::create_range(req, &mut tx).await?;
-
-        tx.commit().await?;
+        IpAddress::create_range(req, tx).await?;
 
         Ok(host)
     }
 
     #[deprecated(since = "0.2.0", note = "deprecated in favor of 'update_all'")]
-    pub async fn update(id: Uuid, host: HostRequest, db: &PgPool) -> Result<Self> {
-        let mut tx = db.begin().await?;
+    pub async fn update(id: Uuid, host: HostRequest, tx: &mut super::DbTrx<'_>) -> Result<Self> {
         let host = sqlx::query(
             r#"UPDATE hosts SET name = $1, version = $2, location = $3, ip_addr = $4, status = $6, cpu_count = $7, mem_size = $8, disk_size = $9, os = $10, os_version = $11 WHERE id = $12 RETURNING *"#
         )
@@ -231,15 +226,15 @@ impl Host {
         .bind(host.os_version)
         .bind(id)
         .try_map(Self::try_from)
-        .fetch_one(&mut tx)
+        .fetch_one(tx)
         .await?;
-
-        tx.commit().await?;
         Ok(host)
     }
 
-    pub async fn update_all(fields: HostSelectiveUpdate, db: &PgPool) -> Result<Self> {
-        let mut tx = db.begin().await?;
+    pub async fn update_all(
+        fields: HostSelectiveUpdate,
+        tx: &mut super::DbTrx<'_>,
+    ) -> Result<Self> {
         let host = sqlx::query(
             r#"UPDATE hosts SET 
                     name = COALESCE($1, name),
@@ -266,37 +261,32 @@ impl Host {
         .bind(fields.status)
         .bind(fields.id)
         .try_map(Self::try_from)
-        .fetch_one(&mut tx)
+        .fetch_one(tx)
         .await?;
-
-        tx.commit().await?;
-
         Ok(host)
     }
 
-    pub async fn update_status(id: Uuid, host: HostStatusRequest, db: &PgPool) -> Result<Self> {
-        let mut tx = db.begin().await?;
+    pub async fn update_status(
+        id: Uuid,
+        host: HostStatusRequest,
+        tx: &mut super::DbTrx<'_>,
+    ) -> Result<Self> {
         let host =
             sqlx::query(r#"UPDATE hosts SET version = $1, status = $2  WHERE id = $3 RETURNING *"#)
                 .bind(host.version)
                 .bind(host.status)
                 .bind(id)
                 .try_map(Self::try_from)
-                .fetch_one(&mut tx)
+                .fetch_one(tx)
                 .await?;
-
-        tx.commit().await?;
         Ok(host)
     }
 
-    pub async fn delete(id: Uuid, db: &PgPool) -> Result<u64> {
-        let mut tx = db.begin().await?;
+    pub async fn delete(id: Uuid, tx: &mut super::DbTrx<'_>) -> Result<u64> {
         let deleted = sqlx::query("DELETE FROM hosts WHERE id = $1")
             .bind(id)
-            .execute(&mut tx)
+            .execute(tx)
             .await?;
-
-        tx.commit().await?;
         Ok(deleted.rows_affected())
     }
 
@@ -305,7 +295,7 @@ impl Host {
     /// is ordered by disk_size and mem_size the first one in the list is returned
     pub async fn get_next_available_host_id(
         requirements: HardwareRequirements,
-        db: &PgPool,
+        db: impl sqlx::PgExecutor<'_>,
     ) -> Result<Uuid> {
         let host = sqlx::query(
             r#"
@@ -342,17 +332,13 @@ impl Host {
 
 #[axum::async_trait]
 impl FindableById for Host {
-    async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
-        let mut host = sqlx::query("SELECT * FROM hosts WHERE id = $1")
+    async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+        sqlx::query("SELECT * FROM hosts WHERE id = $1")
             .bind(id)
             .try_map(Self::try_from)
             .fetch_one(db)
-            .await?;
-
-        // Add Nodes
-        host.nodes = Some(Node::find_all_by_host(host.id, db).await?);
-
-        Ok(host)
+            .await
+            .map_err(Into::into)
     }
 }
 
@@ -371,9 +357,8 @@ impl Owned<Host, ()> for Host {
 
 #[tonic::async_trait]
 impl UpdateInfo<HostInfo, Host> for Host {
-    async fn update_info(info: HostInfo, db: &PgPool) -> Result<Host> {
+    async fn update_info(info: HostInfo, tx: &mut super::DbTrx<'_>) -> Result<Host> {
         let id: Uuid = info.id.ok_or_else(required("info.id"))?.parse()?;
-        let mut tx = db.begin().await?;
         let host = sqlx::query(
             r##"UPDATE hosts SET
                          name = COALESCE($1, name),
@@ -399,10 +384,8 @@ impl UpdateInfo<HostInfo, Host> for Host {
         .bind(info.os_version)
         .bind(info.ip)
         .bind(id)
-        .fetch_one(&mut tx)
+        .fetch_one(tx)
         .await?;
-
-        tx.commit().await?;
 
         Ok(host.try_into()?)
     }
@@ -456,7 +439,7 @@ pub struct HostSelectiveUpdate {
 
 impl HostSelectiveUpdate {
     /// Performs a selective update of only the columns related to metrics of the provided nodes.
-    pub async fn update_metrics(updates: Vec<Self>, db: &PgPool) -> Result<()> {
+    pub async fn update_metrics(updates: Vec<Self>, tx: &mut super::DbTrx<'_>) -> Result<()> {
         type PgBuilder = sqlx::QueryBuilder<'static, sqlx::Postgres>;
 
         // Lets not perform a malformed query on empty input, but lets instead be fast and
@@ -508,7 +491,7 @@ impl HostSelectiveUpdate {
         );
         let template = sqlx::query(query_builder.sql());
         let query = updates.into_iter().fold(template, Self::bind_to);
-        query.execute(db).await?;
+        query.execute(tx).await?;
         Ok(())
     }
 
@@ -699,7 +682,10 @@ pub struct HostProvision {
 }
 
 impl HostProvision {
-    pub async fn create(req: HostProvisionRequest, db: &PgPool) -> Result<HostProvision> {
+    pub async fn create(
+        req: HostProvisionRequest,
+        tx: &mut super::DbTrx<'_>,
+    ) -> Result<HostProvision> {
         let nodes_str = serde_json::to_string(&req.nodes)
             .map_err(|_| ApiError::from(anyhow::anyhow!("Couldn't parse nodes")))?;
 
@@ -712,7 +698,7 @@ impl HostProvision {
         .bind(req.ip_range_from)
         .bind(req.ip_range_to)
         .bind(req.ip_gateway)
-        .fetch_one(db)
+        .fetch_one(tx)
         .await?;
 
         host_provision.set_install_cmd();
@@ -720,7 +706,10 @@ impl HostProvision {
         Ok(host_provision)
     }
 
-    pub async fn find_by_id(host_provision_id: &str, db: &PgPool) -> Result<HostProvision> {
+    pub async fn find_by_id<'a, Db: sqlx::PgExecutor<'a>>(
+        host_provision_id: &str,
+        db: Db,
+    ) -> Result<HostProvision> {
         let mut host_provision =
             sqlx::query_as::<_, HostProvision>("SELECT * FROM host_provisions where id = $1")
                 .bind(host_provision_id)
@@ -735,19 +724,20 @@ impl HostProvision {
     pub async fn claim_by_grpc_provision(
         otp: &str,
         request: blockjoy::ProvisionHostRequest,
-        db: &PgPool,
+        tx: &mut super::DbTrx<'_>,
     ) -> Result<Host> {
         let request = HostCreateRequest::try_from(request)?;
 
-        HostProvision::claim(otp, request, db).await
+        let prov = HostProvision::claim(otp, request, tx).await?;
+        Ok(prov)
     }
 
     pub async fn claim(
         host_provision_id: &str,
         mut req: HostCreateRequest,
-        db: &PgPool,
+        tx: &mut super::DbTrx<'_>,
     ) -> Result<Host> {
-        let host_provision = Self::find_by_id(host_provision_id, db).await?;
+        let host_provision = Self::find_by_id(host_provision_id, &mut *tx).await?;
 
         if host_provision.is_claimed() {
             return Err(anyhow::anyhow!("Host provision has already been claimed.").into());
@@ -770,16 +760,13 @@ impl HostProvision {
         );
         req.name = petname::petname(4, "_");
 
-        //TODO: transaction this
-        let mut host = Host::create(req.into(), db).await?;
+        let host = Host::create(req.into(), tx).await?;
 
         sqlx::query("UPDATE host_provisions set claimed_at = now(), host_id = $1 where id = $2")
             .bind(host.id)
             .bind(host_provision.id)
-            .execute(db)
+            .execute(tx)
             .await?;
-
-        host.nodes = Some(vec![]);
 
         Ok(host)
     }

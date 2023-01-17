@@ -46,7 +46,7 @@ impl std::ops::DerefMut for Tester {
 impl Tester {
     pub async fn new() -> Self {
         let db = TestDb::setup().await;
-        let pool = Arc::new(db.pool.clone());
+        let pool = db.pool.clone();
         let socket = NamedTempFile::new().unwrap();
         let socket = Arc::new(socket.into_temp_path());
         std::fs::remove_file(&*socket).unwrap();
@@ -69,8 +69,12 @@ impl Tester {
         }
     }
 
-    pub fn pool(&self) -> &sqlx::Pool<sqlx::Postgres> {
-        &self.db.pool
+    pub async fn begin(&self) -> api::models::DbTrx {
+        self.db.pool.begin().await.unwrap()
+    }
+
+    pub async fn conn(&self) -> sqlx::pool::PoolConnection<sqlx::Postgres> {
+        self.db.pool.conn().await.unwrap()
     }
 
     pub fn meta(&self) -> blockjoy_ui::RequestMeta {
@@ -103,7 +107,9 @@ impl Tester {
     }
 
     pub async fn hosts(&self) -> Vec<models::Host> {
-        models::Host::find_all(&self.db.pool).await.unwrap()
+        models::Host::find_all(&mut self.conn().await)
+            .await
+            .unwrap()
     }
 
     pub async fn host(&self) -> models::Host {
@@ -115,7 +121,7 @@ impl Tester {
     }
 
     pub async fn org(&self) -> models::Org {
-        models::Org::find_all(&self.db.pool)
+        models::Org::find_all(&mut self.conn().await)
             .await
             .unwrap()
             .pop()
@@ -123,7 +129,7 @@ impl Tester {
     }
 
     pub async fn org_for(&self, user: &models::User) -> models::Org {
-        models::Org::find_all_by_user(user.id, &self.db.pool)
+        models::Org::find_all_by_user(user.id, &mut self.conn().await)
             .await
             .unwrap()
             .first()
@@ -153,7 +159,7 @@ impl Tester {
             SET id = '59edfb35-bbf1-460f-bd3d-e4c86ba73e0d'
             RETURNING *;
         "#)
-        .fetch_one(&self.db.pool)
+        .fetch_one(&mut self.conn().await)
         .await
         .unwrap()
     }

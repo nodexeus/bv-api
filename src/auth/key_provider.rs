@@ -103,7 +103,7 @@ mod tests {
         temp_env::with_vars(vec![("JWT_SECRET", Some("123123"))], || {
             let key = KeyProvider::get_secret(TokenType::UserAuth).unwrap();
 
-            assert_eq!("123123".to_string(), key.to_string());
+            assert_eq!("123123", key.to_string());
         });
 
         Ok(())
@@ -112,9 +112,9 @@ mod tests {
     #[test]
     fn can_read_var_from_env() -> anyhow::Result<()> {
         temp_env::with_vars(vec![("DB_URL", Some("lorem"))], || {
-            let key = KeyProvider::get_var("DB_URL").unwrap();
+            let key = KeyProvider::get_var("DB_URL").expect("Is SECRETS_ROOT set?");
 
-            assert_eq!("lorem".to_string(), key.to_string());
+            assert_eq!("lorem", key.to_string());
         });
 
         Ok(())
@@ -133,7 +133,7 @@ mod tests {
 
                 let key = KeyProvider::get_secret(TokenType::UserAuth).unwrap();
 
-                assert_eq!("123123".to_string(), key.to_string());
+                assert_eq!("123123", key.to_string());
 
                 fs::remove_file(path).unwrap();
             },
@@ -152,7 +152,7 @@ mod tests {
 
                 let key = KeyProvider::get_var("DB_URL").unwrap();
 
-                assert_eq!("ipsum".to_string(), key.to_string());
+                assert_eq!("ipsum", key.to_string());
 
                 fs::remove_file(path).unwrap();
             },

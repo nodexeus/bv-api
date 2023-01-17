@@ -36,7 +36,8 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         host_name: "some host".to_string(),
     };
 
-    Node::create(&mut req, tester.pool()).await?;
+    let mut tx = tester.begin().await;
+    Node::create(&mut req, &mut tx).await.unwrap();
 
     let filter = NodeFilter {
         status: vec!["unknown".to_string()],
@@ -44,7 +45,8 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         blockchains: vec![blockchain.id],
     };
 
-    let nodes = Node::find_all_by_filter(org.id, filter, 0, 10, tester.pool()).await?;
+    let nodes = Node::find_all_by_filter(org.id, filter, 0, 10, &mut tx).await?;
+    tx.commit().await.unwrap();
 
     assert!(!nodes.is_empty());
     assert_eq!(nodes.len(), 1);

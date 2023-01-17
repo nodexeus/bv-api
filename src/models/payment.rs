@@ -2,7 +2,7 @@ use crate::errors::Result;
 use chrono::{DateTime, Utc};
 use log::debug;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -18,7 +18,7 @@ pub struct Payment {
 }
 
 impl Payment {
-    pub async fn create(db: &PgPool, payments: &[Payment]) -> Result<()> {
+    pub async fn create(payments: &[Payment], tx: &mut super::DbTrx<'_>) -> Result<()> {
         for payment in payments {
             let res = sqlx::query(
                 r##"
@@ -39,7 +39,7 @@ impl Payment {
             .bind(&payment.payee)
             .bind(payment.amount)
             .bind(payment.oracle_price)
-            .execute(db)
+            .execute(&mut *tx)
             .await;
 
             if let Err(e) = res {
@@ -50,12 +50,15 @@ impl Payment {
         Ok(())
     }
 
-    pub async fn find_all_by_user(db: &PgPool, user_id: Uuid) -> Result<Vec<Payment>> {
+    pub async fn find_all_by_user(
+        user_id: Uuid,
+        tx: &mut super::DbTrx<'_>,
+    ) -> Result<Vec<Payment>> {
         Ok(sqlx::query_as::<_, Payment>(
             "SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC",
         )
         .bind(user_id)
-        .fetch_all(db)
+        .fetch_all(tx)
         .await?)
     }
 }

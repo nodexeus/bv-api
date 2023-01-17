@@ -6,8 +6,8 @@ use crate::auth::unauthenticated_paths::UnauthenticatedPaths;
 use crate::auth::{Authorization, AuthorizationData, AuthorizationState, FindableById, TokenType};
 use crate::auth::{JwtToken, UserRefreshToken};
 use crate::errors::Result;
+use crate::models;
 use crate::models::{Host, User};
-use crate::server::DbPool;
 use futures_util::future::BoxFuture;
 use hyper::{Request, Response};
 use std::fmt::Debug;
@@ -67,7 +67,7 @@ where
         Box::pin(async move {
             let db = request
                 .extensions()
-                .get::<DbPool>()
+                .get::<models::DbPool>()
                 .unwrap_or_else(|| panic!("DB extension missing"));
             let token = AnyToken::from_request(&request)
                 .map_err(|_| unauthenticated_response("Missing valid token"))?;
@@ -150,11 +150,15 @@ where
                     // 1. try if token is valid
                     token.encode().map_err(cant_parse)?;
 
+                    let mut tx = db
+                        .begin()
+                        .await
+                        .map_err(|_| Status::unauthenticated("Db down :(").to_http())?;
                     let refresh_token = match UserRefreshToken::from_request(&request) {
                         Ok(token) => token,
                         Err(e) => {
                             tracing::error!("No refresh token in request: {e}");
-                            let refresh = User::find_by_id(token.get_id(), db)
+                            let refresh = User::find_by_id(token.get_id(), &mut tx)
                                 .await
                                 .map_err(|_| unauthenticated_response("No refresh token for user"))?
                                 .refresh
@@ -173,9 +177,12 @@ where
                         }
                     };
                     let (_, token, refresh_token) =
-                        User::verify_and_refresh_auth_token(token, refresh_token, db)
+                        User::verify_and_refresh_auth_token(token, refresh_token, &mut tx)
                             .await
                             .map_err(|e| Status::from(e).to_http())?;
+                    tx.commit().await.map_err(|_| {
+                        Status::unauthenticated("Could not commit to db :(").to_http()
+                    })?;
                     let auth_data = AuthorizationData {
                         subject: token.role().to_string(),
                         object: request.uri().path().to_string(),

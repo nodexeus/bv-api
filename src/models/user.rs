@@ -15,7 +15,7 @@ use argon2::{
 use chrono::{DateTime, Utc};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -60,7 +60,7 @@ impl User {
     pub async fn verify_and_refresh_auth_token(
         token: UserAuthToken,
         refresh_token: UserRefreshToken,
-        db: &PgPool,
+        tx: &mut super::DbTrx<'_>,
     ) -> Result<(Option<User>, UserAuthToken, UserRefreshToken)> {
         if token.has_expired() && refresh_token.has_expired() {
             Err(ApiError::from(TokenError::Expired))
@@ -86,7 +86,7 @@ impl User {
                 refresh_token: Some(refresh_token.encode()?),
                 ..Default::default()
             };
-            let user = User::update_all(refresh_token.get_id(), fields, db).await?;
+            let user = User::update_all(refresh_token.get_id(), fields, tx).await?;
 
             Ok((Some(user), token, refresh_token))
         } else if !token.has_expired() && refresh_token.has_expired() {
@@ -115,25 +115,27 @@ impl User {
         )))
     }
 
-    // pub async fn reset_password(_db: &PgPool, _req: &PwdResetInfo) -> Result<User> {
+    // pub async fn reset_password(_db: impl sqlx::PgExecutor<'_>, _req: &PwdResetInfo) -> Result<User> {
     //     // TODO: use new auth
     //     unimplemented!()
     // }
 
-    pub async fn email_reset_password(&self, db: &PgPool) -> Result<()> {
+    pub async fn email_reset_password(&self, db: impl sqlx::PgExecutor<'_>) -> Result<()> {
         let client = MailClient::new();
         client.reset_password(self, db).await
     }
 
-    pub async fn find_all(db: &PgPool) -> Result<Vec<Self>> {
+    pub async fn find_all(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM users")
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_all_pay_address(db: &PgPool) -> Result<Vec<UserPayAddress>> {
-        sqlx::query_as::<_, UserPayAddress>(
+    pub async fn find_all_pay_address(
+        db: impl sqlx::PgExecutor<'_>,
+    ) -> Result<Vec<UserPayAddress>> {
+        sqlx::query_as(
             "SELECT id, pay_address FROM users where pay_address is not NULL AND deleted_at IS NULL",
         )
         .fetch_all(db)
@@ -141,7 +143,7 @@ impl User {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_by_email(email: &str, db: &PgPool) -> Result<Self> {
+    pub async fn find_by_email(email: &str, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
         sqlx::query_as(
             r#"SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL limit 1"#,
         )
@@ -151,30 +153,28 @@ impl User {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_by_refresh(refresh: &str, db: &PgPool) -> Result<Self> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM users WHERE refresh = $1 AND deleted_at IS NULL limit 1",
-        )
-        .bind(refresh)
-        .fetch_one(db)
-        .await
-        .map_err(ApiError::from)
+    pub async fn find_by_refresh(refresh: &str, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+        sqlx::query_as("SELECT * FROM users WHERE refresh = $1 AND deleted_at IS NULL limit 1")
+            .bind(refresh)
+            .fetch_one(db)
+            .await
+            .map_err(ApiError::from)
     }
 
-    pub async fn update_password(&self, password: &str, db: &PgPool) -> Result<Self> {
+    pub async fn update_password(&self, password: &str, tx: &mut super::DbTrx<'_>) -> Result<Self> {
         let argon2 = Argon2::default();
         let salt = SaltString::generate(&mut OsRng);
         if let Some(hashword) = argon2
             .hash_password_simple(password.as_bytes(), salt.as_str())?
             .hash
         {
-            return sqlx::query_as::<_, Self>(
+            return sqlx::query_as(
                 "UPDATE users set hashword = $1, salt = $2 WHERE id = $3 AND deleted_at IS NULL RETURNING *",
             )
             .bind(hashword.to_string())
             .bind(salt.as_str())
             .bind(self.id)
-            .fetch_one(db)
+            .fetch_one(tx)
             .await
             .map_err(ApiError::from);
         }
@@ -182,7 +182,11 @@ impl User {
         Err(ApiError::ValidationError("Invalid password.".to_string()))
     }
 
-    pub async fn create(user: UserRequest, db: &PgPool, _role: Option<TokenRole>) -> Result<Self> {
+    pub async fn create(
+        user: UserRequest,
+        _role: Option<TokenRole>,
+        tx: &mut super::DbTrx<'_>,
+    ) -> Result<Self> {
         user.validate()
             .map_err(|e| ApiError::ValidationError(e.to_string()))?;
 
@@ -193,7 +197,6 @@ impl User {
             .hash
         {
             let id = Uuid::new_v4();
-            let mut tx = db.begin().await?;
             let result = match sqlx::query_as::<_, Self>(
                 r#"INSERT INTO users 
                     (email, first_name, last_name, hashword, salt, staking_quota, fee_bps, id, refresh)
@@ -209,7 +212,7 @@ impl User {
             .bind(FEE_BPS_DEFAULT)
             .bind(id)
             .bind(UserRefreshToken::create(id).encode()?)
-            .fetch_one(&mut tx)
+            .fetch_one(&mut *tx)
             .await
             .map_err(ApiError::from)
             {
@@ -218,7 +221,7 @@ impl User {
                         "INSERT INTO orgs (name, is_personal) values (LOWER($1), true) RETURNING *",
                     )
                     .bind(&user.email)
-                    .fetch_one(&mut tx)
+                    .fetch_one(&mut *tx)
                     .await?;
 
                     sqlx::query(
@@ -226,15 +229,13 @@ impl User {
                     )
                     .bind(org.id)
                     .bind(user.id)
-                    .execute(&mut tx)
+                    .execute(tx)
                     .await?;
 
                     Ok(user)
                 }
                 Err(e) => Err(e),
             };
-
-            tx.commit().await?;
 
             result
         } else {
@@ -243,12 +244,14 @@ impl User {
     }
 
     /// Check if user can be found by email, is confirmed and has provided a valid password
-    pub async fn login(login: LoginUserRequest, db: &PgPool) -> Result<Self> {
-        let user = Self::find_by_email(&login.email, db).await.map_err(|_e| {
-            ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
-        })?;
+    pub async fn login(login: LoginUserRequest, tx: &mut super::DbTrx<'_>) -> Result<Self> {
+        let user = Self::find_by_email(&login.email, &mut *tx)
+            .await
+            .map_err(|_e| {
+                ApiError::InvalidAuthentication(anyhow!("Email or password is invalid."))
+            })?;
 
-        if User::is_confirmed(user.id, db).await? {
+        if User::is_confirmed(user.id, &mut *tx).await? {
             match user.verify_password(&login.password) {
                 Ok(_) => Ok(user),
                 Err(e) => Err(e),
@@ -258,7 +261,11 @@ impl User {
         }
     }
 
-    pub async fn refresh(id: Uuid, refresh_token: String, db: &PgPool) -> Result<User> {
+    pub async fn refresh(
+        id: Uuid,
+        refresh_token: String,
+        tx: &mut super::DbTrx<'_>,
+    ) -> Result<User> {
         // Update user with new refresh token
         let fields = UserSelectiveUpdate {
             first_name: None,
@@ -268,11 +275,14 @@ impl User {
             refresh_token: Some(refresh_token.clone()),
         };
 
-        Self::update_all(id, fields, db).await
+        Self::update_all(id, fields, tx).await
     }
 
-    pub async fn update_all(id: Uuid, fields: UserSelectiveUpdate, db: &PgPool) -> Result<Self> {
-        let mut tx = db.begin().await?;
+    pub async fn update_all(
+        id: Uuid,
+        fields: UserSelectiveUpdate,
+        tx: &mut super::DbTrx<'_>,
+    ) -> Result<Self> {
         let user = sqlx::query_as::<_, User>(
             r#"UPDATE users SET 
                     first_name = COALESCE($1, first_name),
@@ -288,27 +298,25 @@ impl User {
         .bind(fields.staking_quota)
         .bind(fields.refresh_token)
         .bind(id)
-        .fetch_one(&mut tx)
+        .fetch_one(tx)
         .await?;
-
-        tx.commit().await?;
 
         Ok(user)
     }
 
-    pub async fn confirm(id: Uuid, db: &PgPool) -> Result<Self> {
+    pub async fn confirm(id: Uuid, tx: &mut super::DbTrx<'_>) -> Result<Self> {
         sqlx::query_as::<_, User>(
             r#"UPDATE users SET 
                     confirmed_at = now()
                 WHERE id = $1 and confirmed_at IS NULL AND deleted_at IS NULL RETURNING *"#,
         )
         .bind(id)
-        .fetch_one(db)
+        .fetch_one(tx)
         .await
         .map_err(ApiError::from)
     }
 
-    pub async fn is_confirmed(id: Uuid, db: &PgPool) -> Result<bool> {
+    pub async fn is_confirmed(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<bool> {
         let result: i32 = sqlx::query_scalar(
             r#"SELECT count(*)::int 
             FROM users WHERE id = $1 AND confirmed_at IS NOT NULL AND deleted_at IS NULL"#,
@@ -321,7 +329,7 @@ impl User {
     }
 
     /// Mark user deleted if no more nodes belong to it
-    pub async fn delete(id: Uuid, db: &PgPool) -> Result<Self> {
+    pub async fn delete(id: Uuid, tx: &mut super::DbTrx<'_>) -> Result<Self> {
         sqlx::query_as::<_, User>(
             r#"UPDATE users u SET
                     deleted_at = now()
@@ -330,7 +338,7 @@ impl User {
                 RETURNING *"#,
         )
         .bind(id)
-        .fetch_one(db)
+        .fetch_one(tx)
         .await
         .map_err(ApiError::from)
     }
@@ -344,7 +352,7 @@ impl User {
 
 #[axum::async_trait]
 impl FindableById for User {
-    async fn find_by_id(id: Uuid, db: &PgPool) -> Result<Self> {
+    async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL limit 1",
         )

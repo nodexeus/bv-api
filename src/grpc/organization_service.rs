@@ -10,19 +10,18 @@ use crate::grpc::blockjoy_ui::{
 };
 use crate::grpc::helpers::pagination_parameters;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
-use crate::models::{Org, OrgRequest, OrgRole};
-use crate::server::DbPool;
+use crate::models::{self, Org, OrgRequest, OrgRole};
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use super::helpers::{required, try_get_token};
 
 pub struct OrganizationServiceImpl {
-    db: DbPool,
+    db: models::DbPool,
 }
 
 impl OrganizationServiceImpl {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: models::DbPool) -> Self {
         Self { db }
     }
 }
@@ -39,12 +38,13 @@ impl OrganizationService for OrganizationServiceImpl {
         let inner = request.into_inner();
         let org_id = inner.org_id;
 
+        let mut conn = self.db.conn().await?;
         let organizations: Vec<Org> = match org_id {
             Some(org_id) => vec![
-                Org::find_by_id(org_id.parse().map_err(ApiError::UuidParseError)?, &self.db)
+                Org::find_by_id(org_id.parse().map_err(ApiError::UuidParseError)?, &mut conn)
                     .await?,
             ],
-            None => Org::find_all_by_user(user_id, &self.db).await?,
+            None => Org::find_all_by_user(user_id, &mut conn).await?,
         };
         let organizations: Result<_, ApiError> =
             organizations.iter().map(Organization::try_from).collect();
@@ -67,7 +67,9 @@ impl OrganizationService for OrganizationServiceImpl {
         let org = inner.organization.ok_or_else(required("organization"))?;
         let name = org.name.ok_or_else(required("organization.name"))?;
         let org_request = OrgRequest { name };
-        let org = Org::create(&org_request, &user_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let org = Org::create(&org_request, user_id, &mut tx).await?;
+        tx.commit().await?;
         let response_meta = ResponseMeta::from_meta(inner.meta).with_message(org.id);
         let inner = CreateOrganizationResponse {
             meta: Some(response_meta),
@@ -80,8 +82,8 @@ impl OrganizationService for OrganizationServiceImpl {
         request: Request<UpdateOrganizationRequest>,
     ) -> Result<Response<UpdateOrganizationResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
-        let user_id = *token.id();
+        // THOMAS: this line can go right? Not necessary for auth checking?
+        try_get_token::<_, UserAuthToken>(&request)?;
         let inner = request.into_inner();
         let org = inner.organization.ok_or_else(required("organization"))?;
         let org_id = Uuid::parse_str(org.id.ok_or_else(required("organization.id"))?.as_str())
@@ -90,14 +92,12 @@ impl OrganizationService for OrganizationServiceImpl {
             name: org.name.ok_or_else(required("organization.name"))?,
         };
 
-        match Org::update(org_id, update, &user_id, &self.db).await {
-            Ok(_) => {
-                let meta = ResponseMeta::from_meta(inner.meta);
-                let inner = UpdateOrganizationResponse { meta: Some(meta) };
-                Ok(response_with_refresh_token(refresh_token, inner)?)
-            }
-            Err(e) => Err(Status::from(e)),
-        }
+        let mut tx = self.db.begin().await?;
+        Org::update(org_id, update, &mut tx).await?;
+        tx.commit().await?;
+        let meta = ResponseMeta::from_meta(inner.meta);
+        let inner = UpdateOrganizationResponse { meta: Some(meta) };
+        Ok(response_with_refresh_token(refresh_token, inner)?)
     }
 
     async fn delete(
@@ -108,8 +108,9 @@ impl OrganizationService for OrganizationServiceImpl {
         let token = try_get_token::<_, UserAuthToken>(&request)?;
         let user_id = *token.id();
         let inner = request.into_inner();
-        let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
-        let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
+        let org_id = inner.id.parse().map_err(ApiError::from)?;
+        let mut tx = self.db.begin().await?;
+        let member = Org::find_org_user(user_id, org_id, &mut tx).await?;
 
         // Only owner or admins may delete orgs
         match member.role {
@@ -118,7 +119,8 @@ impl OrganizationService for OrganizationServiceImpl {
                 user_id, org_id
             ))),
             OrgRole::Owner | OrgRole::Admin => {
-                Org::delete(org_id, &self.db).await?;
+                Org::delete(org_id, &mut tx).await?;
+                tx.commit().await?;
 
                 let meta = ResponseMeta::from_meta(inner.meta);
                 let inner = DeleteOrganizationResponse { meta: Some(meta) };
@@ -136,7 +138,8 @@ impl OrganizationService for OrganizationServiceImpl {
         let user_id = *token.id();
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
-        let member = Org::find_org_user(&user_id, &org_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let member = Org::find_org_user(user_id, org_id, &mut tx).await?;
 
         match member.role {
             OrgRole::Member => Err(Status::permission_denied(format!(
@@ -145,7 +148,8 @@ impl OrganizationService for OrganizationServiceImpl {
             ))),
             // Only owner or admins may restore orgs
             OrgRole::Owner | OrgRole::Admin => {
-                let org = Org::restore(org_id, &self.db).await?;
+                let org = Org::restore(org_id, &mut tx).await?;
+                tx.commit().await?;
                 let meta = ResponseMeta::from_meta(inner.meta);
                 let inner = RestoreOrganizationResponse {
                     meta: Some(meta),
@@ -167,7 +171,8 @@ impl OrganizationService for OrganizationServiceImpl {
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
 
         let (limit, offset) = pagination_parameters(meta.pagination.clone())?;
-        let users = Org::find_all_member_users_paginated(&org_id, limit, offset, &self.db).await?;
+        let mut conn = self.db.conn().await?;
+        let users = Org::find_all_member_users_paginated(org_id, limit, offset, &mut conn).await?;
         let users: Result<_, ApiError> = users.iter().map(GrpcUiUser::try_from).collect();
         let inner = OrganizationMemberResponse {
             meta: Some(ResponseMeta::from_meta(meta).with_pagination()),
@@ -187,7 +192,8 @@ impl OrganizationService for OrganizationServiceImpl {
         let inner = request.into_inner();
         let user_id = Uuid::parse_str(inner.user_id.as_str()).map_err(ApiError::from)?;
         let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
-        let member = Org::find_org_user(&caller_id, &org_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        let member = Org::find_org_user(caller_id, org_id, &mut tx).await?;
 
         match member.role {
             OrgRole::Member => Err(Status::permission_denied(format!(
@@ -195,7 +201,8 @@ impl OrganizationService for OrganizationServiceImpl {
                 caller_id, user_id, org_id
             ))),
             OrgRole::Owner | OrgRole::Admin => {
-                Org::remove_org_user(&user_id, &org_id, &self.db).await?;
+                Org::remove_org_user(user_id, org_id, &mut tx).await?;
+                tx.commit().await?;
 
                 Ok(response_with_refresh_token::<()>(refresh_token, ())?)
             }
@@ -212,7 +219,9 @@ impl OrganizationService for OrganizationServiceImpl {
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
 
-        Org::remove_org_user(&user_id, &org_id, &self.db).await?;
+        let mut tx = self.db.begin().await?;
+        Org::remove_org_user(user_id, org_id, &mut tx).await?;
+        tx.commit().await?;
 
         Ok(response_with_refresh_token::<()>(refresh_token, ())?)
     }
