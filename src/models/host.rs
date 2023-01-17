@@ -758,7 +758,6 @@ impl HostProvision {
                 .ip_gateway
                 .ok_or_else(|| anyhow!("No IP gateway"))?,
         );
-        req.name = petname::petname(4, "_");
 
         let host = Host::create(req.into(), tx).await?;
 
