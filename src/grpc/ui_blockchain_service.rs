@@ -6,8 +6,6 @@ use crate::grpc::blockjoy_ui::Blockchain;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models;
 use crate::models::NodeTypeKey;
-use crate::server::DbPool;
-use uuid::Uuid;
 
 type Result<T, E = tonic::Status> = std::result::Result<T, E>;
 
