@@ -45,8 +45,8 @@ impl blockjoy_ui::Node {
         nodes: Vec<models::Node>,
         db: &mut sqlx::PgConnection,
     ) -> Result<Vec<Self>> {
-        let node_ids: Vec<_> = nodes.iter().map(|n| n.id).collect();
-        let blockchains: HashMap<_, _> = models::Blockchain::find_by_ids(&node_ids, db)
+        let blockchain_ids: Vec<_> = nodes.iter().map(|n| n.blockchain_id).collect();
+        let blockchains: HashMap<_, _> = models::Blockchain::find_by_ids(&blockchain_ids, db)
             .await?
             .into_iter()
             .map(|b| (b.id, b))
