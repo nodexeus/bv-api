@@ -1,10 +1,11 @@
+use super::convert;
 use super::helpers::{internal, required};
 use crate::auth::UserAuthToken;
-use crate::errors::ApiError;
+use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
-    CreateNodeRequest, CreateNodeResponse, DeleteNodeRequest, GetNodeRequest, GetNodeResponse,
-    ListNodesRequest, ListNodesResponse, Node as GrpcNode, ResponseMeta, UpdateNodeRequest,
+    self, CreateNodeRequest, CreateNodeResponse, DeleteNodeRequest, GetNodeRequest,
+    GetNodeResponse, ListNodesRequest, ListNodesResponse, ResponseMeta, UpdateNodeRequest,
     UpdateNodeResponse,
 };
 use crate::grpc::notification::{ChannelNotification, ChannelNotifier, NotificationPayload};
@@ -13,6 +14,7 @@ use crate::models;
 use crate::models::{
     Command, CommandRequest, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo,
 };
+use std::collections::HashMap;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
@@ -24,6 +26,70 @@ pub struct NodeServiceImpl {
 impl NodeServiceImpl {
     pub fn new(db: models::DbPool, notifier: Arc<ChannelNotifier>) -> Self {
         Self { db, notifier }
+    }
+}
+
+impl blockjoy_ui::Node {
+    /// This function is used to create a ui node from a database node. We want to include the
+    /// `database_name` in the ui representation, but it is not in the node model. Therefore we
+    /// perform a seperate query to the blockchains table.
+    pub async fn from_model(node: models::Node, db: &mut sqlx::PgConnection) -> Result<Self> {
+        let blockchain = models::Blockchain::find_by_id(node.blockchain_id, db).await?;
+        Self::try_new(node, &blockchain)
+    }
+
+    /// This function is used to create many ui nodes from many database nodes. The same
+    /// justification as above applies. Note that this function does not simply defer to the
+    /// function above, but rather it performs 1 query for n nodes. We like it this way :)
+    pub async fn from_models(
+        nodes: Vec<models::Node>,
+        db: &mut sqlx::PgConnection,
+    ) -> Result<Vec<Self>> {
+        let node_ids: Vec<_> = nodes.iter().map(|n| n.id).collect();
+        let blockchains: HashMap<_, _> = models::Blockchain::find_by_ids(&node_ids, db)
+            .await?
+            .into_iter()
+            .map(|b| (b.id, b))
+            .collect();
+
+        nodes
+            .into_iter()
+            .map(|n| (n.blockchain_id, n))
+            .map(|(b_id, n)| Self::try_new(n, &blockchains[&b_id]))
+            .collect()
+    }
+
+    /// Construct a new ui node from the queried parts.
+    fn try_new(node: models::Node, blockchain: &models::Blockchain) -> Result<Self> {
+        Ok(Self {
+            id: Some(node.id.to_string()),
+            org_id: Some(node.org_id.to_string()),
+            host_id: Some(node.host_id.to_string()),
+            host_name: Some(node.host_name),
+            blockchain_id: Some(node.blockchain_id.to_string()),
+            name: node.name,
+            // TODO: get node groups
+            groups: vec![],
+            version: node.version,
+            ip: node.ip_addr,
+            ip_gateway: node.ip_gateway,
+            r#type: Some(node.node_type.to_json()?),
+            address: node.address,
+            wallet_address: node.wallet_address,
+            block_height: node.block_height.map(i64::from),
+            // TODO: Get node data
+            node_data: None,
+            created_at: Some(convert::try_dt_to_ts(node.created_at)?),
+            updated_at: Some(convert::try_dt_to_ts(node.updated_at)?),
+            status: Some(blockjoy_ui::node::NodeStatus::from(node.chain_status).into()),
+            staking_status: Some(
+                blockjoy_ui::node::StakingStatus::from(node.staking_status).into(),
+            ),
+            sync_status: Some(blockjoy_ui::node::SyncStatus::from(node.sync_status).into()),
+            self_update: Some(node.self_update),
+            network: Some(node.network),
+            blockchain_name: Some(blockchain.name.clone()),
+        })
     }
 }
 
@@ -40,7 +106,7 @@ impl NodeService for NodeServiceImpl {
         let node = Node::find_by_id(node_id, &mut conn).await?;
         let response = GetNodeResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            node: Some(node.try_into()?),
+            node: Some(blockjoy_ui::Node::from_model(node, &mut conn).await?),
         };
         Ok(response_with_refresh_token(refresh_token, response)?)
     }
@@ -83,10 +149,10 @@ impl NodeService for NodeServiceImpl {
             }
         };
 
-        let nodes: Result<_, ApiError> = nodes.iter().map(GrpcNode::try_from).collect();
+        let nodes = blockjoy_ui::Node::from_models(nodes, &mut conn).await?;
         let response = ListNodesResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
-            nodes: nodes?,
+            nodes,
         };
         Ok(response_with_refresh_token(refresh_token, response)?)
     }

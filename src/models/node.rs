@@ -291,11 +291,8 @@ impl Node {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_host(
-        host_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
-    ) -> Result<Vec<Self>> {
-        sqlx::query_as::<_, Self>("SELECT * FROM nodes WHERE host_id = $1 order by name DESC")
+    pub async fn find_all_by_host(host_id: Uuid, db: &mut sqlx::PgConnection) -> Result<Vec<Self>> {
+        sqlx::query_as("SELECT * FROM nodes WHERE host_id = $1 order by name DESC")
             .bind(host_id)
             .fetch_all(db)
             .await

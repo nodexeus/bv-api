@@ -48,12 +48,12 @@ impl UpdateServiceImpl {
 
     pub async fn node_payload(id: Uuid, db: models::DbPool) -> Option<Notification> {
         let mut conn = db.conn().await.ok()?;
-        Node::find_by_id(id, &mut conn)
+        let node = Node::find_by_id(id, &mut conn)
             .await
             .map_err(|e| tracing::error!("Node ID {id} not found: {e}"))
-            .ok()
-            .and_then(|n| n.try_into().ok())
-            .map(Notification::Node)
+            .ok()?;
+        let node = blockjoy_ui::Node::from_model(node, &mut conn).await.ok()?;
+        Some(Notification::Node(node))
     }
 }
 

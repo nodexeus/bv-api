@@ -146,7 +146,7 @@ pub mod from {
     use crate::grpc::helpers::required;
     use crate::models::HostSelectiveUpdate;
     use crate::models::{
-        self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, Node, NodeChainStatus,
+        self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, NodeChainStatus,
         NodeCreateRequest, NodeInfo, NodeKeyFile, NodeStakingStatus, NodeSyncStatus, Org, User,
         UserSelectiveUpdate,
     };
@@ -397,135 +397,6 @@ pub mod from {
                 updated_at: Some(try_dt_to_ts(org.updated_at)?),
             };
             Ok(org)
-        }
-    }
-
-    // impl TryFrom<Host> for GrpcHost {
-    //     type Error = ApiError;
-
-    //     fn try_from(host: Host) -> Result<Self, Self::Error> {
-    //         GrpcHost::try_from(&host)
-    //     }
-    // }
-
-    // impl TryFrom<&Host> for GrpcHost {
-    //     type Error = ApiError;
-
-    //     fn try_from(host: &Host) -> Result<Self, Self::Error> {
-    //         let empty: Vec<Node> = vec![];
-    //         let nodes = host.nodes.as_ref().unwrap_or(&empty);
-    //         let nodes: Result<_, ApiError> = nodes.iter().map(GrpcNode::try_from).collect();
-
-    //         let grpc_host = Self {
-    //             id: Some(host.id.to_string()),
-    //             name: Some(host.name.clone()),
-    //             version: host.version.clone().map(String::from),
-    //             location: host.location.clone().map(String::from),
-    //             cpu_count: host.cpu_count.map(i64::from),
-    //             mem_size: host.mem_size.map(i64::from),
-    //             disk_size: host.disk_size.map(i64::from),
-    //             os: host.os.clone().map(String::from),
-    //             os_version: host.os_version.clone().map(String::from),
-    //             ip: Some(host.ip_addr.clone()),
-    //             status: None,
-    //             nodes: nodes?,
-    //             created_at: Some(try_dt_to_ts(host.created_at)?),
-    //             ip_range_from: host.ip_range_from.map(|ip| ip.to_string()),
-    //             ip_range_to: host.ip_range_to.map(|ip| ip.to_string()),
-    //             ip_gateway: host.ip_gateway.map(|ip| ip.to_string()),
-    //         };
-    //         Ok(grpc_host)
-    //     }
-    // }
-
-    impl TryFrom<Node> for GrpcNode {
-        type Error = ApiError;
-
-        fn try_from(node: Node) -> Result<Self, Self::Error> {
-            Self::try_from(&node)
-        }
-    }
-
-    impl TryFrom<&Node> for GrpcNode {
-        type Error = ApiError;
-
-        fn try_from(node: &Node) -> Result<Self, Self::Error> {
-            let grpc_node = Self {
-                id: Some(node.id.to_string()),
-                org_id: Some(node.org_id.to_string()),
-                host_id: Some(node.host_id.to_string()),
-                host_name: Some(node.host_name.clone()),
-                blockchain_id: Some(node.blockchain_id.to_string()),
-                name: node.name.clone(),
-                // TODO: get node groups
-                groups: vec![],
-                version: node.version.clone(),
-                ip: node.ip_addr.clone(),
-                ip_gateway: node.ip_gateway.clone(),
-                r#type: Some(node.node_type.to_json()?),
-                address: node.address.clone(),
-                wallet_address: node.wallet_address.clone(),
-                block_height: node.block_height.map(i64::from),
-                // TODO: Get node data
-                node_data: None,
-                created_at: Some(try_dt_to_ts(node.created_at)?),
-                updated_at: Some(try_dt_to_ts(node.updated_at)?),
-                status: Some(GrpcNodeStatus::from(node.chain_status).into()),
-                staking_status: Some(GrpcStakingStatus::from(node.staking_status).into()),
-                sync_status: Some(GrpcSyncStatus::from(node.sync_status).into()),
-                self_update: Some(node.self_update),
-                network: Some(node.network.clone()),
-            };
-            Ok(grpc_node)
-        }
-    }
-
-    impl TryFrom<&NodeCreateRequest> for GrpcNode {
-        type Error = ApiError;
-
-        fn try_from(req: &NodeCreateRequest) -> Result<Self, Self::Error> {
-            let r#type = serde_json::to_string(req.node_type.as_ref()).map_err(|e| {
-                anyhow!("Could not serialize field `type` of `NodeCreateRequest`: {e:?}")
-            })?;
-            let node = Self {
-                id: None,
-                org_id: Some(req.org_id.to_string()),
-                host_id: None,
-                host_name: Some(req.host_name.clone()),
-                blockchain_id: Some(req.blockchain_id.to_string()),
-                name: Some(petname::petname(3, "_")),
-                // TODO
-                groups: vec![],
-                version: req.version.clone(),
-                ip: req.ip_addr.clone(),
-                ip_gateway: req.ip_gateway.clone(),
-                r#type: Some(r#type),
-                address: req.address.clone(),
-                wallet_address: req.wallet_address.clone(),
-                block_height: req.block_height.map(i64::from),
-                node_data: None,
-                created_at: None,
-                updated_at: None,
-                status: Some(GrpcNodeStatus::from(req.chain_status).into()),
-                staking_status: Some(
-                    GrpcStakingStatus::from(
-                        req.staking_status.unwrap_or(NodeStakingStatus::Unknown),
-                    )
-                    .into(),
-                ),
-                sync_status: Some(GrpcSyncStatus::from(req.sync_status).into()),
-                self_update: Some(req.self_update),
-                network: Some(req.network.clone()),
-            };
-            Ok(node)
-        }
-    }
-
-    impl TryFrom<NodeCreateRequest> for GrpcNode {
-        type Error = ApiError;
-
-        fn try_from(req: NodeCreateRequest) -> Result<Self, Self::Error> {
-            Self::try_from(&req)
         }
     }
 
