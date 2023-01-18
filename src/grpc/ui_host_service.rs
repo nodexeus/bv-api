@@ -23,15 +23,12 @@ impl HostServiceImpl {
 }
 
 impl blockjoy_ui::Host {
-    pub async fn from_model<'a>(
+    pub async fn from_model(
         model: models::Host,
-        db: impl sqlx::PgExecutor<'a>,
+        db: &mut sqlx::PgConnection,
     ) -> errors::Result<Self> {
-        let nodes = models::Node::find_all_by_host(model.id, db).await?;
-        let nodes = nodes
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<errors::Result<_>>()?;
+        let nodes = models::Node::find_all_by_host(model.id, &mut *db).await?;
+        let nodes = blockjoy_ui::Node::from_models(nodes, &mut *db).await?;
         let dto = Self {
             id: Some(model.id.to_string()),
             name: Some(model.name),

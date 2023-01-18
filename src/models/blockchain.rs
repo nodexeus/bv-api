@@ -50,4 +50,12 @@ impl Blockchain {
             .await
             .map_err(ApiError::from)
     }
+
+    pub async fn find_by_ids(ids: &[Uuid], db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Self>> {
+        sqlx::query_as("SELECT * FROM blockchains WHERE status <> 'deleted' AND id = ANY($1)")
+            .bind(ids)
+            .fetch_all(db)
+            .await
+            .map_err(ApiError::from)
+    }
 }
