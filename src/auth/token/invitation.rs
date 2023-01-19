@@ -80,7 +80,7 @@ impl Blacklisted for InvitationToken {
     async fn is_blacklisted(
         &self,
         token: String,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> TokenResult<bool> {
         Ok(BlacklistToken::is_listed(token, db).await.is_ok())
     }

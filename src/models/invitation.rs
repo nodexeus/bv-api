@@ -24,7 +24,7 @@ pub struct Invitation {
 
 #[tonic::async_trait]
 impl FindableById for Invitation {
-    async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Self>
+    async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> ApiResult<Self>
     where
         Self: Sized,
     {
@@ -40,7 +40,7 @@ impl Invitation {
     pub async fn find_by_creator_for_email(
         creator_id: Uuid,
         invitee_email: String,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> ApiResult<Self> {
         sqlx::query_as(
             r#"select * from invitations 
@@ -90,7 +90,7 @@ impl Invitation {
         .map_err(ApiError::from)
     }
 
-    pub async fn pending(org_id: Uuid, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Vec<Self>> {
+    pub async fn pending(org_id: Uuid, db: &mut sqlx::PgConnection) -> ApiResult<Vec<Self>> {
         sqlx::query_as(
             r#"select * from invitations 
                     where created_for_org = $1 and accepted_at is null and declined_at is null
@@ -103,7 +103,7 @@ impl Invitation {
         .map_err(ApiError::from)
     }
 
-    pub async fn received(email: &str, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Vec<Self>> {
+    pub async fn received(email: &str, db: &mut sqlx::PgConnection) -> ApiResult<Vec<Self>> {
         sqlx::query_as(
             r#"select * from invitations 
                     where invitee_email = $1 and accepted_at is null and declined_at is null

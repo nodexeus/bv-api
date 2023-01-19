@@ -41,7 +41,7 @@ pub struct Command {
 }
 
 impl Command {
-    pub async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+    pub async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> Result<Self> {
         sqlx::query_as("SELECT * FROM commands where id = $1")
             .bind(id)
             .fetch_one(db)
@@ -51,7 +51,7 @@ impl Command {
 
     pub async fn find_all_by_host(
         host_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Vec<Command>> {
         sqlx::query_as("SELECT * FROM commands where host_id = $1 ORDER BY created_at DESC")
             .bind(host_id)
@@ -62,7 +62,7 @@ impl Command {
 
     pub async fn find_pending_by_host(
         host_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Vec<Command>> {
         sqlx::query_as("SELECT * FROM commands where host_id = $1 AND completed_at IS NULL ORDER BY created_at DESC")
             .bind(host_id)
@@ -73,7 +73,7 @@ impl Command {
     pub async fn create(
         host_id: Uuid,
         command: CommandRequest,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Command> {
         sqlx::query_as(
             "INSERT INTO commands (host_id, cmd, sub_cmd, resource_id) VALUES ($1, $2, $3, $4) RETURNING *",

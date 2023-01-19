@@ -148,7 +148,7 @@ impl IpAddress {
         !(ip < from || ip > to)
     }
 
-    pub async fn assigned(ip: IpAddr, db: impl sqlx::PgExecutor<'_>) -> ApiResult<bool> {
+    pub async fn assigned(ip: IpAddr, db: &mut sqlx::PgConnection) -> ApiResult<bool> {
         let ip_count: i32 = sqlx::query_scalar(
             r#"SELECT count(id)::int from ip_addresses
                     WHERE ip = $1"#,
@@ -168,7 +168,7 @@ impl IpAddress {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_node(node_ip: String, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Self> {
+    pub async fn find_by_node(node_ip: String, db: &mut sqlx::PgConnection) -> ApiResult<Self> {
         let node_ip: IpAddr = node_ip.parse()?;
 
         sqlx::query_as("select * from ip_addresses where ip = $1 limit 1")

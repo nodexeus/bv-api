@@ -22,7 +22,7 @@ pub struct Reward {
 impl Reward {
     pub async fn summary_by_user(
         user_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<RewardSummary> {
         let row: RewardSummary = sqlx::query_as(
             r##"SELECT 

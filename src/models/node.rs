@@ -188,7 +188,7 @@ pub struct NodeFilter {
 }
 
 impl Node {
-    pub async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Node> {
+    pub async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> Result<Node> {
         sqlx::query_as("SELECT * FROM nodes where id = $1")
             .bind(id)
             .fetch_one(db)
@@ -197,11 +197,11 @@ impl Node {
     }
 
     pub async fn create(req: &mut NodeCreateRequest, tx: &mut super::DbTrx<'_>) -> Result<Node> {
-        let chain = Blockchain::find_by_id(req.blockchain_id, &mut *tx).await?;
+        let chain = Blockchain::find_by_id(req.blockchain_id, tx).await?;
         let node_type = NodeTypeKey::str_from_value(req.node_type.get_id());
         let requirements = get_hw_requirements(chain.name, node_type, req.version.clone()).await?;
-        let host_id = Host::get_next_available_host_id(requirements, &mut *tx).await?;
-        let host = Host::find_by_id(host_id, &mut *tx).await?;
+        let host_id = Host::get_next_available_host_id(requirements, tx).await?;
+        let host = Host::find_by_id(host_id, tx).await?;
 
         req.ip_gateway = host.ip_gateway.map(|ip| ip.to_string());
         req.ip_addr = Some(IpAddress::next_for_host(host_id, tx).await?.ip.to_string());
@@ -303,7 +303,7 @@ impl Node {
         org_id: Uuid,
         offset: i32,
         limit: i32,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
@@ -324,7 +324,7 @@ impl Node {
     pub async fn belongs_to_user_org(
         org_id: Uuid,
         user_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<bool> {
         let cnt: i32 = sqlx::query_scalar(
             r#"
@@ -344,7 +344,7 @@ impl Node {
         filter: NodeFilter,
         offset: i32,
         limit: i32,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Vec<Self>> {
         let mut nodes = sqlx::query_as::<_, Self>(
             r#"
@@ -380,7 +380,7 @@ impl Node {
         Ok(nodes)
     }
 
-    pub async fn running_nodes_count(org_id: &Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<i32> {
+    pub async fn running_nodes_count(org_id: &Uuid, db: &mut sqlx::PgConnection) -> Result<i32> {
         match sqlx::query(
             r#"select COALESCE(count(id)::int, 0) from nodes where chain_status in
                                  (
@@ -412,7 +412,7 @@ impl Node {
         }
     }
 
-    pub async fn halted_nodes_count(org_id: &Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<i32> {
+    pub async fn halted_nodes_count(org_id: &Uuid, db: &mut sqlx::PgConnection) -> Result<i32> {
         match sqlx::query(
             r#"select COALESCE(count(id)::int, 0) from nodes where chain_status in
                                  (

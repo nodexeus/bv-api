@@ -23,7 +23,7 @@ pub struct BroadcastFilter {
 }
 
 impl BroadcastFilter {
-    pub async fn find_by_id(id: &Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+    pub async fn find_by_id(id: &Uuid, db: &mut sqlx::PgConnection) -> Result<Self> {
         sqlx::query_as("SELECT * FROM broadcast_filters where id = $1")
             .bind(id)
             .fetch_one(db)
@@ -33,7 +33,7 @@ impl BroadcastFilter {
 
     pub async fn find_all_by_org_id(
         org_id: &Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Vec<Self>> {
         sqlx::query_as("SELECT * FROM broadcast_filters where org_id = $1")
             .bind(org_id)

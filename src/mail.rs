@@ -115,7 +115,7 @@ impl MailClient {
     pub async fn reset_password(
         &self,
         user: &models::User,
-        _db: impl sqlx::PgExecutor<'_>,
+        _db: &mut sqlx::PgConnection,
     ) -> errors::Result<()> {
         const TEMPLATES: &str = include_str!("../mails/reset_password.toml");
         // SAFETY: assume we can write toml and also protected by test

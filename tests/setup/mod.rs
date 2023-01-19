@@ -107,7 +107,7 @@ impl Tester {
     }
 
     pub async fn hosts(&self) -> Vec<models::Host> {
-        models::Host::find_all(&mut self.conn().await)
+        models::Host::find_all(&mut *self.conn().await)
             .await
             .unwrap()
     }
@@ -121,7 +121,7 @@ impl Tester {
     }
 
     pub async fn org(&self) -> models::Org {
-        models::Org::find_all(&mut self.conn().await)
+        models::Org::find_all(&mut *self.conn().await)
             .await
             .unwrap()
             .pop()
@@ -129,7 +129,7 @@ impl Tester {
     }
 
     pub async fn org_for(&self, user: &models::User) -> models::Org {
-        models::Org::find_all_by_user(user.id, &mut self.conn().await)
+        models::Org::find_all_by_user(user.id, &mut *self.conn().await)
             .await
             .unwrap()
             .first()

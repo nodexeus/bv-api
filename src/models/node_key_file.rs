@@ -23,7 +23,7 @@ pub struct NodeKeyFile {
 impl NodeKeyFile {
     pub async fn create(
         req: CreateNodeKeyFileRequest,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> ApiResult<Self> {
         sqlx::query_as(
             r#"
@@ -42,10 +42,7 @@ impl NodeKeyFile {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_by_node(
-        node_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
-    ) -> ApiResult<Vec<Self>> {
+    pub async fn find_by_node(node_id: Uuid, db: &mut sqlx::PgConnection) -> ApiResult<Vec<Self>> {
         sqlx::query_as(
             r#"
             SELECT * FROM node_key_files WHERE node_id = $1
@@ -57,7 +54,7 @@ impl NodeKeyFile {
         .map_err(ApiError::from)
     }
 
-    pub async fn delete(node_id: Uuid, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Self> {
+    pub async fn delete(node_id: Uuid, db: &mut sqlx::PgConnection) -> ApiResult<Self> {
         sqlx::query_as(
             r#"
             DELETE FROM node_key_files 
@@ -74,7 +71,7 @@ impl NodeKeyFile {
 
 #[tonic::async_trait]
 impl FindableById for NodeKeyFile {
-    async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Self> {
+    async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> ApiResult<Self> {
         sqlx::query_as(
             r#"
             SELECT * FROM node_key_files WHERE id = $1

@@ -22,7 +22,7 @@ pub struct Invoice {
 impl Invoice {
     pub async fn find_all_by_user(
         user_id: &Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Vec<Invoice>> {
         sqlx::query_as(
             r##"SELECT
@@ -45,7 +45,7 @@ impl Invoice {
     }
 
     /// Gets all wallets addresses with a due amount.
-    pub async fn find_all_payments_due(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<PaymentDue>> {
+    pub async fn find_all_payments_due(db: &mut sqlx::PgConnection) -> Result<Vec<PaymentDue>> {
         sqlx::query_as("SELECT users.pay_address, sum(amount), min(ends_at) FROM invoices INNER JOIN users on users.id = invoices.user_id WHERE is_paid = false GROUP BY address")
             .fetch_all(db)
             .await

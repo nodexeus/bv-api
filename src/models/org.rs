@@ -30,7 +30,7 @@ pub struct Org {
 
 #[tonic::async_trait]
 impl FindableById for Org {
-    async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+    async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> Result<Self> {
         sqlx::query_as("SELECT * FROM orgs where id = $1 and deleted_at IS NULL")
             .bind(id)
             .fetch_one(db)
@@ -40,7 +40,7 @@ impl FindableById for Org {
 }
 
 impl Org {
-    pub async fn find_all(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Org>> {
+    pub async fn find_all(db: &mut sqlx::PgConnection) -> Result<Vec<Org>> {
         sqlx::query_as("SELECT * FROM orgs ORDER BY id LIMIT 1")
             .fetch_all(db)
             .await
@@ -50,7 +50,7 @@ impl Org {
     pub async fn find_by_user(
         org_id: Uuid,
         user_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Org> {
         sqlx::query_as::<_, Self>(
             r##"
@@ -75,10 +75,7 @@ impl Org {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_all_by_user(
-        user_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
-    ) -> Result<Vec<Org>> {
+    pub async fn find_all_by_user(user_id: Uuid, db: &mut sqlx::PgConnection) -> Result<Vec<Org>> {
         sqlx::query_as::<_, Self>(
             r##"
             SELECT
@@ -107,7 +104,7 @@ impl Org {
     /// Returns the users of an organization
     pub async fn find_all_members(
         org_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Vec<OrgUser>> {
         sqlx::query_as("SELECT * FROM orgs_users WHERE org_id = $1")
             .bind(org_id)
@@ -119,7 +116,7 @@ impl Org {
     /// Returns the users of an organization
     pub async fn find_all_member_users(
         org_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Vec<User>> {
         sqlx::query_as::<_, User>(
             r#"SELECT users.*
@@ -134,7 +131,7 @@ impl Org {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_personal_org(user_id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Org> {
+    pub async fn find_personal_org(user_id: Uuid, db: &mut sqlx::PgConnection) -> Result<Org> {
         sqlx::query_as::<_, Self>(
             r##"
             SELECT
@@ -164,7 +161,7 @@ impl Org {
         org_id: Uuid,
         limit: i32,
         offset: i32,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Vec<User>> {
         sqlx::query_as::<_, User>(
             r#"SELECT users.*
@@ -187,7 +184,7 @@ impl Org {
     pub async fn is_member(
         user_id: Uuid,
         org_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<bool> {
         match Self::find_org_user(user_id, org_id, db).await {
             Ok(_) => Ok(true),
@@ -217,7 +214,7 @@ impl Org {
     pub async fn find_org_user(
         user_id: Uuid,
         org_id: Uuid,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<OrgUser> {
         let org_user =
             sqlx::query_as("SELECT * FROM orgs_users WHERE org_id = $1 AND user_id = $2")

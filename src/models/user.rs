@@ -115,26 +115,24 @@ impl User {
         )))
     }
 
-    // pub async fn reset_password(_db: impl sqlx::PgExecutor<'_>, _req: &PwdResetInfo) -> Result<User> {
+    // pub async fn reset_password(_db: &mut sqlx::PgConnection, _req: &PwdResetInfo) -> Result<User> {
     //     // TODO: use new auth
     //     unimplemented!()
     // }
 
-    pub async fn email_reset_password(&self, db: impl sqlx::PgExecutor<'_>) -> Result<()> {
+    pub async fn email_reset_password(&self, db: &mut sqlx::PgConnection) -> Result<()> {
         let client = MailClient::new();
         client.reset_password(self, db).await
     }
 
-    pub async fn find_all(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Self>> {
+    pub async fn find_all(db: &mut sqlx::PgConnection) -> Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM users")
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_all_pay_address(
-        db: impl sqlx::PgExecutor<'_>,
-    ) -> Result<Vec<UserPayAddress>> {
+    pub async fn find_all_pay_address(db: &mut sqlx::PgConnection) -> Result<Vec<UserPayAddress>> {
         sqlx::query_as(
             "SELECT id, pay_address FROM users where pay_address is not NULL AND deleted_at IS NULL",
         )
@@ -143,7 +141,7 @@ impl User {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_by_email(email: &str, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+    pub async fn find_by_email(email: &str, db: &mut sqlx::PgConnection) -> Result<Self> {
         sqlx::query_as(
             r#"SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL limit 1"#,
         )
@@ -153,7 +151,7 @@ impl User {
         .map_err(ApiError::from)
     }
 
-    pub async fn find_by_refresh(refresh: &str, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+    pub async fn find_by_refresh(refresh: &str, db: &mut sqlx::PgConnection) -> Result<Self> {
         sqlx::query_as("SELECT * FROM users WHERE refresh = $1 AND deleted_at IS NULL limit 1")
             .bind(refresh)
             .fetch_one(db)
@@ -316,7 +314,7 @@ impl User {
         .map_err(ApiError::from)
     }
 
-    pub async fn is_confirmed(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<bool> {
+    pub async fn is_confirmed(id: Uuid, db: &mut sqlx::PgConnection) -> Result<bool> {
         let result: i32 = sqlx::query_scalar(
             r#"SELECT count(*)::int 
             FROM users WHERE id = $1 AND confirmed_at IS NOT NULL AND deleted_at IS NULL"#,
@@ -352,7 +350,7 @@ impl User {
 
 #[axum::async_trait]
 impl FindableById for User {
-    async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+    async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> Result<Self> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL limit 1",
         )

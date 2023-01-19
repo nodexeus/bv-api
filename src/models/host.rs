@@ -125,7 +125,7 @@ impl Host {
         Ok(())
     }
 
-    pub async fn find_all(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Self>> {
+    pub async fn find_all(db: &mut sqlx::PgConnection) -> Result<Vec<Self>> {
         sqlx::query("SELECT * FROM hosts order by lower(name)")
             .try_map(Self::try_from)
             .fetch_all(db)
@@ -133,7 +133,7 @@ impl Host {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_node(node_id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+    pub async fn find_by_node(node_id: Uuid, db: &mut sqlx::PgConnection) -> Result<Self> {
         sqlx::query("SELECT hosts.* FROM nodes INNER JOIN hosts ON nodes.host_id = hosts.id WHERE nodes.id = $1")
             .bind(node_id)
             .try_map(Self::try_from)
@@ -295,7 +295,7 @@ impl Host {
     /// is ordered by disk_size and mem_size the first one in the list is returned
     pub async fn get_next_available_host_id(
         requirements: HardwareRequirements,
-        db: impl sqlx::PgExecutor<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Uuid> {
         let host = sqlx::query(
             r#"
@@ -332,7 +332,7 @@ impl Host {
 
 #[axum::async_trait]
 impl FindableById for Host {
-    async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+    async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> Result<Self> {
         sqlx::query("SELECT * FROM hosts WHERE id = $1")
             .bind(id)
             .try_map(Self::try_from)

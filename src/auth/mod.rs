@@ -46,7 +46,7 @@ pub trait Identifiable {
 
 #[axum::async_trait]
 pub trait FindableById: Send + Sync + 'static {
-    async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Self>
+    async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> ApiResult<Self>
     where
         Self: Sized;
 }
