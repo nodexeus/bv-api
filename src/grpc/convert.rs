@@ -10,6 +10,15 @@ use crate::models;
 use crate::models::{Blockchain, Command, HostCmd, Node, NodeTypeKey};
 use prost_types::Timestamp;
 
+impl Parameter {
+    fn new(name: &str, val: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            value: val.to_owned(),
+        }
+    }
+}
+
 pub async fn db_command_to_grpc_command(
     cmd: Command,
     db: &models::DbPool,
@@ -38,6 +47,7 @@ pub async fn db_command_to_grpc_command(
 
             let mut conn = db.conn().await?;
             let node = Node::find_by_id(cmd.resource_id, &mut conn).await?;
+            let network = Parameter::new("network", &node.network);
             let cmd = blockjoy::NodeInfoUpdate {
                 name: node.name,
                 self_update: Some(node.self_update),
@@ -45,10 +55,8 @@ pub async fn db_command_to_grpc_command(
                     .node_type
                     .iter_props()
                     .flat_map(|p| p.value().as_ref().map(|v| (p.name(), v)))
-                    .map(|(name, value)| Parameter {
-                        name: name.clone(),
-                        value: value.clone(),
-                    })
+                    .map(|(name, value)| Parameter::new(name, value))
+                    .chain([network])
                     .collect(),
             };
 
@@ -80,6 +88,7 @@ pub async fn db_command_to_grpc_command(
                     .to_lowercase(),
                 status: StatusName::Development.into(),
             };
+            let network = Parameter::new("network", &node.network);
             let create_cmd = NodeCreate {
                 name: node.name.unwrap_or_default(),
                 blockchain: node.blockchain_id.to_string(),
@@ -92,10 +101,8 @@ pub async fn db_command_to_grpc_command(
                     .node_type
                     .iter_props()
                     .flat_map(|p| p.value().as_ref().map(|v| (p.name(), v)))
-                    .map(|(name, value)| Parameter {
-                        name: name.clone(),
-                        value: value.clone(),
-                    })
+                    .map(|(name, value)| Parameter::new(name, value))
+                    .chain([network])
                     .collect(),
             };
 
