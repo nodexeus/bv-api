@@ -208,7 +208,7 @@ pub trait JwtToken: Sized + serde::Serialize {
     }
 
     /// Try to retrieve user for given token
-    async fn try_get_user(&self, id: Uuid, db: impl sqlx::PgExecutor<'_>) -> ApiResult<User> {
+    async fn try_get_user(&self, id: Uuid, db: &mut sqlx::PgConnection) -> ApiResult<User> {
         match self.token_type() {
             TokenType::UserAuth
             | TokenType::UserRefresh
@@ -222,7 +222,7 @@ pub trait JwtToken: Sized + serde::Serialize {
     }
 
     /// Try to retrieve host for given token
-    async fn try_get_host(&self, db: impl sqlx::PgExecutor<'_>) -> ApiResult<Host> {
+    async fn try_get_host(&self, db: &mut sqlx::PgConnection) -> ApiResult<Host> {
         match self.token_type() {
             TokenType::HostAuth | TokenType::HostRefresh => {
                 Host::find_by_id(self.get_id(), db).await
@@ -349,9 +349,6 @@ pub trait Blacklisted {
     async fn blacklist(&self, tx: &mut models::DbTrx<'_>) -> TokenResult<bool>;
 
     /// Return true if encoded token value can be found in blacklist table
-    async fn is_blacklisted(
-        &self,
-        token: String,
-        db: impl sqlx::PgExecutor<'_>,
-    ) -> TokenResult<bool>;
+    async fn is_blacklisted(&self, token: String, db: &mut sqlx::PgConnection)
+        -> TokenResult<bool>;
 }

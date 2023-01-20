@@ -15,7 +15,7 @@
 //! enforce this is by having the functions that mutate accept a database connection of a different
 //! type than those that do  not mutate. Functions that mutate state will accept their database
 //! connection argument as  `tx: &mut super::DbTrx<'_>`, whereas functions that do not mutate take
-//! `db: impl sqlx::PgExecutor<'_>` as their database connection. This ensures that mutating
+//! `db: &mut sqlx::PgConnection` as their database connection. This ensures that mutating
 //! functions _must_ happen from within a transaction, and functions that not mutate may either be\
 //! called from a transaction or from a 'bare' connection.
 
@@ -119,6 +119,20 @@ impl DbPool {
 impl<'a> DbTrx<'a> {
     pub async fn commit(self) -> Result<()> {
         Ok(self.0.commit().await?)
+    }
+}
+
+impl<'a> std::ops::Deref for DbTrx<'a> {
+    type Target = sqlx::PgConnection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> std::ops::DerefMut for DbTrx<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

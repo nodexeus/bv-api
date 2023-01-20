@@ -32,7 +32,7 @@ impl BlacklistToken {
     }
 
     /// Returns true if token is on the blacklist
-    pub async fn is_listed(token: String, db: impl sqlx::PgExecutor<'_>) -> Result<bool> {
+    pub async fn is_listed(token: String, db: &mut sqlx::PgConnection) -> Result<bool> {
         let res: i32 =
             sqlx::query_scalar("SELECT count(token)::int from token_blacklist WHERE token = $1")
                 .bind(token)

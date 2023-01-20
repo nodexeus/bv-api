@@ -36,14 +36,14 @@ pub struct Blockchain {
 }
 
 impl Blockchain {
-    pub async fn find_all(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Self>> {
+    pub async fn find_all(db: &mut sqlx::PgConnection) -> Result<Vec<Self>> {
         sqlx::query_as("SELECT * FROM blockchains WHERE status <> 'deleted' order by lower(name)")
             .fetch_all(db)
             .await
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_id(id: Uuid, db: impl sqlx::PgExecutor<'_>) -> Result<Self> {
+    pub async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> Result<Self> {
         sqlx::query_as("SELECT * FROM blockchains WHERE status <> 'deleted' AND id = $1")
             .bind(id)
             .fetch_one(db)
@@ -51,7 +51,7 @@ impl Blockchain {
             .map_err(ApiError::from)
     }
 
-    pub async fn find_by_ids(ids: &[Uuid], db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Self>> {
+    pub async fn find_by_ids(ids: &[Uuid], db: &mut sqlx::PgConnection) -> Result<Vec<Self>> {
         sqlx::query_as("SELECT * FROM blockchains WHERE status <> 'deleted' AND id = ANY($1)")
             .bind(ids)
             .fetch_all(db)

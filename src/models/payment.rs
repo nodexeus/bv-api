@@ -52,13 +52,13 @@ impl Payment {
 
     pub async fn find_all_by_user(
         user_id: Uuid,
-        tx: &mut super::DbTrx<'_>,
+        db: &mut sqlx::PgConnection,
     ) -> Result<Vec<Payment>> {
         Ok(sqlx::query_as::<_, Payment>(
             "SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC",
         )
         .bind(user_id)
-        .fetch_all(tx)
+        .fetch_all(db)
         .await?)
     }
 }

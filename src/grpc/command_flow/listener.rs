@@ -107,7 +107,8 @@ impl HostListener {
         tracing::info!("Notification is a command notification: {notification:?}");
 
         let cmd_id = notification.get_id();
-        let command = models::Command::find_by_id(cmd_id, &mut self.db.conn().await?).await;
+        let mut conn = self.db.conn().await?;
+        let command = models::Command::find_by_id(cmd_id, &mut conn).await;
 
         tracing::info!("Testing for command with ID {cmd_id}");
 

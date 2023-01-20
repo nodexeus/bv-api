@@ -38,7 +38,7 @@ impl Info {
         .map_err(ApiError::from)
     }
 
-    pub async fn get_info(db: impl sqlx::PgExecutor<'_>) -> Result<Info> {
+    pub async fn get_info(db: &mut sqlx::PgConnection) -> Result<Info> {
         sqlx::query_as("SELECT * FROM info LIMIT 1")
             .fetch_one(db)
             .await
