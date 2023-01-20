@@ -66,7 +66,7 @@ message ConfirmRegistrationResponse {
 
 message SwitchOrgRequest {
   RequestMeta meta = 1;
-  string ord_id = 2;
+  string org_id = 2;
 }
 
 /* Retrieve and refresh API token */
