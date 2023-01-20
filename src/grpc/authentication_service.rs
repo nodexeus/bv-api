@@ -13,7 +13,8 @@ use crate::grpc::helpers::required;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::mail::MailClient;
 use crate::models;
-use crate::models::User;
+use crate::models::{Org, User};
+use std::collections::HashMap;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -53,8 +54,12 @@ impl AuthenticationService for AuthenticationServiceImpl {
         User::refresh(user.id, refresh_token.clone(), &mut tx).await?;
         tx.commit().await?;
 
-        let auth_token =
-            UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?;
+        let auth_token = UserAuthToken::create_token_for::<User>(
+            &user,
+            TokenType::UserAuth,
+            TokenRole::User,
+            None,
+        )?;
 
         let response = LoginUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
@@ -77,13 +82,18 @@ impl AuthenticationService for AuthenticationServiceImpl {
         let user_id = token.get_id();
         let mut tx = self.db.begin().await?;
         let user = User::confirm(user_id, &mut tx).await?;
-        let auth_token =
-            UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?
-                .encode()?;
+        let auth_token = UserAuthToken::create_token_for::<User>(
+            &user,
+            TokenType::UserAuth,
+            TokenRole::User,
+            None,
+        )?
+        .encode()?;
         let refresh_token = UserRefreshToken::create_token_for::<User>(
             &user,
             TokenType::UserAuth,
             TokenRole::User,
+            None,
         )?
         .encode()?;
 
@@ -149,7 +159,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         tx.commit().await?;
         let meta = ResponseMeta::from_meta(request.meta);
         let auth_token =
-            UserAuthToken::create_token_for(&cur_user, TokenType::UserAuth, TokenRole::User)?;
+            UserAuthToken::create_token_for(&cur_user, TokenType::UserAuth, TokenRole::User, None)?;
         let response = UpdatePasswordResponse {
             meta: Some(meta),
             token: Some(ApiToken {
@@ -208,13 +218,27 @@ impl AuthenticationService for AuthenticationServiceImpl {
     ) -> Result<Response<LoginUserResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
         let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let user_id = token.get_id();
         let inner = request.into_inner();
-        let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
         let mut conn = self.db.conn().await?;
-        let user = User::find_by_id(token.id().clone(), &mut conn).await?;
+        let org_user = Org::find_org_user(
+            user_id,
+            Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?,
+            &mut conn,
+        )
+        .await?;
         // TODO: org_id must now be part of UserAuthToken
-        let auth_token =
-            UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?;
+        let mut token_data = HashMap::<String, String>::new();
+
+        token_data.insert("org_id".into(), inner.org_id);
+        token_data.insert("org_role".into(), org_user.role.to_string());
+
+        let auth_token = UserAuthToken::create_token_for(
+            &org_user,
+            TokenType::UserAuth,
+            TokenRole::User,
+            Some(token_data),
+        )?;
 
         let response = LoginUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),

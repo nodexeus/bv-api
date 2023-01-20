@@ -147,16 +147,16 @@ pub mod from {
     use crate::grpc::blockjoy_ui::{
         self, node::NodeStatus as GrpcNodeStatus, node::StakingStatus as GrpcStakingStatus,
         node::SyncStatus as GrpcSyncStatus, Host as GrpcHost, HostProvision as GrpcHostProvision,
-        Node as GrpcNode, Organization, User as GrpcUiUser,
+        Node as GrpcNode, OrgUser, Organization, User as GrpcUiUser,
     };
     use crate::grpc::blockjoy_ui::{BlockchainNetwork, FilterCriteria};
     use crate::grpc::helpers::required;
-    use crate::models::HostSelectiveUpdate;
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, NodeChainStatus,
         NodeCreateRequest, NodeInfo, NodeKeyFile, NodeStakingStatus, NodeSyncStatus, Org, User,
         UserSelectiveUpdate,
     };
+    use crate::models::{HostSelectiveUpdate, OrgRole};
     use crate::models::{Invitation, NodeFilter};
     use anyhow::anyhow;
     use serde_json::Value;
@@ -402,8 +402,19 @@ pub mod from {
                 member_count: org.member_count,
                 created_at: Some(try_dt_to_ts(org.created_at)?),
                 updated_at: Some(try_dt_to_ts(org.updated_at)?),
+                current_user: None,
             };
             Ok(org)
+        }
+    }
+
+    impl From<models::OrgUser> for OrgUser {
+        fn from(value: models::OrgUser) -> Self {
+            Self {
+                user_id: value.user_id.to_string(),
+                org_id: value.org_id.to_string(),
+                role: value.role as i32,
+            }
         }
     }
 

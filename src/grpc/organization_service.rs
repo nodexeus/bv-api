@@ -46,8 +46,11 @@ impl OrganizationService for OrganizationServiceImpl {
             ],
             None => Org::find_all_by_user(user_id, &mut conn).await?,
         };
+        // TODO: add org user to each org
         let organizations: Result<_, ApiError> =
             organizations.iter().map(Organization::try_from).collect();
+        let organizations: Result<_, ApiError> =
+            organizations.iter().map(|mut org: Organization| org.current_user = Org::find_org_user(user_id, org.id.parse().map_err(ApiError::UuidParseError)?, &mut conn).await?).collect();
         let inner = GetOrganizationsResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
             organizations: organizations?,
