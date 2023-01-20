@@ -2,11 +2,12 @@ use crate::auth::{
     FindableById, JwtToken, PwdResetToken, RegistrationConfirmationToken, TokenRole, TokenType,
     UserAuthToken, UserRefreshToken,
 };
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationService;
 use crate::grpc::blockjoy_ui::{
     ApiToken, ConfirmRegistrationRequest, ConfirmRegistrationResponse, LoginUserRequest,
-    LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse, UpdateUiPasswordRequest,
-    UpdateUiPasswordResponse,
+    LoginUserResponse, RefreshTokenRequest, RefreshTokenResponse, SwitchOrgRequest,
+    UpdateUiPasswordRequest, UpdateUiPasswordResponse,
 };
 use crate::grpc::helpers::required;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
@@ -14,6 +15,7 @@ use crate::mail::MailClient;
 use crate::models;
 use crate::models::User;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 use super::blockjoy_ui::{
     ResetPasswordRequest, ResetPasswordResponse, ResponseMeta, UpdatePasswordRequest,
@@ -198,5 +200,29 @@ impl AuthenticationService for AuthenticationServiceImpl {
         };
         tx.commit().await?;
         resp
+    }
+
+    async fn switch_organization(
+        &self,
+        request: Request<SwitchOrgRequest>,
+    ) -> Result<Response<LoginUserResponse>, Status> {
+        let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let inner = request.into_inner();
+        let org_id = Uuid::parse_str(inner.org_id.as_str()).map_err(ApiError::from)?;
+        let mut conn = self.db.conn().await?;
+        let user = User::find_by_id(token.id().clone(), &mut conn).await?;
+        // TODO: org_id must now be part of UserAuthToken
+        let auth_token =
+            UserAuthToken::create_token_for::<User>(&user, TokenType::UserAuth, TokenRole::User)?;
+
+        let response = LoginUserResponse {
+            meta: Some(ResponseMeta::from_meta(inner.meta)),
+            token: Some(ApiToken {
+                value: auth_token.to_base64()?,
+            }),
+        };
+
+        Ok(response_with_refresh_token(refresh_token, response)?)
     }
 }
