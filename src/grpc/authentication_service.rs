@@ -14,7 +14,6 @@ use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::mail::MailClient;
 use crate::models;
 use crate::models::{Org, User};
-use std::collections::HashMap;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -52,6 +51,11 @@ impl AuthenticationService for AuthenticationServiceImpl {
         tracing::debug!("Renewing user refresh token");
         let refresh_token = UserRefreshToken::create(user.id).encode()?;
         User::refresh(user.id, refresh_token.clone(), &mut tx).await?;
+
+        // User personal org by default
+        let org = Org::find_personal_org(user.id, &mut tx).await?;
+        let org_user = Org::find_org_user(user.id, org.id, &mut tx).await?;
+
         tx.commit().await?;
 
         let auth_token = UserAuthToken::create_token_for::<User>(
@@ -60,6 +64,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
             TokenRole::User,
             None,
         )?;
+        let auth_token = auth_token.set_org_user(&org_user);
 
         let response = LoginUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
@@ -227,18 +232,9 @@ impl AuthenticationService for AuthenticationServiceImpl {
             &mut conn,
         )
         .await?;
-        // TODO: org_id must now be part of UserAuthToken
-        let mut token_data = HashMap::<String, String>::new();
-
-        token_data.insert("org_id".into(), inner.org_id);
-        token_data.insert("org_role".into(), org_user.role.to_string());
-
-        let auth_token = UserAuthToken::create_token_for(
-            &org_user,
-            TokenType::UserAuth,
-            TokenRole::User,
-            Some(token_data),
-        )?;
+        let auth_token =
+            UserAuthToken::create_token_for(&org_user, TokenType::UserAuth, TokenRole::User, None)?;
+        let auth_token = auth_token.set_org_user(&org_user);
 
         let response = LoginUserResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta)),
