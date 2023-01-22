@@ -161,9 +161,8 @@ impl Org {
             ON
                 orgs.id = orgs_users.org_id
             WHERE
-                orgs_users.user_id = $1 and is_personal = true
-            ORDER BY
-                lower(orgs.name)
+                orgs_users.user_id = $1 and is_personal and orgs_users.role = 'owner'
+            LIMIT 1
             "##,
         )
         .bind(user_id)
