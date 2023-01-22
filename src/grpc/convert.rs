@@ -141,22 +141,23 @@ pub mod from {
     use super::try_dt_to_ts;
     use crate::cookbook::cookbook_grpc::NetworkConfiguration;
     use crate::errors::ApiError;
+    use crate::grpc;
     use crate::grpc::blockjoy::HostInfo;
     use crate::grpc::blockjoy::Keyfile;
     use crate::grpc::blockjoy_ui::blockchain_network::NetworkType;
     use crate::grpc::blockjoy_ui::{
         self, node::NodeStatus as GrpcNodeStatus, node::StakingStatus as GrpcStakingStatus,
         node::SyncStatus as GrpcSyncStatus, Host as GrpcHost, HostProvision as GrpcHostProvision,
-        Node as GrpcNode, OrgUser, Organization, User as GrpcUiUser,
+        Node as GrpcNode, Organization, User as GrpcUiUser,
     };
     use crate::grpc::blockjoy_ui::{BlockchainNetwork, FilterCriteria};
     use crate::grpc::helpers::required;
+    use crate::models::HostSelectiveUpdate;
     use crate::models::{
         self, ConnectionStatus, ContainerStatus, HostProvision, HostRequest, NodeChainStatus,
         NodeCreateRequest, NodeInfo, NodeKeyFile, NodeStakingStatus, NodeSyncStatus, Org, User,
         UserSelectiveUpdate,
     };
-    use crate::models::{HostSelectiveUpdate, OrgRole};
     use crate::models::{Invitation, NodeFilter};
     use anyhow::anyhow;
     use serde_json::Value;
@@ -408,7 +409,7 @@ pub mod from {
         }
     }
 
-    impl From<models::OrgUser> for OrgUser {
+    impl From<models::OrgUser> for grpc::blockjoy_ui::OrgUser {
         fn from(value: models::OrgUser) -> Self {
             Self {
                 user_id: value.user_id.to_string(),
