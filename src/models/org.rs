@@ -308,7 +308,8 @@ impl Org {
         sqlx::query_as::<_, Org>(
             r#"
             UPDATE orgs SET deleted_at = NULL 
-            WHERE id = $1 AND is_personal = false"#,
+            WHERE id = $1 AND is_personal = false
+            returning *"#,
         )
         .bind(id)
         .fetch_one(tx)
