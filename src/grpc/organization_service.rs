@@ -125,7 +125,7 @@ impl OrganizationService for OrganizationServiceImpl {
         let token = try_get_token::<_, UserAuthToken>(&request)?;
         let user_id = *token.id();
         let inner = request.into_inner();
-        let org_id = inner.id.parse().map_err(ApiError::from)?;
+        let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
         let mut tx = self.db.begin().await?;
         let member = Org::find_org_user(user_id, org_id, &mut tx).await?;
 
@@ -136,6 +136,7 @@ impl OrganizationService for OrganizationServiceImpl {
                 user_id, org_id
             ))),
             OrgRole::Owner | OrgRole::Admin => {
+                tracing::debug!("Deleting org: {}", org_id);
                 Org::delete(org_id, &mut tx).await?;
                 tx.commit().await?;
 
