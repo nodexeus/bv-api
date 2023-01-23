@@ -1,9 +1,10 @@
-use crate::auth::FindableById;
+use crate::auth::{FindableById, Identifiable};
 use crate::errors::{ApiError, Result};
 use crate::models::User;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::fmt::{Display, Formatter};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -15,6 +16,21 @@ pub enum OrgRole {
     Member,
 }
 
+impl Display for OrgRole {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OrgRole::Admin => write!(f, "admin"),
+            OrgRole::Owner => write!(f, "owner"),
+            OrgRole::Member => write!(f, "member"),
+        }
+    }
+}
+
+impl Identifiable for OrgUser {
+    fn get_id(&self) -> Uuid {
+        self.user_id
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq)]
 pub struct Org {
     pub id: Uuid,
@@ -145,9 +161,8 @@ impl Org {
             ON
                 orgs.id = orgs_users.org_id
             WHERE
-                orgs_users.user_id = $1 and is_personal = true
-            ORDER BY
-                lower(orgs.name)
+                orgs_users.user_id = $1 and is_personal and orgs_users.role = 'owner'
+            LIMIT 1
             "##,
         )
         .bind(user_id)

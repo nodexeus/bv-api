@@ -145,8 +145,9 @@ mod tests {
         let db = _before_values.await;
         let (serve_future, mut client) = server_and_client_stub(db.pool.clone()).await;
         let host = db.test_host().await;
-        let token = UserAuthToken::create_token_for(&host, TokenType::HostAuth, TokenRole::Service)
-            .unwrap();
+        let token =
+            UserAuthToken::create_token_for(&host, TokenType::HostAuth, TokenRole::Service, None)
+                .unwrap();
 
         let request_future = async move {
             println!("creating request");
