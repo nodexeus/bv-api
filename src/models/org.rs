@@ -294,6 +294,7 @@ impl Org {
             r#"
             UPDATE orgs SET deleted_at = now() 
             WHERE id = $1 AND is_personal = false
+            returning *
             "#,
         )
         .bind(id)
