@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-
 mod dummy_token;
 
 mod helper_traits;
@@ -7,6 +6,7 @@ mod helper_traits;
 use api::auth::{self, JwtToken, TokenRole, TokenType};
 use api::models;
 use api::{grpc::blockjoy_ui, TestDb};
+pub use dummy_token::*;
 use futures_util::{Stream, StreamExt};
 use helper_traits::GrpcClient;
 use std::convert::TryFrom;
