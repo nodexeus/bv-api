@@ -47,7 +47,7 @@ pub struct Org {
 #[tonic::async_trait]
 impl FindableById for Org {
     async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> Result<Self> {
-        sqlx::query_as("SELECT * FROM orgs where id = $1 and deleted_at IS NULL")
+        sqlx::query_as("SELECT *, (SELECT count(*) from orgs_users where orgs_users.org_id = orgs.id) as member_count FROM orgs where id = $1 and deleted_at IS NULL")
             .bind(id)
             .fetch_one(db)
             .await
