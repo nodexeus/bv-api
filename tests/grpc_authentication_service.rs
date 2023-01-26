@@ -4,6 +4,7 @@ use api::auth::{self, JwtToken};
 use api::grpc::blockjoy_ui;
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
 use api::models;
+use std::collections::HashMap;
 use tonic::transport::Channel;
 
 type Service = AuthenticationServiceClient<Channel>;
@@ -53,11 +54,13 @@ async fn responds_error_with_invalid_credentials_for_login() {
 async fn responds_ok_with_valid_credentials_for_confirm() {
     let tester = setup::Tester::new().await;
     let user = tester.admin_user().await;
+    let mut token_data = HashMap::<String, String>::new();
+    token_data.insert("email".into(), "hugo@boss.com".into());
     let token = auth::RegistrationConfirmationToken::create_token_for(
         &user,
         auth::TokenType::RegistrationConfirmation,
         auth::TokenRole::User,
-        None,
+        Some(token_data),
     )
     .unwrap();
     let req = blockjoy_ui::ConfirmRegistrationRequest {
