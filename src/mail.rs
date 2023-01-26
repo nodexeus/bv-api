@@ -41,11 +41,15 @@ impl MailClient {
         // SAFETY: assume we can write toml and also protected by test
         let templates = toml::from_str(TEMPLATES)
             .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
+        let mut token_data = HashMap::<String, String>::new();
+
+        token_data.insert("email".to_string(), user.email.clone());
+
         let confirmation_token = RegistrationConfirmationToken::create_token_for(
             user,
             TokenType::RegistrationConfirmation,
             TokenRole::User,
-            None,
+            Some(token_data),
         )?
         .encode()?;
         let base_url =

@@ -43,12 +43,8 @@ impl JwtToken for UserAuthToken {
 
 impl UserAuthToken {
     pub fn set_org_user(mut self, user: &crate::models::OrgUser) -> Self {
-        let mut token_data = HashMap::<String, String>::new();
-
-        token_data.insert("org_id".into(), user.org_id.to_string());
-        token_data.insert("org_role".into(), user.role.to_string());
-
-        self.data = token_data;
+        self.data.insert("org_id".into(), user.org_id.to_string());
+        self.data.insert("org_role".into(), user.role.to_string());
 
         self
     }

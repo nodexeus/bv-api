@@ -14,6 +14,7 @@ use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::mail::MailClient;
 use crate::models;
 use crate::models::{Org, User};
+use std::collections::HashMap;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -55,6 +56,9 @@ impl AuthenticationService for AuthenticationServiceImpl {
         // User personal org by default
         let org = Org::find_personal_org(user.id, &mut tx).await?;
         let org_user = Org::find_org_user(user.id, org.id, &mut tx).await?;
+        let mut token_data = HashMap::<String, String>::new();
+
+        token_data.insert("email".to_string(), user.email.clone());
 
         tx.commit().await?;
 
@@ -62,7 +66,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
             &user,
             TokenType::UserAuth,
             TokenRole::User,
-            None,
+            Some(token_data),
         )?;
         let auth_token = auth_token.set_org_user(&org_user);
 
