@@ -52,7 +52,7 @@ pub async fn get_hw_requirements(
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", cb_token).parse().map_err(|e| {
+        format!("Bearer {cb_token}").parse().map_err(|e| {
             ApiError::UnexpectedError(anyhow!("Can't set cookbook auth header: {e}"))
         })?,
     );
@@ -93,7 +93,7 @@ pub async fn get_networks(
 
     request.metadata_mut().insert(
         "authorization",
-        format!("Bearer {}", cb_token).parse().map_err(|e| {
+        format!("Bearer {cb_token}").parse().map_err(|e| {
             ApiError::UnexpectedError(anyhow!("Can't set cookbook auth header: {e}"))
         })?,
     );

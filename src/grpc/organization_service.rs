@@ -132,8 +132,7 @@ impl OrganizationService for OrganizationServiceImpl {
         // Only owner or admins may delete orgs
         match member.role {
             OrgRole::Member => Err(Status::permission_denied(format!(
-                "User {} has no sufficient privileges to delete org {}",
-                user_id, org_id
+                "User {user_id} has no sufficient privileges to delete org {org_id}"
             ))),
             OrgRole::Owner | OrgRole::Admin => {
                 tracing::debug!("Deleting org: {}", org_id);
@@ -161,8 +160,7 @@ impl OrganizationService for OrganizationServiceImpl {
 
         match member.role {
             OrgRole::Member => Err(Status::permission_denied(format!(
-                "User {} has no sufficient privileges to restore org {}",
-                user_id, org_id
+                "User {user_id} has no sufficient privileges to restore org {org_id}"
             ))),
             // Only owner or admins may restore orgs
             OrgRole::Owner | OrgRole::Admin => {
@@ -215,8 +213,7 @@ impl OrganizationService for OrganizationServiceImpl {
 
         match member.role {
             OrgRole::Member => Err(Status::permission_denied(format!(
-                "User {} has no sufficient privileges to remove other user {} from org {}",
-                caller_id, user_id, org_id
+                "User {caller_id} has no sufficient privileges to remove other user {user_id} from org {org_id}"
             ))),
             OrgRole::Owner | OrgRole::Admin => {
                 Org::remove_org_user(user_id, org_id, &mut tx).await?;

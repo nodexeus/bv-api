@@ -41,16 +41,20 @@ impl MailClient {
         // SAFETY: assume we can write toml and also protected by test
         let templates = toml::from_str(TEMPLATES)
             .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
+        let mut token_data = HashMap::<String, String>::new();
+
+        token_data.insert("email".to_string(), user.email.clone());
+
         let confirmation_token = RegistrationConfirmationToken::create_token_for(
             user,
             TokenType::RegistrationConfirmation,
             TokenRole::User,
-            None,
+            Some(token_data),
         )?
         .encode()?;
         let base_url =
             dotenv::var("UI_BASE_URL").map_err(|e| anyhow!("UI_BASE_URL can't be read: {e}"))?;
-        let link = format!("{}/verified?token={}", base_url, confirmation_token);
+        let link = format!("{base_url}/verified?token={confirmation_token}");
         let mut context = HashMap::new();
         context.insert("link".to_owned(), link);
 
@@ -96,8 +100,8 @@ impl MailClient {
         let confirmation_token = InvitationToken::create_for_invitation(invitation)?.encode()?;
         let base_url =
             dotenv::var("UI_BASE_URL").map_err(|e| anyhow!("UI_BASE_URL can't be read: {e}"))?;
-        let accept_link = format!("{}/accept-invite?token={}", base_url, confirmation_token);
-        let decline_link = format!("{}/decline-invite?token={}", base_url, confirmation_token);
+        let accept_link = format!("{base_url}/accept-invite?token={confirmation_token}");
+        let decline_link = format!("{base_url}/decline-invite?token={confirmation_token}");
         let inviter = format!(
             "{} {} ({})",
             inviter.first_name, inviter.last_name, inviter.email

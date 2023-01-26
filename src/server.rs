@@ -19,7 +19,7 @@ pub async fn start() -> anyhow::Result<()> {
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let bind_ip = std::env::var("BIND_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let addr = format!("{}:{}", bind_ip, port);
+    let addr = format!("{bind_ip}:{port}");
 
     let db = PgPoolOptions::new()
         .max_connections(db_max_conn)
