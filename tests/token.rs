@@ -21,7 +21,7 @@ fn should_encode_token() -> anyhow::Result<()> {
             &EncodingKey::from_secret(test_secret.as_ref()),
         ) {
             Ok(token_str) => assert_eq!(token_str, token.encode().unwrap()),
-            Err(e) => panic!("encoding failed: {}", e),
+            Err(e) => panic!("encoding failed: {e}"),
         }
 
         Ok(())
@@ -52,7 +52,7 @@ fn should_decode_valid_token() -> anyhow::Result<()> {
             &validation,
         ) {
             Ok(decoded_data) => assert_eq!(*decoded_data.claims.id(), id),
-            Err(e) => panic!("decoding failed: {}", e),
+            Err(e) => panic!("decoding failed: {e}"),
         }
 
         Ok(())
@@ -76,7 +76,7 @@ fn should_panic_on_decode_expired_token() {
             &DecodingKey::from_secret(test_secret.as_bytes()),
             &validation,
         ) {
-            Err(e) => assert_eq!(format!("{}", e), "ExpiredSignature"),
+            Err(e) => assert_eq!(format!("{e}"), "ExpiredSignature"),
             // assert_eq!(e.into_kind().type_name(), jsonwebtoken::errors::ErrorKind::ExpiredSignature),
             _ => panic!("it worked, but it shouldn't"),
         };
@@ -122,7 +122,7 @@ fn should_get_valid_token() -> anyhow::Result<()> {
         let token = UserAuthToken::try_new(claim)?;
         let encoded = base64::encode(token.encode().unwrap());
         let request = Request::builder()
-            .header(AUTHORIZATION, format!("Bearer {}", encoded))
+            .header(AUTHORIZATION, format!("Bearer {encoded}"))
             .uri("/")
             .method("GET")
             .body(())?;

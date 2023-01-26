@@ -26,7 +26,7 @@ async fn test_possible_routes() -> anyhow::Result<()> {
         let method = item.1;
         let expected_response_code = item.2;
 
-        println!("testing route #{} {} {}", cnt, method, route);
+        println!("testing route #{cnt} {method} {route}");
 
         let req = Request::builder()
             .method(method)
