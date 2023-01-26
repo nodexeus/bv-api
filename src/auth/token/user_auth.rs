@@ -32,7 +32,7 @@ impl JwtToken for UserAuthToken {
             exp: claim.exp,
             token_type: TokenType::UserAuth,
             role: claim.role,
-            data: HashMap::<String, String>::default(),
+            data: claim.data.unwrap_or_default(),
         })
     }
 
