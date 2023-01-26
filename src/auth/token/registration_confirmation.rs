@@ -1,5 +1,8 @@
-use crate::auth::{Blacklisted, JwtToken, TokenClaim, TokenResult, TokenRole, TokenType};
+use crate::auth::{
+    Blacklisted, JwtToken, TokenClaim, TokenError, TokenResult, TokenRole, TokenType,
+};
 use crate::models::{self, BlacklistToken};
+use anyhow::anyhow;
 use derive_getters::Getters;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -11,6 +14,7 @@ pub struct RegistrationConfirmationToken {
     exp: i64,
     token_type: TokenType,
     role: TokenRole,
+    email: String,
 }
 
 impl JwtToken for RegistrationConfirmationToken {
@@ -28,6 +32,12 @@ impl JwtToken for RegistrationConfirmationToken {
             exp: claim.exp,
             token_type: TokenType::RegistrationConfirmation,
             role: claim.role,
+            email: claim
+                .data
+                .ok_or_else(|| TokenError::Invitation(anyhow!("Invalid claim")))?
+                .get("email")
+                .ok_or_else(|| TokenError::Invitation(anyhow!("Invitee email can't be empty")))?
+                .to_string(),
         })
     }
 
