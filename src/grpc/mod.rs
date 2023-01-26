@@ -188,10 +188,8 @@ pub fn response_with_refresh_token<ResponseBody>(
         // let exp = "Fri, 09 Jan 2026 03:15:14 GMT";
         let exp = exp.format("%a, %d %b %Y %H:%M:%S GMT").to_string();
 
-        let raw_cookie = format!(
-            "refresh={}; path=/; expires={}; secure; HttpOnly; SameSite=Lax",
-            token, exp
-        );
+        let raw_cookie =
+            format!("refresh={token}; path=/; expires={exp}; secure; HttpOnly; SameSite=Lax");
         let cookie = raw_cookie.parse().map_err(|e: InvalidMetadataValue| {
             tracing::error!("error creating cookie: {e:?}");
             tonic::Status::internal(e.to_string())

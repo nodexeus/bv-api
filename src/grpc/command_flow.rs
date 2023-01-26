@@ -169,11 +169,11 @@ mod tests {
 
                     while let Some(received) = response_stream.next().await {
                         let received = received.unwrap();
-                        println!("\treceived message: `{:?}`", received);
+                        println!("\treceived message: `{received:?}`");
                     }
                 }
                 Err(s) => {
-                    panic!("didn't work: {:?}", s)
+                    panic!("didn't work: {s:?}")
                 }
             }
         };
@@ -234,7 +234,7 @@ mod tests {
 
                     while let Some(received) = response_stream.next().await {
                         let received = received.unwrap();
-                        println!("\treceived message: `{:?}`", received);
+                        println!("\treceived message: `{received:?}`");
                     }
                 }
                 Err(s) => {

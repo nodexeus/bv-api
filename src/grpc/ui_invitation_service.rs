@@ -129,8 +129,7 @@ impl InvitationService for InvitationServiceImpl {
 
         match org_user.role {
             OrgRole::Member => Err(Status::permission_denied(format!(
-                "User {} is not allowed to list pending invitations on org {}",
-                user_id, org_id
+                "User {user_id} is not allowed to list pending invitations on org {org_id}"
             ))),
             OrgRole::Admin | OrgRole::Owner => {
                 let invitations = Invitation::pending(org_id, &mut conn)

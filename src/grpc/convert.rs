@@ -343,7 +343,7 @@ pub mod from {
 
     impl From<ApiError> for Status {
         fn from(e: ApiError) -> Self {
-            let msg = format!("{:?}", e);
+            let msg = format!("{e:?}");
 
             match e {
                 ApiError::ValidationError(_) => Status::invalid_argument(msg),
@@ -359,7 +359,7 @@ pub mod from {
 
     impl From<Status> for ApiError {
         fn from(status: Status) -> Self {
-            let e = anyhow!(format!("{:?}", status));
+            let e = anyhow!(format!("{status:?}"));
 
             match status.code() {
                 Code::Unauthenticated => ApiError::InvalidAuthentication(e),
