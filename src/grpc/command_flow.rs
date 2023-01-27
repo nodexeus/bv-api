@@ -51,7 +51,8 @@ impl CommandFlow for CommandFlowServerImpl {
             listener::channels(host_id, Notifier::new(self.db.clone()), self.db.clone()).await?;
         tokio::spawn(bv_listener.recv(update_stream));
         tokio::spawn(db_listener.recv());
-        Command::notify_pending_by_host(host_id, &mut conn).await?;
+        let notifier = Notifier::new(self.db.clone());
+        Command::notify_pending_by_host(host_id, &notifier, &mut conn).await?;
         let commands_stream = ReceiverStream::new(rx);
         Ok(Response::new(Box::pin(commands_stream)))
     }
