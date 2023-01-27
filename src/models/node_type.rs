@@ -2,7 +2,7 @@ use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgHasArrayType;
 
-use crate::{errors::ApiError, grpc::helpers::required};
+use crate::errors::ApiError;
 
 pub enum NodeTypeKey {
     Unknown = 0,
@@ -65,7 +65,7 @@ impl From<NodeTypeKey> for i32 {
 pub struct NodeTypeProperty {
     name: String,
     ui_type: String,
-    default: Option<String>,
+    default: String,
     disabled: bool,
     required: bool,
 }
@@ -92,18 +92,6 @@ impl TryFrom<String> for NodeType {
 }
 
 impl NodeTypeProperty {
-    pub fn to_json(&self) -> Result<String, ApiError> {
-        let json_str = format!(
-            "{{ \"name\": \"{}\", \"ui_type\": \"{}\", \"default\": \"{}\", \"disabled:\": \"{}\", \"required\": \"{}\" }}",
-            self.name,
-            self.ui_type,
-            self.default.as_ref().ok_or_else(required("default"))?,
-            self.disabled,
-            self.required,
-        );
-        Ok(json_str)
-    }
-
     pub fn get_name(&self) -> &str {
         &self.name
     }
@@ -112,8 +100,8 @@ impl NodeTypeProperty {
         &self.name
     }
 
-    pub fn get_default(&self) -> Option<&str> {
-        self.default.as_deref()
+    pub fn get_default(&self) -> &str {
+        &self.default
     }
 
     pub fn get_property_type(&self) -> &str {
@@ -123,17 +111,16 @@ impl NodeTypeProperty {
 
 impl NodeType {
     pub fn to_json(&self) -> Result<String, ApiError> {
-        let empty = Vec::new();
-        let props: Result<String, ApiError> = self
-            .properties
-            .as_ref()
-            .unwrap_or(&empty)
-            .iter()
-            .map(|p| p.to_json())
-            .collect();
-        // TODO: Replace this hack
-        let props = props?.replace("}{", "},{");
-        let json_str = format!("{{ \"id\": {}, \"properties\": [{}] }}", self.id, props);
+        #[derive(serde::Serialize)]
+        struct NodeTypeWithoutVersion<'a> {
+            id: i32,
+            properties: &'a Option<Vec<NodeTypeProperty>>,
+        }
+        let without_version = NodeTypeWithoutVersion {
+            id: self.id,
+            properties: &self.properties,
+        };
+        let json_str = serde_json::to_string(&without_version)?;
         Ok(json_str)
     }
 
