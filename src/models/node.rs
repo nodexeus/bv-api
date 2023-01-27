@@ -32,6 +32,30 @@ pub enum ContainerStatus {
     Snapshotting,
 }
 
+impl TryFrom<i32> for ContainerStatus {
+    type Error = ApiError;
+
+    fn try_from(n: i32) -> Result<Self> {
+        match n {
+            0 => Ok(Self::Unknown),
+            1 => Ok(Self::Creating),
+            2 => Ok(Self::Running),
+            3 => Ok(Self::Starting),
+            4 => Ok(Self::Stopping),
+            5 => Ok(Self::Stopped),
+            6 => Ok(Self::Upgrading),
+            7 => Ok(Self::Upgraded),
+            8 => Ok(Self::Deleting),
+            9 => Ok(Self::Deleted),
+            10 => Ok(Self::Installing),
+            11 => Ok(Self::Snapshotting),
+            _ => Err(ApiError::UnexpectedError(anyhow!(
+                "Cannot convert {n} to ContainerStatus"
+            ))),
+        }
+    }
+}
+
 /// NodeSyncStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -519,22 +543,35 @@ pub struct NodeUpdateRequest {
     pub staking_status: Option<NodeStakingStatus>,
     pub block_height: Option<i64>,
     pub self_update: bool,
+    pub container_status: Option<ContainerStatus>,
 }
 
 impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
     type Error = ApiError;
 
     fn try_from(info: GrpcNodeInfo) -> Result<Self> {
-        let id = info.id.as_str().parse()?;
-        let req = Self {
+        let GrpcNodeInfo {
             id,
-            name: info.name,
-            ip_addr: info.ip,
-            chain_status: info.app_status.map(|n| n.try_into()).transpose()?,
-            sync_status: info.sync_status.map(|n| n.try_into()).transpose()?,
-            staking_status: info.staking_status.map(|n| n.try_into()).transpose()?,
-            block_height: info.block_height,
-            self_update: info.self_update.unwrap_or(false),
+            name,
+            ip,
+            app_status,
+            sync_status,
+            staking_status,
+            block_height,
+            self_update,
+            container_status,
+            onchain_name: _, // We explicitly do not use this field,
+        } = info;
+        let req = Self {
+            id: id.as_str().parse()?,
+            name,
+            ip_addr: ip,
+            chain_status: app_status.map(|n| n.try_into()).transpose()?,
+            sync_status: sync_status.map(|n| n.try_into()).transpose()?,
+            staking_status: staking_status.map(|n| n.try_into()).transpose()?,
+            block_height,
+            self_update: self_update.unwrap_or(false),
+            container_status: container_status.map(|n| n.try_into()).transpose()?,
         };
         Ok(req)
     }
