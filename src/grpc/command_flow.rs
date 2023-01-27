@@ -4,6 +4,7 @@ use crate::errors::Result;
 use crate::grpc::blockjoy::{command_flow_server::CommandFlow, Command as GrpcCommand, InfoUpdate};
 use crate::grpc::helpers::try_get_token;
 use crate::models;
+use crate::models::Command;
 use std::pin::Pin;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::codegen::futures_core::Stream;
@@ -38,6 +39,7 @@ impl CommandFlow for CommandFlowServerImpl {
     ) -> Result<Response<Self::CommandsStream>, Status> {
         // Token must be added by middleware beforehand
         let token = try_get_token::<_, HostAuthToken>(&request)?;
+        let mut conn = self.db.conn().await?;
         let mut tx = self.db.begin().await?;
         // Get the host that the user wants to listen to from the current login token.
         let host_id = token.try_get_host(&mut tx).await?.id;
@@ -49,6 +51,8 @@ impl CommandFlow for CommandFlowServerImpl {
             listener::channels(host_id, Notifier::new(self.db.clone()), self.db.clone()).await?;
         tokio::spawn(bv_listener.recv(update_stream));
         tokio::spawn(db_listener.recv());
+        let notifier = Notifier::new(self.db.clone());
+        Command::notify_pending_by_host(host_id, &notifier, &mut conn).await?;
         let commands_stream = ReceiverStream::new(rx);
         Ok(Response::new(Box::pin(commands_stream)))
     }

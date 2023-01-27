@@ -1,6 +1,7 @@
 use crate::auth::FindableById;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::CommandInfo;
+use crate::grpc::notification::Notifier;
 use crate::models::UpdateInfo;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -57,10 +58,25 @@ impl Command {
         host_id: Uuid,
         db: &mut sqlx::PgConnection,
     ) -> Result<Vec<Command>> {
-        sqlx::query_as("SELECT * FROM commands where host_id = $1 AND completed_at IS NULL ORDER BY created_at DESC")
+        sqlx::query_as("SELECT * FROM commands where host_id = $1 AND exit_status IS NULL ORDER BY created_at ASC")
             .bind(host_id)
             .fetch_all(db)
             .await.map_err(ApiError::from)
+    }
+
+    pub async fn notify_pending_by_host(
+        host_id: Uuid,
+        notifier: &Notifier,
+        db: &mut sqlx::PgConnection,
+    ) -> Result<Vec<Command>> {
+        let commands = Self::find_pending_by_host(host_id, db).await?;
+
+        // Send one notification per pending command
+        for command in &commands {
+            notifier.commands_sender(host_id).send(command.id).await?;
+        }
+
+        Ok(commands)
     }
 
     pub async fn create(
