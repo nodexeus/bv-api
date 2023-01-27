@@ -1,7 +1,7 @@
 use crate::auth::FindableById;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::CommandInfo;
-use crate::grpc::notification::{Notifier, Notify};
+use crate::grpc::notification::Notifier;
 use crate::models::UpdateInfo;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
