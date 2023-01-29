@@ -67,11 +67,9 @@ impl UpdateService for UpdateServiceImpl {
         let mut db_listener = PgListener::connect_with(&self.db.inner()).await.unwrap();
         let mut conn = self.db.conn().await?;
         let token = try_get_token::<_, UserAuthToken>(&request)?;
-        let inner = request.into_inner();
         let org_id = Uuid::parse_str(token.data().get("org_id").ok_or_else(required("org_id"))?)
             .map_err(ApiError::from)?;
         let user_id = token.id().to_string();
-        // let nodes = Node::find_all_by_org(org_id, 0, 100, &mut conn).await?;
         let nodes: Vec<String> = Node::find_all_by_org(org_id, 0, 100, &mut conn)
             .await?
             .into_iter()
@@ -85,9 +83,11 @@ impl UpdateService for UpdateServiceImpl {
             .await
             .map_err(ApiError::from)?;
 
+        let inner = request.into_inner();
         // spawn and channel are required if you want handle "disconnect" functionality
         // the `out_stream` will not be polled after client disconnect
         let (tx, rx) = mpsc::channel(128);
+
         tokio::spawn(async move {
             tracing::info!("client {} connected", user_id.clone());
             let res_meta = Some(ResponseMeta::from_meta(inner.meta));
