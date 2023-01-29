@@ -57,7 +57,7 @@ impl Notifier {
 pub trait Notify: FindableById {
     fn channel(id: uuid::Uuid) -> String;
 
-    fn broadcast_channel(id: uuid::Uuid) -> String {
+    fn broadcast_channel(_id: uuid::Uuid) -> String {
         todo!()
     }
 }

@@ -26,7 +26,11 @@ impl UpdateServiceImpl {
         Self { db }
     }
 
-    pub async fn host_payload(id: Uuid, user_id: Uuid, db: models::DbPool) -> Option<Notification> {
+    pub async fn host_payload(
+        id: Uuid,
+        _user_id: Uuid,
+        db: models::DbPool,
+    ) -> Option<Notification> {
         let mut conn = db.conn().await.ok()?;
         let host = Host::find_by_id(id, &mut conn)
             .await
@@ -36,7 +40,11 @@ impl UpdateServiceImpl {
         Some(Notification::Host(host))
     }
 
-    pub async fn node_payload(id: Uuid, user_id: Uuid, db: models::DbPool) -> Option<Notification> {
+    pub async fn node_payload(
+        id: Uuid,
+        _user_id: Uuid,
+        db: models::DbPool,
+    ) -> Option<Notification> {
         let mut conn = db.conn().await.ok()?;
         let node = Node::find_by_id(id, &mut conn)
             .await
@@ -63,13 +71,16 @@ impl UpdateService for UpdateServiceImpl {
         let org_id = Uuid::parse_str(token.data().get("org_id").ok_or_else(required("org_id"))?)
             .map_err(ApiError::from)?;
         let user_id = token.id().to_string();
-        let nodes = Node::find_all_by_org(org_id, 0, 100, &mut conn)
+        // let nodes = Node::find_all_by_org(org_id, 0, 100, &mut conn).await?;
+        let nodes: Vec<String> = Node::find_all_by_org(org_id, 0, 100, &mut conn)
             .await?
-            .iter()
-            .map(|node| Node::broadcast_channel(node.id).as_str())
+            .into_iter()
+            .map(|n| Node::broadcast_channel(n.id))
             .collect();
+        let nodes: Vec<&str> = nodes.iter().map(|s| &**s).collect();
 
         db_listener
+            // Couldn't build a IntoIterator<Item = &str> to use ::listen_all
             .listen_all(nodes)
             .await
             .map_err(ApiError::from)?;
@@ -92,10 +103,8 @@ impl UpdateService for UpdateServiceImpl {
                                 notification: Some(Notification::Node(node)),
                             }),
                         };
-                        match tx.send(res).await {
-                            Ok(_) => {
-                                // item (server response) was queued to be send to client
-                            }
+                        match tx.send(Result::<_, Status>::Ok(res)).await {
+                            Ok(_) => {}
                             Err(_item) => {
                                 // output_stream was build from rx and both are dropped
                                 break;
