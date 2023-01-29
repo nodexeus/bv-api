@@ -78,7 +78,6 @@ impl UpdateService for UpdateServiceImpl {
         let nodes: Vec<&str> = nodes.iter().map(|s| &**s).collect();
 
         db_listener
-            // Couldn't build a IntoIterator<Item = &str> to use ::listen_all
             .listen_all(nodes)
             .await
             .map_err(ApiError::from)?;
@@ -90,6 +89,7 @@ impl UpdateService for UpdateServiceImpl {
 
         tokio::spawn(async move {
             tracing::info!("client {} connected", user_id.clone());
+
             let res_meta = Some(ResponseMeta::from_meta(inner.meta));
 
             while let Ok(notification) = db_listener.recv().await {
@@ -114,7 +114,13 @@ impl UpdateService for UpdateServiceImpl {
                     Err(e) => tracing::error!("Node not found: {e}"),
                 }
             }
+
             tracing::info!("client {user_id} disconnected");
+
+            match db_listener.unlisten_all().await.map_err(ApiError::from) {
+                Ok(_) => tracing::debug!("Stopped DB listeners for Org {org_id}"),
+                Err(e) => tracing::error!("Couldn't remove listeners for org {org_id}: {e}"),
+            }
         });
 
         let output_stream = ReceiverStream::new(rx);
