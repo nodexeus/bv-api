@@ -64,7 +64,7 @@ impl UpdateService for UpdateServiceImpl {
         &self,
         request: Request<GetUpdatesRequest>,
     ) -> Result<Response<Self::UpdatesStream>, Status> {
-        let mut db_listener = PgListener::connect_with(&self.db.inner()).await.unwrap();
+        let mut db_listener = PgListener::connect_with(self.db.inner()).await.unwrap();
         let mut conn = self.db.conn().await?;
         let token = try_get_token::<_, UserAuthToken>(&request)?;
         let org_id = Uuid::parse_str(token.data().get("org_id").ok_or_else(required("org_id"))?)
