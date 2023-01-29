@@ -1,15 +1,18 @@
-use crate::auth::FindableById;
+use crate::auth::{FindableById, UserAuthToken};
+use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::update_notification::Notification;
 use crate::grpc::blockjoy_ui::update_service_server::UpdateService;
-use crate::grpc::blockjoy_ui::{self, GetUpdatesRequest, GetUpdatesResponse};
-use crate::grpc::notification::Notifier;
+use crate::grpc::blockjoy_ui::{
+    self, GetUpdatesRequest, GetUpdatesResponse, ResponseMeta, UpdateNotification,
+};
+use crate::grpc::helpers::{required, try_get_token};
+use crate::grpc::notification::Notify;
 use crate::models;
 use crate::models::{Host, Node};
 use sqlx::postgres::PgListener;
 use std::pin::Pin;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use tokio_stream::StreamExt;
 use tonic::codegen::futures_core::Stream;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -53,16 +56,38 @@ impl UpdateService for UpdateServiceImpl {
         &self,
         request: Request<GetUpdatesRequest>,
     ) -> Result<Response<Self::UpdatesStream>, Status> {
-        let mut db_listener = PgListener::connect_with(&self.db.clone()).await.unwrap();
+        let mut db_listener = PgListener::connect_with(&self.db.inner()).await.unwrap();
+        let mut conn = self.db.conn().await?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let inner = request.into_inner();
+        let org_id = Uuid::parse_str(token.data().get("org_id").ok_or_else(required("org_id"))?)
+            .map_err(ApiError::from)?;
+        let nodes = Node::find_all_by_org(org_id, 0, 100, &mut conn)
+            .await?
+            .iter()
+            .map(|node| Node::broadcast_channel(node.id).as_str())
+            .collect();
 
-        db_listener.listen("").await?;
+        db_listener
+            .listen_all(nodes)
+            .await
+            .map_err(ApiError::from)?;
 
         // spawn and channel are required if you want handle "disconnect" functionality
         // the `out_stream` will not be polled after client disconnect
         let (tx, rx) = mpsc::channel(128);
         tokio::spawn(async move {
             while let Ok(notification) = db_listener.recv().await {
-                match tx.send(Result::<_, Status>::Ok(notification)).await {
+                let node_id: Uuid = notification.payload().parse().unwrap_or_default();
+                let node = Node::find_by_id(node_id, &mut conn).await?;
+
+                let res = GetUpdatesResponse {
+                    meta: Some(ResponseMeta::from_meta(inner.meta)),
+                    update: Some(UpdateNotification {
+                        notification: Some(node.into()),
+                    }),
+                };
+                match tx.send(Response::new(res)).await {
                     Ok(_) => {
                         // item (server response) was queued to be send to client
                     }
@@ -72,7 +97,7 @@ impl UpdateService for UpdateServiceImpl {
                     }
                 }
             }
-            println!("\tclient disconnected");
+            tracing::info!("\tclient disconnected");
         });
 
         let output_stream = ReceiverStream::new(rx);

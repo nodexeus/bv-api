@@ -56,6 +56,10 @@ impl Notifier {
 
 pub trait Notify: FindableById {
     fn channel(id: uuid::Uuid) -> String;
+
+    fn broadcast_channel(id: uuid::Uuid) -> String {
+        todo!()
+    }
 }
 
 pub struct Sender<T: Notify> {
@@ -121,6 +125,10 @@ impl Notify for models::Command {
 impl Notify for models::Node {
     fn channel(id: uuid::Uuid) -> String {
         format!("nodes_for_host_{id}")
+    }
+
+    fn broadcast_channel(id: Uuid) -> String {
+        format!("node_broadcast_{id}")
     }
 }
 
