@@ -62,6 +62,7 @@ impl UpdateService for UpdateServiceImpl {
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(token.data().get("org_id").ok_or_else(required("org_id"))?)
             .map_err(ApiError::from)?;
+        let user_id = token.id().to_string();
         let nodes = Node::find_all_by_org(org_id, 0, 100, &mut conn)
             .await?
             .iter()
@@ -77,27 +78,34 @@ impl UpdateService for UpdateServiceImpl {
         // the `out_stream` will not be polled after client disconnect
         let (tx, rx) = mpsc::channel(128);
         tokio::spawn(async move {
+            tracing::info!("client {} connected", user_id.clone());
+            let res_meta = Some(ResponseMeta::from_meta(inner.meta));
+
             while let Ok(notification) = db_listener.recv().await {
                 let node_id: Uuid = notification.payload().parse().unwrap_or_default();
-                let node = Node::find_by_id(node_id, &mut conn).await?;
-
-                let res = GetUpdatesResponse {
-                    meta: Some(ResponseMeta::from_meta(inner.meta)),
-                    update: Some(UpdateNotification {
-                        notification: Some(node.into()),
-                    }),
-                };
-                match tx.send(Response::new(res)).await {
-                    Ok(_) => {
-                        // item (server response) was queued to be send to client
+                match Node::find_by_id(node_id, &mut conn).await {
+                    Ok(node) => {
+                        let node: blockjoy_ui::Node = node.try_into().unwrap();
+                        let res = GetUpdatesResponse {
+                            meta: res_meta.clone(),
+                            update: Some(UpdateNotification {
+                                notification: Some(Notification::Node(node)),
+                            }),
+                        };
+                        match tx.send(res).await {
+                            Ok(_) => {
+                                // item (server response) was queued to be send to client
+                            }
+                            Err(_item) => {
+                                // output_stream was build from rx and both are dropped
+                                break;
+                            }
+                        }
                     }
-                    Err(_item) => {
-                        // output_stream was build from rx and both are dropped
-                        break;
-                    }
+                    Err(e) => tracing::error!("Node not found: {e}"),
                 }
             }
-            tracing::info!("\tclient disconnected");
+            tracing::info!("client {user_id} disconnected");
         });
 
         let output_stream = ReceiverStream::new(rx);
