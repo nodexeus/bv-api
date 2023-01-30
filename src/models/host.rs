@@ -308,7 +308,7 @@ impl Host {
     ) -> Result<Uuid> {
         let host = sqlx::query(
             r#"
-            SELECT hosts.id,
+            SELECT hosts.id as h_id,
                    (hosts.mem_size - (SELECT SUM(mem_size_mb) from nodes where host_id = hosts.id)) as mem_size,
                    (hosts.disk_size - (SELECT SUM(disk_size_gb) from nodes where host_id = hosts.id)) as disk_size,
                    (select count(*) from ip_addresses where ip_addresses.host_id = hosts.id and not ip_addresses.is_assigned) as ip_addrs
@@ -322,6 +322,7 @@ impl Host {
         let host_id = host.get::<Uuid, _>("h_id");
         let disk_size: i64 = host.try_get("disk_size").unwrap_or_default();
         let mem_size: i64 = host.try_get("mem_size").unwrap_or_default();
+        let ip_addrs: i64 = host.try_get("ip_addrs").unwrap_or_default();
 
         // Trace warnings, if the selected host doesn't seem to have enough resources
         if *requirements.disk_size_gb() > disk_size / 1024i64.pow(3) {
@@ -333,6 +334,12 @@ impl Host {
         if *requirements.mem_size_mb() > mem_size / 1024i64.pow(2) {
             tracing::warn!(
                 "Host {} doesn't seem to have enough memory available",
+                host_id
+            );
+        }
+        if ip_addrs < 1 {
+            tracing::warn!(
+                "Host {} doesn't seem to have enough IP addresses available",
                 host_id
             );
         }
