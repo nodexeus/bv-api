@@ -167,7 +167,7 @@ impl NodeService for NodeServiceImpl {
         let user_id = token.id().to_owned();
         let user = User::find_by_id(user_id, &mut conn).await?;
 
-        if user.staking_quota == 0 {
+        if user.staking_quota <= 0 {
             return Err(Status::from(ApiError::NodeQuota));
         }
 
