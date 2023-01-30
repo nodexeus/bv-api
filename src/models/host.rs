@@ -311,7 +311,7 @@ impl Host {
             SELECT hosts.id as h_id, (hosts.mem_size - SUM(nodes.mem_size_mb)) as mem_size, (hosts.disk_size - SUM(nodes.disk_size_gb)) as disk_size FROM hosts
             LEFT JOIN nodes on hosts.id = nodes.host_id
             GROUP BY hosts.id
-            ORDER BY disk_size desc, mem_size desc
+            ORDER BY disk_size asc, mem_size asc
             LIMIT 1
         "#,
         )
