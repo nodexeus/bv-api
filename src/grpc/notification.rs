@@ -25,6 +25,10 @@ impl Notifier {
         Sender::new(host_id, self.db.clone())
     }
 
+    pub fn nodes_broadcast(&self, node_id: Uuid) -> Sender<models::Node> {
+        Sender::new(node_id, self.db.clone())
+    }
+
     pub async fn nodes_receiver(&self, org_id: Uuid) -> Result<Receiver<models::Node>> {
         Receiver::new(org_id, self.db.clone()).await
     }
@@ -87,6 +91,17 @@ impl<T: Notify> Sender<T> {
             .await?;
         Ok(())
     }
+
+    pub async fn broadcast(&mut self, resource_id: uuid::Uuid) -> Result<()> {
+        let channel = T::broadcast_channel(self.channel_id);
+        let mut conn = self.db.conn().await?;
+        sqlx::query("SELECT pg_notify($1, $2::text)")
+            .bind(&channel)
+            .bind(resource_id)
+            .execute(&mut conn)
+            .await?;
+        Ok(())
+    }
 }
 
 pub struct Receiver<T: Notify> {
@@ -127,8 +142,8 @@ impl Notify for models::Node {
         format!("nodes_for_host_{id}")
     }
 
-    fn broadcast_channel(id: Uuid) -> String {
-        format!("node_broadcast_{id}")
+    fn broadcast_channel(org_id: Uuid) -> String {
+        format!("node_broadcast_{org_id}")
     }
 }
 

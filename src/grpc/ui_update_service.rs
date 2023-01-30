@@ -73,7 +73,7 @@ impl UpdateService for UpdateServiceImpl {
         let nodes: Vec<String> = Node::find_all_by_org(org_id, 0, 100, &mut conn)
             .await?
             .into_iter()
-            .map(|n| Node::broadcast_channel(n.id))
+            .map(|_| Node::broadcast_channel(org_id))
             .collect();
         let nodes: Vec<&str> = nodes.iter().map(|s| &**s).collect();
 

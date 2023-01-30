@@ -175,6 +175,10 @@ impl NodeService for NodeServiceImpl {
         let notifier = notification::Notifier::new(self.db.clone());
         notifier.commands_sender(node.host_id).send(cmd.id).await?;
         notifier.nodes_sender(node.host_id).send(cmd.id).await?;
+        notifier
+            .nodes_broadcast(node.org_id)
+            .broadcast(node.id)
+            .await?;
 
         let response_meta = ResponseMeta::from_meta(inner.meta).with_message(node.id);
         let response = CreateNodeResponse {
