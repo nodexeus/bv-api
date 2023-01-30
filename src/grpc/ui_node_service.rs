@@ -99,15 +99,26 @@ impl NodeService for NodeServiceImpl {
         request: Request<GetNodeRequest>,
     ) -> Result<Response<GetNodeResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let org_id = token
+            .data()
+            .get("org_id")
+            .unwrap_or(&"".to_string())
+            .to_owned();
         let inner = request.into_inner();
         let node_id = inner.id.parse().map_err(ApiError::from)?;
         let mut conn = self.db.conn().await?;
         let node = Node::find_by_id(node_id, &mut conn).await?;
-        let response = GetNodeResponse {
-            meta: Some(ResponseMeta::from_meta(inner.meta)),
-            node: Some(blockjoy_ui::Node::from_model(node, &mut conn).await?),
-        };
-        Ok(response_with_refresh_token(refresh_token, response)?)
+
+        if node.org_id.to_string() == org_id {
+            let response = GetNodeResponse {
+                meta: Some(ResponseMeta::from_meta(inner.meta)),
+                node: Some(blockjoy_ui::Node::from_model(node, &mut conn).await?),
+            };
+            Ok(response_with_refresh_token(refresh_token, response)?)
+        } else {
+            Err(Status::permission_denied("Access not allowed"))
+        }
     }
 
     async fn list(
