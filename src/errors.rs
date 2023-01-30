@@ -60,6 +60,9 @@ pub enum ApiError {
 
     #[error("Error reading key: {0}")]
     Key(KeyProviderError),
+
+    #[error("User node quota exceeded")]
+    NodeQuota,
 }
 
 impl ApiError {

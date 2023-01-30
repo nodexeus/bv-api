@@ -8,10 +8,12 @@ use crate::grpc::blockjoy_ui::{
     GetNodeResponse, ListNodesRequest, ListNodesResponse, ResponseMeta, UpdateNodeRequest,
     UpdateNodeResponse,
 };
+use crate::grpc::helpers::try_get_token;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models;
 use crate::models::{
-    Command, CommandRequest, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo,
+    Command, CommandRequest, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo, User,
+    UserSelectiveUpdate,
 };
 use std::collections::HashMap;
 use tonic::{Request, Response, Status};
@@ -159,6 +161,16 @@ impl NodeService for NodeServiceImpl {
         request: Request<CreateNodeRequest>,
     ) -> Result<Response<CreateNodeResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        // Check quota
+        let mut conn = self.db.conn().await?;
+        let user_id = token.id().to_owned();
+        let user = User::find_by_id(user_id, &mut conn).await?;
+
+        if user.staking_quota == 0 {
+            return Err(Status::from(ApiError::NodeQuota));
+        }
+
         let inner = request.into_inner();
         let mut fields: NodeCreateRequest = inner.node.ok_or_else(required("node"))?.try_into()?;
         let mut tx = self.db.begin().await?;
@@ -168,8 +180,15 @@ impl NodeService for NodeServiceImpl {
             sub_cmd: None,
             resource_id: node.id,
         };
-
         let cmd = Command::create(node.host_id, req, &mut tx).await?;
+        let update_user = UserSelectiveUpdate {
+            first_name: None,
+            last_name: None,
+            fee_bps: None,
+            staking_quota: Some(user.staking_quota - 1),
+            refresh_token: None,
+        };
+        User::update_all(user.id, update_user, &mut tx).await?;
         tx.commit().await?;
 
         let notifier = notification::Notifier::new(self.db.clone());
@@ -184,6 +203,7 @@ impl NodeService for NodeServiceImpl {
         let response = CreateNodeResponse {
             meta: Some(response_meta),
         };
+
         Ok(response_with_refresh_token(refresh_token, response)?)
     }
 
