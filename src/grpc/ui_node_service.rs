@@ -239,6 +239,7 @@ impl NodeService for NodeServiceImpl {
             .clone();
         let inner = request.into_inner();
         let node_id = inner.id.parse().map_err(ApiError::from)?;
+        let mut conn = self.db.conn().await?;
         let mut tx = self.db.begin().await?;
         let node = Node::find_by_id(node_id, &mut tx).await?;
 
@@ -260,6 +261,18 @@ impl NodeService for NodeServiceImpl {
                 resource_id: node_id,
             };
             let cmd = Command::create(node.host_id, req, &mut tx).await?;
+            let user_id = token.id().to_owned();
+            let user = User::find_by_id(user_id, &mut conn).await?;
+            let update_user = UserSelectiveUpdate {
+                first_name: None,
+                last_name: None,
+                fee_bps: None,
+                staking_quota: Some(user.staking_quota + 1),
+                refresh_token: None,
+            };
+
+            User::update_all(user_id, update_user, &mut tx).await?;
+
             tx.commit().await?;
 
             let notifier = notification::Notifier::new(self.db.clone());
