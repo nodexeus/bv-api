@@ -308,10 +308,12 @@ impl Host {
     ) -> Result<Uuid> {
         let host = sqlx::query(
             r#"
-            SELECT hosts.id as h_id, (hosts.mem_size - SUM(nodes.mem_size_mb)) as mem_size, (hosts.disk_size - SUM(nodes.disk_size_gb)) as disk_size FROM hosts
-            LEFT JOIN nodes on hosts.id = nodes.host_id
-            GROUP BY hosts.id
-            ORDER BY disk_size asc, mem_size asc
+            SELECT hosts.id,
+                   (hosts.mem_size - (SELECT SUM(mem_size_mb) from nodes where host_id = hosts.id)) as mem_size,
+                   (hosts.disk_size - (SELECT SUM(disk_size_gb) from nodes where host_id = hosts.id)) as disk_size,
+                   (select count(*) from ip_addresses where ip_addresses.host_id = hosts.id and not ip_addresses.is_assigned) as ip_addrs
+            FROM hosts
+            ORDER BY disk_size desc, mem_size desc, ip_addrs desc
             LIMIT 1
         "#,
         )
