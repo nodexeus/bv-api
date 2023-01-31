@@ -5,7 +5,7 @@ use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, Parameter, Respo
 use crate::grpc::notification;
 use crate::grpc::notification::Notifier;
 use crate::models;
-use crate::models::{Command, CommandRequest as DbCommandRequest, Host, HostCmd, Node};
+use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd, Node};
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
