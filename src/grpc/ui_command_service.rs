@@ -1,9 +1,11 @@
+use crate::auth::FindableById;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
 use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, Parameter, ResponseMeta};
 use crate::grpc::notification;
+use crate::grpc::notification::Notifier;
 use crate::models;
-use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd};
+use crate::models::{Command, CommandRequest as DbCommandRequest, Host, HostCmd, Node};
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -30,10 +32,24 @@ impl CommandServiceImpl {
             resource_id,
         };
 
+        let mut conn = self.db.conn().await?;
         let mut tx = self.db.begin().await?;
-        let cmd = Command::create(host_id, req, &mut tx).await?;
+        let db_cmd = Command::create(host_id, req, &mut tx).await?;
+        let notifier = Notifier::new(self.db.clone());
+
+        match cmd {
+            HostCmd::RestartNode | HostCmd::KillNode => {
+                let node = Node::find_by_id(resource_id, &mut conn).await?;
+                notifier
+                    .nodes_broadcast(node.org_id)
+                    .broadcast(resource_id)
+                    .await?;
+            }
+            _ => {}
+        }
+
         tx.commit().await?;
-        Ok(cmd)
+        Ok(db_cmd)
     }
 
     async fn send_notification(&self, command: models::Command) -> Result<()> {
