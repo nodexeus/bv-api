@@ -258,33 +258,33 @@ impl Node {
                     network
                 ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *"#,
         )
-        .bind(req.org_id)
-        .bind(host_id)
-        .bind(&req.name)
-        .bind(&req.groups)
-        .bind(&req.version)
-        .bind(&req.ip_addr)
-        .bind(req.blockchain_id)
-        .bind(&req.node_type)
-        .bind(&req.address)
-        .bind(&req.wallet_address)
-        .bind(req.block_height)
-        .bind(&req.node_data)
-        .bind(req.chain_status)
-        .bind(req.sync_status)
-        .bind(&req.ip_gateway)
-        .bind(req.self_update)
-        .bind(requirements.vcpu_count)
-        .bind(requirements.mem_size_mb)
-        .bind(requirements.disk_size_gb)
-        .bind(host.name)
-        .bind(&req.network)
-        .fetch_one(tx)
-        .await
-        .map_err(|e| {
-            tracing::error!("Error creating node: {}", e);
-            e
-        })?;
+            .bind(req.org_id)
+            .bind(host_id)
+            .bind(&req.name)
+            .bind(&req.groups)
+            .bind(&req.version)
+            .bind(&req.ip_addr)
+            .bind(req.blockchain_id)
+            .bind(&req.node_type)
+            .bind(&req.address)
+            .bind(&req.wallet_address)
+            .bind(req.block_height)
+            .bind(&req.node_data)
+            .bind(req.chain_status)
+            .bind(req.sync_status)
+            .bind(&req.ip_gateway)
+            .bind(req.self_update)
+            .bind(requirements.vcpu_count)
+            .bind(requirements.mem_size_mb)
+            .bind(requirements.disk_size_gb)
+            .bind(host.name)
+            .bind(&req.network)
+            .fetch_one(tx)
+            .await
+            .map_err(|e| {
+                tracing::error!("Error creating node: {}", e);
+                e
+            })?;
 
         Ok(node)
     }
@@ -595,11 +595,11 @@ pub struct NodeInfo {
 pub struct NodeMetricsUpdate {
     id: Uuid,
     height: Option<i64>,
-    block_age: Option<i64>,
-    staking_status: Option<NodeStakingStatus>,
-    consensus: Option<bool>,
-    chain_status: Option<NodeChainStatus>,
-    sync_status: Option<NodeSyncStatus>,
+    age: Option<i64>,
+    staking: Option<NodeStakingStatus>,
+    cons: Option<bool>,
+    chain: Option<NodeChainStatus>,
+    sync: Option<NodeSyncStatus>,
 }
 
 impl NodeMetricsUpdate {
@@ -616,12 +616,12 @@ impl NodeMetricsUpdate {
         // We first start the query out by declaring which fields to update.
         let mut query_builder = PgBuilder::new(
             "UPDATE nodes SET
-                block_height = row.height::BIGINT,
-                block_age = row.block_age::BIGINT,
-                staking_status = row.staking_status::enum_node_staking_status,
-                consensus = row.consensus::BOOLEAN,
-                chain_status = row.chain_status::enum_node_chain_status,
-                sync_status = row.sync_status::enum_node_sync_status
+                block_height = COALESCE(row.height::BIGINT, block_height),
+                block_age = COALESCE(row.age::BIGINT, block_age),
+                staking_status = COALESCE(row.staking::enum_node_staking_status, staking_status),
+                consensus = COALESCE(row.cons::BOOLEAN, consensus),
+                chain_status = COALESCE(row.chain::enum_node_chain_status, chain_status),
+                sync_status = COALESCE(row.sync::enum_node_sync_status, sync_status)
             FROM (
                 ",
         );
@@ -631,18 +631,18 @@ impl NodeMetricsUpdate {
             builder
                 .push_bind(update.id)
                 .push_bind(update.height)
-                .push_bind(update.block_age)
-                .push_bind(update.staking_status)
-                .push_bind(update.consensus)
-                .push_bind(update.chain_status)
-                .push_bind(update.sync_status);
+                .push_bind(update.age)
+                .push_bind(update.staking)
+                .push_bind(update.cons)
+                .push_bind(update.chain)
+                .push_bind(update.sync);
         });
         // We finish the query by specifying which bind parameters mean what. NOTE: When adding
         // bind parameters they MUST be bound in the same order as they are specified below. Not
         // doing so results in incorrectly interpreted queries.
         query_builder.push(
             "
-            ) AS row(id, height, block_age, staking_status, consensus, chain_status, sync_status)
+            ) AS row(id, height, age, staking, cons, chain, sync)
             WHERE
                 nodes.id = row.id::uuid;",
         );
@@ -657,17 +657,17 @@ impl NodeMetricsUpdate {
         Ok(Self {
             id,
             height: metric.height.map(i64::try_from).transpose()?,
-            block_age: metric.block_age.map(i64::try_from).transpose()?,
-            staking_status: metric
+            age: metric.block_age.map(i64::try_from).transpose()?,
+            staking: metric
                 .staking_status
                 .map(NodeStakingStatus::try_from)
                 .transpose()?,
-            consensus: metric.consensus,
-            chain_status: metric
+            cons: metric.consensus,
+            chain: metric
                 .application_status
                 .map(TryInto::try_into)
                 .transpose()?,
-            sync_status: metric.sync_status.map(TryInto::try_into).transpose()?,
+            sync: metric.sync_status.map(TryInto::try_into).transpose()?,
         })
     }
 
@@ -677,10 +677,10 @@ impl NodeMetricsUpdate {
         query
             .bind(params.id)
             .bind(params.height)
-            .bind(params.block_age)
-            .bind(params.staking_status)
-            .bind(params.consensus)
-            .bind(params.chain_status)
-            .bind(params.sync_status)
+            .bind(params.age)
+            .bind(params.staking)
+            .bind(params.cons)
+            .bind(params.chain)
+            .bind(params.sync)
     }
 }
