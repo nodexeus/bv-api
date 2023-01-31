@@ -258,33 +258,33 @@ impl Node {
                     network
                 ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *"#,
         )
-        .bind(req.org_id)
-        .bind(host_id)
-        .bind(&req.name)
-        .bind(&req.groups)
-        .bind(&req.version)
-        .bind(&req.ip_addr)
-        .bind(req.blockchain_id)
-        .bind(&req.node_type)
-        .bind(&req.address)
-        .bind(&req.wallet_address)
-        .bind(req.block_height)
-        .bind(&req.node_data)
-        .bind(req.chain_status)
-        .bind(req.sync_status)
-        .bind(&req.ip_gateway)
-        .bind(req.self_update)
-        .bind(requirements.vcpu_count)
-        .bind(requirements.mem_size_mb)
-        .bind(requirements.disk_size_gb)
-        .bind(host.name)
-        .bind(&req.network)
-        .fetch_one(tx)
-        .await
-        .map_err(|e| {
-            tracing::error!("Error creating node: {}", e);
-            e
-        })?;
+            .bind(req.org_id)
+            .bind(host_id)
+            .bind(&req.name)
+            .bind(&req.groups)
+            .bind(&req.version)
+            .bind(&req.ip_addr)
+            .bind(req.blockchain_id)
+            .bind(&req.node_type)
+            .bind(&req.address)
+            .bind(&req.wallet_address)
+            .bind(req.block_height)
+            .bind(&req.node_data)
+            .bind(req.chain_status)
+            .bind(req.sync_status)
+            .bind(&req.ip_gateway)
+            .bind(req.self_update)
+            .bind(requirements.vcpu_count)
+            .bind(requirements.mem_size_mb)
+            .bind(requirements.disk_size_gb)
+            .bind(host.name)
+            .bind(&req.network)
+            .fetch_one(tx)
+            .await
+            .map_err(|e| {
+                tracing::error!("Error creating node: {}", e);
+                e
+            })?;
 
         Ok(node)
     }
@@ -616,12 +616,12 @@ impl NodeMetricsUpdate {
         // We first start the query out by declaring which fields to update.
         let mut query_builder = PgBuilder::new(
             "UPDATE nodes SET
-                block_height = row.height::BIGINT,
-                block_age = row.block_age::BIGINT,
-                staking_status = row.staking_status::enum_node_staking_status,
-                consensus = row.consensus::BOOLEAN,
-                chain_status = row.chain_status::enum_node_chain_status,
-                sync_status = row.sync_status::enum_node_sync_status
+                block_height = COALESCE(row.height::BIGINT, block_height),
+                block_age = COALESCE(row.block_age::BIGINT, block_age),
+                staking_status = COALESCE(row.staking_status::enum_node_staking_status, staking_status),
+                consensus = COALESCE(row.consensus::BOOLEAN, consensus),
+                chain_status = COALESCE(row.chain_status::enum_node_chain_status, chain_status),
+                sync_status = COALESCE(row.sync_status::enum_node_sync_status, sync_status)
             FROM (
                 ",
         );
