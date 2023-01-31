@@ -595,11 +595,11 @@ pub struct NodeInfo {
 pub struct NodeMetricsUpdate {
     id: Uuid,
     height: Option<i64>,
-    block_age: Option<i64>,
-    staking_status: Option<NodeStakingStatus>,
-    consensus: Option<bool>,
-    chain_status: Option<NodeChainStatus>,
-    sync_status: Option<NodeSyncStatus>,
+    age: Option<i64>,
+    staking: Option<NodeStakingStatus>,
+    cons: Option<bool>,
+    chain: Option<NodeChainStatus>,
+    sync: Option<NodeSyncStatus>,
 }
 
 impl NodeMetricsUpdate {
@@ -617,11 +617,11 @@ impl NodeMetricsUpdate {
         let mut query_builder = PgBuilder::new(
             "UPDATE nodes SET
                 block_height = COALESCE(row.height::BIGINT, block_height),
-                block_age = COALESCE(row.block_age::BIGINT, block_age),
-                staking_status = COALESCE(row.staking_status::enum_node_staking_status, staking_status),
-                consensus = COALESCE(row.consensus::BOOLEAN, consensus),
-                chain_status = COALESCE(row.chain_status::enum_node_chain_status, chain_status),
-                sync_status = COALESCE(row.sync_status::enum_node_sync_status, sync_status)
+                block_age = COALESCE(row.age::BIGINT, block_age),
+                staking_status = COALESCE(row.staking::enum_node_staking_status, staking_status),
+                consensus = COALESCE(row.cons::BOOLEAN, consensus),
+                chain_status = COALESCE(row.chain::enum_node_chain_status, chain_status),
+                sync_status = COALESCE(row.sync::enum_node_sync_status, sync_status)
             FROM (
                 ",
         );
@@ -631,18 +631,18 @@ impl NodeMetricsUpdate {
             builder
                 .push_bind(update.id)
                 .push_bind(update.height)
-                .push_bind(update.block_age)
-                .push_bind(update.staking_status)
-                .push_bind(update.consensus)
-                .push_bind(update.chain_status)
-                .push_bind(update.sync_status);
+                .push_bind(update.age)
+                .push_bind(update.staking)
+                .push_bind(update.cons)
+                .push_bind(update.chain)
+                .push_bind(update.sync);
         });
         // We finish the query by specifying which bind parameters mean what. NOTE: When adding
         // bind parameters they MUST be bound in the same order as they are specified below. Not
         // doing so results in incorrectly interpreted queries.
         query_builder.push(
             "
-            ) AS row(id, height, block_age, staking_status, consensus, chain_status, sync_status)
+            ) AS row(id, height, age, staking, cons, chain, sync)
             WHERE
                 nodes.id = row.id::uuid;",
         );
@@ -657,17 +657,17 @@ impl NodeMetricsUpdate {
         Ok(Self {
             id,
             height: metric.height.map(i64::try_from).transpose()?,
-            block_age: metric.block_age.map(i64::try_from).transpose()?,
-            staking_status: metric
+            age: metric.block_age.map(i64::try_from).transpose()?,
+            staking: metric
                 .staking_status
                 .map(NodeStakingStatus::try_from)
                 .transpose()?,
-            consensus: metric.consensus,
-            chain_status: metric
+            cons: metric.consensus,
+            chain: metric
                 .application_status
                 .map(TryInto::try_into)
                 .transpose()?,
-            sync_status: metric.sync_status.map(TryInto::try_into).transpose()?,
+            sync: metric.sync_status.map(TryInto::try_into).transpose()?,
         })
     }
 
@@ -677,10 +677,10 @@ impl NodeMetricsUpdate {
         query
             .bind(params.id)
             .bind(params.height)
-            .bind(params.block_age)
-            .bind(params.staking_status)
-            .bind(params.consensus)
-            .bind(params.chain_status)
-            .bind(params.sync_status)
+            .bind(params.age)
+            .bind(params.staking)
+            .bind(params.cons)
+            .bind(params.chain)
+            .bind(params.sync)
     }
 }
