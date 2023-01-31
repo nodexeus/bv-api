@@ -77,6 +77,8 @@ impl UpdateService for UpdateServiceImpl {
             .collect();
         let nodes: Vec<&str> = nodes.iter().map(|s| &**s).collect();
 
+        tracing::debug!("Listing to channels: {nodes:?}");
+
         db_listener
             .listen_all(nodes)
             .await
@@ -88,11 +90,13 @@ impl UpdateService for UpdateServiceImpl {
         let (tx, rx) = mpsc::channel(128);
 
         tokio::spawn(async move {
-            tracing::info!("client {} connected", user_id.clone());
+            tracing::info!("client {user_id} connected");
 
             let res_meta = Some(ResponseMeta::from_meta(inner.meta));
 
             while let Ok(notification) = db_listener.recv().await {
+                tracing::debug!("Received notification for client {user_id}");
+
                 let node_id: Uuid = notification.payload().parse().unwrap_or_default();
                 match Node::find_by_id(node_id, &mut conn).await {
                     Ok(node) => {
