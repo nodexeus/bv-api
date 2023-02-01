@@ -482,8 +482,9 @@ impl UpdateInfo<GrpcNodeInfo, Node> for Node {
                          sync_status = COALESCE($4, sync_status),
                          staking_status = COALESCE($5, staking_status),
                          block_height = COALESCE($6, block_height),
-                         self_update = COALESCE($7, self_update)
-                WHERE id = $8
+                         self_update = COALESCE($7, self_update),
+                         address = COALESCE($8, address)
+                WHERE id = $9
                 RETURNING *
             "##,
         )
@@ -494,6 +495,7 @@ impl UpdateInfo<GrpcNodeInfo, Node> for Node {
         .bind(req.staking_status)
         .bind(req.block_height)
         .bind(req.self_update)
+        .bind(req.address)
         .bind(req.id)
         .fetch_one(tx)
         .await?;
@@ -544,6 +546,7 @@ pub struct NodeUpdateRequest {
     pub block_height: Option<i64>,
     pub self_update: bool,
     pub container_status: Option<ContainerStatus>,
+    pub address: Option<String>,
 }
 
 impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
@@ -561,6 +564,7 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
             self_update,
             container_status,
             onchain_name: _, // We explicitly do not use this field,
+            address,
         } = info;
         let req = Self {
             id: id.as_str().parse()?,
@@ -572,6 +576,7 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
             block_height,
             self_update: self_update.unwrap_or(false),
             container_status: container_status.map(|n| n.try_into()).transpose()?,
+            address,
         };
         Ok(req)
     }
