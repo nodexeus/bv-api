@@ -397,12 +397,7 @@ html = """
                         valign="top"
                       >
                         You can decline the invitation by clicking
-                        <a
-                          style="
-                            text-decoration: underline;
-                            color: #212423 !important;
-                          "
-                          href="{{decline_link}}"
+                        <a href="{{decline_link}}"
                           >here</a
                         >.
                       </td>
