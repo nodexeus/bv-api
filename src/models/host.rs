@@ -309,20 +309,20 @@ impl Host {
         let host = sqlx::query(
             r#"
             SELECT hosts.id as h_id,
-                   (hosts.mem_size - (SELECT SUM(mem_size_mb) from nodes where host_id = hosts.id)) as mem_size,
-                   (hosts.disk_size - (SELECT SUM(disk_size_gb) from nodes where host_id = hosts.id)) as disk_size,
-                   (select count(*) from ip_addresses where ip_addresses.host_id = hosts.id and not ip_addresses.is_assigned) as ip_addrs
+                   (hosts.mem_size - (SELECT SUM(mem_size_mb) from nodes where host_id = hosts.id))::BIGINT as mem_size,
+                   (hosts.disk_size - (SELECT SUM(disk_size_gb) from nodes where host_id = hosts.id))::BIGINT as disk_size,
+                   (select count(*) from ip_addresses where ip_addresses.host_id = hosts.id and not ip_addresses.is_assigned)::BIGINT as ip_addrs
             FROM hosts
-            ORDER BY disk_size desc, mem_size desc, ip_addrs desc
+            ORDER BY ip_addrs desc, disk_size desc, mem_size desc
             LIMIT 1
         "#,
         )
         .fetch_one(db)
         .await?;
         let host_id = host.get::<Uuid, _>("h_id");
-        let disk_size: i64 = host.try_get("disk_size").unwrap_or_default();
-        let mem_size: i64 = host.try_get("mem_size").unwrap_or_default();
-        let ip_addrs: i64 = host.try_get("ip_addrs").unwrap_or_default();
+        let disk_size: i64 = host.get::<i64, _>("disk_size");
+        let mem_size: i64 = host.get::<i64, _>("mem_size");
+        let ip_addrs: i64 = host.get::<i64, _>("ip_addrs");
 
         // Trace warnings, if the selected host doesn't seem to have enough resources
         if *requirements.disk_size_gb() > disk_size / 1024i64.pow(3) {

@@ -179,7 +179,7 @@ impl NodeService for NodeServiceImpl {
         let user = User::find_by_id(user_id, &mut conn).await?;
 
         if user.staking_quota <= 0 {
-            return Err(Status::from(ApiError::NodeQuota));
+            return Err(Status::resource_exhausted("User node quota exceeded"));
         }
 
         let inner = request.into_inner();
