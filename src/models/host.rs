@@ -319,10 +319,10 @@ impl Host {
         )
         .fetch_one(db)
         .await?;
-        let host_id = host.get::<Uuid, _>("h_id");
-        let disk_size: i64 = host.get::<i64, _>("disk_size");
-        let mem_size: i64 = host.get::<i64, _>("mem_size");
-        let ip_addrs: i64 = host.get::<i64, _>("ip_addrs");
+        let host_id = host.try_get::<Uuid, _>("h_id")?;
+        let disk_size: i64 = host.try_get::<i64, _>("disk_size")?;
+        let mem_size: i64 = host.try_get::<i64, _>("mem_size")?;
+        let ip_addrs: i64 = host.try_get::<i64, _>("ip_addrs")?;
 
         // Trace warnings, if the selected host doesn't seem to have enough resources
         if *requirements.disk_size_gb() > disk_size / 1024i64.pow(3) {
