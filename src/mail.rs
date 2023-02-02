@@ -165,7 +165,7 @@ impl MailClient {
         self.send_mail(
             &templates,
             user,
-            "[BlockJoy] Password Updated".to_string(),
+            "[BlockJoy] Reset Password".to_string(),
             Some(context),
         )
         .await
