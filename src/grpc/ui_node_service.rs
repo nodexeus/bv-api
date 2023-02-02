@@ -186,6 +186,7 @@ impl NodeService for NodeServiceImpl {
         let mut fields: NodeCreateRequest = inner.node.ok_or_else(required("node"))?.try_into()?;
         let mut tx = self.db.begin().await?;
         let node = Node::create(&mut fields, &mut tx).await?;
+        // Create the NodeCreate COMMAND
         let req = CommandRequest {
             cmd: HostCmd::CreateNode,
             sub_cmd: None,
@@ -200,6 +201,13 @@ impl NodeService for NodeServiceImpl {
             refresh_token: None,
         };
         User::update_all(user.id, update_user, &mut tx).await?;
+        // Create the NodeStart COMMAND
+        let req = CommandRequest {
+            cmd: HostCmd::RestartNode,
+            sub_cmd: None,
+            resource_id: node.id,
+        };
+        Command::create(node.host_id, req, &mut tx).await?;
         tx.commit().await?;
 
         let notifier = notification::Notifier::new(self.db.clone());
