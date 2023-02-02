@@ -309,8 +309,8 @@ impl Host {
         let host = sqlx::query(
             r#"
             SELECT hosts.id as h_id,
-                   (hosts.mem_size - (SELECT SUM(mem_size_mb) from nodes where host_id = hosts.id))::BIGINT as mem_size,
-                   (hosts.disk_size - (SELECT SUM(disk_size_gb) from nodes where host_id = hosts.id))::BIGINT as disk_size,
+                   COALESCE((hosts.mem_size - (SELECT SUM(mem_size_mb) from nodes where host_id = hosts.id)::BIGINT), 0) as mem_size,
+                   COALESCE((hosts.disk_size - (SELECT SUM(disk_size_gb) from nodes where host_id = hosts.id)::BIGINT), 0) as disk_size,
                    (select count(*) from ip_addresses where ip_addresses.host_id = hosts.id and not ip_addresses.is_assigned)::BIGINT as ip_addrs
             FROM hosts
             ORDER BY ip_addrs desc, disk_size desc, mem_size desc
