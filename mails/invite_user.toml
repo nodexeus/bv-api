@@ -429,12 +429,7 @@ html = """
                       >
                         If you think this was sent by mistake, please contact us
                         immediately at
-                        <a
-                          style="
-                            text-decoration: underline;
-                            color: #212423 !important;
-                          "
-                          href="mailto:hello@blockjoy.com"
+                        <a href="mailto:hello@blockjoy.com"
                           >hello@blockjoy.com</a
                         >.
                       </td>
