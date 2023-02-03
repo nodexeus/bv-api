@@ -200,15 +200,26 @@ impl NodeService for NodeServiceImpl {
             staking_quota: Some(user.staking_quota - 1),
             refresh_token: None,
         };
-        User::update_all(user.id, update_user, &mut tx).await?;
-        // Create the NodeStart COMMAND
-        let req = CommandRequest {
-            cmd: HostCmd::RestartNode,
-            sub_cmd: None,
-            resource_id: node.id,
-        };
-        Command::create(node.host_id, req, &mut tx).await?;
-        tx.commit().await?;
+
+        match User::update_all(user.id, update_user, &mut tx).await {
+            Ok(_) => {
+                // commit the tx for stuff happened so far
+                tx.commit().await?;
+
+                // Create a new tx, so we ensure START happens after CREATE
+                let mut tx = self.db.begin().await?;
+                // Create the NodeStart COMMAND
+                let req = CommandRequest {
+                    cmd: HostCmd::RestartNode,
+                    sub_cmd: None,
+                    resource_id: node.id,
+                };
+
+                Command::create(node.host_id, req, &mut tx).await?;
+                tx.commit().await?;
+            }
+            Err(e) => return Err(Status::from(e)),
+        }
 
         let notifier = notification::Notifier::new(self.db.clone());
         notifier.commands_sender(node.host_id).send(cmd.id).await?;
