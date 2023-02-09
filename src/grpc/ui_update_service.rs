@@ -1,3 +1,4 @@
+use super::notification::Notifier;
 use crate::auth::{FindableById, UserAuthToken};
 use crate::errors::ApiError;
 use crate::grpc::blockjoy_ui::update_notification::Notification;
@@ -6,10 +7,8 @@ use crate::grpc::blockjoy_ui::{
     self, GetUpdatesRequest, GetUpdatesResponse, ResponseMeta, UpdateNotification,
 };
 use crate::grpc::helpers::{required, try_get_token};
-use crate::grpc::notification::Notify;
 use crate::models;
 use crate::models::{Host, Node};
-use sqlx::postgres::PgListener;
 use std::pin::Pin;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -19,11 +18,12 @@ use uuid::Uuid;
 
 pub struct UpdateServiceImpl {
     db: models::DbPool,
+    notifier: Notifier,
 }
 
 impl UpdateServiceImpl {
-    pub fn new(db: models::DbPool) -> Self {
-        Self { db }
+    pub fn new(db: models::DbPool, notifier: Notifier) -> Self {
+        Self { db, notifier }
     }
 
     pub async fn host_payload(
@@ -64,25 +64,17 @@ impl UpdateService for UpdateServiceImpl {
         &self,
         request: Request<GetUpdatesRequest>,
     ) -> Result<Response<Self::UpdatesStream>, Status> {
-        let mut db_listener = PgListener::connect_with(self.db.inner()).await.unwrap();
         let mut conn = self.db.conn().await?;
         let token = try_get_token::<_, UserAuthToken>(&request)?;
         let org_id = Uuid::parse_str(token.data().get("org_id").ok_or_else(required("org_id"))?)
             .map_err(ApiError::from)?;
         let user_id = token.id().to_string();
-        let nodes: Vec<String> = Node::find_all_by_org(org_id, 0, 100, &mut conn)
-            .await?
-            .into_iter()
-            .map(|_| Node::broadcast_channel(org_id))
-            .collect();
-        let nodes: Vec<&str> = nodes.iter().map(|s| &**s).collect();
+        let nodes = Node::find_all_by_org(org_id, 0, 100, &mut conn).await?;
 
         tracing::debug!("Listing to channels: {nodes:?}");
 
-        db_listener
-            .listen_all(nodes)
-            .await
-            .map_err(ApiError::from)?;
+        let is_correct_node = move |node: &Node| nodes.iter().any(|n| n.id == node.id);
+        let mut node_listener = self.notifier.nodes_receiver(org_id);
 
         let inner = request.into_inner();
         // spawn and channel are required if you want handle "disconnect" functionality
@@ -94,37 +86,26 @@ impl UpdateService for UpdateServiceImpl {
 
             let res_meta = Some(ResponseMeta::from_meta(inner.meta));
 
-            while let Ok(notification) = db_listener.recv().await {
+            while let Ok(node) = node_listener.recv_where(&is_correct_node).await {
                 tracing::debug!("Received notification for client {user_id}");
 
-                let node_id: Uuid = notification.payload().parse().unwrap_or_default();
-                match Node::find_by_id(node_id, &mut conn).await {
-                    Ok(node) => {
-                        let node: blockjoy_ui::Node = node.try_into().unwrap();
-                        let res = GetUpdatesResponse {
-                            meta: res_meta.clone(),
-                            update: Some(UpdateNotification {
-                                notification: Some(Notification::Node(node)),
-                            }),
-                        };
-                        match tx.send(Result::<_, Status>::Ok(res)).await {
-                            Ok(_) => {}
-                            Err(_item) => {
-                                // output_stream was build from rx and both are dropped
-                                break;
-                            }
-                        }
+                let node: blockjoy_ui::Node = node.try_into().unwrap();
+                let res = GetUpdatesResponse {
+                    meta: res_meta.clone(),
+                    update: Some(UpdateNotification {
+                        notification: Some(Notification::Node(node)),
+                    }),
+                };
+                match tx.send(Result::<_, Status>::Ok(res)).await {
+                    Ok(_) => {}
+                    Err(_item) => {
+                        // output_stream was build from rx and both are dropped
+                        break;
                     }
-                    Err(e) => tracing::error!("Node not found: {e}"),
                 }
             }
 
             tracing::info!("client {user_id} disconnected");
-
-            match db_listener.unlisten_all().await.map_err(ApiError::from) {
-                Ok(_) => tracing::debug!("Stopped DB listeners for Org {org_id}"),
-                Err(e) => tracing::error!("Couldn't remove listeners for org {org_id}: {e}"),
-            }
         });
 
         let output_stream = ReceiverStream::new(rx);
