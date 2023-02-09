@@ -1,4 +1,3 @@
-use api::grpc::blockjoy::command_flow_client::CommandFlowClient;
 use api::grpc::blockjoy::hosts_client::HostsClient;
 use api::grpc::blockjoy::key_files_client::KeyFilesClient;
 use api::grpc::blockjoy::metrics_service_client::MetricsServiceClient;
@@ -11,7 +10,6 @@ use api::grpc::blockjoy_ui::host_service_client::HostServiceClient;
 use api::grpc::blockjoy_ui::invitation_service_client::InvitationServiceClient;
 use api::grpc::blockjoy_ui::node_service_client::NodeServiceClient;
 use api::grpc::blockjoy_ui::organization_service_client::OrganizationServiceClient;
-use api::grpc::blockjoy_ui::update_service_client::UpdateServiceClient;
 use api::grpc::blockjoy_ui::user_service_client::UserServiceClient;
 use tonic::transport::Channel;
 
@@ -67,12 +65,6 @@ impl GrpcClient<Channel> for CommandServiceClient<Channel> {
     }
 }
 
-impl GrpcClient<Channel> for UpdateServiceClient<Channel> {
-    fn create(channel: Channel) -> Self {
-        Self::new(channel)
-    }
-}
-
 impl GrpcClient<Channel> for DashboardServiceClient<Channel> {
     fn create(channel: Channel) -> Self {
         Self::new(channel)
@@ -80,12 +72,6 @@ impl GrpcClient<Channel> for DashboardServiceClient<Channel> {
 }
 
 impl GrpcClient<Channel> for BlockchainServiceClient<Channel> {
-    fn create(channel: Channel) -> Self {
-        Self::new(channel)
-    }
-}
-
-impl GrpcClient<Channel> for CommandFlowClient<Channel> {
     fn create(channel: Channel) -> Self {
         Self::new(channel)
     }
