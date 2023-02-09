@@ -1,4 +1,5 @@
 pub mod authentication_service;
+pub mod command_service;
 pub mod convert;
 pub mod helpers;
 pub mod host_service;
@@ -44,6 +45,7 @@ use crate::grpc::blockjoy_ui::invitation_service_server::InvitationServiceServer
 use crate::grpc::blockjoy_ui::node_service_server::NodeServiceServer;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationServiceServer;
 use crate::grpc::blockjoy_ui::user_service_server::UserServiceServer;
+use crate::grpc::command_service::CommandsServiceImpl;
 use crate::grpc::key_file_service::KeyFileServiceImpl;
 use crate::grpc::metrics_service::MetricsServiceImpl;
 use crate::grpc::organization_service::OrganizationServiceImpl;
@@ -55,7 +57,7 @@ use crate::grpc::ui_host_service::HostServiceImpl;
 use crate::grpc::ui_invitation_service::InvitationServiceImpl;
 use crate::grpc::ui_node_service::NodeServiceImpl;
 use crate::grpc::user_service::UserServiceImpl;
-use crate::models;
+use crate::{grpc, models};
 use anyhow::anyhow;
 use axum::Extension;
 use blockjoy::hosts_server::HostsServer;
@@ -105,6 +107,8 @@ pub async fn server(
         .await
         .expect("Could not create notifier");
     let auth_service = AuthorizationService::new(enforcer);
+    let command_service =
+        grpc::blockjoy::commands_server::CommandsServer::new(CommandsServiceImpl::new(db.clone()));
     let h_service = HostsServer::new(HostsServiceImpl::new(db.clone()));
     let k_service = KeyFilesServer::new(KeyFileServiceImpl::new(db.clone()));
     let m_service = MetricsServiceServer::new(MetricsServiceImpl::new(db.clone()));
@@ -127,7 +131,6 @@ pub async fn server(
 
     let middleware = tower::ServiceBuilder::new()
         .layer(TraceLayer::new_for_grpc())
-        // TODO: Check if DB extension is still needed
         .layer(Extension(db.clone()))
         .layer(Extension(unauthenticated))
         .layer(AsyncRequireAuthorizationLayer::new(auth_service))
@@ -143,6 +146,7 @@ pub async fn server(
         .layer(middleware)
         .concurrency_limit_per_connection(rate_limiting_settings())
         .add_service(h_service)
+        .add_service(command_service)
         .add_service(k_service)
         .add_service(m_service)
         .add_service(ui_auth_service)
