@@ -3,7 +3,7 @@ use crate::auth::FindableById;
 use crate::errors::Result as ApiResult;
 use crate::grpc::blockjoy::container_image::StatusName;
 use crate::grpc::blockjoy::{
-    self, command, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
+    self, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
     NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
 };
 use crate::grpc::helpers::required;

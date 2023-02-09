@@ -10,22 +10,21 @@ fn main() {
                 // Cookbook API
                 "service.proto",
                 // Backend API
-                "command_flow.proto",
                 "host_service.proto",
+                "node_service.proto",
                 "key_file_service.proto",
                 "metrics.proto",
+                "command.proto",
                 // UI API
                 "authentication_service.proto",
                 "billing_service.proto",
                 "blockchain_service.proto",
-                "command_service.proto",
                 "dashboard_service.proto",
                 "host_provision_service.proto",
                 "invitation_service.proto",
                 "fe_host_service.proto",
-                "node_service.proto",
+                "ui_node_service.proto",
                 "organization_service.proto",
-                "update_service.proto",
                 "user_service.proto",
             ],
             &[

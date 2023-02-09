@@ -1,5 +1,4 @@
 pub mod authentication_service;
-pub mod command_flow;
 pub mod convert;
 pub mod helpers;
 pub mod host_service;
@@ -14,7 +13,6 @@ pub mod ui_host_provision_service;
 pub mod ui_host_service;
 pub mod ui_invitation_service;
 pub mod ui_node_service;
-pub mod ui_update_service;
 pub mod user_service;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -35,7 +33,6 @@ use crate::auth::{
 };
 use crate::errors::{ApiError, Result as ApiResult};
 use crate::grpc::authentication_service::AuthenticationServiceImpl;
-use crate::grpc::blockjoy::command_flow_server::CommandFlowServer;
 use crate::grpc::blockjoy::key_files_server::KeyFilesServer;
 use crate::grpc::blockjoy_ui::authentication_service_server::AuthenticationServiceServer;
 use crate::grpc::blockjoy_ui::blockchain_service_server::BlockchainServiceServer;
@@ -46,9 +43,7 @@ use crate::grpc::blockjoy_ui::host_service_server::HostServiceServer;
 use crate::grpc::blockjoy_ui::invitation_service_server::InvitationServiceServer;
 use crate::grpc::blockjoy_ui::node_service_server::NodeServiceServer;
 use crate::grpc::blockjoy_ui::organization_service_server::OrganizationServiceServer;
-use crate::grpc::blockjoy_ui::update_service_server::UpdateServiceServer;
 use crate::grpc::blockjoy_ui::user_service_server::UserServiceServer;
-use crate::grpc::command_flow::CommandFlowServerImpl;
 use crate::grpc::key_file_service::KeyFileServiceImpl;
 use crate::grpc::metrics_service::MetricsServiceImpl;
 use crate::grpc::organization_service::OrganizationServiceImpl;
@@ -59,7 +54,6 @@ use crate::grpc::ui_host_provision_service::HostProvisionServiceImpl;
 use crate::grpc::ui_host_service::HostServiceImpl;
 use crate::grpc::ui_invitation_service::InvitationServiceImpl;
 use crate::grpc::ui_node_service::NodeServiceImpl;
-use crate::grpc::ui_update_service::UpdateServiceImpl;
 use crate::grpc::user_service::UserServiceImpl;
 use crate::models;
 use anyhow::anyhow;
@@ -112,8 +106,6 @@ pub async fn server(
         .expect("Could not create notifier");
     let auth_service = AuthorizationService::new(enforcer);
     let h_service = HostsServer::new(HostsServiceImpl::new(db.clone()));
-    let c_service =
-        CommandFlowServer::new(CommandFlowServerImpl::new(db.clone(), notifier.clone()));
     let k_service = KeyFilesServer::new(KeyFileServiceImpl::new(db.clone()));
     let m_service = MetricsServiceServer::new(MetricsServiceImpl::new(db.clone()));
     let ui_auth_service =
@@ -127,7 +119,6 @@ pub async fn server(
         CommandServiceServer::new(CommandServiceImpl::new(db.clone(), notifier.clone()));
     let ui_node_service =
         NodeServiceServer::new(NodeServiceImpl::new(db.clone(), notifier.clone()));
-    let ui_update_service = UpdateServiceServer::new(UpdateServiceImpl::new(db.clone(), notifier));
     let ui_dashboard_service = DashboardServiceServer::new(DashboardServiceImpl::new(db.clone()));
     let ui_blockchain_service =
         BlockchainServiceServer::new(BlockchainServiceImpl::new(db.clone()));
@@ -152,7 +143,6 @@ pub async fn server(
         .layer(middleware)
         .concurrency_limit_per_connection(rate_limiting_settings())
         .add_service(h_service)
-        .add_service(c_service)
         .add_service(k_service)
         .add_service(m_service)
         .add_service(ui_auth_service)
@@ -162,7 +152,6 @@ pub async fn server(
         .add_service(ui_hostprovision_service)
         .add_service(ui_node_service)
         .add_service(ui_command_service)
-        .add_service(ui_update_service)
         .add_service(ui_dashboard_service)
         .add_service(ui_blockchain_service)
         .add_service(ui_invitation_service)
