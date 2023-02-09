@@ -9,7 +9,7 @@ use crate::grpc::blockjoy_ui::{
     UpdateNodeResponse,
 };
 use crate::grpc::helpers::try_get_token;
-use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::grpc::{convert, get_refresh_token, response_with_refresh_token};
 use crate::models;
 use crate::models::{
     Command, CommandRequest, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo, User,
@@ -202,6 +202,7 @@ impl NodeService for NodeServiceImpl {
             refresh_token: None,
         };
 
+        #[allow(unused_assignments)]
         let mut restart_cmd: Option<uuid::Uuid> = None;
 
         match User::update_all(user.id, update_user, &mut tx).await {
@@ -226,6 +227,12 @@ impl NodeService for NodeServiceImpl {
         }
 
         self.notifier.commands_sender().send(cmd.id).await?;
+        if restart_cmd.is_some() {
+            self.notifier
+                .commands_sender()
+                .send(restart_cmd.unwrap())
+                .await?;
+        }
         self.notifier.nodes_sender().send(cmd.id).await?;
 
         let response_meta = ResponseMeta::from_meta(inner.meta).with_message(node.id);
