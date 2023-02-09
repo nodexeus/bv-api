@@ -5,6 +5,11 @@ package blockjoy.api.v1;
 import "google/protobuf/timestamp.proto";
 import "messages.proto";
 
+message NodeInfoUpdateRequest {
+    optional string request_id = 1;
+    NodeInfo info = 2;
+}
+
 message NodeInfo {
     // Possible states the container is described with
     enum ContainerStatus {
