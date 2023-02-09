@@ -133,8 +133,18 @@ impl BvListener {
     /// await points, meaning we would not be able to use `&self` anywhere.
     pub async fn recv(self, mut messages: tonic::Streaming<blockjoy::InfoUpdate>) -> Result<()> {
         tracing::debug!("Started waiting for InfoUpdates");
-        while let Some(Ok(update)) = messages.next().await {
-            self.process_info_update(update).await?;
+        while let Some(update) = messages.next().await {
+            match update {
+                Ok(update) => match self.process_info_update(update.clone()).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to process command `{update:?} from bv with error `{e}`"
+                        )
+                    }
+                },
+                Err(err) => tracing::error!("Received error from bv: `{err}`"),
+            }
         }
 
         tracing::debug!("Stopped waiting for InfoUpdates");
