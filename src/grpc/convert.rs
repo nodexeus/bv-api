@@ -121,7 +121,7 @@ pub async fn db_command_to_grpc_command(
     };
 
     Ok(GrpcCommand {
-        r#type: Some(command::Type::Node(node_cmd)),
+        r#type: Some(blockjoy::command::Type::Node(node_cmd)),
     })
 }
 
