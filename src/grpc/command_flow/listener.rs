@@ -21,7 +21,7 @@ type Message = Result<blockjoy::Command, tonic::Status>;
 ///    our user listener stops listening.
 pub async fn channels(
     host_id: uuid::Uuid,
-    notifier: notification::Notifier,
+    notifier: &notification::Notifier,
     db: models::DbPool,
 ) -> Result<(mpsc::Receiver<Message>, DbListener, BvListener)> {
     let (stop_tx, stop_rx) = mpsc::channel(1);
@@ -31,7 +31,7 @@ pub async fn channels(
         host_id,
         sender: tx.clone(),
         stop: stop_rx,
-        messages: notifier.commands_receiver(host_id).await?,
+        messages: notifier.commands_receiver(host_id),
         db: db.clone(),
     };
     let bv_listener = BvListener {
@@ -133,8 +133,18 @@ impl BvListener {
     /// await points, meaning we would not be able to use `&self` anywhere.
     pub async fn recv(self, mut messages: tonic::Streaming<blockjoy::InfoUpdate>) -> Result<()> {
         tracing::debug!("Started waiting for InfoUpdates");
-        while let Some(Ok(update)) = messages.next().await {
-            self.process_info_update(update).await?;
+        while let Some(update) = messages.next().await {
+            match update {
+                Ok(update) => match self.process_info_update(update.clone()).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to process command `{update:?} from bv with error `{e}`"
+                        )
+                    }
+                },
+                Err(err) => tracing::error!("Received error from bv: `{err}`"),
+            }
         }
 
         tracing::debug!("Stopped waiting for InfoUpdates");

@@ -1,21 +1,20 @@
-use crate::auth::FindableById;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
 use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, Parameter, ResponseMeta};
-use crate::grpc::notification;
 use crate::grpc::notification::Notifier;
 use crate::models;
-use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd, Node};
+use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd};
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 pub struct CommandServiceImpl {
     db: models::DbPool,
+    notifier: Notifier,
 }
 
 impl CommandServiceImpl {
-    pub fn new(db: models::DbPool) -> Self {
-        Self { db }
+    pub fn new(db: models::DbPool, notifier: Notifier) -> Self {
+        Self { db, notifier }
     }
 
     async fn create_command(
@@ -32,18 +31,12 @@ impl CommandServiceImpl {
             resource_id,
         };
 
-        let mut conn = self.db.conn().await?;
         let mut tx = self.db.begin().await?;
         let db_cmd = Command::create(host_id, req, &mut tx).await?;
-        let notifier = Notifier::new(self.db.clone());
 
         match cmd {
             HostCmd::RestartNode | HostCmd::KillNode => {
-                let node = Node::find_by_id(resource_id, &mut conn).await?;
-                notifier
-                    .nodes_broadcast(node.org_id)
-                    .broadcast(resource_id)
-                    .await?;
+                self.notifier.nodes_sender().send(resource_id).await?;
             }
             _ => {}
         }
@@ -54,11 +47,7 @@ impl CommandServiceImpl {
 
     async fn send_notification(&self, command: models::Command) -> Result<()> {
         tracing::debug!("Sending notification: {:?}", command);
-        let notifier = notification::Notifier::new(self.db.clone());
-        notifier
-            .commands_sender(command.host_id)
-            .send(command.id)
-            .await
+        self.notifier.commands_sender().send(command.id).await
     }
 
     fn get_resource_id_from_params(params: Vec<Parameter>) -> Result<Uuid, Status> {
