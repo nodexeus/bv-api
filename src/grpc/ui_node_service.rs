@@ -1,4 +1,3 @@
-use super::convert;
 use super::helpers::required;
 use super::notification::Notifier;
 use crate::auth::{FindableById, UserAuthToken};
@@ -10,7 +9,7 @@ use crate::grpc::blockjoy_ui::{
     UpdateNodeResponse,
 };
 use crate::grpc::helpers::try_get_token;
-use crate::grpc::{get_refresh_token, response_with_refresh_token};
+use crate::grpc::{convert, get_refresh_token, response_with_refresh_token};
 use crate::models;
 use crate::models::{
     Command, CommandRequest, HostCmd, IpAddress, Node, NodeCreateRequest, NodeInfo, User,
@@ -188,13 +187,14 @@ impl NodeService for NodeServiceImpl {
         let mut fields: NodeCreateRequest = inner.node.ok_or_else(required("node"))?.try_into()?;
         let mut tx = self.db.begin().await?;
         let node = Node::create(&mut fields, &mut tx).await?;
+        let mut cmd_queue: Vec<CommandRequest> = vec![];
         // Create the NodeCreate COMMAND
         let req = CommandRequest {
             cmd: HostCmd::CreateNode,
             sub_cmd: None,
             resource_id: node.id,
         };
-        let cmd = Command::create(node.host_id, req, &mut tx).await?;
+        cmd_queue.push(req);
         let update_user = UserSelectiveUpdate {
             first_name: None,
             last_name: None,
@@ -202,29 +202,39 @@ impl NodeService for NodeServiceImpl {
             staking_quota: Some(user.staking_quota - 1),
             refresh_token: None,
         };
-
         match User::update_all(user.id, update_user, &mut tx).await {
             Ok(_) => {
                 // commit the tx for stuff happened so far
                 tx.commit().await?;
 
-                // Create a new tx, so we ensure START happens after CREATE
-                let mut tx = self.db.begin().await?;
                 // Create the NodeStart COMMAND
                 let req = CommandRequest {
                     cmd: HostCmd::RestartNode,
                     sub_cmd: None,
                     resource_id: node.id,
                 };
-
-                Command::create(node.host_id, req, &mut tx).await?;
-                tx.commit().await?;
+                cmd_queue.push(req);
             }
             Err(e) => return Err(Status::from(e)),
         }
 
-        self.notifier.commands_sender().send(cmd.id).await?;
-        self.notifier.nodes_sender().send(cmd.id).await?;
+        // Create a new tx, so we ensure START happens after CREATE
+        let mut tx = self.db.begin().await?;
+
+        for req in cmd_queue {
+            let cmd_type = req.cmd;
+            let cmd = Command::create(node.host_id, req, &mut tx).await?;
+
+            match cmd_type {
+                HostCmd::CreateNode => {
+                    self.notifier.commands_sender().send(cmd.id).await?;
+                    self.notifier.nodes_sender().send(cmd.id).await?;
+                }
+                _ => self.notifier.commands_sender().send(cmd.id).await?,
+            }
+        }
+
+        tx.commit().await?;
 
         let response_meta = ResponseMeta::from_meta(inner.meta).with_message(node.id);
         let response = CreateNodeResponse {
