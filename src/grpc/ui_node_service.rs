@@ -201,6 +201,8 @@ impl NodeService for NodeServiceImpl {
             refresh_token: None,
         };
 
+        let mut restart_cmd: Option<uuid::Uuid> = None;
+
         match User::update_all(user.id, update_user, &mut tx).await {
             Ok(_) => {
                 // commit the tx for stuff happened so far
@@ -215,14 +217,21 @@ impl NodeService for NodeServiceImpl {
                     resource_id: node.id,
                 };
 
-                Command::create(node.host_id, req, &mut tx).await?;
+                let cmd = Command::create(node.host_id, req, &mut tx).await?;
                 tx.commit().await?;
+                restart_cmd = Some(cmd.id);
             }
             Err(e) => return Err(Status::from(e)),
         }
 
         let notifier = notification::Notifier::new(self.db.clone());
         notifier.commands_sender(node.host_id).send(cmd.id).await?;
+        if restart_cmd.is_some() {
+            notifier
+                .commands_sender(node.host_id)
+                .send(restart_cmd.unwrap())
+                .await?;
+        }
         notifier.nodes_sender(node.host_id).send(cmd.id).await?;
         notifier
             .nodes_broadcast(node.org_id)
