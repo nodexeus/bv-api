@@ -181,6 +181,38 @@ pub mod from {
         }
     }
 
+    impl TryFrom<grpc::blockjoy::NodeInfo> for models::NodeInfo {
+        type Error = ApiError;
+
+        fn try_from(value: grpc::blockjoy::NodeInfo) -> Result<Self, Self::Error> {
+            Ok(Self {
+                version: None,
+                ip_addr: value.ip,
+                block_height: value.block_height,
+                node_data: None,
+                chain_status: Some(
+                    NodeChainStatus::try_from(value.app_status.unwrap_or(0))
+                        .map_err(|_| ApiError::UnexpectedError(anyhow!("Unknown chain status")))?,
+                ),
+                sync_status: Some(
+                    NodeSyncStatus::try_from(value.sync_status.unwrap_or(0))
+                        .map_err(|_| ApiError::UnexpectedError(anyhow!("Unknown sync status")))?,
+                ),
+                staking_status: Some(
+                    NodeStakingStatus::try_from(value.staking_status.unwrap_or(0)).map_err(
+                        |_| ApiError::UnexpectedError(anyhow!("Unknown staking status")),
+                    )?,
+                ),
+                container_status: Some(
+                    ContainerStatus::try_from(value.container_status.unwrap_or(0)).map_err(
+                        |_| ApiError::UnexpectedError(anyhow!("Unknown container status")),
+                    )?,
+                ),
+                self_update: value.self_update.unwrap_or(false),
+            })
+        }
+    }
+
     impl TryFrom<Invitation> for blockjoy_ui::Invitation {
         type Error = ApiError;
 

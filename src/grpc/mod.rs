@@ -5,6 +5,7 @@ pub mod helpers;
 pub mod host_service;
 pub mod key_file_service;
 pub mod metrics_service;
+pub mod node_service;
 pub mod notification;
 pub mod organization_service;
 pub mod ui_blockchain_service;
@@ -109,6 +110,9 @@ pub async fn server(
     let auth_service = AuthorizationService::new(enforcer);
     let command_service =
         grpc::blockjoy::commands_server::CommandsServer::new(CommandsServiceImpl::new(db.clone()));
+    let node_service = grpc::blockjoy::nodes_server::NodesServer::new(
+        node_service::UpdateNodeServiceImpl::new(db.clone()),
+    );
     let h_service = HostsServer::new(HostsServiceImpl::new(db.clone()));
     let k_service = KeyFilesServer::new(KeyFileServiceImpl::new(db.clone()));
     let m_service = MetricsServiceServer::new(MetricsServiceImpl::new(db.clone()));
@@ -146,6 +150,7 @@ pub async fn server(
         .concurrency_limit_per_connection(rate_limiting_settings())
         .add_service(h_service)
         .add_service(command_service)
+        .add_service(node_service)
         .add_service(k_service)
         .add_service(m_service)
         .add_service(ui_auth_service)
