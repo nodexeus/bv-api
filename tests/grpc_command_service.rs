@@ -3,7 +3,7 @@ use api::auth::FindableById;
 use api::grpc::blockjoy::commands_client::CommandsClient;
 use api::grpc::blockjoy::{CommandInfo, PendingCommandsRequest};
 use api::models;
-use api::models::{Command, CommandRequest, Host, HostCmd};
+use api::models::{Command, CommandRequest, Host, HostCmd, Node, NodeInfo};
 use tonic::transport::Channel;
 use uuid::Uuid;
 
@@ -28,6 +28,21 @@ async fn responds_ok_with_single_get() {
     let tester = setup::Tester::new().await;
     let mut conn = tester.pool.conn().await.unwrap();
     let node = tester.node().await;
+    let mut tx = tester.pool.begin().await.unwrap();
+    let update = NodeInfo {
+        version: None,
+        ip_addr: Some("123.123.123.123".to_string()),
+        block_height: None,
+        node_data: None,
+        chain_status: None,
+        sync_status: None,
+        staking_status: None,
+        container_status: None,
+        self_update: false,
+    };
+    let _ = Node::update_info(&node.id, &update, &mut tx).await.unwrap();
+    tx.commit().await.unwrap();
+
     let cmd = create_command(&tester, node.id, HostCmd::CreateNode).await;
     let host = Host::find_by_id(cmd.host_id, &mut conn).await.unwrap();
     let token = tester.host_token(&host);
@@ -75,6 +90,20 @@ async fn responds_ok_for_pending() {
     let tester = setup::Tester::new().await;
     let mut conn = tester.pool.conn().await.unwrap();
     let node = tester.node().await;
+    let mut tx = tester.pool.begin().await.unwrap();
+    let update = NodeInfo {
+        version: None,
+        ip_addr: Some("123.123.123.123".to_string()),
+        block_height: None,
+        node_data: None,
+        chain_status: None,
+        sync_status: None,
+        staking_status: None,
+        container_status: None,
+        self_update: false,
+    };
+    let _ = Node::update_info(&node.id, &update, &mut tx).await.unwrap();
+    tx.commit().await.unwrap();
     let cmd = create_command(&tester, node.id, HostCmd::CreateNode).await;
     let host = Host::find_by_id(cmd.host_id, &mut conn).await.unwrap();
     let token = tester.host_token(&host);
