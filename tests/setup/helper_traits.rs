@@ -1,6 +1,8 @@
+use api::grpc::blockjoy::commands_client::CommandsClient;
 use api::grpc::blockjoy::hosts_client::HostsClient;
 use api::grpc::blockjoy::key_files_client::KeyFilesClient;
 use api::grpc::blockjoy::metrics_service_client::MetricsServiceClient;
+use api::grpc::blockjoy::nodes_client::NodesClient;
 use api::grpc::blockjoy_ui::authentication_service_client::AuthenticationServiceClient;
 use api::grpc::blockjoy_ui::blockchain_service_client::BlockchainServiceClient;
 use api::grpc::blockjoy_ui::command_service_client::CommandServiceClient;
@@ -90,6 +92,18 @@ impl GrpcClient<Channel> for MetricsServiceClient<Channel> {
 }
 
 impl GrpcClient<Channel> for InvitationServiceClient<Channel> {
+    fn create(channel: Channel) -> Self {
+        Self::new(channel)
+    }
+}
+
+impl GrpcClient<Channel> for NodesClient<Channel> {
+    fn create(channel: Channel) -> Self {
+        Self::new(channel)
+    }
+}
+
+impl GrpcClient<Channel> for CommandsClient<Channel> {
     fn create(channel: Channel) -> Self {
         Self::new(channel)
     }
