@@ -211,14 +211,6 @@ message Organization {
   optional OrgUser current_user = 15;
 }
 
-/* Info update as received by UpdateService */
-message UpdateNotification {
-  oneof notification {
-    Host host = 1;
-    Node node = 2;
-  }
-}
-
 /* User representation */
 message User {
   optional string id = 1;
