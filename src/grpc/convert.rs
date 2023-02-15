@@ -3,7 +3,7 @@ use crate::auth::FindableById;
 use crate::errors::Result as ApiResult;
 use crate::grpc::blockjoy::container_image::StatusName;
 use crate::grpc::blockjoy::{
-    self, command, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
+    self, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
     NodeDelete, NodeInfoGet, NodeRestart, NodeStop,
 };
 use crate::grpc::helpers::required;
@@ -121,7 +121,7 @@ pub async fn db_command_to_grpc_command(
     };
 
     Ok(GrpcCommand {
-        r#type: Some(command::Type::Node(node_cmd)),
+        r#type: Some(blockjoy::command::Type::Node(node_cmd)),
     })
 }
 
@@ -178,6 +178,38 @@ pub mod from {
                 staking_quota: None,
                 refresh_token: None,
             }
+        }
+    }
+
+    impl TryFrom<grpc::blockjoy::NodeInfo> for models::NodeInfo {
+        type Error = ApiError;
+
+        fn try_from(value: grpc::blockjoy::NodeInfo) -> Result<Self, Self::Error> {
+            Ok(Self {
+                version: None,
+                ip_addr: value.ip,
+                block_height: value.block_height,
+                node_data: None,
+                chain_status: Some(
+                    NodeChainStatus::try_from(value.app_status.unwrap_or(0))
+                        .map_err(|_| ApiError::UnexpectedError(anyhow!("Unknown chain status")))?,
+                ),
+                sync_status: Some(
+                    NodeSyncStatus::try_from(value.sync_status.unwrap_or(0))
+                        .map_err(|_| ApiError::UnexpectedError(anyhow!("Unknown sync status")))?,
+                ),
+                staking_status: Some(
+                    NodeStakingStatus::try_from(value.staking_status.unwrap_or(0)).map_err(
+                        |_| ApiError::UnexpectedError(anyhow!("Unknown staking status")),
+                    )?,
+                ),
+                container_status: Some(
+                    ContainerStatus::try_from(value.container_status.unwrap_or(0)).map_err(
+                        |_| ApiError::UnexpectedError(anyhow!("Unknown container status")),
+                    )?,
+                ),
+                self_update: value.self_update.unwrap_or(false),
+            })
         }
     }
 
