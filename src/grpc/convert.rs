@@ -318,6 +318,7 @@ pub mod from {
                     .ip_gateway
                     .map(|ip| ip.to_string())
                     .ok_or_else(required("host_provision.ip_gateway"))?,
+                org_id: None,
             };
             Ok(hp)
         }

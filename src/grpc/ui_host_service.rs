@@ -46,6 +46,7 @@ impl blockjoy_ui::Host {
             ip_range_from: model.ip_range_from.map(|ip| ip.to_string()),
             ip_range_to: model.ip_range_to.map(|ip| ip.to_string()),
             ip_gateway: model.ip_gateway.map(|ip| ip.to_string()),
+            org_id: None,
         };
         Ok(dto)
     }
