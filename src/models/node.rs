@@ -565,6 +565,7 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
             container_status,
             onchain_name: _, // We explicitly do not use this field,
             address,
+            host_id,
         } = info;
         let req = Self {
             id: id.as_str().parse()?,
