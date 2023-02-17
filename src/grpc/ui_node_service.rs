@@ -105,7 +105,7 @@ impl NodeService for NodeServiceImpl {
         let refresh_token = get_refresh_token(&request);
         let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let org_id = token
-            .data()
+            .data
             .get("org_id")
             .unwrap_or(&"".to_string())
             .to_owned();
@@ -180,8 +180,7 @@ impl NodeService for NodeServiceImpl {
         let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         // Check quota
         let mut conn = self.db.conn().await?;
-        let user_id = token.id().to_owned();
-        let user = User::find_by_id(user_id, &mut conn).await?;
+        let user = User::find_by_id(token.id, &mut conn).await?;
 
         if user.staking_quota <= 0 {
             return Err(Status::resource_exhausted("User node quota exceeded"));
@@ -270,7 +269,7 @@ impl NodeService for NodeServiceImpl {
         let mut tx = self.db.begin().await?;
         let node = Node::find_by_id(node_id, &mut tx).await?;
 
-        if Node::belongs_to_user_org(node.org_id, *token.id(), &mut tx).await? {
+        if Node::belongs_to_user_org(node.org_id, token.id, &mut tx).await? {
             // 1. Delete node, if the node belongs to the current user
             // Key files are deleted automatically because of 'on delete cascade' in tables DDL
             Node::delete(node_id, &mut tx).await?;
@@ -288,7 +287,7 @@ impl NodeService for NodeServiceImpl {
                 resource_id: node_id,
             };
             let cmd = Command::create(node.host_id, req, &mut tx).await?;
-            let user_id = token.id().to_owned();
+            let user_id = token.id;
             let user = User::find_by_id(user_id, &mut conn).await?;
             let update_user = UserSelectiveUpdate {
                 first_name: None,
