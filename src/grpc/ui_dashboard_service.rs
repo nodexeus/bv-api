@@ -55,7 +55,7 @@ impl DashboardService for DashboardServiceImpl {
         }
 
         let response = DashboardMetricsResponse {
-            meta: Some(ResponseMeta::from_meta(inner.meta)),
+            meta: Some(ResponseMeta::from_meta(inner.meta, Some(token.try_into()?))),
             metrics,
         };
 

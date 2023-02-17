@@ -37,7 +37,7 @@ impl UserService for UserServiceImpl {
         let user = token.try_get_user(*token.id(), &mut conn).await?;
         let inner = request.into_inner();
         let response = GetUserResponse {
-            meta: Some(ResponseMeta::from_meta(inner.meta)),
+            meta: Some(ResponseMeta::from_meta(inner.meta, Some(token.try_into()?))),
             user: Some(GrpcUser::try_from(user)?),
         };
 
@@ -60,7 +60,7 @@ impl UserService for UserServiceImpl {
         let mut tx = self.db.begin().await?;
         let new_user = User::create(user_request, Some(TokenRole::User), &mut tx).await?;
         tx.commit().await?;
-        let meta = ResponseMeta::from_meta(inner.meta).with_message(new_user.id);
+        let meta = ResponseMeta::from_meta(inner.meta, None).with_message(new_user.id);
         let response = CreateUserResponse { meta: Some(meta) };
 
         MailClient::new()
@@ -90,7 +90,7 @@ impl UserService for UserServiceImpl {
                 .await?
                 .try_into()?;
             tx.commit().await?;
-            let response_meta = ResponseMeta::from_meta(inner.meta);
+            let response_meta = ResponseMeta::from_meta(inner.meta, Some(token.try_into()?));
             let response = UpdateUserResponse {
                 meta: Some(response_meta),
                 user: Some(user),
