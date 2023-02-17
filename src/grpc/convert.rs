@@ -25,10 +25,11 @@ pub async fn db_command_to_grpc_command(
     db: &models::DbPool,
 ) -> ApiResult<GrpcCommand> {
     let mut node_cmd = NodeCommand {
-        id: cmd.resource_id.to_string(),
+        node_id: cmd.resource_id.to_string(),
         command: None,
         api_command_id: cmd.id.to_string(),
         created_at: None,
+        host_id: cmd.host_id.to_string(),
     };
 
     node_cmd.command = match cmd.cmd {
@@ -140,6 +141,7 @@ pub fn try_dt_to_ts(datetime: chrono::DateTime<chrono::Utc>) -> ApiResult<Timest
 
 pub mod from {
     use super::try_dt_to_ts;
+    use crate::auth::{JwtToken, UserAuthToken};
     use crate::cookbook::cookbook_grpc::NetworkConfiguration;
     use crate::errors::ApiError;
     use crate::grpc;
@@ -178,6 +180,24 @@ pub mod from {
                 staking_quota: None,
                 refresh_token: None,
             }
+        }
+    }
+
+    impl TryFrom<&UserAuthToken> for grpc::blockjoy_ui::ApiToken {
+        type Error = ApiError;
+
+        fn try_from(value: &UserAuthToken) -> Result<Self, Self::Error> {
+            Ok(Self {
+                value: value.encode()?,
+            })
+        }
+    }
+
+    impl TryFrom<UserAuthToken> for grpc::blockjoy_ui::ApiToken {
+        type Error = ApiError;
+
+        fn try_from(value: UserAuthToken) -> Result<Self, Self::Error> {
+            Self::try_from(&value)
         }
     }
 
@@ -314,6 +334,7 @@ pub mod from {
                     .ip_gateway
                     .map(|ip| ip.to_string())
                     .ok_or_else(required("host_provision.ip_gateway"))?,
+                org_id: None,
             };
             Ok(hp)
         }

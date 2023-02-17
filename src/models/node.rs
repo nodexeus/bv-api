@@ -547,6 +547,7 @@ pub struct NodeUpdateRequest {
     pub self_update: bool,
     pub container_status: Option<ContainerStatus>,
     pub address: Option<String>,
+    pub host_id: Option<String>,
 }
 
 impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
@@ -565,6 +566,7 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
             container_status,
             onchain_name: _, // We explicitly do not use this field,
             address,
+            host_id,
         } = info;
         let req = Self {
             id: id.as_str().parse()?,
@@ -577,6 +579,7 @@ impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
             self_update: self_update.unwrap_or(false),
             container_status: container_status.map(|n| n.try_into()).transpose()?,
             address,
+            host_id,
         };
         Ok(req)
     }

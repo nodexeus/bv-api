@@ -1,6 +1,8 @@
+use crate::auth::UserAuthToken;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::command_service_server::CommandService;
 use crate::grpc::blockjoy_ui::{CommandRequest, CommandResponse, Parameter, ResponseMeta};
+use crate::grpc::helpers::try_get_token;
 use crate::grpc::notification::Notifier;
 use crate::models;
 use crate::models::{Command, CommandRequest as DbCommandRequest, HostCmd};
@@ -62,6 +64,7 @@ impl CommandServiceImpl {
 
 macro_rules! create_command {
     ($obj:expr, $req:expr, $cmd:expr, $sub_cmd:expr) => {{
+        let token = try_get_token::<_, UserAuthToken>(&$req)?.try_into()?;
         let inner = $req.into_inner();
 
         let host_id = inner.id;
@@ -75,7 +78,7 @@ macro_rules! create_command {
             .await?;
 
         let response = CommandResponse {
-            meta: Some(ResponseMeta::from_meta(inner.meta).with_message(cmd.id)),
+            meta: Some(ResponseMeta::from_meta(inner.meta, Some(token)).with_message(cmd.id)),
         };
         $obj.send_notification(cmd).await?;
 
