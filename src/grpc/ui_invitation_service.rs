@@ -156,7 +156,7 @@ impl InvitationService for InvitationServiceImpl {
         request: Request<ListReceivedInvitationRequest>,
     ) -> Result<Response<InvitationsResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let mut conn = self.db.conn().await?;
         let user = User::find_by_id(token.get_id(), &mut conn).await?;
         let inner = request.into_inner();

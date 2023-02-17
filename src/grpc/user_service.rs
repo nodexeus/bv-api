@@ -32,7 +32,7 @@ impl UserService for UserServiceImpl {
         request: Request<GetUserRequest>,
     ) -> Result<Response<GetUserResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let mut conn = self.db.conn().await?;
         let user = token.try_get_user(*token.id(), &mut conn).await?;
         let inner = request.into_inner();
@@ -78,7 +78,8 @@ impl UserService for UserServiceImpl {
         let token = request
             .extensions()
             .get::<UserAuthToken>()
-            .ok_or_else(required("auth token"))?;
+            .ok_or_else(required("auth token"))?
+            .clone();
         let mut tx = self.db.begin().await?;
         let user_id = token.try_get_user(*token.id(), &mut tx).await?.id;
         let inner = request.into_inner();

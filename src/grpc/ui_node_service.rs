@@ -100,7 +100,7 @@ impl NodeService for NodeServiceImpl {
         request: Request<GetNodeRequest>,
     ) -> Result<Response<GetNodeResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let org_id = token
             .data()
             .get("org_id")
@@ -174,7 +174,7 @@ impl NodeService for NodeServiceImpl {
         request: Request<CreateNodeRequest>,
     ) -> Result<Response<CreateNodeResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         // Check quota
         let mut conn = self.db.conn().await?;
         let user_id = token.id().to_owned();

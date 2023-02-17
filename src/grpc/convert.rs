@@ -25,7 +25,7 @@ pub async fn db_command_to_grpc_command(
     db: &models::DbPool,
 ) -> ApiResult<GrpcCommand> {
     let mut node_cmd = NodeCommand {
-        id: cmd.resource_id.to_string(),
+        node_id: cmd.resource_id.to_string(),
         command: None,
         api_command_id: cmd.id.to_string(),
         created_at: None,
@@ -53,7 +53,6 @@ pub async fn db_command_to_grpc_command(
             let cmd = blockjoy::NodeInfoUpdate {
                 name: node.name,
                 self_update: Some(node.self_update),
-                node_id: node.id.to_string(),
                 properties: node
                     .node_type
                     .iter_props()
@@ -111,9 +110,7 @@ pub async fn db_command_to_grpc_command(
 
             Some(node_command::Command::Create(create_cmd))
         }
-        HostCmd::DeleteNode => Some(node_command::Command::Delete(NodeDelete {
-            node_id: cmd.resource_id.to_string(),
-        })),
+        HostCmd::DeleteNode => Some(node_command::Command::Delete(NodeDelete {})),
         HostCmd::GetBVSVersion => unimplemented!(),
         HostCmd::UpdateBVS => unimplemented!(),
         HostCmd::RestartBVS => unimplemented!(),
@@ -193,6 +190,14 @@ pub mod from {
             Ok(Self {
                 value: value.encode()?,
             })
+        }
+    }
+
+    impl TryFrom<UserAuthToken> for grpc::blockjoy_ui::ApiToken {
+        type Error = ApiError;
+
+        fn try_from(value: UserAuthToken) -> Result<Self, Self::Error> {
+            Self::try_from(&value)
         }
     }
 

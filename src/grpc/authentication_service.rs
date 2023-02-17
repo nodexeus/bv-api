@@ -226,7 +226,7 @@ impl AuthenticationService for AuthenticationServiceImpl {
         request: Request<SwitchOrgRequest>,
     ) -> Result<Response<LoginUserResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let user_id = token.get_id();
         let inner = request.into_inner();
         let mut conn = self.db.conn().await?;

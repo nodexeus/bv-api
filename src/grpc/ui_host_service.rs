@@ -66,7 +66,7 @@ impl HostService for HostServiceImpl {
         use get_hosts_request::Param;
 
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let inner = request.into_inner();
         let meta = inner.meta.ok_or_else(required("meta"))?;
         let request_id = meta.id;

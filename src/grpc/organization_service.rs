@@ -33,7 +33,7 @@ impl OrganizationService for OrganizationServiceImpl {
         request: Request<GetOrganizationsRequest>,
     ) -> Result<Response<GetOrganizationsResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let user_id = *token.id();
         let inner = request.into_inner();
         let org_id = inner.org_id.clone();
@@ -78,7 +78,7 @@ impl OrganizationService for OrganizationServiceImpl {
         request: Request<CreateOrganizationRequest>,
     ) -> Result<Response<CreateOrganizationResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let user_id = *token.id();
         let inner = request.into_inner();
         let org = inner.organization.ok_or_else(required("organization"))?;
@@ -122,7 +122,7 @@ impl OrganizationService for OrganizationServiceImpl {
         request: Request<DeleteOrganizationRequest>,
     ) -> Result<Response<DeleteOrganizationResponse>, Status> {
         let refresh_token = get_refresh_token(&request);
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let user_id = *token.id();
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
@@ -151,7 +151,7 @@ impl OrganizationService for OrganizationServiceImpl {
         &self,
         request: Request<RestoreOrganizationRequest>,
     ) -> Result<Response<RestoreOrganizationResponse>, Status> {
-        let token = try_get_token::<_, UserAuthToken>(&request)?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let user_id = *token.id();
         let inner = request.into_inner();
         let org_id = Uuid::parse_str(inner.id.as_str()).map_err(ApiError::from)?;
