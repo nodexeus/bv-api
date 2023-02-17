@@ -94,40 +94,28 @@ message NodeInfo {
     optional SyncStatus sync_status = 10;
     optional StakingStatus staking_status = 11;
     optional string address = 12;
-    optional string host_id = 13;
 }
 
-message NodeStart {
-    string node_id = 1;
-}
+message NodeStart {}
 
-message NodeStop {
-    string node_id = 1;
-}
+message NodeStop {}
 
-message NodeRestart {
-    string node_id = 1;
-}
+message NodeRestart {}
 
 message NodeUpgrade {
-    string node_id = 1;
-    ContainerImage image = 2;
+    ContainerImage image = 1;
 }
 
 message NodeInfoUpdate {
-    string node_id = 1;
-    optional string name = 2;
-    optional bool self_update = 3;
-    repeated Parameter properties = 4;
+    optional string name = 1;
+    optional bool self_update = 2;
+    repeated Parameter properties = 3;
 }
 
-message NodeInfoGet {
-    string node_id = 1;
-}
+message NodeInfoGet {}
 
 message NodeGenericCommand {
-    string node_id = 1;
-    repeated Parameter params = 2;
+    repeated Parameter params = 1;
 }
 
 message NodeCreate {
@@ -141,15 +129,12 @@ message NodeCreate {
     repeated Parameter properties = 8;
 }
 
-message NodeDelete {
-    string node_id = 1;
-}
+message NodeDelete {}
 
 message NodeCommand {
     string id = 1;
     string api_command_id = 2;
     google.protobuf.Timestamp created_at = 3;
-    string host_id = 13;
 
     oneof command {
         NodeGenericCommand generic = 4;
