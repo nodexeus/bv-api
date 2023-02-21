@@ -192,11 +192,11 @@ impl NodeService for NodeServiceImpl {
         let node = Node::create(&mut fields, &mut tx).await?;
 
         self.notifier
-            .bv_nodes_sender()
+            .bv_nodes_sender()?
             .send(&node.clone().into())
             .await?;
         self.notifier
-            .ui_nodes_sender()
+            .ui_nodes_sender()?
             .send(&node.clone().try_into()?)
             .await?;
 
@@ -207,7 +207,7 @@ impl NodeService for NodeServiceImpl {
         };
         let cmd = Command::create(node.host_id, req, &mut tx).await?;
         let grpc_cmd = convert::db_command_to_grpc_command(&cmd, &mut tx).await?;
-        self.notifier.bv_commands_sender().send(&grpc_cmd).await?;
+        self.notifier.bv_commands_sender()?.send(&grpc_cmd).await?;
 
         let update_user = UserSelectiveUpdate {
             first_name: None,
@@ -224,7 +224,7 @@ impl NodeService for NodeServiceImpl {
         };
         let cmd = Command::create(node.host_id, req, &mut tx).await?;
         let grpc_cmd = convert::db_command_to_grpc_command(&cmd, &mut tx).await?;
-        self.notifier.bv_commands_sender().send(&grpc_cmd).await?;
+        self.notifier.bv_commands_sender()?.send(&grpc_cmd).await?;
 
         tx.commit().await?;
 
@@ -303,7 +303,7 @@ impl NodeService for NodeServiceImpl {
 
             tx.commit().await?;
 
-            self.notifier.bv_commands_sender().send(&grpc_cmd).await?;
+            self.notifier.bv_commands_sender()?.send(&grpc_cmd).await?;
             // let grpc_cmd = cmd.clone().try_into()?;
             // self.notifier.ui_commands_sender().send(&grpc_cmd).await;
 
