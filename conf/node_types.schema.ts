@@ -246,6 +246,28 @@ function write_json(chain: string, node_types: SupportedNodeTypes) {
     });
 }
 
+////////////////////////////////////////////////////
+///             TEZO sample                      ///
+////////////////////////////////////////////////////
+const tezo_full: NodeType = {
+    id: NodeTypeKey.Node,
+    version: '15.1-2-build.1',
+    properties: [
+        disabled_self_hosted
+    ],
+};
+
+////////////////////////////////////////////////////
+///             NEAR sample                      ///
+////////////////////////////////////////////////////
+const near_full: NodeType = {
+    id: NodeTypeKey.Node,
+    version: '1.31.0',
+    properties: [
+        disabled_self_hosted
+    ],
+};
+
 // Write HNT node types
 // write_json("HNT", [hnt_validator, hnt_miner]);
 
@@ -256,4 +278,10 @@ function write_json(chain: string, node_types: SupportedNodeTypes) {
 // write_json("ADA", [ada_full, ada_validator]);
 
 // Write ALGO node types
-write_json("ALGO", [algo_node]);
+// write_json("ALGO", [algo_node]);
+
+// Write TEZO node types
+write_json("TEZO", [tezo_full]);
+
+// Write NEAR node types
+write_json("NEAR", [near_full]);
