@@ -59,13 +59,19 @@ pub enum ApiError {
     IpParseError(#[from] std::net::AddrParseError),
 
     #[error("Error reading key: {0}")]
-    Key(KeyProviderError),
+    Key(#[from] KeyProviderError),
 
     #[error("Struggles with receiving through channel: {0}")]
     ChannelError(#[from] tokio::sync::broadcast::error::RecvError),
 
     #[error("User node quota exceeded")]
     NodeQuota,
+
+    #[error("{0}")]
+    InvalidArgument(tonic::Status),
+
+    #[error("Mqtt error: {0}")]
+    MqttError(#[from] rumqttc::ClientError),
 }
 
 impl ApiError {
