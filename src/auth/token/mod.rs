@@ -353,3 +353,11 @@ pub trait Blacklisted {
     async fn is_blacklisted(&self, token: String, db: &mut sqlx::PgConnection)
         -> TokenResult<bool>;
 }
+
+pub fn determine_token_by_str(token: &str) -> TokenResult<TokenType> {
+    let payload = token.split('.').nth(1).ok_or(TokenError::Invalid)?;
+    let decoded = base64::decode(payload).or(Err(TokenError::Invalid))?;
+    let json: UnknownToken = serde_json::from_slice(&decoded).or(Err(TokenError::Invalid))?;
+    
+    Ok(json.token_type)
+}
