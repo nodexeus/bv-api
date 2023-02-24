@@ -80,7 +80,7 @@ impl Notifier {
 /// When a message comes in, the re
 pub struct MqttClient<T> {
     client: rumqttc::AsyncClient,
-    _event_loop: rumqttc::EventLoop,
+    event_loop: rumqttc::EventLoop,
     _pd: std::marker::PhantomData<T>,
 }
 
@@ -90,7 +90,7 @@ impl<T: Notify + prost::Message> MqttClient<T> {
         let (client, event_loop) = rumqttc::AsyncClient::new(options, 10);
         Ok(Self {
             client,
-            _event_loop: event_loop,
+            event_loop,
             _pd: std::marker::PhantomData,
         })
     }
@@ -112,12 +112,19 @@ impl<T: Notify + prost::Message> MqttClient<T> {
     pub async fn send(&mut self, msg: &T) -> Result<()> {
         const RETAIN: bool = false;
         const QOS: rumqttc::QoS = rumqttc::QoS::ExactlyOnce;
+        const SEND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
         let payload = msg.encode_to_vec();
 
         for channel in msg.channels() {
             self.client
                 .publish(&channel, QOS, RETAIN, payload.clone())
                 .await?;
+
+            match tokio::time::timeout(SEND_TIMEOUT, self.event_loop.poll()).await {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => tracing::error!("Could not send MQTT message: {e}"),
+                Err(_) => tracing::error!("MQTT sending made no progress in {SEND_TIMEOUT:?}"),
+            };
         }
         Ok(())
     }
