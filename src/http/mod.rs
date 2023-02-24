@@ -1,7 +1,6 @@
 use crate::http::routes::unauthenticated_routes;
 use crate::models;
 use axum::{Extension, Router};
-use serde::Deserialize;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
