@@ -6,7 +6,6 @@ pub fn unauthenticated_routes() -> Router {
     let mqtt_router = Router::new()
         // mqtt/auth
         // -> { username: %u => JWT TOKEN }
-        .route("/auth", post(mqtt_auth))
         .route("/acl", post(mqtt_acl));
 
     Router::new()
