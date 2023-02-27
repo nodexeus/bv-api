@@ -24,11 +24,8 @@ pub struct NodeServiceImpl {
 }
 
 impl NodeServiceImpl {
-    pub fn new(db: models::DbPool) -> Self {
-        Self {
-            db,
-            notifier: Notifier::new(),
-        }
+    pub fn new(db: models::DbPool, notifier: Notifier) -> Self {
+        Self { db, notifier }
     }
 }
 
@@ -190,6 +187,8 @@ impl NodeService for NodeServiceImpl {
         let mut fields: NodeCreateRequest = inner.node.ok_or_else(required("node"))?.try_into()?;
         let mut tx = self.db.begin().await?;
         let node = Node::create(&mut fields, &mut tx).await?;
+
+        println!("Created node: now notifying:");
 
         self.notifier
             .bv_nodes_sender()?
