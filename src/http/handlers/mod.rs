@@ -21,7 +21,7 @@ pub async fn health(Extension(db): Extension<models::DbPool>) -> impl IntoRespon
 }
 
 pub async fn mqtt_auth(Json(_payload): Json<MqttAclRequest>) -> impl IntoResponse {
-    todo!()
+    (StatusCode::OK, Json("{}"))
 }
 
 pub async fn mqtt_acl(Json(payload): Json<MqttAclRequest>) -> impl IntoResponse {
