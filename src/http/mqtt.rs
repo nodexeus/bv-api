@@ -44,7 +44,7 @@ pub struct MqttHostPolicy;
 #[tonic::async_trait]
 impl MqttAclPolicy for MqttUserPolicy {
     /// TODO
-    async fn allow(token: &str, _topic: String) -> MqttAclPolicyResult {
+    fn allow(token: &str, _topic: String) -> MqttAclPolicyResult {
         // Verify token
         let token = UserAuthToken::from_str(token)?;
         let _org_id = token.data.get("org_id").unwrap_or(&String::new());
