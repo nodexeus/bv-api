@@ -8,6 +8,7 @@ pub mod metrics_service;
 pub mod node_service;
 pub mod notification;
 pub mod organization_service;
+pub mod service_discovery;
 pub mod ui_blockchain_service;
 pub mod ui_command_service;
 pub mod ui_dashboard_service;
