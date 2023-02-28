@@ -5,6 +5,7 @@ use crate::grpc::blockjoy::ServicesResponse;
 use anyhow::anyhow;
 use tonic::{Request, Response, Status};
 
+#[derive(Default)]
 pub struct DiscoveryServiceImpl;
 
 #[tonic::async_trait]
