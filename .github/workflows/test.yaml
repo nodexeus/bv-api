@@ -59,6 +59,7 @@ jobs:
       MQTT_SERVER_PORT: 1883
       MQTT_USERNAME: blockvisor-api
       MQTT_PASSWORD: PH*rE:\ZQlecB9/I?[#R$q3M;5yCb]Y+
+      KEY_SERVICE_URL: https://api.dev.blockjoy.com
 
     steps:
       - uses: actions/checkout@v2
