@@ -20,6 +20,7 @@ pub struct MqttAuthRequest {
 }
 
 #[derive(Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum MqttOperationType {
     Publish,
     Subscribe,
