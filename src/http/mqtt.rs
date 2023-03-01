@@ -21,7 +21,7 @@ pub enum MqttOperationType {
     Subscribe,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct MqttAclRequest {
     pub operation: MqttOperationType,
     pub username: String,
@@ -51,6 +51,8 @@ impl MqttAclPolicy for MqttUserPolicy {
         let token = UserAuthToken::from_str(token)?;
         let _org_id = token.data.get("org_id").unwrap_or(&String::new());
 
+        tracing::info!("MqttUserPolicy returns true");
+
         Ok(true)
     }
 }
@@ -63,7 +65,10 @@ impl MqttAclPolicy for MqttHostPolicy {
             .nth(3)
             .ok_or("")
             .map_err(|e| MqttPolicyError::Topic(anyhow!(e)))?;
+        let result = token.id.to_string().as_str() == host_id;
 
-        Ok(token.id.to_string().as_str() == host_id)
+        tracing::info!("MqttAclPolicy returns: {result}");
+
+        Ok(result)
     }
 }
