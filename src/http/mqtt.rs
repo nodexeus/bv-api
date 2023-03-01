@@ -60,7 +60,7 @@ impl MqttAclPolicy for MqttHostPolicy {
         let token = HostAuthToken::from_str(token)?;
         let host_id = topic
             .split('/')
-            .nth(2)
+            .nth(3)
             .ok_or("")
             .map_err(|e| MqttPolicyError::Topic(anyhow!(e)))?;
 
