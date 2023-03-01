@@ -14,11 +14,6 @@ pub enum MqttPolicyError {
     Topic(anyhow::Error),
 }
 
-#[derive(Deserialize)]
-pub struct MqttAuthRequest {
-    pub username: String,
-}
-
 #[derive(Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum MqttOperationType {
@@ -31,6 +26,12 @@ pub struct MqttAclRequest {
     pub operation: MqttOperationType,
     pub username: String,
     pub topic: String,
+}
+
+#[derive(Deserialize)]
+pub struct MqttAuthRequest {
+    pub username: String,
+    pub password: String,
 }
 
 pub type MqttAclPolicyResult = Result<bool, MqttPolicyError>;

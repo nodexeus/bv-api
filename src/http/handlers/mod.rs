@@ -1,6 +1,6 @@
 use super::mqtt::MqttAclRequest;
 use crate::auth::{determine_token_by_str, TokenType};
-use crate::http::mqtt::{MqttAclPolicy, MqttHostPolicy, MqttUserPolicy};
+use crate::http::mqtt::{MqttAclPolicy, MqttAuthRequest, MqttHostPolicy, MqttUserPolicy};
 use crate::models;
 use axum::extract::{Extension, Json};
 use axum::http::StatusCode;
@@ -20,7 +20,7 @@ pub async fn health(Extension(db): Extension<models::DbPool>) -> impl IntoRespon
     }
 }
 
-pub async fn mqtt_auth(Json(_payload): Json<MqttAclRequest>) -> impl IntoResponse {
+pub async fn mqtt_auth(Json(_payload): Json<MqttAuthRequest>) -> impl IntoResponse {
     (StatusCode::OK, Json("{}"))
 }
 
