@@ -20,11 +20,14 @@ pub async fn health(Extension(db): Extension<models::DbPool>) -> impl IntoRespon
     }
 }
 
-pub async fn mqtt_auth(Json(_payload): Json<MqttAuthRequest>) -> impl IntoResponse {
+pub async fn mqtt_auth(Json(payload): Json<serde_json::Value>) -> impl IntoResponse {
+    tracing::info!("Value is {payload:?}");
     (StatusCode::OK, Json("{}"))
 }
 
 pub async fn mqtt_acl(Json(payload): Json<MqttAclRequest>) -> impl IntoResponse {
+    tracing::info!("Got acl payload: {payload:?}");
+
     // TODO: Remove the unwraps, just for testing
     match determine_token_by_str(payload.username.as_str()) {
         Ok(TokenType::UserAuth) => {
