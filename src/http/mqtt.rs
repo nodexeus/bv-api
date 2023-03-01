@@ -14,7 +14,7 @@ pub enum MqttPolicyError {
     Topic(anyhow::Error),
 }
 
-#[derive(Deserialize, Eq, PartialEq)]
+#[derive(Deserialize, Eq, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum MqttOperationType {
     Publish,
