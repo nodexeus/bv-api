@@ -8,6 +8,7 @@ pub mod metrics_service;
 pub mod node_service;
 pub mod notification;
 pub mod organization_service;
+pub mod service_discovery;
 pub mod ui_blockchain_service;
 pub mod ui_command_service;
 pub mod ui_dashboard_service;
@@ -50,6 +51,7 @@ use crate::grpc::command_service::CommandsServiceImpl;
 use crate::grpc::key_file_service::KeyFileServiceImpl;
 use crate::grpc::metrics_service::MetricsServiceImpl;
 use crate::grpc::organization_service::OrganizationServiceImpl;
+use crate::grpc::service_discovery::DiscoveryServiceImpl;
 use crate::grpc::ui_blockchain_service::BlockchainServiceImpl;
 use crate::grpc::ui_command_service::CommandServiceImpl;
 use crate::grpc::ui_dashboard_service::DashboardServiceImpl;
@@ -107,6 +109,8 @@ pub async fn server(
     let auth_service = AuthorizationService::new(enforcer);
     let notifier = Notifier::new().expect("Could not set up MQTT notifier!");
 
+    let discovery_service =
+        grpc::blockjoy::discovery_server::DiscoveryServer::new(DiscoveryServiceImpl::default());
     let command_service =
         grpc::blockjoy::commands_server::CommandsServer::new(CommandsServiceImpl::new(db.clone()));
     let node_service = grpc::blockjoy::nodes_server::NodesServer::new(
@@ -148,6 +152,7 @@ pub async fn server(
         .layer(middleware)
         .concurrency_limit_per_connection(rate_limiting_settings())
         .add_service(h_service)
+        .add_service(discovery_service)
         .add_service(command_service)
         .add_service(node_service)
         .add_service(k_service)
