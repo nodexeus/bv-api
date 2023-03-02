@@ -23,7 +23,6 @@ jobs:
           image_tag: ${{ github.sha }},latest
           dockerfile: ./Dockerfile
           context: ./
-          target: build
 
       - name: Build and Push Migrations
         uses: RafikFarhad/push-to-gcr-github-action@v5-beta
@@ -34,4 +33,3 @@ jobs:
           image_tag: ${{ github.sha }},latest
           dockerfile: ./migrations/Dockerfile
           context: ./migrations
-          target: build
