@@ -1,6 +1,6 @@
 use super::mqtt::MqttAclRequest;
 use crate::auth::{determine_token_by_str, TokenType};
-use crate::http::mqtt::{MqttAclPolicy, MqttAuthRequest, MqttHostPolicy, MqttUserPolicy};
+use crate::http::mqtt::{MqttAclPolicy, MqttHostPolicy, MqttUserPolicy};
 use crate::models;
 use axum::extract::{Extension, Json};
 use axum::http::StatusCode;

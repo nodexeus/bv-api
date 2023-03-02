@@ -23,7 +23,7 @@ pub enum MqttOperationType {
 
 #[derive(Deserialize, Debug)]
 pub struct MqttAclRequest {
-    pub operation: MqttOperationType,
+    pub operation: String,
     pub username: String,
     pub topic: String,
 }
