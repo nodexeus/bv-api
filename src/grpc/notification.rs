@@ -45,14 +45,17 @@ impl Notifier {
         let options = Self::get_mqtt_options()?;
         let (client, mut event_loop) = rumqttc::AsyncClient::new(options, 10);
         client
-            .subscribe("testeroni", rumqttc::QoS::AtLeastOnce)
+            .subscribe("/bv/hosts/#", rumqttc::QoS::AtLeastOnce)
             .await
             .unwrap();
         tokio::spawn(async move {
             loop {
-                if let Err(e) = event_loop.poll().await {
-                    tracing::warn!("MQTT failure, ignoring and continuing to poll: {e}");
-                    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                match event_loop.poll().await {
+                    Ok(event) => println!("Successful polling event: {event:?}"),
+                    Err(e) => {
+                        tracing::warn!("MQTT failure, ignoring and continuing to poll: {e}");
+                        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                    }
                 }
             }
         });
