@@ -41,9 +41,13 @@ pub struct Notifier {
 }
 
 impl Notifier {
-    pub fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         let options = Self::get_mqtt_options()?;
         let (client, mut event_loop) = rumqttc::AsyncClient::new(options, 10);
+        client
+            .subscribe("testeroni", rumqttc::QoS::AtLeastOnce)
+            .await
+            .unwrap();
         tokio::spawn(async move {
             loop {
                 if let Err(e) = event_loop.poll().await {
@@ -227,7 +231,7 @@ mod tests {
         let db = crate::TestDb::setup().await;
         let host = db.host().await;
         let host = host.try_into().unwrap();
-        let notifier = Notifier::new().unwrap();
+        let notifier = Notifier::new().await.unwrap();
         notifier
             .bv_hosts_sender()
             .unwrap()
@@ -241,7 +245,7 @@ mod tests {
         let db = crate::TestDb::setup().await;
         let node = db.node().await;
         let node = node.try_into().unwrap();
-        let notifier = Notifier::new().unwrap();
+        let notifier = Notifier::new().await.unwrap();
         notifier
             .bv_nodes_sender()
             .unwrap()
@@ -258,7 +262,7 @@ mod tests {
         let command = convert::db_command_to_grpc_command(&command, &mut conn)
             .await
             .unwrap();
-        let notifier = Notifier::new().unwrap();
+        let notifier = Notifier::new().await.unwrap();
         notifier
             .bv_commands_sender()
             .unwrap()
@@ -272,7 +276,7 @@ mod tests {
         let db = crate::TestDb::setup().await;
         let host = db.host().await;
         let host = host.try_into().unwrap();
-        let notifier = Notifier::new().unwrap();
+        let notifier = Notifier::new().await.unwrap();
         notifier
             .ui_hosts_sender()
             .unwrap()
@@ -286,7 +290,7 @@ mod tests {
         let db = crate::TestDb::setup().await;
         let node = db.node().await;
         let node = node.try_into().unwrap();
-        let notifier = Notifier::new().unwrap();
+        let notifier = Notifier::new().await.unwrap();
         notifier
             .ui_nodes_sender()
             .unwrap()

@@ -107,8 +107,9 @@ pub async fn server(
         .await
         .expect("Could not create Authorization!");
     let auth_service = AuthorizationService::new(enforcer);
-    let notifier = Notifier::new().expect("Could not set up MQTT notifier!");
-
+    let notifier = Notifier::new()
+        .await
+        .expect("Could not set up MQTT notifier!");
     let msg = blockjoy::Command {
         r#type: Some(blockjoy::command::Type::Node(blockjoy::NodeCommand {
             node_id: uuid::Uuid::new_v4().to_string(),
