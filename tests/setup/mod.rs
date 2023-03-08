@@ -6,6 +6,8 @@ mod helper_traits;
 use api::auth::{self, JwtToken, TokenRole, TokenType};
 use api::models;
 use api::{grpc::blockjoy_ui, TestDb};
+use diesel_async::pooled_connection::bb8::PooledConnection;
+use diesel_async::AsyncPgConnection;
 pub use dummy_token::*;
 use futures_util::{Stream, StreamExt};
 use helper_traits::GrpcClient;
@@ -70,11 +72,7 @@ impl Tester {
         }
     }
 
-    pub async fn begin(&self) -> api::models::DbTrx {
-        self.db.pool.begin().await.unwrap()
-    }
-
-    pub async fn conn(&self) -> sqlx::pool::PoolConnection<sqlx::Postgres> {
+    pub async fn conn(&self) -> PooledConnection<'_, AsyncPgConnection> {
         self.db.pool.conn().await.unwrap()
     }
 
@@ -108,34 +106,32 @@ impl Tester {
     }
 
     pub async fn hosts(&self) -> Vec<models::Host> {
-        models::Host::find_all(&mut *self.conn().await)
-            .await
-            .unwrap()
+        let mut conn = self.conn().await;
+        models::Host::find_all(&mut conn).await.unwrap()
     }
 
     pub async fn host(&self) -> models::Host {
-        self.hosts().await.first().unwrap().clone()
-    }
-
-    pub async fn host2(&self) -> models::Host {
         self.hosts().await.pop().unwrap()
     }
 
+    pub async fn host2(&self) -> models::Host {
+        let mut hosts = self.hosts().await;
+        hosts.pop().unwrap();
+        hosts.pop().unwrap()
+    }
+
     pub async fn org(&self) -> models::Org {
-        models::Org::find_all(&mut *self.conn().await)
-            .await
-            .unwrap()
-            .pop()
-            .unwrap()
+        self.db.org().await
     }
 
     pub async fn org_for(&self, user: &models::User) -> models::Org {
-        models::Org::find_all_by_user(user.id, &mut *self.conn().await)
+        let mut conn = self.conn().await;
+        models::Org::find_all_by_user(user.id, &mut conn)
             .await
             .unwrap()
-            .first()
+            .into_iter()
+            .find(|o| !o.is_personal)
             .unwrap()
-            .clone()
     }
 
     pub async fn user_token(&self, user: &models::User) -> impl JwtToken + Clone {
@@ -161,18 +157,10 @@ impl Tester {
     }
 
     pub async fn node(&self) -> models::Node {
-        sqlx::query_as(r#"
-            INSERT INTO
-                nodes (id, org_id, host_id, node_type, blockchain_id)
-            VALUES
-                ('59edfb35-bbf1-460f-bd3d-e4c86ba73e0d', (SELECT id FROM orgs LIMIT 1), (SELECT id FROM hosts LIMIT 1), '{"id":404}', (SELECT id FROM blockchains LIMIT 1))
-            ON CONFLICT (id) DO UPDATE
-            SET id = '59edfb35-bbf1-460f-bd3d-e4c86ba73e0d'
-            RETURNING *;
-        "#)
-        .fetch_one(&mut self.conn().await)
-        .await
-        .unwrap()
+        use api::auth::FindableById;
+        let mut conn = self.conn().await;
+        let node_id = "cdbbc736-f399-42ab-86cf-617ce983011d".parse().unwrap();
+        models::Node::find_by_id(node_id, &mut conn).await.unwrap()
     }
 
     pub async fn blockchain(&self) -> models::Blockchain {
@@ -253,7 +241,7 @@ impl Tester {
         req.metadata_mut()
             .insert("authorization", auth.parse().unwrap());
 
-        let refresh = format!("refresh={}", refresh.to_base64().unwrap());
+        let refresh = format!("refresh={}", refresh.encode().unwrap());
         req.metadata_mut()
             .insert("cookie", refresh.parse().unwrap());
 

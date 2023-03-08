@@ -8,6 +8,11 @@ pub mod mail;
 pub mod models;
 pub mod server;
 
+use errors::Result;
+
+pub const MIGRATIONS: diesel_migrations::EmbeddedMigrations =
+    diesel_migrations::embed_migrations!();
+
 // #[cfg(test)]
 pub use test::TestDb;
 // #[cfg(test)]
@@ -17,16 +22,21 @@ mod test {
         HostRefreshToken, JwtToken, TokenClaim, TokenRole, TokenType, UserRefreshToken,
     };
     use crate::models;
+    use crate::models::schema::{blockchains, commands, nodes, orgs};
+    use diesel::migration::MigrationSource;
+    use diesel::prelude::*;
+    use diesel_async::pooled_connection::bb8::Pool;
+    use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+    use diesel_async::scoped_futures::ScopedFutureExt;
+    use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
     use rand::Rng;
-    use sqlx::Connection;
-    use std::net::IpAddr;
-    use std::str::FromStr;
     use uuid::Uuid;
 
     #[derive(Clone)]
     pub struct TestDb {
         pub pool: models::DbPool,
         test_db_name: String,
+        test_db_url: String,
         main_db_url: String,
     }
 
@@ -49,8 +59,8 @@ mod test {
             // `CREATE DATABASE` query.
             let main_db_url = std::env::var("DATABASE_URL").expect("Missing DATABASE_URL");
             let db_name = Self::db_name();
-            let mut conn = sqlx::PgConnection::connect(&main_db_url).await.unwrap();
-            sqlx::query(&format!("CREATE DATABASE {db_name};"))
+            let mut conn = AsyncPgConnection::establish(&main_db_url).await.unwrap();
+            diesel::sql_query(&format!("CREATE DATABASE {db_name};"))
                 .execute(&mut conn)
                 .await
                 .unwrap();
@@ -63,30 +73,36 @@ mod test {
                 .unwrap_or_else(|_| "10".to_string())
                 .parse()
                 .unwrap();
-            let pool = sqlx::postgres::PgPoolOptions::new()
-                .max_connections(db_max_conn)
-                .connect(&db_url)
+
+            let config = AsyncDieselConnectionManager::<diesel_async::AsyncPgConnection>::new(
+                db_url.clone(),
+            );
+            let pool = Pool::builder()
+                .max_size(db_max_conn)
+                .build(config)
                 .await
-                .expect("Could not create db connection pool.");
+                .unwrap();
 
             // With our constructed pool, we can create a tester, migrate the database and seed it
             // with some data for our tests.
             let db = TestDb {
                 pool: models::DbPool::new(pool),
                 test_db_name: db_name,
+                test_db_url: db_url,
                 main_db_url,
             };
-            sqlx::migrate!("./migrations")
-                .run(&mut db.pool.conn().await.unwrap())
-                .await
-                .unwrap();
+            for migration in super::MIGRATIONS.migrations().unwrap() {
+                migration
+                    .run(&mut PgConnection::establish(&db.test_db_url).unwrap())
+                    .unwrap();
+            }
             db.seed().await;
             db
         }
 
         async fn tear_down(test_db_name: String, main_db_url: String) {
-            let mut conn = sqlx::PgConnection::connect(&main_db_url).await.unwrap();
-            sqlx::query(&format!("DROP DATABASE {test_db_name}"))
+            let mut conn = AsyncPgConnection::establish(&main_db_url).await.unwrap();
+            diesel::sql_query(&format!("DROP DATABASE {test_db_name}"))
                 .execute(&mut conn)
                 .await
                 .unwrap();
@@ -104,186 +120,181 @@ mod test {
 
         /// Seeds the database with some initial data that we need for running tests.
         async fn seed(&self) {
-            let mut tx = self.pool.begin().await.unwrap();
-            sqlx::query("INSERT INTO info (block_height) VALUES (99)")
-                .execute(&mut tx)
+            self.pool
+                .trx(|c| Self::_seed(c).scope_boxed())
+                .await
+                .expect("Could not seed db");
+        }
+
+        async fn _seed(conn: &mut diesel_async::AsyncPgConnection) -> crate::Result<()> {
+            diesel::sql_query("INSERT INTO info (block_height) VALUES (99)")
+                .execute(conn)
                 .await
                 .expect("could not update info in test setup");
-            /*
-            sqlx::query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('fd5e2a49-f741-4eb2-a8b1-ee6222146ced','DeletedChain', 'deleted', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]')")
-            .execute(&mut tx)
-            .await
-            .expect("Error inserting blockchain");
-            sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Pocket', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]')")
-            .execute(&mut tx)
-            .await
-            .expect("Error inserting blockchain");
-            sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Cosmos', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
-            .execute(&mut tx)
-            .await
-            .expect("Error inserting blockchain");
-            sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Etherium', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
-            .execute(&mut tx)
-            .await
-            .expect("Error inserting blockchain");
-            sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Lightning', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
-            .execute(&mut tx)
-            .await
-            .expect("Error inserting blockchain");
-            sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Algorand', 'production', '[{ \"id\": 2, \"properties\": [{\"name\": \"ip\",\"label\": \"IP address\",\"default\": \"\",\"type\": \"string\"},{\"name\": \"managed\",\"label\": \"Self hosted or managed?\",\"default\": \"true\",\"type\": \"boolean\"}]},{\"id\": 3,\"properties\": []}]');")
-            .execute(&mut tx)
-            .await
-            .expect("Error inserting blockchain");
-             */
 
-            sqlx::query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('1fdbf4c3-ff16-489a-8d3d-87c8620b963c','Helium', 'production', '[]')")
-                .execute(&mut tx)
+            diesel::sql_query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('1fdbf4c3-ff16-489a-8d3d-87c8620b963c','Helium', 'production', '[]')")
+                .execute(conn)
+                .await.unwrap();
+            diesel::sql_query("INSERT INTO blockchains (name,status,supported_node_types) values ('Ethereum', 'production', '[{\"id\":3,\"version\": \"3.3.0\", \"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]}]');")
+                .execute(conn)
+                .await.unwrap();
+            // let blockchain: models::Blockchain = diesel::sql_query("INSERT INTO blockchains (name,status,supported_node_types) values ('Helium', 'production', '[{\"id\":3, \"version\": \"0.0.3\",\"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]}]') RETURNING *;")
+            let blockchain: models::Blockchain = diesel::insert_into(blockchains::table)
+                .values((
+                    blockchains::name.eq("Helium"),
+                    blockchains::status.eq(models::BlockchainStatus::Production),
+                    blockchains::supported_node_types
+                        .eq(serde_json::json!([Self::test_node_types()])),
+                ))
+                .get_result(conn)
                 .await
-                .expect("Error inserting blockchain");
-            sqlx::query("INSERT INTO blockchains (name,status,supported_node_types) values ('Ethereum', 'production', '[{\"id\":3,\"version\": \"3.3.0\", \"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]}]');")
-                .execute(&mut tx)
+                .unwrap();
+
+            let org_id: uuid::Uuid = "08dede71-b97d-47c1-a91d-6ba0997b3cdd".parse().unwrap();
+            diesel::insert_into(orgs::table)
+                .values((
+                    orgs::id.eq(org_id),
+                    orgs::name.eq("the blockboys"),
+                    orgs::is_personal.eq(false),
+                ))
+                .execute(conn)
                 .await
-                .expect("Error inserting blockchain");
-            let blockchain: models::Blockchain = sqlx::query_as("INSERT INTO blockchains (name,status,supported_node_types) values ('Helium', 'production', '[{\"id\":3, \"version\": \"0.0.3\",\"properties\":[{\"name\":\"keystore-file\",\"ui_type\":\"key-upload\",\"default\":\"\",\"disabled\":false,\"required\":true},{\"name\":\"self-hosted\",\"ui_type\":\"switch\",\"default\":\"false\",\"disabled\":true,\"required\":true}]}]') RETURNING *;")
-                .fetch_one(&mut tx)
+                .unwrap();
+
+            let user = models::NewUser::new("test@here.com", "Luuk", "Tester", "abc12345").unwrap();
+            let admin = models::NewUser::new("admin@here.com", "Mr", "Admin", "abc12345").unwrap();
+
+            let user = user.create(conn).await.unwrap();
+            let admin = admin.create(conn).await.unwrap();
+
+            models::NewOrgUser::new(org_id, admin.id, models::OrgRole::Admin)
+                .create(conn)
                 .await
-                .expect("Error inserting blockchain");
+                .unwrap();
 
-            let user = models::UserRequest {
-                email: "test@here.com".into(),
-                first_name: "Luuk".into(),
-                last_name: "Tester".into(),
-                password: "abc12345".into(),
-                password_confirm: "abc12345".into(),
-            };
-
-            let admin = models::UserRequest {
-                email: "admin@here.com".into(),
-                first_name: "Master".into(),
-                last_name: "Admin".into(),
-                password: "abc12345".into(),
-                password_confirm: "abc12345".into(),
-            };
-
-            let user = models::User::create(user, None, &mut tx)
-                .await
-                .expect("Could not create test user in db.");
-
-            let _ = models::User::create(admin, None, &mut tx)
-                .await
-                .expect("Could not create admin user in db.");
-
-            sqlx::query(
-                "UPDATE users set pay_address = '123456', staking_quota = 3 where email = 'test@here.com'",
+            diesel::sql_query(
+                "UPDATE users set pay_address = '123456', staking_quota = 3 WHERE email = 'test@here.com'",
             )
-            .execute(&mut tx)
-            .await
-            .expect("could not set user's pay address for user test user in sql");
+            .execute(conn)
+            .await.unwrap();
 
-            sqlx::query("INSERT INTO invoices (user_id, earnings, fee_bps, validators_count, amount, starts_at, ends_at, is_paid) values ($1, 99, 200, 1, 1000000000, now(), now(), false)")
-            .bind(user.id)
-            .execute(&mut tx)
-            .await
-            .expect("could insert test invoice into db");
+            diesel::sql_query("
+            INSERT INTO
+                invoices (user_id, earnings, fee_bps, validators_count, amount, starts_at, ends_at, is_paid)
+            VALUES
+                ($1, 99, 200, 1, 1000000000, now(), now(), false);")
+                .bind::<diesel::sql_types::Uuid, _>(user.id)
+                .execute(conn)
+                .await.unwrap();
 
-            let host1 = models::HostRequest {
-                name: "Host-1".into(),
-                version: Some("0.1.0".into()),
-                location: Some("Virginia".into()),
+            let host1 = models::NewHost {
+                name: "Host-1",
+                version: Some("0.1.0"),
+                location: Some("Virginia"),
                 cpu_count: Some(16),
                 mem_size: Some(1612312312),
                 disk_size: Some(161212312),
                 os: None,
                 os_version: None,
-                ip_addr: "192.168.1.1".into(),
+                ip_addr: "192.168.1.1",
                 status: models::ConnectionStatus::Online,
-                ip_range_from: Some(IpAddr::from_str("192.168.0.10").expect("invalid ip")),
-                ip_range_to: Some(IpAddr::from_str("192.168.0.100").expect("invalid ip")),
-                ip_gateway: Some(IpAddr::from_str("192.168.0.1").expect("invalid ip")),
+                ip_range_from: "192.168.0.10".parse().unwrap(),
+                ip_range_to: "192.168.0.100".parse().unwrap(),
+                ip_gateway: "192.168.0.1".parse().unwrap(),
             };
 
-            let host1 = models::Host::create(host1, &mut tx)
-                .await
-                .expect("Could not create test host in db.");
-
-            let host2 = models::HostRequest {
-                name: "Host-2".into(),
-                version: Some("0.1.0".into()),
-                location: Some("Ohio".into()),
-                cpu_count: Some(16),
-                mem_size: Some(1612312312),
-                disk_size: Some(161212312),
-                os: None,
-                os_version: None,
-                ip_addr: "192.168.2.1".into(),
-                status: models::ConnectionStatus::Online,
-                ip_range_from: Some(IpAddr::from_str("192.12.0.10").expect("invalid ip")),
-                ip_range_to: Some(IpAddr::from_str("192.12.0.20").expect("invalid ip")),
-                ip_gateway: Some(IpAddr::from_str("192.12.0.1").expect("invalid ip")),
-            };
-
-            let _host2 = models::Host::create(host2, &mut tx)
-                .await
-                .expect("Could not create test host in db.");
-
-            let org: models::Org =
-                sqlx::query_as("INSERT INTO orgs (name) VALUES ('the blockboys') RETURNING *")
-                    .fetch_one(&mut tx)
-                    .await
-                    .unwrap();
-            sqlx::query(
-                "INSERT INTO nodes
-                    (org_id, host_id, blockchain_id, node_type, block_age, consensus)
-                VALUES
-                    ($1, $2, $3, $4::jsonb, 0, true)",
+            let host1 = host1.create(conn).await.unwrap();
+            models::NewIpAddressRange::try_new(
+                "127.0.0.1".parse().unwrap(),
+                "127.0.0.10".parse().unwrap(),
+                Some(host1.id),
             )
-            .bind(org.id)
-            .bind(host1.id)
-            .bind(blockchain.id)
-            .bind("{\"id\": 1}")
-            .execute(&mut tx)
+            .unwrap()
+            .create(conn)
             .await
             .unwrap();
 
-            tx.commit().await.unwrap();
+            let host2 = models::NewHost {
+                name: "Host-2",
+                version: Some("0.1.0"),
+                location: Some("Ohio"),
+                cpu_count: Some(16),
+                mem_size: Some(1612312312),
+                disk_size: Some(161212312),
+                os: None,
+                os_version: None,
+                ip_addr: "192.168.2.1",
+                status: models::ConnectionStatus::Online,
+                ip_range_from: "192.12.0.10".parse().unwrap(),
+                ip_range_to: "192.12.0.20".parse().unwrap(),
+                ip_gateway: "192.12.0.1".parse().unwrap(),
+            };
+
+            host2.create(conn).await.unwrap();
+            let node_id: uuid::Uuid = "cdbbc736-f399-42ab-86cf-617ce983011d".parse().unwrap();
+
+            let ip_gateway = host1.ip_gateway.unwrap().to_string();
+            let ip_addr = models::IpAddress::next_for_host(host1.id, conn)
+                .await
+                .unwrap()
+                .ip
+                .ip()
+                .to_string();
+
+            diesel::insert_into(nodes::table)
+                .values((
+                    nodes::id.eq(node_id),
+                    nodes::name.eq("Test Node"),
+                    nodes::org_id.eq(org_id),
+                    nodes::host_id.eq(host1.id),
+                    nodes::blockchain_id.eq(blockchain.id),
+                    nodes::node_type.eq(Self::test_node_types()),
+                    nodes::block_age.eq(0),
+                    nodes::consensus.eq(true),
+                    nodes::chain_status.eq(models::NodeChainStatus::Broadcasting),
+                    nodes::ip_gateway.eq(ip_gateway),
+                    nodes::ip_addr.eq(ip_addr),
+                ))
+                .execute(conn)
+                .await
+                .unwrap();
+            Ok(())
         }
 
         pub async fn host(&self) -> models::Host {
-            sqlx::query("SELECT * FROM hosts WHERE name = 'Host-1'")
-                .try_map(models::Host::try_from)
-                .fetch_one(&mut self.pool.conn().await.unwrap())
+            models::Host::find_by_name("Host-1", &mut self.pool.conn().await.unwrap())
                 .await
                 .unwrap()
         }
 
         pub async fn node(&self) -> models::Node {
-            sqlx::query_as("SELECT * FROM nodes LIMIT 1")
-                .fetch_one(&mut self.pool.conn().await.unwrap())
+            nodes::table
+                .limit(1)
+                .get_result(&mut self.pool.conn().await.unwrap())
                 .await
                 .unwrap()
         }
 
         pub async fn org(&self) -> models::Org {
-            sqlx::query_as("SELECT * FROM orgs LIMIT 1")
-                .fetch_one(&mut self.pool.conn().await.unwrap())
+            use crate::auth::FindableById;
+            let id = "08dede71-b97d-47c1-a91d-6ba0997b3cdd".parse().unwrap();
+            models::Org::find_by_id(id, &mut self.pool.conn().await.unwrap())
                 .await
                 .unwrap()
         }
 
         pub async fn command(&self) -> models::Command {
             let host = self.host().await;
-            sqlx::query_as(
-                "INSERT INTO
-                    commands (id, host_id, cmd)
-                VALUES (
-                    'eab8a84b-8e3d-4b02-bf14-4160e76c177b', $1, $2
-                ) RETURNING *;",
-            )
-            .bind(host.id)
-            .bind(models::HostCmd::RestartNode)
-            .fetch_one(&mut self.pool.conn().await.unwrap())
-            .await
-            .unwrap()
+            let id: Uuid = "eab8a84b-8e3d-4b02-bf14-4160e76c177b".parse().unwrap();
+            diesel::insert_into(commands::table)
+                .values((
+                    commands::id.eq(id),
+                    commands::host_id.eq(host.id),
+                    commands::cmd.eq(models::HostCmd::RestartNode),
+                ))
+                .get_result(&mut self.pool.conn().await.unwrap())
+                .await
+                .unwrap()
         }
 
         pub async fn admin_user(&self) -> models::User {
@@ -293,8 +304,9 @@ mod test {
         }
 
         pub async fn blockchain(&self) -> models::Blockchain {
-            sqlx::query_as("SELECT * FROM blockchains WHERE name = 'Ethereum'")
-                .fetch_one(&mut self.pool.conn().await.unwrap())
+            blockchains::table
+                .filter(blockchains::name.eq("Ethereum"))
+                .get_result(&mut self.pool.conn().await.unwrap())
                 .await
                 .unwrap()
         }
@@ -321,6 +333,33 @@ mod test {
             );
 
             HostRefreshToken::try_new(claim).unwrap()
+        }
+
+        fn test_node_types() -> serde_json::Value {
+            serde_json::json!({
+                "id": 3,
+                "version": "0.0.3",
+                "properties": [
+                    {
+                        "name": "keystore-file",
+                        "label": "some-label",
+                        "description": "please put your file here",
+                        "ui_type": "key-upload",
+                        "disabled": false,
+                        "required": true,
+                        "default": "wow!"
+                    },
+                    {
+                        "name": "self-hosted",
+                        "label": "some-better-label",
+                        "description": "check if you want to self-host",
+                        "ui_type": "switch",
+                        "disabled": true,
+                        "required": true,
+                        "default": "hank"
+                    },
+                ],
+            })
         }
     }
 }

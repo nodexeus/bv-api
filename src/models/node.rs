@@ -1,22 +1,19 @@
-use super::{node_type::*, PgQuery};
+use super::node_type::*;
+use super::schema::{nodes, orgs_users};
 use crate::auth::FindableById;
 use crate::cookbook::get_hw_requirements;
 use crate::errors::{ApiError, Result};
-use crate::grpc::blockjoy::{self, NodeInfo as GrpcNodeInfo};
-use crate::models::node_property_value::NodeProperties;
+use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
 use crate::models::{Blockchain, Host, IpAddress, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use sqlx::{types::Json, FromRow, Row};
-use std::string::ToString;
-use strum_macros::{Display, EnumString};
+use diesel::prelude::*;
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use uuid::Uuid;
 
 /// ContainerStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "enum_container_status", rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
+#[ExistingTypePath = "crate::models::schema::sql_types::EnumContainerStatus"]
 pub enum ContainerStatus {
     Unknown,
     Creating,
@@ -57,9 +54,8 @@ impl TryFrom<i32> for ContainerStatus {
 }
 
 /// NodeSyncStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "enum_node_sync_status", rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
+#[ExistingTypePath = "crate::models::schema::sql_types::EnumNodeSyncStatus"]
 pub enum NodeSyncStatus {
     Unknown,
     Syncing,
@@ -82,9 +78,8 @@ impl TryFrom<i32> for NodeSyncStatus {
 }
 
 /// NodeStakingStatus reflects blockjoy.api.v1.node.NodeInfo.StakingStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "enum_node_staking_status", rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
+#[ExistingTypePath = "crate::models::schema::sql_types::EnumNodeStakingStatus"]
 pub enum NodeStakingStatus {
     Unknown,
     Follower,
@@ -115,12 +110,8 @@ impl TryFrom<i32> for NodeStakingStatus {
 }
 
 /// NodeChainStatus reflects blockjoy.api.v1.node.NodeInfo.ApplicationStatus in node.proto
-#[derive(
-    Clone, Copy, Debug, Display, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, EnumString,
-)]
-#[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "enum_node_chain_status", rename_all = "snake_case")]
-#[strum(serialize_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
+#[ExistingTypePath = "crate::models::schema::sql_types::EnumNodeChainStatus"]
 pub enum NodeChainStatus {
     Unknown,
     Provisioning,
@@ -172,28 +163,58 @@ impl TryFrom<i32> for NodeChainStatus {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, FromRow)]
+impl std::str::FromStr for NodeChainStatus {
+    type Err = ApiError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "unknown" => Ok(Self::Unknown),
+            "provisioning" => Ok(Self::Provisioning),
+            "broadcasting" => Ok(Self::Broadcasting),
+            "cancelled" => Ok(Self::Cancelled),
+            "delegating" => Ok(Self::Delegating),
+            "delinquent" => Ok(Self::Delinquent),
+            "disabled" => Ok(Self::Disabled),
+            "earning" => Ok(Self::Earning),
+            "electing" => Ok(Self::Electing),
+            "elected" => Ok(Self::Elected),
+            "exported" => Ok(Self::Exported),
+            "ingesting" => Ok(Self::Ingesting),
+            "mining" => Ok(Self::Mining),
+            "minting" => Ok(Self::Minting),
+            "processing" => Ok(Self::Processing),
+            "relaying" => Ok(Self::Relaying),
+            "removed" => Ok(Self::Removed),
+            "removing" => Ok(Self::Removing),
+            _ => Err(ApiError::UnexpectedError(anyhow!(
+                "Cannot convert `{s}` to NodeChainStatus"
+            ))),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Queryable, Identifiable)]
 pub struct Node {
     pub id: Uuid,
     pub org_id: Uuid,
     pub host_id: Uuid,
-    pub name: Option<String>,
+    pub name: String,
     pub groups: Option<String>,
     pub version: Option<String>,
     pub ip_addr: Option<String>,
-    pub ip_gateway: Option<String>,
-    pub blockchain_id: Uuid,
-    pub node_type: Json<NodeProperties>,
     pub address: Option<String>,
     pub wallet_address: Option<String>,
     pub block_height: Option<i64>,
     pub node_data: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub blockchain_id: Uuid,
     pub sync_status: NodeSyncStatus,
     pub chain_status: NodeChainStatus,
-    pub staking_status: NodeStakingStatus,
+    pub staking_status: Option<NodeStakingStatus>,
     pub container_status: ContainerStatus,
+    node_type: serde_json::Value,
+    pub ip_gateway: String,
     pub self_update: bool,
     pub block_age: Option<i64>,
     pub consensus: Option<bool>,
@@ -206,493 +227,282 @@ pub struct Node {
 
 #[derive(Clone, Debug)]
 pub struct NodeFilter {
-    pub status: Vec<String>,
-    pub node_types: Vec<String>,
-    pub blockchains: Vec<Uuid>,
+    pub status: Vec<NodeChainStatus>,
+    pub node_types: Vec<i32>,
+    pub blockchains: Vec<uuid::Uuid>,
 }
 
 #[axum::async_trait]
 impl FindableById for Node {
-    async fn find_by_id(id: Uuid, db: &mut sqlx::PgConnection) -> Result<Self> {
-        sqlx::query_as("SELECT * FROM nodes where id = $1")
-            .bind(id)
-            .fetch_one(db)
-            .await
-            .map_err(ApiError::from)
+    async fn find_by_id(id: uuid::Uuid, conn: &mut AsyncPgConnection) -> Result<Self> {
+        let node = nodes::table.find(id).get_result(conn).await?;
+        Ok(node)
     }
 }
 
 impl Node {
-    pub async fn create(req: &mut NodeCreateRequest, tx: &mut super::DbTrx<'_>) -> Result<Node> {
-        let chain = Blockchain::find_by_id(req.blockchain_id, tx).await?;
-        let node_type = NodeTypeKey::str_from_value(req.node_type.get_id());
-        let requirements = get_hw_requirements(chain.name, node_type, req.version.clone()).await?;
-        let host_id = Host::get_next_available_host_id(requirements, tx).await?;
-        let host = Host::find_by_id(host_id, tx).await?;
-
-        req.ip_gateway = host.ip_gateway.map(|ip| ip.to_string());
-        req.ip_addr = Some(IpAddress::next_for_host(host_id, tx).await?.ip.to_string());
-
-        let node = sqlx::query_as(
-            r#"INSERT INTO nodes (
-                    org_id, 
-                    host_id,
-                    name, 
-                    groups, 
-                    version, 
-                    ip_addr, 
-                    blockchain_id, 
-                    node_type, 
-                    address, 
-                    wallet_address, 
-                    block_height, 
-                    node_data,
-                    chain_status,
-                    sync_status,
-                    ip_gateway,
-                    self_update,
-                    vcpu_count,
-                    mem_size_mb,
-                    disk_size_gb,
-                    host_name,
-                    network
-                ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *"#,
-        )
-            .bind(req.org_id)
-            .bind(host_id)
-            .bind(&req.name)
-            .bind(&req.groups)
-            .bind(&req.version)
-            .bind(&req.ip_addr)
-            .bind(req.blockchain_id)
-            .bind(&req.node_type)
-            .bind(&req.address)
-            .bind(&req.wallet_address)
-            .bind(req.block_height)
-            .bind(&req.node_data)
-            .bind(req.chain_status)
-            .bind(req.sync_status)
-            .bind(&req.ip_gateway)
-            .bind(req.self_update)
-            .bind(requirements.vcpu_count)
-            .bind(requirements.mem_size_mb)
-            .bind(requirements.disk_size_gb)
-            .bind(host.name)
-            .bind(&req.network)
-            .fetch_one(tx)
-            .await
-            .map_err(|e| {
-                tracing::error!("Error creating node: {}", e);
-                e
-            })?;
-
-        Ok(node)
+    pub fn node_type(&self) -> Result<super::NodeProperties> {
+        let res = serde_json::from_value(self.node_type.clone())?;
+        Ok(res)
     }
 
-    pub async fn all(db: &mut sqlx::PgConnection) -> Result<Vec<Self>> {
-        sqlx::query_as("SELECT * FROM nodes")
-            .fetch_all(db)
-            .await
-            .map_err(ApiError::from)
+    pub async fn all(conn: &mut AsyncPgConnection) -> Result<Vec<Self>> {
+        nodes::table.get_results(conn).await.map_err(ApiError::from)
     }
 
-    pub async fn update_info(info: &NodeInfo, tx: &mut super::DbTrx<'_>) -> Result<Node> {
-        sqlx::query_as(
-            r#"UPDATE nodes SET 
-                    version = COALESCE($1, version),
-                    ip_addr = COALESCE($2, ip_addr),
-                    block_height = COALESCE($3, block_height),
-                    node_data = COALESCE($4, node_data),
-                    chain_status = COALESCE($5, chain_status),
-                    sync_status = COALESCE($6, sync_status),
-                    self_update = COALESCE($7, self_update)
-                WHERE id = $8 RETURNING *"#,
-        )
-        .bind(&info.version)
-        .bind(&info.ip_addr)
-        .bind(info.block_height)
-        .bind(&info.node_data)
-        .bind(info.chain_status)
-        .bind(info.sync_status)
-        .bind(info.self_update)
-        .bind(info.id)
-        .fetch_one(tx)
-        .await
-        .map_err(ApiError::from)
-    }
-
-    pub async fn find_all_by_host(host_id: Uuid, db: &mut sqlx::PgConnection) -> Result<Vec<Self>> {
-        sqlx::query_as("SELECT * FROM nodes WHERE host_id = $1 order by name DESC")
-            .bind(host_id)
-            .fetch_all(db)
-            .await
-            .map_err(ApiError::from)
+    pub async fn find_all_by_host(
+        host_id: Uuid,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<Vec<Self>> {
+        let nodes = nodes::table
+            .filter(nodes::host_id.eq(host_id))
+            .get_results(conn)
+            .await?;
+        Ok(nodes)
     }
 
     pub async fn find_all_by_org(
         org_id: Uuid,
-        offset: i32,
-        limit: i32,
-        db: &mut sqlx::PgConnection,
+        offset: i64,
+        limit: i64,
+        conn: &mut AsyncPgConnection,
     ) -> Result<Vec<Self>> {
-        sqlx::query_as::<_, Self>(
-            r#"
-            SELECT * FROM nodes WHERE org_id = $1 
-            ORDER BY name DESC 
-            OFFSET $2
-            LIMIT $3"#,
-        )
-        .bind(org_id)
-        .bind(offset)
-        .bind(limit)
-        .fetch_all(db)
-        .await
-        .map_err(ApiError::from)
+        let nodes = nodes::table
+            .filter(nodes::org_id.eq(org_id))
+            .offset(offset)
+            .limit(limit)
+            .get_results(conn)
+            .await?;
+        Ok(nodes)
     }
 
     // TODO: Check role if user is allowed to delete the node
     pub async fn belongs_to_user_org(
         org_id: Uuid,
         user_id: Uuid,
-        db: &mut sqlx::PgConnection,
+        conn: &mut AsyncPgConnection,
     ) -> Result<bool> {
-        let cnt: i32 = sqlx::query_scalar(
-            r#"
-            SELECT count(*)::int FROM orgs_users WHERE org_id = $1 and user_id = $2 
-            "#,
-        )
-        .bind(org_id)
-        .bind(user_id)
-        .fetch_one(db)
-        .await?;
-
-        Ok(cnt > 0)
+        let query = orgs_users::table
+            .filter(orgs_users::org_id.eq(org_id))
+            .filter(orgs_users::user_id.eq(user_id));
+        let exists = diesel::select(diesel::dsl::exists(query))
+            .get_result(conn)
+            .await?;
+        Ok(exists)
     }
 
     pub async fn find_all_by_filter(
         org_id: Uuid,
         filter: NodeFilter,
-        offset: i32,
-        limit: i32,
-        db: &mut sqlx::PgConnection,
+        offset: i64,
+        limit: i64,
+        conn: &mut AsyncPgConnection,
     ) -> Result<Vec<Self>> {
-        let mut nodes = sqlx::query_as::<_, Self>(
-            r#"
-                SELECT * FROM nodes
-                WHERE org_id = $1
-                ORDER BY created_at DESC
-                OFFSET $2
-                LIMIT $3
-            "#,
-        )
-        .bind(org_id)
-        .bind(offset)
-        .bind(limit)
-        .fetch_all(db)
-        .await?;
+        let mut query = nodes::table
+            .filter(nodes::org_id.eq(org_id))
+            .offset(offset)
+            .limit(limit)
+            .into_boxed();
 
         // Apply filters if present
         if !filter.blockchains.is_empty() {
             tracing::debug!("Applying blockchain filter: {:?}", filter.blockchains);
-            nodes.retain(|n| filter.blockchains.contains(&n.blockchain_id));
-        }
-        if !filter.status.is_empty() {
-            nodes.retain(|n| filter.status.contains(&n.chain_status.to_string()));
-        }
-        if !filter.node_types.is_empty() {
-            nodes.retain(|n| {
-                filter
-                    .node_types
-                    .contains(&n.node_type.get_id().to_string())
-            })
+
+            // If a list of blockchains was given, we interpret them as ids, and require that each
+            // node's blockchain is in the provided list.
+            query = query.filter(nodes::blockchain_id.eq_any(&filter.blockchains));
         }
 
+        if !filter.status.is_empty() {
+            query = query.filter(nodes::chain_status.eq_any(&filter.status));
+        }
+
+        let mut nodes: Vec<Node> = query.get_results(conn).await?;
+
+        if !filter.node_types.is_empty() {
+            let mut remaining = Vec::new();
+            for node in nodes {
+                let node_type = node.node_type()?;
+                if filter.node_types.contains(&node_type.get_id()) {
+                    remaining.push(node);
+                }
+            }
+            nodes = remaining;
+        }
         Ok(nodes)
     }
 
-    pub async fn running_nodes_count(org_id: &Uuid, db: &mut sqlx::PgConnection) -> Result<i32> {
-        match sqlx::query(
-            r#"select COALESCE(count(id)::int, 0) from nodes where chain_status in
-                                 (
-                                  'broadcasting'::enum_node_chain_status,
-                                  'provisioning'::enum_node_chain_status,
-                                  'cancelled'::enum_node_chain_status,
-                                  'delegating'::enum_node_chain_status,
-                                  'delinquent'::enum_node_chain_status,
-                                  'earning'::enum_node_chain_status,
-                                  'electing'::enum_node_chain_status,
-                                  'elected'::enum_node_chain_status,
-                                  'exported'::enum_node_chain_status,
-                                  'ingesting'::enum_node_chain_status,
-                                  'mining'::enum_node_chain_status,
-                                  'minting'::enum_node_chain_status,
-                                  'processing'::enum_node_chain_status,
-                                  'relaying'::enum_node_chain_status
-                                 ) and org_id = $1;"#,
-        )
-        .bind(org_id)
-        .fetch_one(db)
-        .await
-        {
-            Ok(row) => Ok(row.get(0)),
-            Err(e) => {
-                tracing::error!("Got error while retrieving number of running hosts: {}", e);
-                Err(ApiError::from(e))
-            }
-        }
+    pub async fn running_nodes_count(org_id: Uuid, conn: &mut AsyncPgConnection) -> Result<i64> {
+        use NodeChainStatus::*;
+        const RUNNING_STATUSES: [NodeChainStatus; 14] = [
+            Broadcasting,
+            Provisioning,
+            Cancelled,
+            Delegating,
+            Delinquent,
+            Earning,
+            Electing,
+            Elected,
+            Exported,
+            Ingesting,
+            Mining,
+            Minting,
+            Processing,
+            Relaying,
+        ];
+        let count = nodes::table
+            .filter(nodes::org_id.eq(org_id))
+            .filter(nodes::chain_status.eq_any(&RUNNING_STATUSES))
+            .count()
+            .get_result(conn)
+            .await?;
+
+        Ok(count)
     }
 
-    pub async fn halted_nodes_count(org_id: &Uuid, db: &mut sqlx::PgConnection) -> Result<i32> {
-        match sqlx::query(
-            r#"select COALESCE(count(id)::int, 0) from nodes where chain_status in
-                                 (
-                                  'unknown'::enum_node_chain_status,
-                                  'disabled'::enum_node_chain_status,
-                                  'removed'::enum_node_chain_status,
-                                  'removing'::enum_node_chain_status
-                                 ) and org_id = $1;"#,
-        )
-        .bind(org_id)
-        .fetch_one(db)
-        .await
-        {
-            Ok(row) => Ok(row.get(0)),
-            Err(e) => {
-                tracing::error!("Got error while retrieving number of running hosts: {}", e);
-                Err(ApiError::from(e))
-            }
-        }
+    pub async fn halted_nodes_count(org_id: &Uuid, conn: &mut AsyncPgConnection) -> Result<i64> {
+        use NodeChainStatus::*;
+        const HALTED_STATUSES: [NodeChainStatus; 4] = [Unknown, Disabled, Removed, Removing];
+        let count = nodes::table
+            .filter(nodes::org_id.eq(org_id))
+            .filter(nodes::chain_status.eq_any(&HALTED_STATUSES))
+            .count()
+            .get_result(conn)
+            .await?;
+
+        Ok(count)
     }
 
-    pub async fn delete(node_id: Uuid, tx: &mut super::DbTrx<'_>) -> Result<Self> {
-        sqlx::query_as(r#"DELETE FROM nodes WHERE id = $1 RETURNING *"#)
-            .bind(node_id)
-            .fetch_one(tx)
-            .await
-            .map_err(ApiError::from)
+    pub async fn delete(node_id: Uuid, conn: &mut AsyncPgConnection) -> Result<()> {
+        diesel::delete(nodes::table.find(node_id))
+            .execute(conn)
+            .await?;
+        Ok(())
     }
 }
 
 #[tonic::async_trait]
 impl UpdateInfo<GrpcNodeInfo, Node> for Node {
-    async fn update_info(info: GrpcNodeInfo, tx: &mut super::DbTrx<'_>) -> Result<Node> {
-        let req: NodeUpdateRequest = info.try_into()?;
-        let node: Node = sqlx::query_as(
-            r##"UPDATE nodes SET
-                         name = COALESCE($1, name),
-                         ip_addr = COALESCE($2, ip_addr),
-                         chain_status = COALESCE($3, chain_status),
-                         sync_status = COALESCE($4, sync_status),
-                         staking_status = COALESCE($5, staking_status),
-                         block_height = COALESCE($6, block_height),
-                         self_update = COALESCE($7, self_update),
-                         address = COALESCE($8, address)
-                WHERE id = $9
-                RETURNING *
-            "##,
-        )
-        .bind(req.name)
-        .bind(req.ip_addr)
-        .bind(req.chain_status)
-        .bind(req.sync_status)
-        .bind(req.staking_status)
-        .bind(req.block_height)
-        .bind(req.self_update)
-        .bind(req.address)
-        .bind(req.id)
-        .fetch_one(tx)
-        .await?;
-
-        Ok(node)
+    async fn update_info(info: GrpcNodeInfo, conn: &mut AsyncPgConnection) -> Result<Node> {
+        info.as_update()?.update(conn).await
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct NodeProvision {
     pub blockchain_id: Uuid,
     pub node_type: NodeType,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct NodeCreateRequest {
-    pub org_id: Uuid,
-    pub host_name: String,
-    pub name: Option<String>,
-    pub groups: Option<String>,
-    pub version: Option<String>,
-    pub ip_addr: Option<String>,
-    pub ip_gateway: Option<String>,
+#[derive(Debug, Insertable)]
+#[diesel(table_name = nodes)]
+pub struct NewNode<'a> {
+    pub id: uuid::Uuid,
+    pub org_id: uuid::Uuid,
+    pub host_name: Option<&'a str>,
+    pub name: String,
+    pub groups: String,
+    pub version: Option<&'a str>,
+    pub ip_addr: Option<&'a str>,
+    pub ip_gateway: Option<&'a str>,
     pub blockchain_id: Uuid,
-    pub node_type: Json<NodeProperties>,
-    pub address: Option<String>,
-    pub wallet_address: Option<String>,
+    pub node_type: serde_json::Value,
+    pub address: Option<&'a str>,
+    pub wallet_address: Option<&'a str>,
     pub block_height: Option<i64>,
     pub node_data: Option<serde_json::Value>,
     pub chain_status: NodeChainStatus,
     pub sync_status: NodeSyncStatus,
-    pub staking_status: Option<NodeStakingStatus>,
+    pub staking_status: NodeStakingStatus,
     pub container_status: ContainerStatus,
     pub self_update: bool,
     pub vcpu_count: i64,
     pub mem_size_mb: i64,
     pub disk_size_gb: i64,
-    pub network: String,
+    pub network: &'a str,
 }
 
-pub struct NodeUpdateRequest {
-    pub id: Uuid,
-    pub host_id: Option<String>,
-    pub name: Option<String>,
-    pub ip_addr: Option<String>,
-    pub chain_status: Option<NodeChainStatus>,
-    pub sync_status: Option<NodeSyncStatus>,
-    pub staking_status: Option<NodeStakingStatus>,
-    pub block_height: Option<i64>,
-    pub self_update: bool,
-    pub container_status: Option<ContainerStatus>,
-    pub address: Option<String>,
-}
+impl NewNode<'_> {
+    pub fn node_type(&self) -> Result<super::NodeProperties> {
+        let res = serde_json::from_value(self.node_type.clone())?;
+        Ok(res)
+    }
 
-impl TryFrom<GrpcNodeInfo> for NodeUpdateRequest {
-    type Error = ApiError;
+    pub async fn create(mut self, conn: &mut AsyncPgConnection) -> Result<Node> {
+        let chain = Blockchain::find_by_id(self.blockchain_id, conn).await?;
+        let node_type = NodeTypeKey::str_from_value(self.node_type()?.get_id());
+        let requirements = get_hw_requirements(chain.name, node_type, self.version).await?;
+        let host_id = Host::get_next_available_host_id(requirements, conn).await?;
+        let host = Host::find_by_id(host_id, conn).await?;
+        let ip_gateway = host.ip_gateway.map(|ip| ip.to_string());
+        let ip_addr = IpAddress::next_for_host(host_id, conn)
+            .await?
+            .ip
+            .ip()
+            .to_string();
 
-    fn try_from(info: GrpcNodeInfo) -> Result<Self> {
-        let GrpcNodeInfo {
-            id,
-            host_id,
-            name,
-            ip,
-            app_status,
-            sync_status,
-            staking_status,
-            block_height,
-            self_update,
-            container_status,
-            onchain_name: _, // We explicitly do not use this field
-            address,
-        } = info;
-        let req = Self {
-            id: id.as_str().parse()?,
-            name,
-            ip_addr: ip,
-            chain_status: app_status.map(|n| n.try_into()).transpose()?,
-            sync_status: sync_status.map(|n| n.try_into()).transpose()?,
-            staking_status: staking_status.map(|n| n.try_into()).transpose()?,
-            block_height,
-            self_update: self_update.unwrap_or(false),
-            container_status: container_status.map(|n| n.try_into()).transpose()?,
-            address,
-            host_id,
-        };
-        Ok(req)
+        self.ip_gateway = ip_gateway.as_deref();
+        self.ip_addr = Some(&ip_addr);
+
+        diesel::insert_into(nodes::table)
+            .values((self, nodes::host_id.eq(host_id)))
+            .get_result(conn)
+            .await
+            .map_err(|e| {
+                tracing::error!("Error creating node: {e}");
+                e.into()
+            })
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct NodeInfo {
+#[derive(Debug, AsChangeset)]
+#[diesel(table_name = nodes)]
+pub struct UpdateNode<'a> {
     pub id: uuid::Uuid,
-    pub version: Option<String>,
-    pub ip_addr: Option<String>,
+    pub name: Option<&'a str>,
+    pub version: Option<&'a str>,
+    pub ip_addr: Option<&'a str>,
     pub block_height: Option<i64>,
     pub node_data: Option<serde_json::Value>,
     pub chain_status: Option<NodeChainStatus>,
     pub sync_status: Option<NodeSyncStatus>,
     pub staking_status: Option<NodeStakingStatus>,
     pub container_status: Option<ContainerStatus>,
-    pub self_update: bool,
+    pub self_update: Option<bool>,
+}
+
+impl UpdateNode<'_> {
+    pub async fn update(&self, conn: &mut AsyncPgConnection) -> Result<Node> {
+        let node = diesel::update(nodes::table.find(self.id))
+            .set((self, nodes::updated_at.eq(chrono::Utc::now())))
+            .get_result(conn)
+            .await?;
+        Ok(node)
+    }
 }
 
 /// This struct is used for updating the metrics of a node.
-#[derive(Debug)]
-pub struct NodeMetricsUpdate {
-    id: Uuid,
-    height: Option<i64>,
-    age: Option<i64>,
-    staking: Option<NodeStakingStatus>,
-    cons: Option<bool>,
-    chain: Option<NodeChainStatus>,
-    sync: Option<NodeSyncStatus>,
+#[derive(Debug, Insertable, AsChangeset)]
+#[diesel(table_name = nodes)]
+pub struct UpdateNodeMetrics {
+    pub id: Uuid,
+    pub block_height: Option<i64>,
+    pub block_age: Option<i64>,
+    pub staking_status: Option<NodeStakingStatus>,
+    pub consensus: Option<bool>,
+    pub chain_status: Option<NodeChainStatus>,
+    pub sync_status: Option<NodeSyncStatus>,
 }
 
-impl NodeMetricsUpdate {
+impl UpdateNodeMetrics {
     /// Performs a selective update of only the columns related to metrics of the provided nodes.
-    pub async fn update_metrics(updates: Vec<Self>, tx: &mut super::DbTrx<'_>) -> Result<()> {
-        type PgBuilder = sqlx::QueryBuilder<'static, sqlx::Postgres>;
-
-        // Lets not perform a malformed query on empty input, but lets instead be fast and
-        // short-circuit here.
-        if updates.is_empty() {
-            return Ok(());
+    pub async fn update_metrics(updates: Vec<Self>, conn: &mut AsyncPgConnection) -> Result<()> {
+        for update in updates {
+            diesel::update(nodes::table.find(update.id))
+                .set(update)
+                .execute(conn)
+                .await?;
         }
-
-        // We first start the query out by declaring which fields to update.
-        let mut query_builder = PgBuilder::new(
-            "UPDATE nodes SET
-                block_height = COALESCE(row.height::BIGINT, block_height),
-                block_age = COALESCE(row.age::BIGINT, block_age),
-                staking_status = COALESCE(row.staking::enum_node_staking_status, staking_status),
-                consensus = COALESCE(row.cons::BOOLEAN, consensus),
-                chain_status = COALESCE(row.chain::enum_node_chain_status, chain_status),
-                sync_status = COALESCE(row.sync::enum_node_sync_status, sync_status)
-            FROM (
-                ",
-        );
-
-        // Now we bind a variable number of parameters
-        query_builder.push_values(updates.iter(), |mut builder, update| {
-            builder
-                .push_bind(update.id)
-                .push_bind(update.height)
-                .push_bind(update.age)
-                .push_bind(update.staking)
-                .push_bind(update.cons)
-                .push_bind(update.chain)
-                .push_bind(update.sync);
-        });
-        // We finish the query by specifying which bind parameters mean what. NOTE: When adding
-        // bind parameters they MUST be bound in the same order as they are specified below. Not
-        // doing so results in incorrectly interpreted queries.
-        query_builder.push(
-            "
-            ) AS row(id, height, age, staking, cons, chain, sync)
-            WHERE
-                nodes.id = row.id::uuid;",
-        );
-        let template = sqlx::query(query_builder.sql());
-        let query = updates.into_iter().fold(template, Self::bind_to);
-        query.execute(tx).await?;
         Ok(())
-    }
-
-    pub fn from_metrics(id: String, metric: blockjoy::NodeMetrics) -> Result<Self> {
-        let id = id.parse()?;
-        Ok(Self {
-            id,
-            height: metric.height.map(i64::try_from).transpose()?,
-            age: metric.block_age.map(i64::try_from).transpose()?,
-            staking: metric
-                .staking_status
-                .map(NodeStakingStatus::try_from)
-                .transpose()?,
-            cons: metric.consensus,
-            chain: metric
-                .application_status
-                .map(TryInto::try_into)
-                .transpose()?,
-            sync: metric.sync_status.map(TryInto::try_into).transpose()?,
-        })
-    }
-
-    /// Binds the params in `params` to the provided query in the correct order, then returns the
-    /// modified query. Since this is order-dependent, this function is private.
-    fn bind_to(query: PgQuery<'_>, params: Self) -> PgQuery<'_> {
-        query
-            .bind(params.id)
-            .bind(params.height)
-            .bind(params.age)
-            .bind(params.staking)
-            .bind(params.cons)
-            .bind(params.chain)
-            .bind(params.sync)
     }
 }
