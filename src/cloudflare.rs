@@ -33,7 +33,7 @@ pub struct CloudflarePayload {
     pub ttl: i64,
     pub priority: i32,
     pub proxied: bool,
-    pub tags: Vec<String>,
+    pub tags: String,
 }
 
 impl CloudflarePayload {
@@ -48,7 +48,7 @@ impl CloudflarePayload {
             ttl,
             priority: 10,
             proxied: false,
-            tags: vec![format!("owner:{}", owner)],
+            tags: format!("owner:{}", owner),
         })
     }
 }
