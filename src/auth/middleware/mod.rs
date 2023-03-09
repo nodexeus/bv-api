@@ -147,7 +147,7 @@ where
                 }
                 AnyToken::UserAuth(token) => {
                     // 1. try if token is valid
-                    dbg!(token.encode().map_err(cant_parse))?;
+                    token.encode().map_err(cant_parse)?;
                     let refresh = match UserRefreshToken::from_request(&request) {
                         Ok(token) => token,
                         Err(e) => {

@@ -34,6 +34,7 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         disk_size_gb: 0,
         host_name: Some("some host"),
         network: "some network",
+        created_by: user.id,
     };
 
     let mut conn = tester.conn().await;
