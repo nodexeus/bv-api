@@ -1,6 +1,6 @@
 use super::blockjoy::Parameter;
 use crate::auth::FindableById;
-use crate::errors::Result as ApiResult;
+use crate::errors::{ApiError, Result as ApiResult};
 use crate::grpc::blockjoy::container_image::StatusName;
 use crate::grpc::blockjoy::{
     self, node_command, Command as GrpcCommand, ContainerImage, NodeCommand, NodeCreate,
@@ -8,6 +8,7 @@ use crate::grpc::blockjoy::{
 };
 use crate::grpc::helpers::required;
 use crate::models::{Blockchain, Command, HostCmd, Node, NodeTypeKey};
+use anyhow::anyhow;
 use diesel_async::AsyncPgConnection;
 use prost_types::Timestamp;
 
@@ -40,7 +41,7 @@ pub async fn db_command_to_grpc_command(
         })
     };
 
-    match cmd.cmd {
+    match dbg!(cmd.cmd) {
         HostCmd::RestartNode => {
             let node_id = cmd.node_id.ok_or_else(required("command.node_id"))?;
             let cmd = Command::Restart(NodeRestart {});
@@ -79,7 +80,7 @@ pub async fn db_command_to_grpc_command(
         }
         HostCmd::MigrateNode => {
             tracing::error!("Using NodeGenericCommand for MigrateNode");
-            unimplemented!();
+            Err(ApiError::UnexpectedError(anyhow!("Not implemented")))
         }
         HostCmd::GetNodeVersion => {
             tracing::debug!("Using NodeInfoGet for GetNodeVersion");
@@ -119,17 +120,19 @@ pub async fn db_command_to_grpc_command(
             node_cmd(cmd, node_id.to_string())
         }
         HostCmd::DeleteNode => {
-            let node_id = cmd.node_id.ok_or_else(required("command.node_id"))?;
+            let node_id = cmd
+                .sub_cmd
+                .clone()
+                .ok_or_else(required("command.node_id"))?;
             let cmd = Command::Delete(NodeDelete {});
-            node_cmd(cmd, node_id.to_string())
+            node_cmd(cmd, node_id)
         }
-
-        HostCmd::GetBVSVersion => unimplemented!(),
-        HostCmd::UpdateBVS => unimplemented!(),
-        HostCmd::RestartBVS => unimplemented!(),
-        HostCmd::RemoveBVS => unimplemented!(),
-        HostCmd::CreateBVS => unimplemented!(),
-        HostCmd::StopBVS => unimplemented!(),
+        HostCmd::GetBVSVersion => Err(ApiError::UnexpectedError(anyhow!("Not implemented"))),
+        HostCmd::UpdateBVS => Err(ApiError::UnexpectedError(anyhow!("Not implemented"))),
+        HostCmd::RestartBVS => Err(ApiError::UnexpectedError(anyhow!("Not implemented"))),
+        HostCmd::RemoveBVS => Err(ApiError::UnexpectedError(anyhow!("Not implemented"))),
+        HostCmd::CreateBVS => Err(ApiError::UnexpectedError(anyhow!("Not implemented"))),
+        HostCmd::StopBVS => Err(ApiError::UnexpectedError(anyhow!("Not implemented"))),
         // TODO: Missing
         // NodeStart, NodeUpgrade
     }
