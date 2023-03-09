@@ -33,11 +33,10 @@ pub struct CloudflarePayload {
     pub ttl: i64,
     pub priority: i32,
     pub proxied: bool,
-    pub tags: String,
 }
 
 impl CloudflarePayload {
-    pub fn new(node_name: String, owner: uuid::Uuid) -> DnsResult<Self> {
+    pub fn new(node_name: String) -> DnsResult<Self> {
         let name = format!("{node_name}.{}", std::env::var("CF_DNS_BASE")?);
         let ttl: i64 = std::env::var("CF_TTL")?.parse()?;
 
@@ -48,7 +47,6 @@ impl CloudflarePayload {
             ttl,
             priority: 10,
             proxied: false,
-            tags: format!("owner:{}", owner),
         })
     }
 }
@@ -73,7 +71,7 @@ impl CloudflareApi {
     }
 
     pub async fn create_node_dns(&self, node: crate::models::Node) -> DnsResult<bool> {
-        let payload = CloudflarePayload::new(node.name, node.org_id)?;
+        let payload = CloudflarePayload::new(node.name)?;
         let endpoint = format!("zones/{}/dns_records", self.zone_id);
 
         self.post(payload, endpoint).await
