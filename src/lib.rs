@@ -292,6 +292,7 @@ mod test {
                     commands::id.eq(id),
                     commands::host_id.eq(host.id),
                     commands::cmd.eq(models::HostCmd::RestartNode),
+                    commands::node_id.eq(self.node().await.id),
                 ))
                 .get_result(&mut self.pool.conn().await.unwrap())
                 .await
