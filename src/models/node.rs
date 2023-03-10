@@ -224,6 +224,7 @@ pub struct Node {
     pub host_name: String,
     pub network: String,
     pub created_by: Option<uuid::Uuid>,
+    pub dns_record_id: Option<String>,
 }
 
 #[derive(Clone, Debug)]
