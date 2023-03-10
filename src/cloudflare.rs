@@ -78,6 +78,12 @@ impl CloudflareApi {
         Ok(self.post(payload, endpoint).await? == http::status::StatusCode::OK)
     }
 
+    pub async fn delete_node_dns(&self, node: crate::models::Node) -> DnsResult<bool> {
+        let endpoint = format!("zones/{}/dns_records/{}", self.zone_id, node.dns_record_id);
+
+        Ok(self.delete(endpoint).await? == http::status::StatusCode::OK)
+    }
+
     async fn post(
         &self,
         payload: CloudflarePayload,
@@ -91,6 +97,16 @@ impl CloudflareApi {
             .json(&payload)
             .send()
             .await?;
+
+        dbg!(&res);
+
+        Ok(res.status())
+    }
+
+    async fn delete(&self, endpoint: String) -> DnsResult<http::status::StatusCode> {
+        let url = format!("{}/{}", self.base_url, endpoint);
+        let client = reqwest::Client::new();
+        let res = client.post(url).bearer_auth(&self.token).send().await?;
 
         dbg!(&res);
 
