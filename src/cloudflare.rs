@@ -6,6 +6,7 @@
 //!
 
 use crate::auth::key_provider::KeyProvider;
+use axum::http;
 use serde::Serialize;
 use std::string::ToString;
 
@@ -74,10 +75,14 @@ impl CloudflareApi {
         let payload = CloudflarePayload::new(node.name)?;
         let endpoint = format!("zones/{}/dns_records", self.zone_id);
 
-        self.post(payload, endpoint).await
+        Ok(self.post(payload, endpoint).await? == http::status::StatusCode::OK)
     }
 
-    async fn post(&self, payload: CloudflarePayload, endpoint: String) -> DnsResult<bool> {
+    async fn post(
+        &self,
+        payload: CloudflarePayload,
+        endpoint: String,
+    ) -> DnsResult<http::status::StatusCode> {
         let url = format!("{}/{}", self.base_url, endpoint);
         let client = reqwest::Client::new();
         let res = client
@@ -87,8 +92,8 @@ impl CloudflareApi {
             .send()
             .await?;
 
-        dbg!(res);
+        dbg!(&res);
 
-        Ok(false)
+        Ok(res.status())
     }
 }
