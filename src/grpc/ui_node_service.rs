@@ -430,11 +430,12 @@ impl NodeService for NodeServiceImpl {
                     models::Command::delete_pending(node_id, c).await?;
 
                     // Send delete node command
+                    let node_id = node_id.to_string();
                     let new_command = models::NewCommand {
                         host_id: node.host_id,
                         cmd: models::HostCmd::DeleteNode,
-                        sub_cmd: None,
-                        node_id: Some(node_id),
+                        sub_cmd: Some(&node_id),
+                        node_id: None,
                     };
                     let cmd = new_command.create(c).await?;
                     let user_id = token.id;
