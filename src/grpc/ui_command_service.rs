@@ -155,7 +155,7 @@ impl CommandService for CommandServiceImpl {
         &self,
         request: Request<blockjoy_ui::CommandRequest>,
     ) -> Result<Response<blockjoy_ui::CommandResponse>, Status> {
-        let cmd = dbg!(self.handle_request(request, CreateBVS).await)?;
+        let cmd = self.handle_request(request, CreateBVS).await?;
         Ok(Response::new(cmd))
     }
 

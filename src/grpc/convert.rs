@@ -41,7 +41,7 @@ pub async fn db_command_to_grpc_command(
         })
     };
 
-    match dbg!(cmd.cmd) {
+    match cmd.cmd {
         HostCmd::RestartNode => {
             let node_id = cmd.node_id.ok_or_else(required("command.node_id"))?;
             let cmd = Command::Restart(NodeRestart {});

@@ -279,7 +279,7 @@ pub trait JwtToken: Sized + serde::Serialize {
             Ok(token) => Ok(token.claims),
             Err(e) => {
                 tracing::error!("Error decoding token: {e:?}");
-                Err(TokenError::EnDeCoding(dbg!(e)))
+                Err(TokenError::EnDeCoding(e))
             }
         }
     }
