@@ -51,11 +51,10 @@ pub async fn start() -> anyhow::Result<()> {
 fn establish_connection(config: &str) -> BoxFuture<ConnectionResult<AsyncPgConnection>> {
     dbg!(config);
     let fut = async {
-        let rustls_config = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(root_certs())
-            .with_no_client_auth();
-        let tls = tokio_postgres_rustls::MakeRustlsConnect::new(rustls_config);
+        use openssl::ssl::{SslConnector, SslMethod};
+        let builder = SslConnector::builder(SslMethod::tls())
+            .map_err(|e| ConnectionError::BadConnection(e.to_string()))?;
+        let tls = postgres_openssl::MakeTlsConnector::new(builder.build());
         let (client, conn) = tokio_postgres::connect(config, tls)
             .await
             .map_err(|e| ConnectionError::BadConnection(e.to_string()))?;
@@ -69,10 +68,10 @@ fn establish_connection(config: &str) -> BoxFuture<ConnectionResult<AsyncPgConne
     fut.boxed()
 }
 
-fn root_certs() -> rustls::RootCertStore {
-    let mut roots = rustls::RootCertStore::empty();
-    let certs = rustls_native_certs::load_native_certs().expect("Certs not loadable!");
-    let certs: Vec<_> = certs.into_iter().map(|cert| cert.0).collect();
-    roots.add_parsable_certificates(&certs);
-    roots
-}
+// fn root_certs() -> rustls::RootCertStore {
+//     let mut roots = rustls::RootCertStore::empty();
+//     let certs = rustls_native_certs::load_native_certs().expect("Certs not loadable!");
+//     let certs: Vec<_> = certs.into_iter().map(|cert| cert.0).collect();
+//     roots.add_parsable_certificates(&certs);
+//     roots
+// }
