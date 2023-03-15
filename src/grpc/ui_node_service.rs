@@ -85,7 +85,10 @@ impl blockjoy_ui::Node {
         blockchain: &models::Blockchain,
         user: Option<&models::User>,
     ) -> Result<Self> {
-        let node_type = node.node_type()?;
+        let properties = models::NodePropertiesWithId {
+            id: node.node_type.into(),
+            props: node.properties()?,
+        };
         Ok(Self {
             id: Some(node.id.to_string()),
             org_id: Some(node.org_id.to_string()),
@@ -98,7 +101,7 @@ impl blockjoy_ui::Node {
             version: node.version,
             ip: node.ip_addr,
             ip_gateway: Some(node.ip_gateway),
-            r#type: Some(serde_json::to_string(&node_type)?),
+            r#type: Some(serde_json::to_string(&properties)?),
             address: node.address,
             wallet_address: node.wallet_address,
             block_height: node.block_height.map(i64::from),
@@ -122,6 +125,8 @@ impl blockjoy_ui::Node {
     }
 
     pub fn as_new(&self, user_id: uuid::Uuid) -> Result<models::NewNode<'_>> {
+        let properties = self.r#type.as_ref().ok_or_else(required("node.type"))?;
+        let properties: models::NodePropertiesWithId = serde_json::from_str(properties)?;
         Ok(models::NewNode {
             id: uuid::Uuid::new_v4(),
             org_id: self
@@ -138,9 +143,7 @@ impl blockjoy_ui::Node {
                 .as_ref()
                 .ok_or_else(required("node.blockchain_id"))?
                 .parse()?,
-            node_type: serde_json::from_str(
-                self.r#type.as_ref().ok_or_else(required("node.type"))?,
-            )?,
+            properties: serde_json::to_value(properties.props)?,
             address: self.address.as_deref(),
             wallet_address: self.wallet_address.as_deref(),
             block_height: self.block_height,
@@ -164,6 +167,7 @@ impl blockjoy_ui::Node {
                 .network
                 .as_deref()
                 .ok_or_else(required("node.network"))?,
+            node_type: properties.id.try_into()?,
             created_by: user_id,
         })
     }
@@ -443,6 +447,8 @@ impl NodeService for NodeServiceImpl {
                         host_id: node.host_id,
                         cmd: models::HostCmd::DeleteNode,
                         sub_cmd: Some(&node_id),
+                        // Note that the `node_id` goes into the `sub_cmd` field, not the node_id
+                        // field, because the node was just deleted.
                         node_id: None,
                     };
                     let cmd = new_command.create(c).await?;

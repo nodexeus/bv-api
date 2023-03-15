@@ -68,7 +68,7 @@ where
                 .extensions()
                 .get::<models::DbPool>()
                 .unwrap_or_else(|| panic!("DB extension missing"));
-            let token = AnyToken::from_request(&request)
+            let token = dbg!(AnyToken::from_request(&request))
                 .map_err(|_| unauthenticated_response("Missing valid token"))?;
             let cant_parse =
                 |e| unauthenticated_response(format!("Could not extract token: {e:?}"));
