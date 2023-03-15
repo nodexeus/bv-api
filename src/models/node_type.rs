@@ -95,9 +95,9 @@ impl TryFrom<i32> for NodeType {
     }
 }
 
-impl Into<i32> for NodeType {
-    fn into(self) -> i32 {
-        match self {
+impl From<NodeType> for i32 {
+    fn from(value: NodeType) -> Self {
+        match value {
             NodeType::Unknown => 0,
             NodeType::Miner => 1,
             NodeType::Etl => 2,
