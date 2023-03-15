@@ -4,6 +4,7 @@ use crate::auth::FindableById;
 use crate::cookbook::get_hw_requirements;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
+use crate::grpc::helpers::required;
 use crate::models::{Blockchain, Host, IpAddress, UpdateInfo};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
@@ -404,8 +405,6 @@ pub struct NewNode<'a> {
     pub name: String,
     pub groups: String,
     pub version: Option<&'a str>,
-    pub ip_addr: Option<&'a str>,
-    pub ip_gateway: Option<&'a str>,
     pub blockchain_id: Uuid,
     pub node_type: serde_json::Value,
     pub address: Option<&'a str>,
@@ -430,24 +429,31 @@ impl NewNode<'_> {
         Ok(res)
     }
 
-    pub async fn create(mut self, conn: &mut AsyncPgConnection) -> Result<Node> {
+    pub async fn create(self, conn: &mut AsyncPgConnection) -> Result<Node> {
         let chain = Blockchain::find_by_id(self.blockchain_id, conn).await?;
         let node_type = NodeTypeKey::str_from_value(self.node_type()?.get_id());
         let requirements = get_hw_requirements(chain.name, node_type, self.version).await?;
         let host_id = Host::get_next_available_host_id(requirements, conn).await?;
         let host = Host::find_by_id(host_id, conn).await?;
-        let ip_gateway = host.ip_gateway.map(|ip| ip.to_string());
         let ip_addr = IpAddress::next_for_host(host_id, conn)
             .await?
             .ip
             .ip()
             .to_string();
 
-        self.ip_gateway = ip_gateway.as_deref();
-        self.ip_addr = Some(&ip_addr);
+        let ip_gateway = host
+            .ip_gateway
+            .ok_or_else(required("host.ip_gateway"))?
+            .ip()
+            .to_string();
 
         diesel::insert_into(nodes::table)
-            .values((self, nodes::host_id.eq(host_id)))
+            .values((
+                self,
+                nodes::host_id.eq(host_id),
+                nodes::ip_gateway.eq(ip_gateway),
+                nodes::ip_addr.eq(ip_addr),
+            ))
             .get_result(conn)
             .await
             .map_err(|e| {

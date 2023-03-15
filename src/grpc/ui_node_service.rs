@@ -133,8 +133,6 @@ impl blockjoy_ui::Node {
             name: petname::petname(3, "_"),
             groups: self.groups.join(","),
             version: self.version.as_deref(),
-            ip_addr: self.ip.as_deref(),
-            ip_gateway: self.ip_gateway.as_deref(),
             blockchain_id: self
                 .blockchain_id
                 .as_ref()
