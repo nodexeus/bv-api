@@ -83,12 +83,18 @@ impl BlockchainService for BlockchainServiceImpl {
             let mut blockchain = blockjoy_ui::Blockchain::from_model(blockchain)?;
 
             for node_properties in node_types {
-                let nets = get_networks(
-                    name.clone(),
-                    models::NodeType::str_from_value(node_properties.id),
-                    Some(node_properties.version.to_string()),
-                )
-                .await?;
+                let node_type = models::NodeType::str_from_value(node_properties.id);
+                let version = Some(node_properties.version.to_string());
+                let res = get_networks(name.clone(), node_type.clone(), version.clone()).await;
+                let nets = match res {
+                    Ok(nets) => nets,
+                    Err(e) => {
+                        tracing::error!(
+                            "Could not get networks for {name} {node_type} version {version:?}: {e}"
+                        );
+                        continue;
+                    }
+                };
 
                 blockchain.networks.extend(nets.iter().map(|c| c.into()));
             }
