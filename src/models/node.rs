@@ -395,7 +395,6 @@ pub struct NodeProvision {
 pub struct NewNode<'a> {
     pub id: uuid::Uuid,
     pub org_id: uuid::Uuid,
-    pub host_name: Option<&'a str>,
     pub name: String,
     pub groups: String,
     pub version: Option<&'a str>,
@@ -448,6 +447,7 @@ impl NewNode<'_> {
                 nodes::host_id.eq(host_id),
                 nodes::ip_gateway.eq(ip_gateway),
                 nodes::ip_addr.eq(ip_addr),
+                nodes::host_name.eq(&host.name),
             ))
             .get_result(conn)
             .await

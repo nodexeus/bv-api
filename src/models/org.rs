@@ -3,6 +3,7 @@ use crate::auth::{FindableById, Identifiable};
 use crate::errors::Result;
 use crate::models::User;
 use chrono::{DateTime, Utc};
+use diesel::query_source::{Alias, AliasedField};
 use diesel::{dsl, prelude::*};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use std::fmt::{Display, Formatter};
@@ -38,7 +39,15 @@ impl FindableById for Org {
     }
 }
 
+diesel::alias! {
+    pub const ORGS_USERS_ALIAS: Alias<OrgsUserAlias> = orgs_users as orgs_users_alias;
+}
 type NotDeleted = dsl::Filter<orgs::table, dsl::IsNull<orgs::deleted_at>>;
+type _BelongingOrgs = dsl::Filter<
+    Alias<OrgsUserAlias>,
+    dsl::Eq<AliasedField<OrgsUserAlias, orgs_users::org_id>, orgs::id>,
+>;
+type NMembers = dsl::AssumeNotNull<dsl::SingleValue<dsl::Select<_BelongingOrgs, dsl::CountStar>>>;
 
 impl Org {
     pub async fn find_by_user(
@@ -48,27 +57,19 @@ impl Org {
     ) -> Result<Org> {
         let org = Self::not_deleted()
             .find(org_id)
-            .filter(orgs_users::user_id.eq(user_id))
             .inner_join(orgs_users::table)
-            .group_by(orgs::id)
-            .select((orgs::all_columns, dsl::count(orgs_users::user_id)))
+            .filter(orgs_users::user_id.eq(user_id))
+            .select((orgs::all_columns, Self::n_members()))
             .get_result(conn)
             .await?;
         Ok(org)
     }
 
     pub async fn find_all_by_user(user_id: Uuid, conn: &mut AsyncPgConnection) -> Result<Vec<Org>> {
-        let ou_alias = diesel::alias!(orgs_users as ou_alias);
-        let n_members = orgs_users::table
-            .filter(orgs_users::org_id.eq(orgs::id))
-            .count()
-            .single_value()
-            // A COUNT query always returns a value.
-            .assume_not_null();
         let orgs = Self::not_deleted()
-            .inner_join(ou_alias.on(ou_alias.field(orgs_users::org_id).eq(orgs::id)))
-            .filter(ou_alias.field(orgs_users::user_id).eq(user_id))
-            .select((orgs::all_columns, n_members))
+            .inner_join(orgs_users::table)
+            .filter(orgs_users::user_id.eq(user_id))
+            .select((orgs::all_columns, Self::n_members()))
             .get_results(conn)
             .await?;
 
@@ -218,6 +219,17 @@ impl Org {
 
     fn not_deleted() -> NotDeleted {
         orgs::table.filter(orgs::deleted_at.is_null())
+    }
+
+    /// Returns a query that can be used as a subquery to select the number of users from an
+    /// organization.
+    fn n_members() -> NMembers {
+        ORGS_USERS_ALIAS
+            .filter(ORGS_USERS_ALIAS.field(orgs_users::org_id).eq(orgs::id))
+            .count()
+            .single_value()
+            // A COUNT query always returns a value.
+            .assume_not_null()
     }
 }
 

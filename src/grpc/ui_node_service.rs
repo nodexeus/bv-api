@@ -122,7 +122,6 @@ impl blockjoy_ui::Node {
                 .as_ref()
                 .ok_or_else(required("node.org_id"))?
                 .parse()?,
-            host_name: self.host_name.as_deref(),
             name: petname::petname(3, "_"),
             groups: self.groups.join(","),
             version: self.version.as_deref(),

@@ -31,7 +31,6 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         vcpu_count: 0,
         mem_size_mb: 0,
         disk_size_gb: 0,
-        host_name: Some("some host"),
         network: "some network",
         node_type: models::NodeType::Validator,
         created_by: user.id,
