@@ -62,24 +62,24 @@ impl Invitation {
         Ok(pending)
     }
 
-    pub async fn accept(id: uuid::Uuid, conn: &mut AsyncPgConnection) -> Result<Self> {
-        let invitation = diesel::update(invitations::table.find(id))
+    pub async fn accept(self, conn: &mut AsyncPgConnection) -> Result<Self> {
+        let invitation = diesel::update(invitations::table.find(self.id))
             .set(invitations::accepted_at.eq(chrono::Utc::now()))
             .get_result(conn)
             .await?;
         Ok(invitation)
     }
 
-    pub async fn decline(id: uuid::Uuid, conn: &mut AsyncPgConnection) -> Result<Self> {
-        let invitation = diesel::update(invitations::table.find(id))
+    pub async fn decline(self, conn: &mut AsyncPgConnection) -> Result<Self> {
+        let invitation = diesel::update(invitations::table.find(self.id))
             .set(invitations::declined_at.eq(chrono::Utc::now()))
             .get_result(conn)
             .await?;
         Ok(invitation)
     }
 
-    pub async fn revoke(id: uuid::Uuid, conn: &mut AsyncPgConnection) -> Result<()> {
-        diesel::delete(invitations::table.find(id))
+    pub async fn revoke(self, conn: &mut AsyncPgConnection) -> Result<()> {
+        diesel::delete(invitations::table.find(self.id))
             .execute(conn)
             .await?;
         Ok(())

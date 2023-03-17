@@ -58,13 +58,20 @@ impl Org {
     }
 
     pub async fn find_all_by_user(user_id: Uuid, conn: &mut AsyncPgConnection) -> Result<Vec<Org>> {
+        let ou_alias = diesel::alias!(orgs_users as ou_alias);
+        let n_members = orgs_users::table
+            .filter(orgs_users::org_id.eq(orgs::id))
+            .count()
+            .single_value()
+            // A COUNT query always returns a value.
+            .assume_not_null();
         let orgs = Self::not_deleted()
-            .filter(orgs_users::user_id.eq(user_id))
-            .inner_join(orgs_users::table)
-            .group_by(orgs::id)
-            .select((orgs::all_columns, dsl::count(orgs_users::user_id)))
+            .inner_join(ou_alias.on(ou_alias.field(orgs_users::org_id).eq(orgs::id)))
+            .filter(ou_alias.field(orgs_users::user_id).eq(user_id))
+            .select((orgs::all_columns, n_members))
             .get_results(conn)
             .await?;
+
         Ok(orgs)
     }
 

@@ -201,7 +201,17 @@ impl InvitationService for super::GrpcImpl {
         self.db
             .trx(|c| {
                 async move {
-                    let invitation = Invitation::accept(invitation_id, c).await?;
+                    let invitation = models::Invitation::find_by_id(invitation_id, c).await?;
+                    if invitation.accepted_at.is_some() {
+                        return Err(
+                            Status::failed_precondition("Invitation is already accepted").into(),
+                        );
+                    }
+                    if invitation.declined_at.is_some() {
+                        return Err(Status::failed_precondition("Invitation is declined").into());
+                    }
+
+                    let invitation = invitation.accept(c).await?;
                     // Only registered users can accept an invitation
                     let new_member = User::find_by_email(&invitation.invitee_email, c).await?;
                     Org::add_member(
@@ -222,7 +232,21 @@ impl InvitationService for super::GrpcImpl {
     async fn decline(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
         let (refresh_token, invitation_id) = get_refresh_token_invitation_id_from_request(request)?;
         self.db
-            .trx(|c| Invitation::decline(invitation_id, c).scope_boxed())
+            .trx(|c| {
+                async move {
+                    let invitation = models::Invitation::find_by_id(invitation_id, c).await?;
+                    if invitation.accepted_at.is_some() {
+                        return Err(Status::failed_precondition("Invitation is accepted").into());
+                    }
+                    if invitation.declined_at.is_some() {
+                        return Err(
+                            Status::failed_precondition("Invitation is already declined").into(),
+                        );
+                    }
+                    invitation.decline(c).await
+                }
+                .scope_boxed()
+            })
             .await?;
 
         response_with_refresh_token(refresh_token, ())
@@ -245,11 +269,18 @@ impl InvitationService for super::GrpcImpl {
                     let invitation =
                         Invitation::find_by_creator_for_email(user_id, &invitee_email, c).await?;
 
+                    if invitation.accepted_at.is_some() {
+                        return Err(Status::failed_precondition("Invitation is accepted").into());
+                    }
+                    if invitation.declined_at.is_some() {
+                        return Err(Status::failed_precondition("Invitation is declined").into());
+                    }
+
                     // Check if user belongs to org, the role is already checked by the auth middleware
                     Org::find_org_user(invitation.created_by_user, invitation.created_for_org, c)
                         .await?;
 
-                    Invitation::revoke(invitation.id, c).await
+                    invitation.revoke(c).await
                 }
                 .scope_boxed()
             })
