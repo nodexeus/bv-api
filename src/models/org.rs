@@ -29,10 +29,8 @@ pub struct OrgWithoutMembers {
 impl FindableById for Org {
     async fn find_by_id(org_id: Uuid, conn: &mut AsyncPgConnection) -> Result<Self> {
         let org = Org::not_deleted()
-            .filter(orgs::id.eq(org_id))
-            .inner_join(orgs_users::table)
-            .group_by(orgs::id)
-            .select((orgs::all_columns, dsl::count(orgs_users::user_id)))
+            .find(org_id)
+            .select((orgs::all_columns, Self::n_members()))
             .get_result(conn)
             .await?;
         Ok(org)
@@ -108,8 +106,7 @@ impl Org {
             .filter(orgs_users::user_id.eq(user_id))
             .filter(orgs_users::role.eq(OrgRole::Owner))
             .inner_join(orgs_users::table)
-            .group_by(orgs::id)
-            .select((orgs::all_columns, dsl::count(orgs_users::user_id)))
+            .select((orgs::all_columns, Self::n_members()))
             .get_result(conn)
             .await?;
         Ok(org)
