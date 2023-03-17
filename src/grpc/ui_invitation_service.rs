@@ -143,34 +143,37 @@ impl InvitationService for super::GrpcImpl {
         &self,
         request: Request<ListPendingInvitationRequest>,
     ) -> Result<Response<InvitationsResponse>, Status> {
-        let token = try_get_token::<_, UserAuthToken>(&request)?.try_into()?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
         let refresh_token = get_refresh_token(&request);
-        let user_id = try_get_token::<_, UserAuthToken>(&request)?.get_id();
+        let user_id = token.get_id();
+        let token = token.try_into()?;
         let inner = request.into_inner();
         let org_id = inner.org_id.parse().map_err(ApiError::from)?;
         let mut conn = self.db.conn().await?;
         let org_user = Org::find_org_user(user_id, org_id, &mut conn).await?;
 
-        match org_user.role {
-            OrgRole::Member => Err(Status::permission_denied(format!(
+        let is_allowed = match org_user.role {
+            OrgRole::Member => false,
+            OrgRole::Admin | OrgRole::Owner => true,
+        };
+        if !is_allowed {
+            super::bail_unauthorized!(
                 "User {user_id} is not allowed to list pending invitations on org {org_id}"
-            ))),
-            OrgRole::Admin | OrgRole::Owner => {
-                let invitations = Invitation::pending(org_id, &mut conn)
-                    .await?
-                    .into_iter()
-                    .map(blockjoy_ui::Invitation::from_model)
-                    .collect::<Result<_>>()?;
-
-                let response_meta = ResponseMeta::from_meta(inner.meta, Some(token));
-                let response = InvitationsResponse {
-                    meta: Some(response_meta),
-                    invitations,
-                };
-
-                response_with_refresh_token(refresh_token, response)
-            }
+            );
         }
+        let invitations = Invitation::pending(org_id, &mut conn)
+            .await?
+            .into_iter()
+            .map(blockjoy_ui::Invitation::from_model)
+            .collect::<Result<_>>()?;
+
+        let response_meta = ResponseMeta::from_meta(inner.meta, Some(token));
+        let response = InvitationsResponse {
+            meta: Some(response_meta),
+            invitations,
+        };
+
+        response_with_refresh_token(refresh_token, response)
     }
 
     async fn list_received(
@@ -198,7 +201,8 @@ impl InvitationService for super::GrpcImpl {
 
     async fn accept(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
         let (refresh_token, invitation_id) = get_refresh_token_invitation_id_from_request(request)?;
-        self.db
+        let msg = self
+            .db
             .trx(|c| {
                 async move {
                     let invitation = models::Invitation::find_by_id(invitation_id, c).await?;
@@ -214,17 +218,21 @@ impl InvitationService for super::GrpcImpl {
                     let invitation = invitation.accept(c).await?;
                     // Only registered users can accept an invitation
                     let new_member = User::find_by_email(&invitation.invitee_email, c).await?;
-                    Org::add_member(
+                    let org_user = Org::add_member(
                         new_member.id,
                         invitation.created_for_org,
                         OrgRole::Member,
                         c,
                     )
-                    .await
+                    .await?;
+                    let org = models::Org::find_by_id(org_user.org_id, c).await?;
+                    let user = models::User::find_by_id(org_user.user_id, c).await?;
+                    blockjoy_ui::OrgMessage::updated(org, user)
                 }
                 .scope_boxed()
             })
             .await?;
+        self.notifier.ui_orgs_sender()?.send(&msg).await?;
 
         response_with_refresh_token(refresh_token, ())
     }
