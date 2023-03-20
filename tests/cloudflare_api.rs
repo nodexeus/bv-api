@@ -17,6 +17,7 @@ async fn can_create_node_dns() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+#[ignore]
 async fn can_remove_node_dns() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
 

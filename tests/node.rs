@@ -34,6 +34,7 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         network: "some network",
         node_type: models::NodeType::Validator,
         created_by: user.id,
+        dns_record_id: None,
     };
 
     let mut conn = tester.conn().await;

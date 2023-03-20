@@ -1,5 +1,6 @@
 use crate::auth::key_provider::KeyProviderError;
 use crate::auth::TokenError;
+use crate::cloudflare::DnsError;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -75,6 +76,9 @@ pub enum ApiError {
 
     #[error("Mqtt error: {0}")]
     MqttError(#[from] rumqttc::ClientError),
+
+    #[error("Cloudflare integration error: {0}")]
+    DnsError(#[from] DnsError),
 }
 
 impl ApiError {

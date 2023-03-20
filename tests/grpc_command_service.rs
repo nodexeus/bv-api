@@ -3,7 +3,6 @@ use api::auth::FindableById;
 use api::grpc::blockjoy::commands_client::CommandsClient;
 use api::grpc::blockjoy::{CommandInfo, PendingCommandsRequest};
 use api::models;
-use diesel::row::NamedRow;
 use tonic::transport::Channel;
 use uuid::Uuid;
 
