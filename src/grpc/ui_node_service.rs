@@ -1,6 +1,7 @@
 use super::blockjoy;
 use super::helpers::required;
 use crate::auth::{FindableById, UserAuthToken};
+use crate::cloudflare::CloudflareApi;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
@@ -11,6 +12,7 @@ use crate::grpc::blockjoy_ui::{
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::{convert, get_refresh_token, response_with_refresh_token};
 use crate::models;
+use anyhow::anyhow;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use futures_util::future::OptionFuture;
 use std::collections::HashMap;
@@ -112,9 +114,12 @@ impl blockjoy_ui::Node {
         })
     }
 
-    pub fn as_new(&self, user_id: uuid::Uuid) -> Result<models::NewNode<'_>> {
+    pub async fn as_new(&self, user_id: uuid::Uuid) -> Result<models::NewNode<'_>> {
         let properties = self.r#type.as_ref().ok_or_else(required("node.type"))?;
         let properties: models::NodePropertiesWithId = serde_json::from_str(properties)?;
+        let name = petname::petname(3, "_");
+        let cf_api = CloudflareApi::new().map_err(|e| ApiError::UnexpectedError(anyhow!(e)))?;
+
         Ok(models::NewNode {
             id: uuid::Uuid::new_v4(),
             org_id: self
@@ -122,7 +127,7 @@ impl blockjoy_ui::Node {
                 .as_ref()
                 .ok_or_else(required("node.org_id"))?
                 .parse()?,
-            name: petname::petname(3, "_"),
+            name: name.clone(),
             groups: self.groups.join(","),
             version: self.version.as_deref(),
             blockchain_id: self
@@ -156,6 +161,12 @@ impl blockjoy_ui::Node {
                 .ok_or_else(required("node.network"))?,
             node_type: properties.id.try_into()?,
             created_by: user_id,
+            dns_record_id: Some(
+                cf_api
+                    .get_node_dns(name)
+                    .await
+                    .map_err(|e| ApiError::UnexpectedError(anyhow!(e)))?,
+            ),
         })
     }
 
@@ -296,7 +307,7 @@ impl NodeService for super::GrpcImpl {
             .trx(|c| {
                 async move {
                     let node = inner.node.as_ref().ok_or_else(required("node"))?;
-                    let node = node.as_new(user.id)?.create(c).await?;
+                    let node = node.as_new(user.id).await?.create(c).await?;
 
                     let ui_node = blockjoy_ui::NodeMessage::created(node.clone(), c).await?;
 

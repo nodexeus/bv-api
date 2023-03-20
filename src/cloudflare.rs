@@ -6,11 +6,23 @@
 //!
 
 use crate::auth::key_provider::KeyProvider;
+use anyhow::anyhow;
 use axum::http;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::string::ToString;
 
 pub type DnsResult<T> = Result<T, DnsError>;
+
+#[derive(Deserialize, Debug)]
+struct CloudflareDnsResult {
+    pub id: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct CloudflareDnsResponse {
+    pub errors: serde_json::Value,
+    pub result: Option<CloudflareDnsResult>,
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum DnsError {
@@ -24,6 +36,8 @@ pub enum DnsError {
     Http(#[from] reqwest::Error),
     #[error("Error handling JSON: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("Unknown DNS error: {0}")]
+    Unknown(anyhow::Error),
 }
 
 #[derive(Serialize)]
@@ -71,15 +85,27 @@ impl CloudflareApi {
         })
     }
 
-    pub async fn create_node_dns(&self, node: crate::models::Node) -> DnsResult<bool> {
-        let payload = CloudflarePayload::new(node.name)?;
+    pub async fn get_node_dns(&self, name: String) -> DnsResult<String> {
+        let payload = CloudflarePayload::new(name.clone())?;
         let endpoint = format!("zones/{}/dns_records", self.zone_id);
+        let response = self.post(payload, endpoint).await?;
 
-        Ok(self.post(payload, endpoint).await? == http::status::StatusCode::OK)
+        if response.result.is_some() {
+            let id = response.result.unwrap().id;
+            tracing::debug!("Created DNS entry for node name '{name}': {}", id);
+
+            Ok(id)
+        } else {
+            tracing::error!(
+                "Couldn't create DNS entry for node '{name}': {:?}",
+                response.errors
+            );
+            Err(DnsError::Unknown(anyhow!(response.errors)))
+        }
     }
 
-    pub async fn delete_node_dns(&self, node: crate::models::Node) -> DnsResult<bool> {
-        let endpoint = format!("zones/{}/dns_records/{}", self.zone_id, node.dns_record_id);
+    pub async fn remove_node_dns(&self, id: String) -> DnsResult<bool> {
+        let endpoint = format!("zones/{}/dns_records/{}", self.zone_id, id);
 
         Ok(self.delete(endpoint).await? == http::status::StatusCode::OK)
     }
@@ -88,7 +114,7 @@ impl CloudflareApi {
         &self,
         payload: CloudflarePayload,
         endpoint: String,
-    ) -> DnsResult<http::status::StatusCode> {
+    ) -> DnsResult<CloudflareDnsResponse> {
         let url = format!("{}/{}", self.base_url, endpoint);
         let client = reqwest::Client::new();
         let res = client
@@ -96,17 +122,19 @@ impl CloudflareApi {
             .bearer_auth(&self.token)
             .json(&payload)
             .send()
+            .await?
+            .json::<CloudflareDnsResponse>()
             .await?;
 
         dbg!(&res);
 
-        Ok(res.status())
+        Ok(res)
     }
 
     async fn delete(&self, endpoint: String) -> DnsResult<http::status::StatusCode> {
         let url = format!("{}/{}", self.base_url, endpoint);
         let client = reqwest::Client::new();
-        let res = client.post(url).bearer_auth(&self.token).send().await?;
+        let res = client.delete(url).bearer_auth(&self.token).send().await?;
 
         dbg!(&res);
 

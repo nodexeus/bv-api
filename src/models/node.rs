@@ -1,6 +1,7 @@
 use super::node_type::*;
 use super::schema::{nodes, orgs_users};
 use crate::auth::FindableById;
+use crate::cloudflare::CloudflareApi;
 use crate::cookbook::get_hw_requirements;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
@@ -224,8 +225,9 @@ pub struct Node {
     pub disk_size_gb: i64,                         // disk_size_gb -> Int8,
     pub host_name: String,                         // host_name -> Text,
     pub network: String,                           // network -> Text,
-    pub created_by: Option<uuid::Uuid>,            // node_type -> EnumNodeType,
-    pub node_type: NodeType,
+    pub created_by: Option<uuid::Uuid>,
+    pub dns_record_id: Option<String>,
+    pub node_type: NodeType, // node_type -> EnumNodeType,
 }
 
 #[derive(Clone, Debug)]
@@ -370,9 +372,23 @@ impl Node {
     }
 
     pub async fn delete(node_id: Uuid, conn: &mut AsyncPgConnection) -> Result<()> {
+        let node = Node::find_by_id(node_id, conn).await?;
+        let cf_api = CloudflareApi::new()
+            .map_err(|e| ApiError::UnexpectedError(anyhow!("Couldn't load CF API: {e}")))?;
+
         diesel::delete(nodes::table.find(node_id))
             .execute(conn)
             .await?;
+
+        if node.dns_record_id.is_some() {
+            cf_api
+                .remove_node_dns(node.dns_record_id.unwrap())
+                .await
+                .map_err(|e| {
+                    ApiError::UnexpectedError(anyhow!("Couldn't delete DNS entry: {e}"))
+                })?;
+        }
+
         Ok(())
     }
 }
@@ -415,6 +431,7 @@ pub struct NewNode<'a> {
     pub network: &'a str,
     pub node_type: NodeType,
     pub created_by: uuid::Uuid,
+    pub dns_record_id: Option<String>,
 }
 
 impl NewNode<'_> {
