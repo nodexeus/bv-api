@@ -60,6 +60,13 @@ jobs:
       MQTT_USERNAME: blockvisor-api
       MQTT_PASSWORD: PH*rE:\ZQlecB9/I?[#R$q3M;5yCb]Y+
       KEY_SERVICE_URL: https://api.dev.blockjoy.com
+      # Cloudflare
+      CF_BASE_URL: https://api.cloudflare.com/client/v4
+      CF_ZONE: 89560cdd783e35f7a9d718755ea9c656
+      CF_DNS_BASE: n0des.xyz
+      CF_TTL: 300
+      # secret
+      CF_TOKEN: 9QjEiXC4B26tgshHZjuZ57kJcjaChSSsDfzUvfYQ
 
     steps:
       - uses: actions/checkout@v2
