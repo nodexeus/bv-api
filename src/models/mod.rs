@@ -30,7 +30,7 @@ mod invoice;
 mod ip_address;
 mod node;
 mod node_key_file;
-mod node_property_value;
+mod node_property;
 mod node_type;
 mod org;
 mod payment;
@@ -53,7 +53,7 @@ pub use invoice::*;
 pub use ip_address::*;
 pub use node::*;
 pub use node_key_file::*;
-pub use node_property_value::*;
+pub use node_property::*;
 pub use node_type::*;
 pub use org::*;
 pub use payment::*;
@@ -68,6 +68,12 @@ pub trait UpdateInfo<T, R> {
 }
 
 diesel::sql_function!(fn lower(x: diesel::sql_types::Text) -> diesel::sql_types::Text);
+diesel::sql_function!(
+    fn coalesce(
+        x: diesel::sql_types::Nullable<diesel::sql_types::BigInt>,
+        y: diesel::sql_types::BigInt,
+    ) -> diesel::sql_types::BigInt
+);
 
 /// Our wrapper type for a ref counted postgres pool. We use a wrapper type because the functions
 /// `begin` and `conn` return a `Result<_, sqlx::Error>`. From our controllers we must return a

@@ -7,19 +7,8 @@ use crate::errors::ApiError;
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models;
-use crate::models::NodeTypeKey;
 
 type Result<T, E = tonic::Status> = std::result::Result<T, E>;
-
-pub struct BlockchainServiceImpl {
-    db: models::DbPool,
-}
-
-impl BlockchainServiceImpl {
-    pub fn new(db: models::DbPool) -> Self {
-        Self { db }
-    }
-}
 
 impl blockjoy_ui::Blockchain {
     fn from_model(model: models::Blockchain) -> crate::Result<Self> {
@@ -47,7 +36,7 @@ impl blockjoy_ui::Blockchain {
 }
 
 #[tonic::async_trait]
-impl BlockchainService for BlockchainServiceImpl {
+impl BlockchainService for super::GrpcImpl {
     async fn get(
         &self,
         request: tonic::Request<blockjoy_ui::GetBlockchainRequest>,
@@ -83,13 +72,19 @@ impl BlockchainService for BlockchainServiceImpl {
             let name = blockchain.name.clone();
             let mut blockchain = blockjoy_ui::Blockchain::from_model(blockchain)?;
 
-            for node_type in node_types {
-                let nets = get_networks(
-                    name.clone(),
-                    NodeTypeKey::str_from_value(node_type.get_id()),
-                    Some(node_type.version.to_string()),
-                )
-                .await?;
+            for node_properties in node_types {
+                let node_type = models::NodeType::str_from_value(node_properties.id);
+                let version = Some(node_properties.version.to_string());
+                let res = get_networks(name.clone(), node_type.clone(), version.clone()).await;
+                let nets = match res {
+                    Ok(nets) => nets,
+                    Err(e) => {
+                        tracing::error!(
+                            "Could not get networks for {name} {node_type} version {version:?}: {e}"
+                        );
+                        continue;
+                    }
+                };
 
                 blockchain.networks.extend(nets.iter().map(|c| c.into()));
             }

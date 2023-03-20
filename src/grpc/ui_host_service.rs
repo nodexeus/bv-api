@@ -13,16 +13,6 @@ use crate::models;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use tonic::{Request, Response, Status};
 
-pub struct HostServiceImpl {
-    db: models::DbPool,
-}
-
-impl HostServiceImpl {
-    pub fn new(db: models::DbPool) -> Self {
-        Self { db }
-    }
-}
-
 impl blockjoy_ui::Host {
     pub async fn from_model(
         model: models::Host,
@@ -64,23 +54,26 @@ impl blockjoy_ui::Host {
             os_version: self.os_version.as_deref(),
             ip_addr: self.ip.as_deref().ok_or_else(required("host.ip"))?,
             status: models::ConnectionStatus::Online,
-            ip_range_from: self
-                .ip_range_from
-                .as_ref()
-                .ok_or_else(required("host.ip_range_from"))?
-                .parse()?,
+            ip_range_from: Some(
+                self.ip_range_from
+                    .as_ref()
+                    .ok_or_else(required("host.ip_range_from"))?
+                    .parse()?,
+            ),
 
-            ip_range_to: self
-                .ip_range_to
-                .as_ref()
-                .ok_or_else(required("host.ip_range_to"))?
-                .parse()?,
+            ip_range_to: Some(
+                self.ip_range_to
+                    .as_ref()
+                    .ok_or_else(required("host.ip_range_to"))?
+                    .parse()?,
+            ),
 
-            ip_gateway: self
-                .ip_gateway
-                .as_ref()
-                .ok_or_else(required("host.ip_gateway"))?
-                .parse()?,
+            ip_gateway: Some(
+                self.ip_gateway
+                    .as_ref()
+                    .ok_or_else(required("host.ip_gateway"))?
+                    .parse()?,
+            ),
         })
     }
 
@@ -105,7 +98,7 @@ impl blockjoy_ui::Host {
 }
 
 #[tonic::async_trait]
-impl HostService for HostServiceImpl {
+impl HostService for super::GrpcImpl {
     /// Get host(s) by one of:
     /// - ID
     /// - Organization ID

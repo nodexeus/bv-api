@@ -15,41 +15,31 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-pub struct InvitationServiceImpl {
-    db: models::DbPool,
-}
+fn get_refresh_token_invitation_id_from_request(
+    request: Request<InvitationRequest>,
+) -> Result<(Option<String>, Uuid), Status> {
+    let refresh_token = get_refresh_token(&request);
+    let invitation_id = match try_get_token::<_, InvitationToken>(&request) {
+        Ok(token) => {
+            tracing::debug!("Found invitation token");
 
-impl InvitationServiceImpl {
-    pub fn new(db: models::DbPool) -> Self {
-        Self { db }
-    }
+            token.id
+        }
+        Err(_) => {
+            tracing::debug!("No invitation token available, trying user auth token");
 
-    fn get_refresh_token_invitation_id_from_request(
-        request: Request<InvitationRequest>,
-    ) -> Result<(Option<String>, Uuid), Status> {
-        let refresh_token = get_refresh_token(&request);
-        let invitation_id = match try_get_token::<_, InvitationToken>(&request) {
-            Ok(token) => {
-                tracing::debug!("Found invitation token");
+            let inner = request.into_inner();
+            let invitation_id = inner
+                .invitation
+                .ok_or_else(|| Status::permission_denied("No valid invitation found"))?
+                .id
+                .ok_or_else(|| Status::permission_denied("No valid invitation ID found"))?;
 
-                token.id
-            }
-            Err(_) => {
-                tracing::debug!("No invitation token available, trying user auth token");
+            invitation_id.parse().map_err(ApiError::from)?
+        }
+    };
 
-                let inner = request.into_inner();
-                let invitation_id = inner
-                    .invitation
-                    .ok_or_else(|| Status::permission_denied("No valid invitation found"))?
-                    .id
-                    .ok_or_else(|| Status::permission_denied("No valid invitation ID found"))?;
-
-                Uuid::parse_str(invitation_id.as_str()).map_err(ApiError::from)?
-            }
-        };
-
-        Ok((refresh_token, invitation_id))
-    }
+    Ok((refresh_token, invitation_id))
 }
 
 impl blockjoy_ui::CreateInvitationRequest {
@@ -93,7 +83,7 @@ impl blockjoy_ui::Invitation {
 }
 
 #[tonic::async_trait]
-impl InvitationService for InvitationServiceImpl {
+impl InvitationService for super::GrpcImpl {
     async fn create(
         &self,
         request: Request<CreateInvitationRequest>,
@@ -153,34 +143,37 @@ impl InvitationService for InvitationServiceImpl {
         &self,
         request: Request<ListPendingInvitationRequest>,
     ) -> Result<Response<InvitationsResponse>, Status> {
-        let token = try_get_token::<_, UserAuthToken>(&request)?.try_into()?;
+        let token = try_get_token::<_, UserAuthToken>(&request)?;
         let refresh_token = get_refresh_token(&request);
-        let user_id = try_get_token::<_, UserAuthToken>(&request)?.get_id();
+        let user_id = token.get_id();
+        let token = token.try_into()?;
         let inner = request.into_inner();
         let org_id = inner.org_id.parse().map_err(ApiError::from)?;
         let mut conn = self.db.conn().await?;
         let org_user = Org::find_org_user(user_id, org_id, &mut conn).await?;
 
-        match org_user.role {
-            OrgRole::Member => Err(Status::permission_denied(format!(
+        let is_allowed = match org_user.role {
+            OrgRole::Member => false,
+            OrgRole::Admin | OrgRole::Owner => true,
+        };
+        if !is_allowed {
+            super::bail_unauthorized!(
                 "User {user_id} is not allowed to list pending invitations on org {org_id}"
-            ))),
-            OrgRole::Admin | OrgRole::Owner => {
-                let invitations = Invitation::pending(org_id, &mut conn)
-                    .await?
-                    .into_iter()
-                    .map(blockjoy_ui::Invitation::from_model)
-                    .collect::<Result<_>>()?;
-
-                let response_meta = ResponseMeta::from_meta(inner.meta, Some(token));
-                let response = InvitationsResponse {
-                    meta: Some(response_meta),
-                    invitations,
-                };
-
-                response_with_refresh_token(refresh_token, response)
-            }
+            );
         }
+        let invitations = Invitation::pending(org_id, &mut conn)
+            .await?
+            .into_iter()
+            .map(blockjoy_ui::Invitation::from_model)
+            .collect::<Result<_>>()?;
+
+        let response_meta = ResponseMeta::from_meta(inner.meta, Some(token));
+        let response = InvitationsResponse {
+            meta: Some(response_meta),
+            invitations,
+        };
+
+        response_with_refresh_token(refresh_token, response)
     }
 
     async fn list_received(
@@ -207,34 +200,61 @@ impl InvitationService for InvitationServiceImpl {
     }
 
     async fn accept(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
-        let (refresh_token, invitation_id) =
-            InvitationServiceImpl::get_refresh_token_invitation_id_from_request(request)?;
-        self.db
+        let (refresh_token, invitation_id) = get_refresh_token_invitation_id_from_request(request)?;
+        let msg = self
+            .db
             .trx(|c| {
                 async move {
-                    let invitation = Invitation::accept(invitation_id, c).await?;
+                    let invitation = models::Invitation::find_by_id(invitation_id, c).await?;
+                    if invitation.accepted_at.is_some() {
+                        return Err(
+                            Status::failed_precondition("Invitation is already accepted").into(),
+                        );
+                    }
+                    if invitation.declined_at.is_some() {
+                        return Err(Status::failed_precondition("Invitation is declined").into());
+                    }
+
+                    let invitation = invitation.accept(c).await?;
                     // Only registered users can accept an invitation
                     let new_member = User::find_by_email(&invitation.invitee_email, c).await?;
-                    Org::add_member(
+                    let org_user = Org::add_member(
                         new_member.id,
                         invitation.created_for_org,
                         OrgRole::Member,
                         c,
                     )
-                    .await
+                    .await?;
+                    let org = models::Org::find_by_id(org_user.org_id, c).await?;
+                    let user = models::User::find_by_id(org_user.user_id, c).await?;
+                    blockjoy_ui::OrgMessage::updated(org, user)
                 }
                 .scope_boxed()
             })
             .await?;
+        self.notifier.ui_orgs_sender()?.send(&msg).await?;
 
         response_with_refresh_token(refresh_token, ())
     }
 
     async fn decline(&self, request: Request<InvitationRequest>) -> Result<Response<()>, Status> {
-        let (refresh_token, invitation_id) =
-            InvitationServiceImpl::get_refresh_token_invitation_id_from_request(request)?;
+        let (refresh_token, invitation_id) = get_refresh_token_invitation_id_from_request(request)?;
         self.db
-            .trx(|c| Invitation::decline(invitation_id, c).scope_boxed())
+            .trx(|c| {
+                async move {
+                    let invitation = models::Invitation::find_by_id(invitation_id, c).await?;
+                    if invitation.accepted_at.is_some() {
+                        return Err(Status::failed_precondition("Invitation is accepted").into());
+                    }
+                    if invitation.declined_at.is_some() {
+                        return Err(
+                            Status::failed_precondition("Invitation is already declined").into(),
+                        );
+                    }
+                    invitation.decline(c).await
+                }
+                .scope_boxed()
+            })
             .await?;
 
         response_with_refresh_token(refresh_token, ())
@@ -257,11 +277,18 @@ impl InvitationService for InvitationServiceImpl {
                     let invitation =
                         Invitation::find_by_creator_for_email(user_id, &invitee_email, c).await?;
 
+                    if invitation.accepted_at.is_some() {
+                        return Err(Status::failed_precondition("Invitation is accepted").into());
+                    }
+                    if invitation.declined_at.is_some() {
+                        return Err(Status::failed_precondition("Invitation is declined").into());
+                    }
+
                     // Check if user belongs to org, the role is already checked by the auth middleware
                     Org::find_org_user(invitation.created_by_user, invitation.created_for_org, c)
                         .await?;
 
-                    Invitation::revoke(invitation.id, c).await
+                    invitation.revoke(c).await
                 }
                 .scope_boxed()
             })
