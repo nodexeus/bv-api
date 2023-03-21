@@ -124,7 +124,7 @@ impl blockjoy_ui::Node {
                 .as_ref()
                 .ok_or_else(required("node.org_id"))?
                 .parse()?,
-            name: name.clone(),
+            name,
             groups: self.groups.join(","),
             version: self.version.as_deref(),
             blockchain_id: self
