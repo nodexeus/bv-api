@@ -51,14 +51,14 @@ pub struct CloudflarePayload {
 }
 
 impl CloudflarePayload {
-    pub fn new(node_name: String) -> DnsResult<Self> {
+    pub fn new(node_name: String, origin_ip: String) -> DnsResult<Self> {
         let name = format!("{node_name}.{}", std::env::var("CF_DNS_BASE")?);
         let ttl: i64 = std::env::var("CF_TTL")?.parse()?;
 
         Ok(Self {
             r#type: "A".to_string(),
             name,
-            content: "127.0.0.1".to_string(),
+            content: origin_ip,
             ttl,
             priority: 10,
             proxied: false,
@@ -70,10 +70,11 @@ pub struct CloudflareApi {
     pub base_url: String,
     pub zone_id: String,
     pub token: String,
+    pub origin_ip: String,
 }
 
 impl CloudflareApi {
-    pub fn new() -> DnsResult<Self> {
+    pub fn new(origin_ip: String) -> DnsResult<Self> {
         let zone_id = std::env::var("CF_ZONE")?;
         let base_url = std::env::var("CF_BASE_URL")?;
         let token = KeyProvider::get_var("CF_TOKEN")?.value;
@@ -82,11 +83,12 @@ impl CloudflareApi {
             base_url,
             zone_id,
             token,
+            origin_ip,
         })
     }
 
-    pub async fn get_node_dns(&self, name: String) -> DnsResult<String> {
-        let payload = CloudflarePayload::new(name.clone())?;
+    pub async fn get_node_dns(&self, name: String, origin_ip: String) -> DnsResult<String> {
+        let payload = CloudflarePayload::new(name.clone(), origin_ip)?;
         let endpoint = format!("zones/{}/dns_records", self.zone_id);
         let response = self.post(payload, endpoint).await?;
 

@@ -373,7 +373,7 @@ impl Node {
 
     pub async fn delete(node_id: Uuid, conn: &mut AsyncPgConnection) -> Result<()> {
         let node = Node::find_by_id(node_id, conn).await?;
-        let cf_api = CloudflareApi::new()?;
+        let cf_api = CloudflareApi::new(node.ip_addr.unwrap_or_default())?;
 
         diesel::delete(nodes::table.find(node_id))
             .execute(conn)
@@ -423,9 +423,8 @@ pub struct NewNode<'a> {
     pub mem_size_mb: i64,
     pub disk_size_gb: i64,
     pub network: &'a str,
-    pub node_type: NodeType,
     pub created_by: uuid::Uuid,
-    pub dns_record_id: Option<String>,
+    pub node_type: NodeType,
 }
 
 impl NewNode<'_> {
@@ -452,6 +451,11 @@ impl NewNode<'_> {
             .ip()
             .to_string();
 
+        let cf_api = CloudflareApi::new(ip_addr.clone())?;
+        let dns_record_id = cf_api
+            .get_node_dns(self.name.clone(), ip_addr.clone())
+            .await?;
+
         diesel::insert_into(nodes::table)
             .values((
                 self,
@@ -459,6 +463,7 @@ impl NewNode<'_> {
                 nodes::ip_gateway.eq(ip_gateway),
                 nodes::ip_addr.eq(ip_addr),
                 nodes::host_name.eq(&host.name),
+                nodes::dns_record_id.eq(dns_record_id),
             ))
             .get_result(conn)
             .await

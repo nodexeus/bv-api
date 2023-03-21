@@ -1,7 +1,6 @@
 use super::blockjoy;
 use super::helpers::required;
 use crate::auth::{FindableById, UserAuthToken};
-use crate::cloudflare::CloudflareApi;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
@@ -12,7 +11,6 @@ use crate::grpc::blockjoy_ui::{
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::{convert, get_refresh_token, response_with_refresh_token};
 use crate::models;
-use anyhow::anyhow;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use futures_util::future::OptionFuture;
 use std::collections::HashMap;
@@ -118,7 +116,6 @@ impl blockjoy_ui::Node {
         let properties = self.r#type.as_ref().ok_or_else(required("node.type"))?;
         let properties: models::NodePropertiesWithId = serde_json::from_str(properties)?;
         let name = petname::petname(3, "_");
-        let cf_api = CloudflareApi::new().map_err(|e| ApiError::UnexpectedError(anyhow!(e)))?;
 
         Ok(models::NewNode {
             id: uuid::Uuid::new_v4(),
@@ -161,16 +158,10 @@ impl blockjoy_ui::Node {
                 .ok_or_else(required("node.network"))?,
             node_type: properties.id.try_into()?,
             created_by: user_id,
-            dns_record_id: Some(
-                cf_api
-                    .get_node_dns(name)
-                    .await
-                    .map_err(|e| ApiError::UnexpectedError(anyhow!(e)))?,
-            ),
         })
     }
 
-    fn as_update(&self) -> Result<models::UpdateNode<'_>> {
+    async fn as_update(&self) -> Result<models::UpdateNode<'_>> {
         Ok(models::UpdateNode {
             id: self.id.as_ref().ok_or_else(required("node.id"))?.parse()?,
             name: self.name.as_deref(),
@@ -381,7 +372,8 @@ impl NodeService for super::GrpcImpl {
             .node
             .as_ref()
             .ok_or_else(required("node"))?
-            .as_update()?;
+            .as_update()
+            .await?;
 
         let msg = self
             .db
