@@ -128,8 +128,6 @@ impl CloudflareApi {
             .json::<CloudflareDnsResponse>()
             .await?;
 
-        dbg!(&res);
-
         Ok(res)
     }
 
@@ -137,8 +135,6 @@ impl CloudflareApi {
         let url = format!("{}/{}", self.base_url, endpoint);
         let client = reqwest::Client::new();
         let res = client.delete(url).bearer_auth(&self.token).send().await?;
-
-        dbg!(&res);
 
         Ok(res.status())
     }
