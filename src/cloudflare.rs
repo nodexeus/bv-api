@@ -20,7 +20,6 @@ struct CloudflareDnsResult {
 
 #[derive(Deserialize, Debug)]
 struct CloudflareDnsResponse {
-    pub errors: serde_json::Value,
     pub result: Option<CloudflareDnsResult>,
 }
 
