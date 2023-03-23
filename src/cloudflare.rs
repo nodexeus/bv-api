@@ -90,26 +90,29 @@ impl CloudflareApi {
     pub async fn get_node_dns(&self, name: String, origin_ip: String) -> DnsResult<String> {
         let payload = CloudflarePayload::new(name.clone(), origin_ip)?;
         let endpoint = format!("zones/{}/dns_records", self.zone_id);
-        let response = self.post(payload, endpoint).await?;
 
-        if response.result.is_some() {
-            let id = response.result.unwrap().id;
-            tracing::debug!("Created DNS entry for node name '{name}': {}", id);
+        match self.post(payload, endpoint).await {
+            Ok(response) => {
+                let id = response.result.unwrap().id;
+                tracing::debug!("Created DNS entry for node name '{name}': {}", id);
 
-            Ok(id)
-        } else {
-            tracing::error!(
-                "Couldn't create DNS entry for node '{name}': {:?}",
-                response.errors
-            );
-            Err(DnsError::Unknown(anyhow!(response.errors)))
+                Ok(id)
+            }
+            Err(e) => {
+                tracing::error!("Couldn't create DNS entry for node '{name}': {e}",);
+
+                Err(DnsError::Unknown(anyhow!(e)))
+            }
         }
     }
 
-    pub async fn remove_node_dns(&self, id: String) -> DnsResult<bool> {
+    pub async fn remove_node_dns(&self, id: String) -> DnsResult<()> {
         let endpoint = format!("zones/{}/dns_records/{}", self.zone_id, id);
 
-        Ok(self.delete(endpoint).await? == http::status::StatusCode::OK)
+        match self.delete(endpoint).await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(DnsError::Unknown(anyhow!("Couldn't delete DNS entry: {e}"))),
+        }
     }
 
     async fn post(

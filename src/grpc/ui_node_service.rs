@@ -112,7 +112,7 @@ impl blockjoy_ui::Node {
         })
     }
 
-    pub async fn as_new(&self, user_id: uuid::Uuid) -> Result<models::NewNode<'_>> {
+    pub fn as_new(&self, user_id: uuid::Uuid) -> Result<models::NewNode<'_>> {
         let properties = self.r#type.as_ref().ok_or_else(required("node.type"))?;
         let properties: models::NodePropertiesWithId = serde_json::from_str(properties)?;
         let name = petname::petname(3, "_");
@@ -161,7 +161,7 @@ impl blockjoy_ui::Node {
         })
     }
 
-    async fn as_update(&self) -> Result<models::UpdateNode<'_>> {
+    fn as_update(&self) -> Result<models::UpdateNode<'_>> {
         Ok(models::UpdateNode {
             id: self.id.as_ref().ok_or_else(required("node.id"))?.parse()?,
             name: self.name.as_deref(),
@@ -298,7 +298,7 @@ impl NodeService for super::GrpcImpl {
             .trx(|c| {
                 async move {
                     let node = inner.node.as_ref().ok_or_else(required("node"))?;
-                    let node = node.as_new(user.id).await?.create(c).await?;
+                    let node = node.as_new(user.id)?.create(c).await?;
 
                     let node_msg = blockjoy_ui::NodeMessage::created(node.clone(), c).await?;
 
@@ -372,8 +372,7 @@ impl NodeService for super::GrpcImpl {
             .node
             .as_ref()
             .ok_or_else(required("node"))?
-            .as_update()
-            .await?;
+            .as_update()?;
 
         let msg = self
             .db
