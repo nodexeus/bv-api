@@ -373,14 +373,14 @@ impl Node {
 
     pub async fn delete(node_id: Uuid, conn: &mut AsyncPgConnection) -> Result<()> {
         let node = Node::find_by_id(node_id, conn).await?;
-        let cf_api = CloudflareApi::new(node.ip_addr.unwrap_or_default())?;
+        let cf_api = CloudflareApi::new(node.ip_addr.ok_or_else(|| anyhow!("IP required"))?)?;
 
         diesel::delete(nodes::table.find(node_id))
             .execute(conn)
             .await?;
 
-        if node.dns_record_id.is_some() {
-            cf_api.remove_node_dns(node.dns_record_id.unwrap()).await?;
+        if let Some(id) = node.dns_record_id {
+            cf_api.remove_node_dns(id).await?;
         }
 
         Ok(())

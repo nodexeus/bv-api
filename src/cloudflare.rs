@@ -6,6 +6,7 @@
 //!
 
 use crate::auth::key_provider::KeyProvider;
+use crate::grpc::helpers::required;
 use anyhow::anyhow;
 use axum::http;
 use serde::{Deserialize, Serialize};
@@ -92,7 +93,10 @@ impl CloudflareApi {
 
         match self.post(payload, endpoint).await {
             Ok(response) => {
-                let id = response.result.unwrap().id;
+                let id = response
+                    .result
+                    .ok_or_else(|| anyhow!("Response result is required"))?
+                    .id;
                 tracing::debug!("Created DNS entry for node name '{name}': {}", id);
 
                 Ok(id)
