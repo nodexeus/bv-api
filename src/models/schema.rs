@@ -257,6 +257,7 @@ diesel::table! {
         host_name -> Text,
         network -> Text,
         created_by -> Nullable<Uuid>,
+        dns_record_id -> Nullable<Varchar>,
         node_type -> EnumNodeType,
     }
 }

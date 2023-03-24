@@ -1,6 +1,7 @@
 use super::node_type::*;
 use super::schema::{nodes, orgs_users};
 use crate::auth::FindableById;
+use crate::cloudflare::CloudflareApi;
 use crate::cookbook::get_hw_requirements;
 use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy::NodeInfo as GrpcNodeInfo;
@@ -224,8 +225,9 @@ pub struct Node {
     pub disk_size_gb: i64,                         // disk_size_gb -> Int8,
     pub host_name: String,                         // host_name -> Text,
     pub network: String,                           // network -> Text,
-    pub created_by: Option<uuid::Uuid>,            // node_type -> EnumNodeType,
-    pub node_type: NodeType,
+    pub created_by: Option<uuid::Uuid>,
+    pub dns_record_id: Option<String>,
+    pub node_type: NodeType, // node_type -> EnumNodeType,
 }
 
 #[derive(Clone, Debug)]
@@ -370,9 +372,17 @@ impl Node {
     }
 
     pub async fn delete(node_id: Uuid, conn: &mut AsyncPgConnection) -> Result<()> {
+        let node = Node::find_by_id(node_id, conn).await?;
+        let cf_api = CloudflareApi::new(node.ip_addr.ok_or_else(|| anyhow!("IP required"))?)?;
+
         diesel::delete(nodes::table.find(node_id))
             .execute(conn)
             .await?;
+
+        if let Some(id) = node.dns_record_id {
+            cf_api.remove_node_dns(id).await?;
+        }
+
         Ok(())
     }
 }
@@ -413,8 +423,8 @@ pub struct NewNode<'a> {
     pub mem_size_mb: i64,
     pub disk_size_gb: i64,
     pub network: &'a str,
-    pub node_type: NodeType,
     pub created_by: uuid::Uuid,
+    pub node_type: NodeType,
 }
 
 impl NewNode<'_> {
@@ -441,6 +451,11 @@ impl NewNode<'_> {
             .ip()
             .to_string();
 
+        let cf_api = CloudflareApi::new(ip_addr.clone())?;
+        let dns_record_id = cf_api
+            .get_node_dns(self.name.clone(), ip_addr.clone())
+            .await?;
+
         diesel::insert_into(nodes::table)
             .values((
                 self,
@@ -448,6 +463,7 @@ impl NewNode<'_> {
                 nodes::ip_gateway.eq(ip_gateway),
                 nodes::ip_addr.eq(ip_addr),
                 nodes::host_name.eq(&host.name),
+                nodes::dns_record_id.eq(dns_record_id),
             ))
             .get_result(conn)
             .await

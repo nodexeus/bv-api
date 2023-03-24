@@ -4,6 +4,9 @@ use api::models::{self};
 
 #[tokio::test]
 async fn can_filter_nodes() -> anyhow::Result<()> {
+    let mut name = String::from("test_");
+    name.push_str(petname::petname(3, "_").as_str());
+
     let tester = setup::Tester::new().await;
     let blockchain = tester.blockchain().await;
     let user = tester.admin_user().await;
@@ -24,7 +27,7 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         block_height: None,
         groups: "".to_string(),
         node_data: None,
-        name: "Mr. Nodington".to_string(),
+        name,
         version: Some("3.3.0"),
         staking_status: models::NodeStakingStatus::Staked,
         self_update: false,
@@ -49,6 +52,16 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
 
     assert!(!nodes.is_empty());
     assert_eq!(nodes.len(), 1);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn has_dns_entry() -> anyhow::Result<()> {
+    let tester = setup::Tester::new().await;
+    let node = tester.node().await;
+
+    assert!(node.dns_record_id.is_some());
 
     Ok(())
 }
