@@ -200,8 +200,8 @@ impl blockjoy_ui::OrgMessage {
     fn org_id(&self) -> Option<uuid::Uuid> {
         use org_message::Message::*;
         match self.message.as_ref()? {
-            Created(blockjoy_ui::OrgCreated { org, .. }) => org.as_ref()?.id.as_ref()?.parse().ok(),
-            Updated(blockjoy_ui::OrgUpdated { org, .. }) => org.as_ref()?.id.as_ref()?.parse().ok(),
+            Created(blockjoy_ui::OrgCreated { org, .. }) => org.as_ref()?.id.parse().ok(),
+            Updated(blockjoy_ui::OrgUpdated { org, .. }) => org.as_ref()?.id.parse().ok(),
             Deleted(blockjoy_ui::OrgDeleted {
                 organization_id, ..
             }) => organization_id.parse().ok(),
@@ -261,9 +261,7 @@ impl blockjoy_ui::NodeMessage {
         use node_message::Message::*;
         match self.message.as_ref()? {
             Created(blockjoy_ui::NodeCreated { node })
-            | Updated(blockjoy_ui::NodeUpdated { node, .. }) => {
-                node.as_ref()?.id.as_ref()?.parse().ok()
-            }
+            | Updated(blockjoy_ui::NodeUpdated { node, .. }) => node.as_ref()?.id.parse().ok(),
             Deleted(blockjoy_ui::NodeDeleted { node_id, .. }) => node_id.parse().ok(),
         }
     }
@@ -272,9 +270,7 @@ impl blockjoy_ui::NodeMessage {
         use node_message::Message::*;
         match self.message.as_ref()? {
             Created(blockjoy_ui::NodeCreated { node })
-            | Updated(blockjoy_ui::NodeUpdated { node, .. }) => {
-                node.as_ref()?.org_id.as_ref()?.parse().ok()
-            }
+            | Updated(blockjoy_ui::NodeUpdated { node, .. }) => node.as_ref()?.org_id.parse().ok(),
             Deleted(blockjoy_ui::NodeDeleted {
                 organization_id, ..
             }) => organization_id.parse().ok(),
@@ -383,8 +379,11 @@ mod tests {
     #[tokio::test]
     async fn test_ui_hosts_sender() {
         let db = crate::TestDb::setup().await;
+        let mut conn = db.pool.conn().await.unwrap();
         let host = db.host().await;
-        let host = host.try_into().unwrap();
+        let host = blockjoy_ui::Host::from_model(host, &mut conn)
+            .await
+            .unwrap();
         let notifier = Notifier::new().await.unwrap();
         notifier
             .ui_hosts_sender()
