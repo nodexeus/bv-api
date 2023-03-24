@@ -174,21 +174,6 @@ pub mod from {
     use anyhow::anyhow;
     use tonic::{Code, Status};
 
-    // impl TryFrom<&blockjoy_ui::User> for UpdateUser<'_> {
-    //     type Error = ApiError;
-
-    //     fn try_from(user: &blockjoy_ui::User) -> crate::Result<Self> {
-    //         Ok(Self {
-    //             id: user.id.as_ref().ok_or_else(required("user.id"))?.parse()?,
-    //             first_name: user.first_name.as_deref(),
-    //             last_name: user.last_name.as_deref(),
-    //             fee_bps: None,
-    //             staking_quota: None,
-    //             refresh: None,
-    //         })
-    //     }
-    // }
-
     impl TryFrom<&UserAuthToken> for grpc::blockjoy_ui::ApiToken {
         type Error = ApiError;
 
@@ -236,45 +221,20 @@ pub mod from {
         }
     }
 
-    impl TryFrom<models::Host> for blockjoy_ui::Host {
-        type Error = ApiError;
-
-        fn try_from(value: models::Host) -> Result<Self, Self::Error> {
-            let host = Self {
-                id: Some(value.id.to_string()),
-                name: Some(value.name),
-                version: value.version,
-                location: value.location,
-                cpu_count: value.cpu_count,
-                mem_size: value.mem_size,
-                disk_size: value.disk_size,
-                os: value.os,
-                os_version: value.os_version,
-                ip: Some(value.ip_addr),
-                status: Some(value.status as i32),
-                nodes: vec![],
-                created_at: Some(try_dt_to_ts(value.created_at)?),
-                ip_range_from: value.ip_range_from.map(|ip| ip.to_string()),
-                ip_range_to: value.ip_range_to.map(|ip| ip.to_string()),
-                ip_gateway: value.ip_gateway.map(|ip| ip.to_string()),
-                org_id: None, // TODO
-            };
-            Ok(host)
-        }
-    }
-
     impl From<ApiError> for Status {
         fn from(e: ApiError) -> Self {
+            use ApiError::*;
+
             let msg = format!("{e:?}");
 
             match e {
-                ApiError::ValidationError(_) => Status::invalid_argument(msg),
-                ApiError::NotFoundError(_) => Status::not_found(msg),
-                ApiError::DuplicateResource { .. } => Status::invalid_argument(msg),
-                ApiError::InvalidAuthentication(_) => Status::unauthenticated(msg),
-                ApiError::InsufficientPermissionsError => Status::permission_denied(msg),
-                ApiError::UuidParseError(_) => Status::invalid_argument(msg),
-                ApiError::InvalidArgument(s) => s,
+                ValidationError(_) => Status::invalid_argument(msg),
+                NotFoundError(_) => Status::not_found(msg),
+                DuplicateResource { .. } => Status::invalid_argument(msg),
+                InvalidAuthentication(_) => Status::unauthenticated(msg),
+                InsufficientPermissionsError => Status::permission_denied(msg),
+                UuidParseError(_) | IpParseError(_) => Status::invalid_argument(msg),
+                InvalidArgument(s) => s,
                 _ => Status::internal(msg),
             }
         }
