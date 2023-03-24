@@ -345,43 +345,6 @@ pub mod from {
         }
     }
 
-    impl TryFrom<&models::Blockchain> for blockjoy_ui::Blockchain {
-        type Error = ApiError;
-
-        fn try_from(model: &models::Blockchain) -> Result<Self, Self::Error> {
-            let json = &model.supported_node_types()?;
-            let json = serde_json::to_string(&json)
-                .map_err(|e| anyhow!("Could not serialize supported node types: {e}"))?;
-
-            let blockchain = Self {
-                id: Some(model.id.to_string()),
-                name: Some(model.name.clone()),
-                description: model.description.clone(),
-                status: model.status as i32,
-                project_url: model.project_url.clone(),
-                repo_url: model.repo_url.clone(),
-                supports_etl: model.supports_etl,
-                supports_node: model.supports_node,
-                supports_staking: model.supports_staking,
-                supports_broadcast: model.supports_broadcast,
-                version: model.version.clone(),
-                supported_nodes_types: json,
-                created_at: Some(try_dt_to_ts(model.created_at)?),
-                updated_at: Some(try_dt_to_ts(model.updated_at)?),
-                networks: vec![],
-            };
-            Ok(blockchain)
-        }
-    }
-
-    impl TryFrom<models::Blockchain> for blockjoy_ui::Blockchain {
-        type Error = ApiError;
-
-        fn try_from(model: models::Blockchain) -> Result<Self, Self::Error> {
-            Self::try_from(&model)
-        }
-    }
-
     impl TryFrom<NodeKeyFile> for Keyfile {
         type Error = ApiError;
 
