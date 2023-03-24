@@ -16,7 +16,9 @@ message GetHostProvisionResponse {
 
 message CreateHostProvisionRequest {
   RequestMeta meta = 1;
-  HostProvision host_provision = 2;
+  string ip_range_from = 2;
+  string ip_range_to = 3;
+  string ip_gateway = 4;
 }
 
 message CreateHostProvisionResponse {
@@ -25,8 +27,9 @@ message CreateHostProvisionResponse {
 
 /* Host provisioning */
 service HostProvisionService {
-  /* Get a single host provision identified by ID or a list of all available host provisions */
-  rpc Get(GetHostProvisionRequest) returns (GetHostProvisionResponse) {}
+  /* Get a single host provision identified by ID or a list of all available
+   * host provisions */
+  rpc Get(GetHostProvisionRequest) returns (GetHostProvisionResponse);
   /* Create a single host provision */
-  rpc Create(CreateHostProvisionRequest) returns (CreateHostProvisionResponse) {}
+  rpc Create(CreateHostProvisionRequest) returns (CreateHostProvisionResponse);
 }

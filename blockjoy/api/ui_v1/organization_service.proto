@@ -6,30 +6,41 @@ import "common.proto";
 import "google/protobuf/empty.proto";
 
 message GetOrganizationsRequest {
+  // Metadata about the request.
   RequestMeta meta = 1;
   optional string org_id = 2;
 }
 
 message GetOrganizationsResponse {
+  // Metadata about the response.
   ResponseMeta meta = 1;
   repeated Organization organizations = 2;
 }
 
 message CreateOrganizationRequest {
+  // Metadata about the request.
   RequestMeta meta = 1;
-  Organization organization = 2;
+  string name = 2;
 }
 
 message CreateOrganizationResponse {
+  // Metadata about the response.
   ResponseMeta meta = 1;
-}
-
-message UpdateOrganizationRequest {
-  RequestMeta meta = 1;
   Organization organization = 2;
 }
 
+message UpdateOrganizationRequest {
+  // Metadata about the request.
+  RequestMeta meta = 1;
+  // The id of the organization to be updated.
+  string id = 2;
+  // If this value is provided, the name of the organization will be set to the
+  // provided value.
+  optional string name = 3;
+}
+
 message UpdateOrganizationResponse {
+  // Metadata about the response.
   ResponseMeta meta = 1;
 }
 
@@ -75,20 +86,22 @@ message LeaveOrganizationRequest {
 
 /* Manage organizations */
 service OrganizationService {
-  /* Get all the organizations for a user. All users automatically get a private (internal) organization */
-  rpc Get(GetOrganizationsRequest) returns (GetOrganizationsResponse) {}
+  /* Get all the organizations for a user. All users automatically get a
+   * private (internal) organization 
+   */
+  rpc Get(GetOrganizationsRequest) returns (GetOrganizationsResponse);
   /* Create a single organization */
-  rpc Create(CreateOrganizationRequest) returns (CreateOrganizationResponse) {}
+  rpc Create(CreateOrganizationRequest) returns (CreateOrganizationResponse);
   /* Update a single organization */
-  rpc Update(UpdateOrganizationRequest) returns (UpdateOrganizationResponse) {}
+  rpc Update(UpdateOrganizationRequest) returns (UpdateOrganizationResponse);
   /* Mark a single organization as deleted */
-  rpc Delete(DeleteOrganizationRequest) returns (DeleteOrganizationResponse) {}
+  rpc Delete(DeleteOrganizationRequest) returns (DeleteOrganizationResponse);
   /* Restore a previously deleted organization */
-  rpc Restore(RestoreOrganizationRequest) returns (RestoreOrganizationResponse) {}
+  rpc Restore(RestoreOrganizationRequest) returns (RestoreOrganizationResponse);
   /* Retrieve organization members */
-  rpc Members(OrganizationMemberRequest) returns (OrganizationMemberResponse) {}
+  rpc Members(OrganizationMemberRequest) returns (OrganizationMemberResponse);
   /* Remove organization member */
-  rpc RemoveMember(RemoveMemberRequest) returns (google.protobuf.Empty) {}
+  rpc RemoveMember(RemoveMemberRequest) returns (google.protobuf.Empty);
   /* Leave an organization the user is member of */
-  rpc Leave(LeaveOrganizationRequest) returns (google.protobuf.Empty) {}
+  rpc Leave(LeaveOrganizationRequest) returns (google.protobuf.Empty);
 }

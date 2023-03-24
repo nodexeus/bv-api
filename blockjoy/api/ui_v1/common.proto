@@ -4,10 +4,9 @@ package blockjoy.api.ui_v1;
 
 import "google/protobuf/timestamp.proto";
 
-/*
- * API token representation
- * As there's no specific token type, we use this one to indicate the value of the field
- * will be an API token
+/* API token representation
+ * As there's no specific token type, we use this one to indicate the value of
+ * the field will be an API token
  */
 message ApiToken {
   string value = 1;
@@ -17,13 +16,15 @@ message ApiToken {
  * Pagination information, used in the response type
  */
 message Pagination {
-  /* Optional total number of items, may not be bigger than PAGINATION_MAX_COUNT */
+  /* Optional total number of items, may not be bigger than
+   * PAGINATION_MAX_COUNT
+   */
   optional int32 total_items = 1;
   int32 current_page = 2;
   int32 items_per_page = 3;
 }
 
-/* General request meta data */
+/* General request metadata */
 message RequestMeta {
   /* Request ID. Should be generated when constructing the request */
   optional string id = 1;
@@ -35,15 +36,15 @@ message RequestMeta {
   optional Pagination pagination = 5;
 }
 
-/* General response meta data */
+/* General response metadata */
 message ResponseMeta {
   /* Response status codes */
   enum Status {
     reserved 3 to 15;
 
-    UnknownResponse = 0;
-    Success = 1;
-    GeneralError = 2;
+    STATUS_UNSPECIFIED = 0;
+    STATUS_SUCCESS = 1;
+    STATUS_GENERALERROR = 2;
   }
 
   /* Response status code */
@@ -65,37 +66,53 @@ message Host {
     // Up to 15 to ensure only 1 byte is used for the most common values
     reserved 12 to 15;
 
-    UndefinedContainerStatus = 0;
-    Creating = 1;
-    Running = 2;
-    Starting = 3;
-    Stopping = 4;
-    Stopped = 5;
-    Upgrading = 6;
-    Upgraded = 7;
-    Deleting = 8;
-    Deleted = 9;
-    Installing = 10;
-    Snapshotting = 11;
+    HOST_STATUS_UNSPECIFIED = 0;
+    HOST_STATUS_CREATING = 1;
+    HOST_STATUS_RUNNING = 2;
+    HOST_STATUS_STARTING = 3;
+    HOST_STATUS_STOPPING = 4;
+    HOST_STATUS_STOPPED = 5;
+    HOST_STATUS_UPGRADING = 6;
+    HOST_STATUS_UPGRADED = 7;
+    HOST_STATUS_DELETING = 8;
+    HOST_STATUS_DELETED = 9;
+    HOST_STATUS_INSTALLING = 10;
+    HOST_STATUS_SNAPSHOTTING = 11;
   }
 
-  optional string id = 1;
-  optional string name = 2;
+  // This is the id of the host.
+  string id = 1;
+  // This is the randomly generated name of the host.
+  string name = 2;
+  // The version of the blockjoy control software running on the host.
   optional string version = 3;
+  // The physical location of the server.
   optional string location = 4;
-  optional int64 cpu_count = 5;
-  optional int64 mem_size = 6;
-  optional int64 disk_size = 7;
+  // The number of logical cores the machine has.
+  optional uint64 cpu_count = 5;
+  // The amount of physical memory the machine has in megabytes.
+  optional uint64 mem_size = 6;
+  // The size of the physical disks the machine has, in gigabytes.
+  optional uint64 disk_size = 7;
+  // The operating system running on the machine, i.e. "BSD" or "Linux".
   optional string os = 8;
+  // The version of said operating system running on the host.
   optional string os_version = 9;
-  optional string ip = 10;
-  optional HostStatus status = 11;
+  // The ip address on which the machine is reachable.
+  string ip = 10;
+  // Current status of the machine, or `UNSPECIFIED`.
+  HostStatus status = 11;
+  // All the nodes running on this machine.
   repeated Node nodes = 12;
-  optional google.protobuf.Timestamp created_at = 13;
+  // The moment this host was created. Corresponds to the moment that the
+  // host_provision was 
+  google.protobuf.Timestamp created_at = 13;
+  // The lowest ip address that this host may assign to a node.
   optional string ip_range_from = 14;
+  // The highest ip address that this host may assign to a node.
   optional string ip_range_to = 15;
+  // The ip gateway of this host.
   optional string ip_gateway = 16;
-  optional string org_id = 17;
 }
 
 /* HostProvision entity */
@@ -119,25 +136,25 @@ message Node {
    * node's states as seen by the blockchain
    */
   enum NodeStatus {
-    UndefinedApplicationStatus = 0;
+    NODE_STATUS_UNSPECIFIED = 0;
     // General chain states
-    Provisioning = 1;
-    Broadcasting = 2;
-    Cancelled = 3;
-    Delegating = 4;
-    Delinquent = 5;
-    Disabled = 6;
-    Earning = 7;
-    Electing = 8;
-    Elected = 9;
-    Exported = 10;
-    Ingesting = 11;
-    Mining = 12;
-    Minting = 13;
-    Processing = 14;
-    Relaying = 15;
-    Removed = 16;
-    Removing = 17;
+    NODE_STATUS_PROVISIONING = 1;
+    NODE_STATUS_BROADCASTING = 2;
+    NODE_STATUS_CANCELLED = 3;
+    NODE_STATUS_DELEGATING = 4;
+    NODE_STATUS_DELINQUENT = 5;
+    NODE_STATUS_DISABLED = 6;
+    NODE_STATUS_EARNING = 7;
+    NODE_STATUS_ELECTING = 8;
+    NODE_STATUS_ELECTED = 9;
+    NODE_STATUS_EXPORTED = 10;
+    NODE_STATUS_INGESTING = 11;
+    NODE_STATUS_MINING = 12;
+    NODE_STATUS_MINTING = 13;
+    NODE_STATUS_PROCESSING = 14;
+    NODE_STATUS_RELAYING = 15;
+    NODE_STATUS_REMOVED = 16;
+    NODE_STATUS_REMOVING = 17;
   }
 
   // Describe the node's syncing status
@@ -146,9 +163,9 @@ message Node {
     // Up to 15 to ensure only 1 byte is used for the most common values
     reserved 3 to 15;
 
-    UndefinedSyncStatus = 0;
-    Syncing = 1;
-    Synced = 2;
+    SYNC_STATUS_UNSPECIFIED = 0;
+    SYNC_STATUS_SYNCING = 1;
+    SYNC_STATUS_SYNCED = 2;
   }
 
   // Describe the node's staking status
@@ -157,46 +174,76 @@ message Node {
     // Up to 15 to ensure only 1 byte is used for the most common values
     reserved 7 to 15;
 
-    UndefinedStakingStatus = 0;
-    Follower = 1;
-    Staked = 2;
-    Staking = 3;
-    Validating = 4;
-    Consensus = 5;
-    Unstaked = 6;
+    STAKING_STATUS_UNSPECIFIED = 0;
+    STAKING_STATUS_FOLLOWER = 1;
+    STAKING_STATUS_STAKED = 2;
+    STAKING_STATUS_STAKING = 3;
+    STAKING_STATUS_VALIDATING = 4;
+    STAKING_STATUS_CONSENSUS = 5;
+    STAKING_STATUS_UNSTAKED = 6;
   }
 
-  optional string id = 1;
-  optional string org_id = 2;
-  optional string host_id = 3;
-  optional string host_name = 4;
-  optional string blockchain_id = 5;
-  optional string name = 6;
-  repeated string groups = 7;
+  enum NodeType {
+    NODE_TYPE_UNSPECIFIED = 0;
+    NODE_TYPE_MINER = 1;
+    NODE_TYPE_ETL = 2;
+    NODE_TYPE_VALIDATOR = 3;
+    NODE_TYPE_API = 4;
+    NODE_TYPE_ORACLE = 5;
+    NODE_TYPE_RELAY = 6;
+    NODE_TYPE_EXECUTION = 7;
+    NODE_TYPE_BEACON = 8;
+    NODE_TYPE_MEVBOOST = 9;
+    NODE_TYPE_NODE = 10;
+    NODE_TYPE_FULLNODE = 11;
+    NODE_TYPE_LIGHTNODE = 12;
+  }
+
+  message NodeProperty {
+    string name = 1;
+    string label = 2;
+    string description = 3;
+    string ui_type = 4;
+    bool disabled = 5;
+    bool required = 6;
+    optional string value = 7;
+  }
+
+  string id = 1;
+  string org_id = 2;
+  string host_id = 3;
+  string host_name = 4;
+  string blockchain_id = 5;
+  string name = 6;
   optional string version = 8;
   optional string ip = 9;
-  optional string type = 10;
-  optional string address = 11;
-  optional string wallet_address = 12;
+  NodeType type = 10;
+  repeated NodeProperty properties = 11;
   optional int64 block_height = 13;
-  optional bytes node_data = 14;
-  optional google.protobuf.Timestamp created_at = 15;
-  optional google.protobuf.Timestamp updated_at = 16;
-  optional NodeStatus status = 17;
-  optional SyncStatus sync_status = 18;
+  google.protobuf.Timestamp created_at = 15;
+  google.protobuf.Timestamp updated_at = 16;
+  NodeStatus status = 17;
+  SyncStatus sync_status = 18;
   optional StakingStatus staking_status = 19;
-  optional string ip_gateway = 20;
-  optional bool self_update = 21;
-  optional string network = 22;
+  string ip_gateway = 20;
+  bool self_update = 21;
+  string network = 22;
   optional string blockchain_name = 23;
+  // The id of the user that created this node. For the earliest nodes we
+  // created, this field was not tracked and is therefore not populated.
+  optional string created_by = 24;
+  // The name of the aforementioned user.
+  optional string created_by_name = 25;
+  // The email of said aforementioned user.
+  optional string created_by_email = 26;
 }
 
 message OrgUser {
   enum OrgRole {
-    UndefinedOrgRole = 0;
-    Member = 1;
-    Owner = 2;
-    Admin = 3;
+    ORG_ROLE_UNSPECIFIED = 0;
+    ORG_ROLE_MEMBER = 1;
+    ORG_ROLE_OWNER = 2;
+    ORG_ROLE_ADMIN = 3;
   }
 
   string user_id = 1;
@@ -206,23 +253,34 @@ message OrgUser {
 
 /* Organization representation */
 message Organization {
-  optional string id = 1;
-  optional string name = 2;
-  optional bool personal = 3;
-  optional int64 member_count = 4;
-  optional google.protobuf.Timestamp created_at = 13;
-  optional google.protobuf.Timestamp updated_at = 14;
+  // The UUID of a the organization.
+  string id = 1;
+  // The name of this organization.
+  string name = 2;
+  // If this field is set to true, this organization is a personal
+  // organization. A personal organization is the default organzation for a
+  // user that contains only them.
+  bool personal = 3;
+  // The number of users in this organization.
+  uint64 member_count = 4;
+  // The moment which this organization was created.
+  google.protobuf.Timestamp created_at = 13;
+  // The moment which this organization was last updated.
+  google.protobuf.Timestamp updated_at = 14;
+  // This field contains the `OrgRole` that the user has within this
+  // organization, which controls the level of permissions they have to perform
+  // mutations (i.e. kick other users).
   optional OrgUser current_user = 15;
 }
 
 /* User representation */
 message User {
-  optional string id = 1;
-  optional string email = 2;
-  optional string first_name = 3;
-  optional string last_name = 4;
-  optional google.protobuf.Timestamp created_at = 5;
-  optional google.protobuf.Timestamp updated_at = 6;
+  string id = 1;
+  string email = 2;
+  string first_name = 3;
+  string last_name = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
 }
 
 /* Bill representation */
@@ -241,11 +299,11 @@ message Bill {
 /* Single metric value */
 message Metric {
   enum Name {
-    Unknown = 0;
-    Nodes = 1;
-    Hosts = 2;
-    Online = 3;
-    Offline = 4;
+    NAME_UNSPECIFIED = 0;
+    NAME_NODES = 1;
+    NAME_HOSTS = 2;
+    NAME_ONLINE = 3;
+    NAME_OFFLINE = 4;
   }
 
   Name name = 1;
@@ -266,10 +324,10 @@ message Parameter {
 
 message BlockchainNetwork {
   enum NetworkType {
-    UnknownNetworkType = 0;
-    Dev = 1;
-    Test = 2;
-    Main = 3;
+    NETWORK_TYPE_UNSPECIFIED = 0;
+    NETWORK_TYPE_DEV = 1;
+    NETWORK_TYPE_TEST = 2;
+    NETWORK_TYPE_MAIN = 3;
   }
 
   string name = 1;
@@ -279,12 +337,12 @@ message BlockchainNetwork {
 
 message Blockchain {
   enum BlockchainStatus {
-    UndefinedBlockchainStatus = 0;
-    Development = 1;
-    Alpha = 2;
-    Beta = 3;
-    Production = 4;
-    Deleted = 5;
+    BLOCKCHAIN_STATUS_UNSPECIFIED = 0;
+    BLOCKCHAIN_STATUS_DEVELOPMENT = 1;
+    BLOCKCHAIN_STATUS_ALPHA = 2;
+    BLOCKCHAIN_STATUS_BETA = 3;
+    BLOCKCHAIN_STATUS_PRODUCTION = 4;
+    BLOCKCHAIN_STATUS_DELETED = 5;
   }
 
   optional string id = 1;
