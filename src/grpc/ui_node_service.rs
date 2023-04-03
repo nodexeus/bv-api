@@ -108,6 +108,8 @@ impl blockjoy_ui::Node {
             created_by: user.map(|u| u.id.to_string()),
             created_by_name: user.map(|u| format!("{} {}", u.first_name, u.last_name)),
             created_by_email: user.map(|u| u.email.clone()),
+            allow_ips: vec![],
+            deny_ips: vec![],
         })
     }
 }

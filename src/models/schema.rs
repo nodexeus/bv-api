@@ -257,7 +257,7 @@ diesel::table! {
         host_name -> Text,
         network -> Text,
         created_by -> Nullable<Uuid>,
-        dns_record_id -> Nullable<Varchar>,
+        dns_record_id -> Varchar,
         allow_ips -> Jsonb,
         deny_ips -> Jsonb,
         node_type -> EnumNodeType,
