@@ -150,18 +150,40 @@ pub fn try_dt_to_ts(datetime: chrono::DateTime<chrono::Utc>) -> ApiResult<Timest
 pub mod from {
     use crate::auth::{JwtToken, UserAuthToken};
     use crate::cookbook::cookbook_grpc::NetworkConfiguration;
-    use crate::errors::ApiError;
+    use crate::errors::{ApiError, Result as ApiResult};
     use crate::grpc;
     use crate::grpc::blockjoy::Keyfile;
     use crate::grpc::blockjoy_ui::blockchain_network::NetworkType;
-    use crate::grpc::blockjoy_ui::BlockchainNetwork;
     use crate::grpc::blockjoy_ui::{
         node::NodeStatus as GrpcNodeStatus, node::StakingStatus as GrpcStakingStatus,
         node::SyncStatus as GrpcSyncStatus,
     };
+    use crate::grpc::blockjoy_ui::{BlockchainNetwork, FilteredIpAddr};
     use crate::models::{self, NodeChainStatus, NodeKeyFile, NodeStakingStatus, NodeSyncStatus};
     use anyhow::anyhow;
     use tonic::{Code, Status};
+
+    pub fn json_value_to_vec(json: &serde_json::Value) -> ApiResult<Vec<FilteredIpAddr>> {
+        let arr = json
+            .as_array()
+            .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Error deserializing JSON")))?;
+        let mut result = vec![];
+
+        for value in arr {
+            let tmp = value
+                .as_object()
+                .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Error deserializing JSON")))?;
+            let ip = tmp
+                .get("ip")
+                .map(|e| e.to_string())
+                .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Can't read IP")))?;
+            let description = tmp.get("description").map(|e| e.to_string());
+
+            result.push(FilteredIpAddr { ip, description });
+        }
+
+        Ok(result)
+    }
 
     impl TryFrom<&UserAuthToken> for grpc::blockjoy_ui::ApiToken {
         type Error = ApiError;
