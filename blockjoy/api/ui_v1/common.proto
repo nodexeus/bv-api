@@ -215,6 +215,9 @@ message Node {
   string host_name = 4;
   string blockchain_id = 5;
   string name = 6;
+  // The P2P address of the node on the blockchain. This field is only set as
+  // the node is started, so therefore it is optional.
+  optional string address = 7;
   optional string version = 8;
   optional string ip = 9;
   NodeType type = 10;
@@ -236,6 +239,10 @@ message Node {
   optional string created_by_name = 25;
   // The email of said aforementioned user.
   optional string created_by_email = 26;
+  // Whitelisted IP address for firewall
+  repeated FilteredIpAddr allow_ips = 27;
+  // Blacklisted IP address for firewall
+  repeated FilteredIpAddr deny_ips = 28;
 }
 
 message OrgUser {
@@ -373,4 +380,10 @@ message Invitation {
   optional google.protobuf.Timestamp declined_at = 7;
   optional string created_by_user_name = 8;
   optional string created_for_org_name = 9;
+}
+
+// IP address used for node firewalls∆
+message FilteredIpAddr {
+  string ip = 1;
+  optional string description = 2;
 }
