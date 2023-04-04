@@ -166,17 +166,18 @@ pub mod from {
     pub fn json_value_to_vec(json: &serde_json::Value) -> ApiResult<Vec<FilteredIpAddr>> {
         let arr = json
             .as_array()
-            .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Error deserializing JSON")))?;
+            .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Error deserializing JSON object")))?;
         let mut result = vec![];
 
         for value in arr {
-            let tmp = value
-                .as_object()
-                .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Error deserializing JSON")))?;
+            let tmp = value.as_object().ok_or_else(|| {
+                ApiError::UnexpectedError(anyhow!("Error deserializing JSON array"))
+            })?;
             let ip = tmp
                 .get("ip")
                 .map(|e| e.to_string())
-                .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Can't read IP")))?;
+                .ok_or_else(|| ApiError::UnexpectedError(anyhow!("Can't read IP")))?
+                .to_string();
             let description = tmp.get("description").map(|e| e.to_string());
 
             result.push(FilteredIpAddr { ip, description });
