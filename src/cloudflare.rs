@@ -39,7 +39,7 @@ pub enum DnsError {
     Unknown(anyhow::Error),
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct CloudflarePayload {
     pub r#type: String,
     pub name: String,
@@ -126,6 +126,9 @@ impl CloudflareApi {
     ) -> DnsResult<CloudflareDnsResponse> {
         let url = format!("{}/{}", self.base_url, endpoint);
         let client = reqwest::Client::new();
+
+        tracing::debug!("Sending payload to cloudflare: {payload:?}");
+
         let res = client
             .post(url)
             .bearer_auth(&self.token)
