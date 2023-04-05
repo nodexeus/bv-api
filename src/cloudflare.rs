@@ -92,6 +92,8 @@ impl CloudflareApi {
 
         match self.post(payload, endpoint).await {
             Ok(response) => {
+                tracing::debug!("received response: {response:?}");
+
                 let id = response
                     .result
                     .ok_or_else(|| DnsError::Unknown(anyhow!("Response result is not parsable")))?
