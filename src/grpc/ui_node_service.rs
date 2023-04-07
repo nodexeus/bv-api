@@ -7,7 +7,7 @@ use crate::grpc::blockjoy_ui::{
     GetNodeResponse, ListNodesRequest, ListNodesResponse, ResponseMeta, UpdateNodeRequest,
     UpdateNodeResponse,
 };
-use crate::grpc::convert::from::json_value_to_vec;
+use crate::grpc::convert::json_value_to_vec;
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::{convert, get_refresh_token, response_with_refresh_token};
 use crate::models;
