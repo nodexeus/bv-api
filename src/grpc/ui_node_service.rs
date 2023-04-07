@@ -1,7 +1,6 @@
 use super::blockjoy;
 use super::helpers::required;
 use crate::auth::{FindableById, UserAuthToken};
-use crate::errors::{ApiError, Result};
 use crate::grpc::blockjoy_ui::node_service_server::NodeService;
 use crate::grpc::blockjoy_ui::{
     self, CreateNodeRequest, CreateNodeResponse, DeleteNodeRequest, GetNodeRequest,
@@ -12,6 +11,7 @@ use crate::grpc::convert::from::json_value_to_vec;
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::{convert, get_refresh_token, response_with_refresh_token};
 use crate::models;
+use crate::Result;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use futures_util::future::OptionFuture;
 use std::collections::HashMap;
@@ -158,7 +158,7 @@ impl blockjoy_ui::CreateNodeRequest {
         Ok(models::NewNode {
             id: uuid::Uuid::new_v4(),
             org_id: self.org_id.parse()?,
-            name: petname::petname(3, "_"),
+            name: petname::Petnames::large().generate_one(3, "_"),
             groups: "".to_string(),
             version: self.version.as_deref(),
             blockchain_id: self.blockchain_id.parse()?,
@@ -233,7 +233,7 @@ impl NodeService for super::GrpcImpl {
         let refresh_token = get_refresh_token(&request);
         let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
         let inner = request.into_inner();
-        let node_id = inner.id.parse().map_err(ApiError::from)?;
+        let node_id = inner.id.parse().map_err(crate::Error::from)?;
         let mut conn = self.conn().await?;
         let node = models::Node::find_by_id(node_id, &mut conn).await?;
 
@@ -255,7 +255,7 @@ impl NodeService for super::GrpcImpl {
         let token = try_get_token::<_, UserAuthToken>(&request)?.try_into()?;
         let inner = request.into_inner();
         let filters = inner.filter.clone();
-        let org_id = inner.org_id.parse().map_err(ApiError::from)?;
+        let org_id = inner.org_id.parse().map_err(crate::Error::from)?;
         let pagination = inner
             .meta
             .clone()
@@ -328,7 +328,7 @@ impl NodeService for super::GrpcImpl {
                         node_id: Some(node.id),
                     };
                     let cmd = new_command.create(c).await?;
-                    let create_msg = convert::db_command_to_grpc_command(&cmd, c).await?;
+                    let create_msg = blockjoy::Command::from_model(&cmd, c).await?;
 
                     let update_user = models::UpdateUser {
                         id: user.id,
@@ -347,7 +347,7 @@ impl NodeService for super::GrpcImpl {
                         node_id: Some(node.id),
                     };
                     let cmd = new_command.create(c).await?;
-                    let restart_msg = convert::db_command_to_grpc_command(&cmd, c).await?;
+                    let restart_msg = blockjoy::Command::from_model(&cmd, c).await?;
                     let ui_node = blockjoy_ui::Node::from_model(node.clone(), c).await?;
                     Ok((node, ui_node, node_msg, create_msg, restart_msg))
                 }
@@ -465,7 +465,7 @@ impl NodeService for super::GrpcImpl {
                 };
                 update_user.update(c).await?;
 
-                let grpc_cmd = convert::db_command_to_grpc_command(&cmd, c).await?;
+                let grpc_cmd = blockjoy::Command::from_model(&cmd, c).await?;
                 self.notifier.bv_commands_sender()?.send(&grpc_cmd).await?;
 
                 self.notifier
