@@ -19,11 +19,19 @@ use std::collections::HashMap;
 use tonic::{Request, Response, Status};
 
 impl blockjoy_ui::Organization {
+    /// Converts a list of `Org` models into a list of `Organization` DTO's. We take care to perform
+    /// O(1) queries, no matter the length of `models`. For this we need to find all users belonging
+    /// to this each org.
     pub async fn from_models(
         models: Vec<models::Org>,
         conn: &mut AsyncPgConnection,
     ) -> crate::Result<Vec<Self>> {
+        // We find all OrgUsers belonging to each model. This gives us a map from `org_id` to
+        // `Vec<OrgUser>`.
         let org_users = models::OrgUser::by_orgs(&models, conn).await?;
+
+        // Now we get the actual users for each `OrgUser`, because we also need to provide the name
+        // and email of each user.
         let user_ids: Vec<uuid::Uuid> = org_users.values().flatten().map(|ou| ou.user_id).collect();
         let users: HashMap<uuid::Uuid, models::User> = models::User::find_by_ids(&user_ids, conn)
             .await?
@@ -31,6 +39,8 @@ impl blockjoy_ui::Organization {
             .map(|u| (u.id, u))
             .collect();
 
+        // Finally we can loop over the models to construct the final list of messages we set out to
+        // create.
         models
             .into_iter()
             .map(|model| {
@@ -115,10 +125,8 @@ impl OrganizationService for super::GrpcImpl {
                     let user = models::User::find_by_id(user_id, c).await?;
                     let org = new_org.create(user.id, c).await?;
                     let ui_org = blockjoy_ui::Organization::from_model(org.clone(), c).await?;
-                    Ok((
-                        ui_org,
-                        blockjoy_ui::OrgMessage::created(org, user, c).await?,
-                    ))
+                    let msg = blockjoy_ui::OrgMessage::created(org, user, c).await?;
+                    Ok((ui_org, msg))
                 }
                 .scope_boxed()
             })
