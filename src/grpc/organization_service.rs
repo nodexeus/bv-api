@@ -14,22 +14,57 @@ use crate::grpc::{get_refresh_token, response_with_refresh_token};
 use crate::models;
 use crate::Error;
 use diesel_async::scoped_futures::ScopedFutureExt;
+use diesel_async::AsyncPgConnection;
+use std::collections::HashMap;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 
 impl blockjoy_ui::Organization {
-    pub fn from_model(model: models::Org) -> crate::Result<Self> {
-        let (model, member_count) = (model.org, model.members);
-        let org = Self {
-            id: model.id.to_string(),
-            name: model.name,
-            personal: model.is_personal,
-            member_count: member_count.try_into()?,
-            created_at: Some(convert::try_dt_to_ts(model.created_at)?),
-            updated_at: Some(convert::try_dt_to_ts(model.updated_at)?),
-            current_user: None,
-        };
-        Ok(org)
+    pub async fn from_models(
+        models: Vec<models::Org>,
+        conn: &mut AsyncPgConnection,
+    ) -> crate::Result<Vec<Self>> {
+        let org_users = models::OrgUser::by_orgs(&models, conn).await?;
+        let user_ids: Vec<uuid::Uuid> = org_users.values().flatten().map(|ou| ou.user_id).collect();
+        let users: HashMap<uuid::Uuid, models::User> = models::User::find_by_ids(&user_ids, conn)
+            .await?
+            .into_iter()
+            .map(|u| (u.id, u))
+            .collect();
+
+        models
+            .into_iter()
+            .map(|model| {
+                let org_users = &org_users[&model.id];
+                Ok(Self {
+                    id: model.id.to_string(),
+                    name: model.name.clone(),
+                    personal: model.is_personal,
+                    member_count: org_users.len().try_into()?,
+                    created_at: Some(convert::try_dt_to_ts(model.created_at)?),
+                    updated_at: Some(convert::try_dt_to_ts(model.updated_at)?),
+                    members: org_users
+                        .iter()
+                        .map(|ou| {
+                            let user = &users[&ou.user_id];
+                            blockjoy_ui::OrgUser {
+                                user_id: ou.user_id.to_string(),
+                                org_id: ou.org_id.to_string(),
+                                role: ou.role as i32,
+                                name: format!("{} {}", user.first_name, user.last_name),
+                                email: user.email.clone(),
+                            }
+                        })
+                        .collect(),
+                })
+            })
+            .collect()
+    }
+
+    pub async fn from_model(
+        model: models::Org,
+        conn: &mut AsyncPgConnection,
+    ) -> crate::Result<Self> {
+        Ok(Self::from_models(vec![model], conn).await?[0].clone())
     }
 }
 
@@ -53,19 +88,7 @@ impl OrganizationService for super::GrpcImpl {
             }
             None => models::Org::find_all_by_user(user_id, &mut conn).await?,
         };
-        let mut organizations = organizations
-            .into_iter()
-            .map(Organization::from_model)
-            .collect::<crate::Result<Vec<_>>>()?;
-
-        for org in &mut organizations {
-            let org_id: Uuid = org.id.parse().map_err(Error::UuidParseError)?;
-            let user = models::Org::find_org_user(user_id, org_id, &mut conn)
-                .await?
-                .into();
-            org.current_user = Some(user);
-        }
-
+        let organizations = Organization::from_models(organizations, &mut conn).await?;
         let inner = GetOrganizationsResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta, Some(token.try_into()?))),
             organizations,
@@ -91,8 +114,11 @@ impl OrganizationService for super::GrpcImpl {
                 async move {
                     let user = models::User::find_by_id(user_id, c).await?;
                     let org = new_org.create(user.id, c).await?;
-                    let ui_org = blockjoy_ui::Organization::from_model(org.clone())?;
-                    Ok((ui_org, blockjoy_ui::OrgMessage::created(org, user)?))
+                    let ui_org = blockjoy_ui::Organization::from_model(org.clone(), c).await?;
+                    Ok((
+                        ui_org,
+                        blockjoy_ui::OrgMessage::created(org, user, c).await?,
+                    ))
                 }
                 .scope_boxed()
             })
@@ -127,7 +153,7 @@ impl OrganizationService for super::GrpcImpl {
                 async move {
                     let org = update.update(c).await?;
                     let user = models::User::find_by_id(user_id, c).await?;
-                    blockjoy_ui::OrgMessage::updated(org, user)
+                    blockjoy_ui::OrgMessage::updated(org, user, c).await
                 }
                 .scope_boxed()
             })
@@ -210,7 +236,7 @@ impl OrganizationService for super::GrpcImpl {
                     let meta = ResponseMeta::from_meta(inner.meta, Some(token.try_into()?));
                     let inner = RestoreOrganizationResponse {
                         meta: Some(meta),
-                        organization: Some(blockjoy_ui::Organization::from_model(org)?),
+                        organization: Some(blockjoy_ui::Organization::from_model(org, c).await?),
                     };
                     Ok(inner)
                 }
@@ -281,7 +307,7 @@ impl OrganizationService for super::GrpcImpl {
                         .await?;
                     let org = models::Org::find_by_id(org_id, c).await?;
                     let user = models::User::find_by_id(caller_id, c).await?;
-                    blockjoy_ui::OrgMessage::updated(org, user)
+                    blockjoy_ui::OrgMessage::updated(org, user, c).await
                 }
                 .scope_boxed()
             })
@@ -305,7 +331,7 @@ impl OrganizationService for super::GrpcImpl {
                     models::Org::remove_org_user(user_id, org_id, c).await?;
                     let org = models::Org::find_by_id(org_id, c).await?;
                     let user = models::User::find_by_id(user_id, c).await?;
-                    blockjoy_ui::OrgMessage::updated(org, user)
+                    blockjoy_ui::OrgMessage::updated(org, user, c).await
                 }
                 .scope_boxed()
             })
