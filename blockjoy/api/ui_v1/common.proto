@@ -240,9 +240,9 @@ message Node {
   // The email of said aforementioned user.
   optional string created_by_email = 26;
   // Whitelisted IP address for firewall
-  repeated FilteredIpAddr allow_ips = 27;
+  repeated string allow_ips = 27;
   // Blacklisted IP address for firewall
-  repeated FilteredIpAddr deny_ips = 28;
+  repeated string deny_ips = 28;
 }
 
 message OrgUser {
