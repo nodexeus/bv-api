@@ -56,15 +56,9 @@ impl blockjoy_ui::Organization {
                         .iter()
                         .map(|ou| {
                             let user = &users[&ou.user_id];
-                            blockjoy_ui::OrgUser {
-                                user_id: ou.user_id.to_string(),
-                                org_id: ou.org_id.to_string(),
-                                role: ou.role as i32,
-                                name: format!("{} {}", user.first_name, user.last_name),
-                                email: user.email.clone(),
-                            }
+                            blockjoy_ui::User::from_model(user.clone())
                         })
-                        .collect(),
+                        .collect::<crate::Result<_>>()?,
                 })
             })
             .collect()
