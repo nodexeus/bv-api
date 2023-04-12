@@ -64,7 +64,7 @@ impl blockjoy::Command {
                 let node = models::Node::find_by_id(node_id()?, conn).await?;
                 let cmd = Command::Update(blockjoy::NodeUpdate {
                     self_update: Some(node.self_update),
-                    rules: create_rule_for_nodes(node)?,
+                    rules: create_rule_for_nodes(&node)?,
                 });
                 node_cmd_default_id(cmd)
             }
@@ -94,15 +94,15 @@ impl blockjoy::Command {
                     .chain([network])
                     .collect();
                 let cmd = Command::Create(blockjoy::NodeCreate {
-                    name: node.name,
+                    name: node.name.clone(),
                     blockchain: node.blockchain_id.to_string(),
                     image: Some(image),
                     r#type: serde_json::to_string(&r#type)?,
-                    ip: node.ip_addr,
-                    gateway: node.ip_gateway,
+                    ip: node.ip_addr.clone(),
+                    gateway: node.ip_gateway.clone(),
                     self_update: node.self_update,
                     properties,
-                    rules: create_rule_for_nodes(node)?,
+                    rules: create_rule_for_nodes(&node)?,
                 });
 
                 node_cmd_default_id(cmd)

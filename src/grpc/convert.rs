@@ -113,6 +113,8 @@ pub mod from {
                 user_id: value.user_id.to_string(),
                 org_id: value.org_id.to_string(),
                 role: value.role as i32,
+                name: "".to_string(),
+                email: "".to_string(),
             }
         }
     }

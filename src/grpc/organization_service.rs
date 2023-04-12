@@ -15,7 +15,6 @@ use crate::models;
 use crate::Error;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 
 impl blockjoy_ui::Organization {
     pub fn from_model(model: models::Org) -> crate::Result<Self> {
@@ -27,7 +26,7 @@ impl blockjoy_ui::Organization {
             member_count: member_count.try_into()?,
             created_at: Some(convert::try_dt_to_ts(model.created_at)?),
             updated_at: Some(convert::try_dt_to_ts(model.updated_at)?),
-            current_user: None,
+            members: vec![],
         };
         Ok(org)
     }
@@ -57,14 +56,6 @@ impl OrganizationService for super::GrpcImpl {
             .into_iter()
             .map(Organization::from_model)
             .collect::<crate::Result<Vec<_>>>()?;
-
-        for org in &mut organizations {
-            let org_id: Uuid = org.id.parse().map_err(Error::UuidParseError)?;
-            let user = models::Org::find_org_user(user_id, org_id, &mut conn)
-                .await?
-                .into();
-            org.current_user = Some(user);
-        }
 
         let inner = GetOrganizationsResponse {
             meta: Some(ResponseMeta::from_meta(inner.meta, Some(token.try_into()?))),
