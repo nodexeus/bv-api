@@ -2,6 +2,7 @@ use super::blockjoy::{self, commands_server::Commands};
 use super::convert;
 use super::helpers::required;
 use crate::auth::FindableById;
+use crate::firewall::create_rule_for_nodes;
 use crate::models;
 use anyhow::anyhow;
 use diesel_async::scoped_futures::ScopedFutureExt;
@@ -63,6 +64,7 @@ impl blockjoy::Command {
                 let node = models::Node::find_by_id(node_id()?, conn).await?;
                 let cmd = Command::Update(blockjoy::NodeUpdate {
                     self_update: Some(node.self_update),
+                    rules: create_rule_for_nodes(node)?,
                 });
                 node_cmd_default_id(cmd)
             }
@@ -100,6 +102,7 @@ impl blockjoy::Command {
                     gateway: node.ip_gateway,
                     self_update: node.self_update,
                     properties,
+                    rules: create_rule_for_nodes(node)?,
                 });
 
                 node_cmd_default_id(cmd)
