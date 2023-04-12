@@ -215,7 +215,8 @@ impl blockjoy_ui::OrgMessage {
     ) -> crate::Result<Self> {
         Ok(Self {
             message: Some(org_message::Message::Created(blockjoy_ui::OrgCreated {
-                org: Some(blockjoy_ui::Organization::from_model(model, conn).await?),
+                // Over MQTT, there is no current user so we pass None as a second argument.
+                org: Some(blockjoy_ui::Organization::from_model(model, None, conn).await?),
                 created_by: user.id.to_string(),
                 created_by_name: format!("{} {}", user.first_name, user.last_name),
                 created_by_email: user.email,
@@ -230,7 +231,8 @@ impl blockjoy_ui::OrgMessage {
     ) -> crate::Result<Self> {
         Ok(Self {
             message: Some(org_message::Message::Updated(blockjoy_ui::OrgUpdated {
-                org: Some(blockjoy_ui::Organization::from_model(model, conn).await?),
+                // Over MQTT, there is no current user so we pass None as a second argument.
+                org: Some(blockjoy_ui::Organization::from_model(model, None, conn).await?),
                 updated_by: user.id.to_string(),
                 updated_by_name: format!("{} {}", user.first_name, user.last_name),
                 updated_by_email: user.email,
