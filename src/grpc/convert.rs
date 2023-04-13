@@ -17,6 +17,16 @@ pub fn try_dt_to_ts(datetime: chrono::DateTime<chrono::Utc>) -> crate::Result<Ti
     Ok(timestamp)
 }
 
+pub fn filtered_ip_to_string(ips: Vec<FilteredIpAddr>) -> ApiResult<Vec<String>> {
+    let mut string_ips: Vec<String> = vec![];
+
+    for ip in ips {
+        string_ips.push(ip.ip);
+    }
+
+    Ok(string_ips)
+}
+
 pub fn json_value_to_vec(json: &serde_json::Value) -> ApiResult<Vec<FilteredIpAddr>> {
     let arr = json
         .as_array()
@@ -51,7 +61,7 @@ pub mod from {
         node::NodeStatus as GrpcNodeStatus, node::StakingStatus as GrpcStakingStatus,
         node::SyncStatus as GrpcSyncStatus,
     };
-    use crate::models::{self, NodeChainStatus, NodeKeyFile, NodeStakingStatus, NodeSyncStatus};
+    use crate::models::{NodeChainStatus, NodeKeyFile, NodeStakingStatus, NodeSyncStatus};
     use crate::Error;
     use anyhow::anyhow;
     use tonic::{Code, Status};
@@ -103,18 +113,6 @@ pub mod from {
                 Code::PermissionDenied => Error::InsufficientPermissionsError,
                 Code::InvalidArgument => Error::InvalidArgument(status),
                 _ => Error::UnexpectedError(e),
-            }
-        }
-    }
-
-    impl From<models::OrgUser> for grpc::blockjoy_ui::OrgUser {
-        fn from(value: models::OrgUser) -> Self {
-            Self {
-                user_id: value.user_id.to_string(),
-                org_id: value.org_id.to_string(),
-                role: value.role as i32,
-                name: "".to_string(),
-                email: "".to_string(),
             }
         }
     }

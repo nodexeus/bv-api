@@ -7,7 +7,7 @@ use crate::grpc::blockjoy_ui::{
     GetNodeResponse, ListNodesRequest, ListNodesResponse, ResponseMeta, UpdateNodeRequest,
     UpdateNodeResponse,
 };
-use crate::grpc::convert::json_value_to_vec;
+use crate::grpc::convert::{filtered_ip_to_string, json_value_to_vec};
 use crate::grpc::helpers::try_get_token;
 use crate::grpc::{convert, get_refresh_token, response_with_refresh_token};
 use crate::models;
@@ -81,6 +81,10 @@ impl blockjoy_ui::Node {
             .flatten()
             .map(blockjoy_ui::node::NodeProperty::from_model)
             .collect();
+        let allow_ips = json_value_to_vec(&node.allow_ips)?;
+        let allow_ips = filtered_ip_to_string(allow_ips)?;
+        let deny_ips = json_value_to_vec(&node.deny_ips)?;
+        let deny_ips = filtered_ip_to_string(deny_ips)?;
         Ok(Self {
             id: node.id.to_string(),
             org_id: node.org_id.to_string(),
@@ -109,8 +113,8 @@ impl blockjoy_ui::Node {
             created_by: user.map(|u| u.id.to_string()),
             created_by_name: user.map(|u| format!("{} {}", u.first_name, u.last_name)),
             created_by_email: user.map(|u| u.email.clone()),
-            allow_ips: json_value_to_vec(&node.allow_ips)?,
-            deny_ips: json_value_to_vec(&node.deny_ips)?,
+            allow_ips,
+            deny_ips,
         })
     }
 }
