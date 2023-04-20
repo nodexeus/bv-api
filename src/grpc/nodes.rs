@@ -341,16 +341,16 @@ impl api::Node {
 
 impl api::CreateNodeRequest {
     pub fn as_new(&self, user_id: uuid::Uuid) -> crate::Result<models::NewNode<'_>> {
+        let properties = self
+            .properties
+            .iter()
+            .map(|p| api::node::NodeProperty::into_model(p.clone()))
+            .collect::<crate::Result<_>>()?;
         let properties = models::NodePropertiesWithId {
             id: self.node_type,
             props: models::NodeProperties {
                 version: self.version.clone(),
-                properties: Some(
-                    self.properties
-                        .iter()
-                        .map(|p| api::node::NodeProperty::into_model(p.clone()))
-                        .collect(),
-                ),
+                properties: Some(properties),
             },
         };
         Ok(models::NewNode {
@@ -582,26 +582,50 @@ impl api::node::SyncStatus {
 
 impl api::node::NodeProperty {
     fn from_model(model: models::NodePropertyValue) -> Self {
-        Self {
+        let mut prop = Self {
             name: model.name,
             label: model.label,
             description: model.description,
-            ui_type: model.ui_type,
+            ui_type: 0,
             disabled: model.disabled,
             required: model.required,
             value: model.value,
-        }
+        };
+        prop.set_ui_type(api::UiType::from_model(model.ui_type));
+        prop
     }
 
-    fn into_model(self) -> models::NodePropertyValue {
-        models::NodePropertyValue {
+    fn into_model(self) -> crate::Result<models::NodePropertyValue> {
+        let ui_type = self.ui_type().into_model()?;
+        Ok(models::NodePropertyValue {
             name: self.name,
             label: self.label,
             description: self.description,
-            ui_type: self.ui_type,
+            ui_type,
             disabled: self.disabled,
             required: self.required,
             value: self.value,
+        })
+    }
+}
+
+impl api::UiType {
+    pub fn from_model(model: models::BlockchainPropertyUiType) -> Self {
+        match model {
+            models::BlockchainPropertyUiType::FileUpload => api::UiType::FileUpload,
+            models::BlockchainPropertyUiType::Password => api::UiType::Password,
+            models::BlockchainPropertyUiType::Text => api::UiType::Text,
+            models::BlockchainPropertyUiType::Switch => api::UiType::Switch,
+        }
+    }
+
+    pub fn into_model(self) -> crate::Result<models::BlockchainPropertyUiType> {
+        match self {
+            Self::Unspecified => Err(anyhow::anyhow!("UiType not specified!").into()),
+            Self::Switch => Ok(models::BlockchainPropertyUiType::Switch),
+            Self::Password => Ok(models::BlockchainPropertyUiType::Password),
+            Self::Text => Ok(models::BlockchainPropertyUiType::Text),
+            Self::FileUpload => Ok(models::BlockchainPropertyUiType::FileUpload),
         }
     }
 }

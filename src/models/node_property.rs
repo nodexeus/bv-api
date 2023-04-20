@@ -5,7 +5,7 @@ pub struct NodePropertyValue {
     pub name: String,
     pub label: String,
     pub description: String,
-    pub ui_type: String,
+    pub ui_type: BlockchainPropertyUiType,
     pub disabled: bool,
     pub required: bool,
     pub value: Option<String>,
@@ -60,7 +60,7 @@ pub struct BlockchainPropertyValue {
     pub required: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BlockchainPropertyUiType {
     Switch,

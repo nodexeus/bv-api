@@ -165,17 +165,6 @@ impl api::SupportedNodeProperty {
     }
 }
 
-impl api::UiType {
-    fn from_model(model: models::BlockchainPropertyUiType) -> Self {
-        match model {
-            models::BlockchainPropertyUiType::FileUpload => api::UiType::FileUpload,
-            models::BlockchainPropertyUiType::Password => api::UiType::Password,
-            models::BlockchainPropertyUiType::Text => api::UiType::Text,
-            models::BlockchainPropertyUiType::Switch => api::UiType::Switch,
-        }
-    }
-}
-
 impl api::blockchain::BlockchainStatus {
     fn from_model(model: models::BlockchainStatus) -> Self {
         match model {
