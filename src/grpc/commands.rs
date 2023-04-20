@@ -97,7 +97,7 @@ impl commands_server::Commands for super::GrpcImpl {
 impl api::Command {
     pub async fn from_model(
         model: &models::Command,
-        conn: &mut πdiesel_async::AsyncPgConnection,
+        conn: &mut diesel_async::AsyncPgConnection,
     ) -> crate::Result<api::Command> {
         use api::command;
         use api::node_command::Command;
