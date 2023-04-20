@@ -4,7 +4,7 @@ use crate::Error;
 use crate::Result as ApiResult;
 use anyhow::anyhow;
 
-pub fn create_rule_for_nodes(node: &Node) -> ApiResult<Vec<Rule>> {
+pub fn create_rule_for_node(node: &Node) -> ApiResult<Vec<Rule>> {
     let mut rules: Vec<Rule> = vec![];
     let allow_ips = node
         .allow_ips
