@@ -57,8 +57,8 @@ pub enum Error {
     #[error("Cannot parse IP address: {0}")]
     IpParseError(#[from] std::net::AddrParseError),
 
-    #[error("Cannot parse CIDR address: {0}")]
-    Cidr(#[from] cidr::errors::NetworkParseError),
+    #[error("Cannot parse CIDR address")]
+    Cidr,
 
     #[error("{0}")]
     OtherIpParseError(#[from] ipnetwork::IpNetworkError),

@@ -1,7 +1,7 @@
 use super::api::{self, commands_server};
 use super::helpers::required;
 use crate::auth::FindableById;
-use crate::firewall::create_rule_for_node;
+use crate::firewall::create_rules_for_node;
 use crate::models;
 use anyhow::anyhow;
 use diesel_async::scoped_futures::ScopedFutureExt;
@@ -141,7 +141,7 @@ impl api::Command {
                 let node = models::Node::find_by_id(node_id()?, conn).await?;
                 let cmd = Command::Update(api::NodeUpdate {
                     self_update: Some(node.self_update),
-                    rules: create_rule_for_node(&node)?,
+                    rules: create_rules_for_node(&node)?,
                 });
                 node_cmd_default_id(cmd)
             }
@@ -177,7 +177,7 @@ impl api::Command {
                     gateway: node.ip_gateway.clone(),
                     self_update: node.self_update,
                     properties,
-                    rules: create_rule_for_node(&node)?,
+                    rules: create_rules_for_node(&node)?,
                 };
                 node_create.set_node_type(api::node::NodeType::from_model(node.node_type));
                 let cmd = Command::Create(node_create);
