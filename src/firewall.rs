@@ -42,7 +42,7 @@ fn create_firewall_rule(
         );
 
         // Validate IP
-        if ip.contains("/") {
+        if ip.contains('/') {
             final_ip = cidr::Ipv4Cidr::from_str(ip.as_str())?.to_string();
         } else {
             final_ip = Ipv4Addr::from_str(ip.as_str())?.to_string();
