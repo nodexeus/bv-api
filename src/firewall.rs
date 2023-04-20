@@ -1,4 +1,4 @@
-use crate::grpc::blockjoy::{Action, Direction, Rule};
+use crate::grpc::api::{Action, Direction, Rule};
 use crate::models::Node;
 use crate::Error;
 use crate::Result as ApiResult;
