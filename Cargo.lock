@@ -251,6 +251,7 @@ dependencies = [
  "base64 0.13.1",
  "casbin",
  "chrono",
+ "cidr",
  "diesel",
  "diesel-async",
  "diesel-derive-enum",
@@ -360,6 +361,12 @@ dependencies = [
  "wasm-bindgen",
  "winapi",
 ]
+
+[[package]]
+name = "cidr"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "300bccc729b1ada84523246038aad61fead689ac362bb9d44beea6f6a188c34b"
 
 [[package]]
 name = "clap"
