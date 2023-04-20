@@ -15,27 +15,6 @@ pub enum ConnectionStatus {
     Offline,
 }
 
-impl From<ConnectionStatus> for i32 {
-    fn from(value: ConnectionStatus) -> Self {
-        match value {
-            ConnectionStatus::Online => 1,
-            ConnectionStatus::Offline => 2,
-        }
-    }
-}
-
-impl TryFrom<i32> for ConnectionStatus {
-    type Error = Error;
-
-    fn try_from(value: i32) -> crate::Result<Self> {
-        match value {
-            1 => Ok(ConnectionStatus::Online),
-            2 => Ok(ConnectionStatus::Offline),
-            n => Err(anyhow!("Invalid ConnectionStatus: {n}").into()),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
 #[ExistingTypePath = "crate::models::schema::sql_types::EnumHostType"]
 pub enum HostType {
@@ -117,6 +96,18 @@ impl Host {
             .get_result(conn)
             .await?;
         Ok(host)
+    }
+
+    /// For each provided argument, filters the hosts by that argument.
+    pub async fn filter(os: Option<&str>, conn: &mut AsyncPgConnection) -> Result<Vec<Self>> {
+        let mut query = hosts::table.into_boxed();
+
+        if let Some(os) = os {
+            query = query.filter(hosts::os.eq(os));
+        }
+
+        let hosts = query.get_results(conn).await?;
+        Ok(hosts)
     }
 
     pub async fn find_by_id(host_id: Uuid, conn: &mut AsyncPgConnection) -> Result<Self> {
