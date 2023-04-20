@@ -15,8 +15,8 @@ pub fn create_rules_for_node(node: &Node) -> ApiResult<Vec<Rule>> {
         .deny_ips
         .as_array()
         .ok_or_else(|| Error::UnexpectedError(anyhow!("No deny IPs defined")))?;
-    let mut deny_rules = create_firewall_rules(allow_ips, Action::Deny)?;
-    let mut allow_rules = create_firewall_rules(deny_ips, Action::Allow)?;
+    let mut allow_rules = create_firewall_rules(allow_ips, Action::Allow)?;
+    let mut deny_rules = create_firewall_rules(deny_ips, Action::Deny)?;
 
     rules.append(&mut allow_rules);
     rules.append(&mut deny_rules);
