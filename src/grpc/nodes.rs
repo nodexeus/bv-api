@@ -14,10 +14,9 @@ impl nodes_server::Nodes for super::GrpcImpl {
         request: Request<api::GetNodeRequest>,
     ) -> super::Result<api::GetNodeResponse> {
         let refresh_token = super::get_refresh_token(&request);
-        let org_id = helpers::try_get_token::<_, auth::UserAuthToken>(&request)
+        let user_id = helpers::try_get_token::<_, auth::UserAuthToken>(&request)
             .ok()
-            .map(|t| t.try_org_id())
-            .transpose()?;
+            .map(|t| t.id);
         let host_id = helpers::try_get_token::<_, auth::HostAuthToken>(&request)
             .ok()
             .map(|t| t.id);
@@ -26,8 +25,8 @@ impl nodes_server::Nodes for super::GrpcImpl {
         let mut conn = self.conn().await?;
         let node = models::Node::find_by_id(node_id, &mut conn).await?;
 
-        let is_allowed = if let Some(org_id) = org_id {
-            node.org_id == org_id
+        let is_allowed = if let Some(user_id) = user_id {
+            models::Org::is_member(user_id, node.org_id, &mut conn).await?
         } else if let Some(host_id) = host_id {
             node.host_id == host_id
         } else {
@@ -612,10 +611,10 @@ impl api::node::NodeProperty {
 impl api::UiType {
     pub fn from_model(model: models::BlockchainPropertyUiType) -> Self {
         match model {
-            models::BlockchainPropertyUiType::FileUpload => api::UiType::FileUpload,
+            models::BlockchainPropertyUiType::Switch => api::UiType::Switch,
             models::BlockchainPropertyUiType::Password => api::UiType::Password,
             models::BlockchainPropertyUiType::Text => api::UiType::Text,
-            models::BlockchainPropertyUiType::Switch => api::UiType::Switch,
+            models::BlockchainPropertyUiType::FileUpload => api::UiType::FileUpload,
         }
     }
 
