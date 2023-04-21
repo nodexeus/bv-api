@@ -424,7 +424,7 @@ impl NewNode<'_> {
             conn,
         )
         .await?;
-        // Jus take the first one if ther is one.
+        // Just take the first one if there is one.
         let best = candidates
             .into_iter()
             .next()

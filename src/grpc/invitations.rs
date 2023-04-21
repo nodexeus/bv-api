@@ -228,7 +228,7 @@ async fn authorized_invite(
         // that the currently logged in user is actually the user that was invited.
         (_, Some(auth_token)) => {
             let invitee = models::User::find_by_id(auth_token.id, conn).await?;
-            invitee.email != invite.invitee_email
+            invitee.email == invite.invitee_email
         }
         _ => return Err(crate::Error::unexpected("need auth or invite token")),
     };
