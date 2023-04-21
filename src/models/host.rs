@@ -180,9 +180,9 @@ impl Host {
         (
             SELECT
                 id as host_id,
-                hosts.cpu_count - (SELECT COALESCE(SUM(vcpu_count))::BIGINT FROM nodes WHERE host_id = hosts.id) as av_cpus,
-                hosts.mem_size_bytes - (SELECT COALESCE(SUM(mem_size_bytes))::BIGINT FROM nodes WHERE host_id = hosts.id) as av_mem,
-                hosts.disk_size_bytes - (SELECT COALESCE(SUM(disk_size_bytes))::BIGINT FROM nodes WHERE host_id = hosts.id) as av_disk,
+                hosts.cpu_count - (SELECT COALESCE(SUM(vcpu_count), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) as av_cpus,
+                hosts.mem_size_bytes - (SELECT COALESCE(SUM(mem_size_bytes), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) as av_mem,
+                hosts.disk_size_bytes - (SELECT COALESCE(SUM(disk_size_bytes), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) as av_disk,
                 (SELECT COUNT(*) FROM ip_addresses WHERE ip_addresses.host_id = hosts.id AND NOT ip_addresses.is_assigned) as ips,
                 (SELECT COUNT(*) FROM nodes WHERE host_id = hosts.id AND blockchain_id = $4 AND node_type = $5 AND org_id = $6) as n_similar
             FROM

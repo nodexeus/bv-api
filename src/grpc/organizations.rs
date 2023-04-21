@@ -106,9 +106,9 @@ impl orgs_server::Orgs for super::GrpcImpl {
         let token = helpers::try_get_token::<_, UserAuthToken>(&request)?;
         let user_id = token.id;
         let inner = request.into_inner();
-        let org_id = inner.id.parse().map_err(crate::Error::from)?;
         self.trx(|c| {
             async move {
+                let org_id = inner.id.parse()?;
                 let org = models::Org::find_by_id(org_id, c).await?;
                 if org.is_personal {
                     super::bail_unauthorized!("Can't deleted personal org");
