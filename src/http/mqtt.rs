@@ -59,27 +59,30 @@ impl MqttAclPolicy for MqttUserPolicy {
     async fn allow(&self, token: &str, topic: &str) -> MqttAclPolicyResult {
         // Verify token
         let token = UserAuthToken::from_str(token)?;
-        let user_org_id = token.try_org_id().with_context(|| "Policy error")?;
+        let mut conn = self
+            .db
+            .conn()
+            .await
+            .with_context(|| "Couldn't get database connection")?;
         let is_allowed = if let Some(rest) = topic.strip_prefix("/orgs/") {
-            let org_id: uuid::Uuid = rest
+            let org_id = rest
                 .get(..36)
                 .ok_or_else(|| anyhow!("`{rest}` is too short to contain a valid uuid"))?
                 .parse()?;
-            org_id == user_org_id
+            models::Org::is_member(token.id, org_id, &mut conn)
+                .await
+                .with_context(|| "Policy error")?
         } else if let Some(rest) = topic.strip_prefix("/nodes/") {
             let node_id = rest
                 .get(..36)
                 .ok_or_else(|| anyhow!("`{rest}` is too short to contain a valid uuid"))?
                 .parse()?;
-            let mut conn = self
-                .db
-                .conn()
-                .await
-                .with_context(|| "Couldn't get database connection")?;
             let node = models::Node::find_by_id(node_id, &mut conn)
                 .await
                 .with_context(|| "No such node")?;
-            node.org_id == user_org_id
+            models::Org::is_member(token.id, node.org_id, &mut conn)
+                .await
+                .with_context(|| "Policy error")?
         } else {
             false
         };

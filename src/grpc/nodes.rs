@@ -32,10 +32,10 @@ impl nodes_server::Nodes for super::GrpcImpl {
         } else {
             false
         };
-
         if !is_allowed {
             super::bail_unauthorized!("Access not allowed")
         }
+
         let response = api::GetNodeResponse {
             node: Some(api::Node::from_model(node, &mut conn).await?),
         };
@@ -108,22 +108,22 @@ impl nodes_server::Nodes for super::GrpcImpl {
         request: Request<api::UpdateNodeRequest>,
     ) -> super::Result<api::UpdateNodeResponse> {
         let refresh_token = super::get_refresh_token(&request);
-        let user_token = helpers::try_get_token::<_, auth::UserAuthToken>(&request).ok();
-        let org_id = user_token.map(|t| t.try_org_id()).transpose()?;
-        let user_id = user_token.map(|t| t.id);
-        let host_id = helpers::try_get_token::<_, auth::HostAuthToken>(&request)
+        let user_token = helpers::try_get_token::<_, auth::UserAuthToken>(&request)
             .ok()
-            .map(|t| t.id);
+            .cloned();
+        let host_token = helpers::try_get_token::<_, auth::HostAuthToken>(&request)
+            .ok()
+            .cloned();
 
         self.trx(|c| {
             async move {
                 let inner = request.into_inner();
                 let node = models::Node::find_by_id(inner.id.parse()?, c).await?;
 
-                let is_allowed = if let Some(org_id) = org_id {
-                    node.org_id == org_id
-                } else if let Some(host_id) = host_id {
-                    node.host_id == host_id
+                let is_allowed = if let Some(ref user_token) = user_token {
+                    models::Org::is_member(user_token.id, node.org_id, c).await?
+                } else if let Some(host_token) = host_token {
+                    node.host_id == host_token.id
                 } else {
                     false
                 };
@@ -133,7 +133,7 @@ impl nodes_server::Nodes for super::GrpcImpl {
                 }
 
                 let update_node = inner.as_update()?;
-                let user = user_id.map(|id| models::User::find_by_id(id, c));
+                let user = user_token.map(|tkn| models::User::find_by_id(tkn.id, c));
                 let user = OptionFuture::from(user).await.transpose()?;
                 let node = update_node.update(c).await?;
 
