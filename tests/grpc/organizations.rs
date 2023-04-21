@@ -33,6 +33,20 @@ async fn responds_ok_for_update() {
 }
 
 #[tokio::test]
+async fn delete_org() {
+    let tester = super::Tester::new().await;
+    let req = api::CreateOrgRequest {
+        name: "new-org".to_string(),
+    };
+    let org = tester.send_admin(Service::create, req).await.unwrap();
+
+    let req = api::DeleteOrgRequest {
+        id: org.org.unwrap().id,
+    };
+    tester.send_admin(Service::delete, req).await.unwrap();
+}
+
+#[tokio::test]
 async fn responds_error_for_delete_on_personal_org() {
     let tester = super::Tester::new().await;
     let user = tester.admin_user().await;
