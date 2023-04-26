@@ -104,8 +104,8 @@ pub struct Node {
     pub network: String,
     pub created_by: Option<uuid::Uuid>,
     pub dns_record_id: String,
-    pub allow_ips: serde_json::Value,
-    pub deny_ips: serde_json::Value,
+    allow_ips: serde_json::Value,
+    deny_ips: serde_json::Value,
     pub node_type: NodeType,
     pub scheduler_similarity: Option<super::SimilarNodeAffinity>,
     pub scheduler_resource: super::ResourceAffinity,
@@ -326,12 +326,31 @@ impl Node {
             resource: self.scheduler_resource,
         }
     }
+
+    pub fn allow_ips(&self) -> crate::Result<Vec<FilteredIpAddr>> {
+        Self::filtered_ip_addrs(self.allow_ips.clone())
+    }
+
+    pub fn deny_ips(&self) -> crate::Result<Vec<FilteredIpAddr>> {
+        Self::filtered_ip_addrs(self.deny_ips.clone())
+    }
+
+    fn filtered_ip_addrs(value: serde_json::Value) -> crate::Result<Vec<FilteredIpAddr>> {
+        let addrs: Vec<FilteredIpAddr> = serde_json::from_value(value)?;
+        Ok(addrs)
+    }
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct NodeProvision {
     pub blockchain_id: uuid::Uuid,
     pub node_type: NodeType,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct FilteredIpAddr {
+    pub ip: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Insertable)]
@@ -355,6 +374,8 @@ pub struct NewNode<'a> {
     pub mem_size_bytes: i64,
     pub disk_size_bytes: i64,
     pub network: &'a str,
+    pub allow_ips: serde_json::Value,
+    pub deny_ips: serde_json::Value,
     pub node_type: NodeType,
     pub created_by: uuid::Uuid,
     pub scheduler_similarity: Option<super::SimilarNodeAffinity>,
@@ -368,12 +389,7 @@ impl NewNode<'_> {
     }
 
     pub async fn create(self, conn: &mut AsyncPgConnection) -> crate::Result<Node> {
-        use crate::Error::NoMatchingHostError;
-
-        let host = self
-            .find_host(conn)
-            .await
-            .map_err(|_| NoMatchingHostError("The system is out of resources".to_string()))?;
+        let host = self.find_host(conn).await?;
         let ip_addr = super::IpAddress::next_for_host(host.id, conn)
             .await?
             .ip
@@ -408,6 +424,8 @@ impl NewNode<'_> {
     /// node, we do not need to worry about logic regarding where the retry placing the node. We
     /// simply ask for an ordered list of the most suitable hosts, and pick the first one.
     pub async fn find_host(&self, conn: &mut AsyncPgConnection) -> crate::Result<super::Host> {
+        use crate::Error::NoMatchingHostError;
+
         let chain = super::Blockchain::find_by_id(self.blockchain_id, conn).await?;
         let requirements = get_hw_requirements(
             chain.name,
@@ -428,7 +446,7 @@ impl NewNode<'_> {
         let best = candidates
             .into_iter()
             .next()
-            .ok_or_else(|| anyhow!("No matching host found"))?;
+            .ok_or_else(|| NoMatchingHostError("The system is out of resources".to_string()))?;
         Ok(best)
     }
 
@@ -455,6 +473,8 @@ pub struct UpdateNode<'a> {
     pub container_status: Option<ContainerStatus>,
     pub self_update: Option<bool>,
     pub address: Option<&'a str>,
+    pub allow_ips: Option<serde_json::Value>,
+    pub deny_ips: Option<serde_json::Value>,
 }
 
 impl UpdateNode<'_> {
