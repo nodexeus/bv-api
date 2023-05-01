@@ -119,7 +119,7 @@ async fn responds_ok_for_provision() {
     let to = "172.168.0.10".parse().unwrap();
     let gateway = "172.168.0.100".parse().unwrap();
     let mut conn = tester.conn().await;
-    let host_provision = models::NewHostProvision::new(None, from, to, gateway)
+    let host_provision = models::NewHostProvision::new(None, from, to, gateway, None)
         .unwrap()
         .create(&mut conn)
         .await

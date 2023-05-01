@@ -35,13 +35,13 @@ async fn can_filter_nodes() -> anyhow::Result<()> {
         node_type: models::NodeType::Validator,
         created_by: user.id,
         scheduler_similarity: None,
-        scheduler_resource: models::ResourceAffinity::MostResources,
+        scheduler_resource: Some(models::ResourceAffinity::MostResources),
         allow_ips: serde_json::json!([]),
         deny_ips: serde_json::json!([]),
     };
 
     let mut conn = tester.conn().await;
-    req.create(&mut conn).await.unwrap();
+    req.create(None, &mut conn).await.unwrap();
 
     let filter = models::NodeFilter {
         status: vec![models::NodeChainStatus::Unknown],

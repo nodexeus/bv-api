@@ -83,9 +83,13 @@ async fn responds_ok_with_valid_data_for_create() {
         properties: vec![],
         version: "3.3.0".to_string(),
         network: "some network".to_string(),
-        scheduler: Some(api::NodeScheduler {
-            similarity: None,
-            resource: api::node_scheduler::ResourceAffinity::MostResources.into(),
+        placement: Some(api::NodePlacement {
+            placement: Some(api::node_placement::Placement::Scheduler(
+                api::NodeScheduler {
+                    similarity: None,
+                    resource: api::node_scheduler::ResourceAffinity::MostResources.into(),
+                },
+            )),
         }),
         allow_ips: vec![api::FilteredIpAddr {
             ip: "127.0.0.1".to_string(),
@@ -126,9 +130,13 @@ async fn responds_invalid_argument_with_invalid_data_for_create() {
         properties: vec![],
         version: "3.3.0".to_string(),
         network: "some network".to_string(),
-        scheduler: Some(api::NodeScheduler {
-            similarity: None,
-            resource: api::node_scheduler::ResourceAffinity::MostResources.into(),
+        placement: Some(api::NodePlacement {
+            placement: Some(api::node_placement::Placement::Scheduler(
+                api::NodeScheduler {
+                    similarity: None,
+                    resource: api::node_scheduler::ResourceAffinity::MostResources.into(),
+                },
+            )),
         }),
         allow_ips: vec![],
         deny_ips: vec![],
