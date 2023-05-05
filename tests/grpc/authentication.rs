@@ -1,5 +1,5 @@
-use blockvisor_api::auth::{self, JwtToken};
-use blockvisor_api::grpc::api::{self, auth_service_client};
+use blockvisor_api::auth::{self, JwtToken, UserRefreshToken};
+use blockvisor_api::grpc::api::{self, auth_service_client, AuthServiceRefreshRequest};
 use blockvisor_api::models;
 use std::collections::HashMap;
 
@@ -69,11 +69,21 @@ async fn responds_ok_with_valid_credentials_for_confirm() {
 }
 
 #[tokio::test]
-async fn responds_unimplemented_for_refresh() {
+async fn responds_ok_for_refresh() {
     let tester = super::Tester::new().await;
-    let req = api::AuthServiceRefreshRequest {};
-    let status = tester.send_admin(Service::refresh, req).await.unwrap_err();
-    assert_eq!(status.code(), tonic::Code::Unimplemented);
+    let mut conn = tester.conn().await;
+    let user = tester.admin_user().await;
+    // confirm admin user, otherwise login would fail
+    // models::User::confirm(user.id, &mut conn).await.unwrap();
+    let refresh_token = UserRefreshToken::create(user.id);
+    let enc_refresh_token = refresh_token.encode().unwrap();
+
+    models::User::set_refresh(user.id, &enc_refresh_token, &mut conn)
+        .await
+        .unwrap();
+    let req = AuthServiceRefreshRequest {};
+
+    tester.send_admin(Service::refresh, req).await.unwrap();
 }
 
 #[tokio::test]
