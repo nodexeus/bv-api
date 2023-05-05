@@ -99,6 +99,7 @@ impl auth_service_server::AuthService for super::GrpcImpl {
         request: Request<api::AuthServiceRefreshRequest>,
     ) -> super::Result<api::AuthServiceRefreshResponse> {
         let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
+        let token_role = token.role;
         let user_id = token.get_id();
         self.trx(|c| {
             async move {
@@ -106,14 +107,14 @@ impl auth_service_server::AuthService for super::GrpcImpl {
                 let token = UserAuthToken::create_token_for::<models::User>(
                     &user,
                     TokenType::UserAuth,
-                    TokenRole::Admin,
+                    token_role,
                     None,
                 )?
                 .encode()?;
                 let refresh_token = UserRefreshToken::create_token_for::<models::User>(
                     &user,
                     TokenType::UserAuth,
-                    TokenRole::Admin,
+                    token_role,
                     None,
                 )?
                 .encode()?;
