@@ -96,9 +96,38 @@ impl auth_service_server::AuthService for super::GrpcImpl {
 
     async fn refresh(
         &self,
-        _request: Request<api::AuthServiceRefreshRequest>,
+        request: Request<api::AuthServiceRefreshRequest>,
     ) -> super::Result<api::AuthServiceRefreshResponse> {
-        Err(Status::unimplemented("Not necessary anymore"))
+        let token = try_get_token::<_, UserAuthToken>(&request)?.clone();
+        let token_role = token.role;
+        let user_id = token.get_id();
+        self.trx(|c| {
+            async move {
+                let user = models::User::find_by_id(user_id, c).await?;
+                let token = UserAuthToken::create_token_for::<models::User>(
+                    &user,
+                    TokenType::UserAuth,
+                    token_role,
+                    None,
+                )?
+                .encode()?;
+                let refresh_token = UserRefreshToken::create_token_for::<models::User>(
+                    &user,
+                    TokenType::UserAuth,
+                    token_role,
+                    None,
+                )?
+                .encode()?;
+
+                models::User::set_refresh(user.id, &refresh_token, c).await?;
+
+                let response = api::AuthServiceRefreshResponse { token };
+
+                Ok(response_with_refresh_token(Some(refresh_token), response)?)
+            }
+            .scope_boxed()
+        })
+        .await
     }
 
     /// This endpoint triggers the sending of the reset-password email. The actual resetting is
