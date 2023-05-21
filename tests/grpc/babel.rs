@@ -1,8 +1,9 @@
-use blockvisor_api::grpc::api::{self, BabelConfig, BabelNewVersionRequest};
+use blockvisor_api::grpc::api;
 use blockvisor_api::{models, TestDb};
 use futures_util::{stream, StreamExt};
 
 type Service = api::babel_service_client::BabelServiceClient<super::Channel>;
+
 fn create_new_node<'a>(
     index: usize,
     org_id: &'a uuid::Uuid,
@@ -48,7 +49,7 @@ fn create_new_node<'a>(
 async fn test_notify_success() {
     let tester = super::Tester::new().await;
     let blockchain = tester.blockchain().await;
-    let user = tester.admin_user().await;
+    let user = tester.user().await;
     let org = tester.org_for(&user).await;
     let host_id = tester.host().await.id;
     let ip_address = tester.host().await.ip_addr;
@@ -87,9 +88,9 @@ async fn test_notify_success() {
     let target_version = "2.0.0";
 
     // Create request object
-    let request = BabelNewVersionRequest {
+    let request = api::BabelServiceNotifyRequest {
         uuid: uuid::Uuid::new_v4().to_string(),
-        config: Some(BabelConfig {
+        config: Some(api::BabelConfig {
             node_version: target_version.to_string(),
             node_type: models::NodeType::Validator.to_string(),
             protocol: blockchain.name.to_string(),
@@ -97,9 +98,9 @@ async fn test_notify_success() {
     };
 
     let mut response = tester.send_admin(Service::notify, request).await.unwrap();
-    response.nodes_ids.sort();
+    response.node_ids.sort();
     ids.sort();
-    assert_eq!(ids, response.nodes_ids);
+    assert_eq!(ids, response.node_ids);
 
     // Check that blockchain supported_node_types was updated with new version
     assert!(tester
@@ -115,7 +116,7 @@ async fn test_notify_success() {
 async fn test_nothing_to_notify_no_nodes_to_update_all_up_to_date() {
     let tester = super::Tester::new().await;
     let blockchain = tester.blockchain().await;
-    let user = tester.admin_user().await;
+    let user = tester.user().await;
     let org = tester.org_for(&user).await;
     let host_id = tester.host().await.id;
     let ip_address = tester.host().await.ip_addr;
@@ -147,9 +148,9 @@ async fn test_nothing_to_notify_no_nodes_to_update_all_up_to_date() {
         .await;
 
     // Create request object
-    let request = BabelNewVersionRequest {
+    let request = api::BabelServiceNotifyRequest {
         uuid: uuid::Uuid::new_v4().to_string(),
-        config: Some(BabelConfig {
+        config: Some(api::BabelConfig {
             node_version: "2.0.0".to_string(),
             node_type: models::NodeType::Validator.to_string(),
             protocol: blockchain.name.to_string(),
@@ -157,14 +158,14 @@ async fn test_nothing_to_notify_no_nodes_to_update_all_up_to_date() {
     };
 
     let response = tester.send_admin(Service::notify, request).await.unwrap();
-    assert!(response.nodes_ids.is_empty());
+    assert!(response.node_ids.is_empty());
 }
 
 #[tokio::test]
 async fn test_nothing_to_notify_no_nodes_to_update_diff_node_type() {
     let tester = super::Tester::new().await;
     let blockchain = tester.blockchain().await;
-    let user = tester.admin_user().await;
+    let user = tester.user().await;
     let org = tester.org_for(&user).await;
     let host_id = tester.host().await.id;
     let ip_address = tester.host().await.ip_addr;
@@ -196,9 +197,9 @@ async fn test_nothing_to_notify_no_nodes_to_update_diff_node_type() {
         .await;
 
     // Create request object
-    let request = BabelNewVersionRequest {
+    let request = api::BabelServiceNotifyRequest {
         uuid: uuid::Uuid::new_v4().to_string(),
-        config: Some(BabelConfig {
+        config: Some(api::BabelConfig {
             node_version: "2.0.0".to_string(),
             node_type: models::NodeType::Validator.to_string(),
             protocol: blockchain.name.to_string(),
@@ -206,5 +207,5 @@ async fn test_nothing_to_notify_no_nodes_to_update_diff_node_type() {
     };
 
     let response = tester.send_admin(Service::notify, request).await.unwrap();
-    assert!(response.nodes_ids.is_empty());
+    assert!(response.node_ids.is_empty());
 }
