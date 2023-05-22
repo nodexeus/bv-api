@@ -51,7 +51,7 @@ impl Refresh {
     pub fn as_set_cookie(&self) -> crate::Result<String> {
         let exp = self.exp.format("%a, %d %b %Y %H:%M:%S GMT");
         let tkn = self.encode()?;
-        let val = format!("refresh={tkn}; path=/; expires={exp}; Secure; HttpOnly; SameSite=None");
+        let val = format!("refresh={tkn}; path=/; expires={exp}; Secure; HttpOnly; SameSite=None; Domain=blockjoy.com");
         Ok(val)
     }
 
