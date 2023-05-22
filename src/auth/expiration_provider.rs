@@ -6,7 +6,8 @@ pub struct ExpirationProvider;
 
 impl ExpirationProvider {
     pub fn expiration(name: &str) -> crate::Result<chrono::Duration> {
-        let val = super::key_provider::KeyProvider::get_var(name)?;
+        let val = std::env::var(name)
+            .map_err(|_| crate::Error::unexpected(format!("Missing env param {name}")))?;
         let val = val.parse()?;
         let val = chrono::Duration::minutes(val);
         Ok(val)
