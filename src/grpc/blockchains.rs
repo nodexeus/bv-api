@@ -1,6 +1,7 @@
 use super::api::{self, blockchain_service_server, SupportedNodeProperty};
+use crate::auth::expiration_provider;
 use crate::cookbook::get_networks;
-use crate::models;
+use crate::{auth, models};
 use futures_util::future::join_all;
 use std::collections::HashMap;
 
@@ -39,7 +40,7 @@ async fn get(
 }
 
 async fn list(
-    _: tonic::Request<api::BlockchainServiceListRequest>,
+    req: tonic::Request<api::BlockchainServiceListRequest>,
     conn: &mut diesel_async::AsyncPgConnection,
 ) -> super::Result<api::BlockchainServiceListResponse> {
     // We need to combine info from two seperate sources: the database and cookbook. Since
@@ -91,7 +92,17 @@ async fn list(
     let resp = api::BlockchainServiceListResponse {
         blockchains: grpc_blockchains,
     };
-    Ok(tonic::Response::new(resp))
+    let mut resp = tonic::Response::new(resp);
+
+    let claims = auth::get_claims(&req, auth::Endpoint::BlockchainList, conn).await?;
+    let auth::Resource::User(user_id) = claims.resource() else { panic!("Not user")  };
+    let iat = chrono::Utc::now();
+    let refresh_exp =
+        expiration_provider::ExpirationProvider::expiration(auth::REFRESH_EXPIRATION_USER_MINS)?;
+    let refresh = auth::Refresh::new(user_id, iat, refresh_exp)?;
+    let refresh = refresh.as_set_cookie()?;
+    resp.metadata_mut().insert("set-cookie", refresh.parse()?);
+    Ok(resp)
 }
 
 /// This is a helper function for BlockchainService::list. It retrieves the networks for a given set
