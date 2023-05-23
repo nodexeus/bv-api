@@ -109,8 +109,9 @@ async fn list(
                 models::Org::is_member(user_id, org_id.parse()?, conn).await?
             } else if let Some(created_by) = &req.created_by {
                 parse(created_by)? == user_id
-            } else if let Some(invitee_id) = &req.invitee_id {
-                parse(invitee_id)? == user_id
+            } else if let Some(invitee_email) = &req.invitee_email {
+                let user = models::User::find_by_email(invitee_email, conn).await?;
+                user.id == user_id
             } else {
                 false
             }
@@ -302,7 +303,7 @@ impl api::InvitationServiceListRequest {
         let status = (status != api::InvitationStatus::Unspecified).then_some(status);
         Ok(models::InvitationFilter {
             org_id: self.org_id.as_ref().map(|id| id.parse()).transpose()?,
-            invitee_id: self.invitee_id.as_ref().map(|id| id.parse()).transpose()?,
+            invitee_email: self.invitee_email.as_deref(),
             created_by: self.created_by.as_ref().map(|id| id.parse()).transpose()?,
             accepted: status.map(|s| s == api::InvitationStatus::Accepted),
             declined: status.map(|s| s == api::InvitationStatus::Declined),

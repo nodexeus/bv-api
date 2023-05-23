@@ -35,20 +35,16 @@ impl Invitation {
     }
 
     pub async fn filter(
-        filter: InvitationFilter,
+        filter: InvitationFilter<'_>,
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<Self>> {
-        use super::schema::users;
-
-        let mut query = invitations::table
-            .left_join(users::table.on(users::email.eq(invitations::invitee_email)))
-            .into_boxed();
+        let mut query = invitations::table.into_boxed();
 
         if let Some(org_id) = filter.org_id {
             query = query.filter(invitations::created_for_org.eq(org_id));
         }
-        if let Some(invitee_id) = filter.invitee_id {
-            query = query.filter(users::id.eq(invitee_id));
+        if let Some(invitee_email) = filter.invitee_email {
+            query = query.filter(invitations::invitee_email.eq(invitee_email));
         }
         if let Some(created_by) = filter.created_by {
             query = query.filter(invitations::created_by_user.eq(created_by));
@@ -129,9 +125,9 @@ impl<'a> NewInvitation<'a> {
     }
 }
 
-pub struct InvitationFilter {
+pub struct InvitationFilter<'a> {
     pub org_id: Option<uuid::Uuid>,
-    pub invitee_id: Option<uuid::Uuid>,
+    pub invitee_email: Option<&'a str>,
     pub created_by: Option<uuid::Uuid>,
     pub accepted: Option<bool>,
     pub declined: Option<bool>,

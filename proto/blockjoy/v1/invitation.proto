@@ -82,7 +82,7 @@ message InvitationServiceCreateResponse {
 
 message InvitationServiceListRequest {
   optional string org_id = 1;
-  optional string invitee_id = 2;
+  optional string invitee_email = 2;
   optional string created_by = 3;
   optional InvitationStatus status = 4;
 }
