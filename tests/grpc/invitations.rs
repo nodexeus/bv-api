@@ -67,7 +67,7 @@ async fn responds_ok_for_list_received() {
     let invitation = create_invitation(&tester).await;
     let user = tester.user().await;
     let req = api::InvitationServiceListRequest {
-        invitee_id: Some(user.id.to_string()),
+        invitee_email: Some(user.email.to_string()),
         ..Default::default()
     };
 
