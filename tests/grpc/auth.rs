@@ -115,3 +115,26 @@ async fn refresh_works() {
 
     tester.send(Service::refresh, req).await.unwrap();
 }
+
+#[tokio::test]
+async fn refresh_works_from_cookie() {
+    let tester = super::Tester::new().await;
+
+    let jwt = tester.admin_token().await;
+    let refresh = auth::Refresh::new(
+        tester.user().await.id,
+        chrono::Utc::now(),
+        chrono::Duration::seconds(60),
+    )
+    .unwrap();
+    let refresh = refresh.encode().unwrap();
+    let req = api::AuthServiceRefreshRequest {
+        token: jwt.encode().unwrap(),
+        refresh: None,
+    };
+    let mut req = tonic::Request::new(req);
+    req.metadata_mut()
+        .insert("cookie", format!("refresh={refresh}").parse().unwrap());
+
+    tester.send(Service::refresh, req).await.unwrap();
+}

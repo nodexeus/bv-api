@@ -51,20 +51,22 @@ async fn claims_from_api_key(_meta: &str, _conn: &mut AsyncPgConnection) -> crat
 }
 
 pub fn get_refresh<T>(req: &tonic::Request<T>) -> crate::Result<Option<Refresh>> {
-    let meta = match req.metadata().get("Cookie") {
-        Some(meta) => meta.to_str()?,
+    let meta = match req.metadata().get("cookie") {
+        Some(meta) => dbg!(meta.to_str()?),
         None => return Ok(None),
     };
     let Some(refresh_idx) = meta.find("refresh=") else { return Ok(None) };
-    let Some(end_offset) = meta[refresh_idx..].find(';') else { return Ok(None) };
-    let end_idx = refresh_idx + end_offset;
-    if end_idx < refresh_idx {
+    let end_idx = meta[refresh_idx..]
+        .find(';')
+        .map(|offset| offset + refresh_idx)
+        .unwrap_or(meta.len());
+    if refresh_idx > end_idx {
         return Ok(None);
     };
     // Note that `refresh + 8` can never cause an out of bounds access, because we found the string
     // `"refresh="` and then `";"` after that, so there must be at least 10 characters occuring
     // after `refresh_idx`
-    let refresh = Refresh::decode(&meta[refresh_idx + 8..end_idx])?;
+    let refresh = Refresh::decode(dbg!(&meta[refresh_idx + 8..end_idx]))?;
     Ok(Some(refresh))
 }
 
