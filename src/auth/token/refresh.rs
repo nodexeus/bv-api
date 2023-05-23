@@ -73,14 +73,16 @@ mod tests {
 
     #[test]
     fn test_encode_decode_preserves_token() {
-        let refresh = Refresh::new(
-            uuid::Uuid::new_v4(),
-            chrono::Utc::now(),
-            chrono::Duration::seconds(1),
-        )
-        .unwrap();
-        let encoded = refresh.encode().unwrap();
-        let decoded = Refresh::decode(&encoded).unwrap();
-        assert_eq!(refresh, decoded);
+        temp_env::with_var_unset("SECRETS_ROOT", || {
+            let refresh = Refresh::new(
+                uuid::Uuid::new_v4(),
+                chrono::Utc::now(),
+                chrono::Duration::seconds(1),
+            )
+            .unwrap();
+            let encoded = refresh.encode().unwrap();
+            let decoded = Refresh::decode(&encoded).unwrap();
+            assert_eq!(refresh, decoded);
+        });
     }
 }

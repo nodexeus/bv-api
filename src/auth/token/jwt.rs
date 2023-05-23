@@ -45,19 +45,21 @@ mod tests {
 
     #[test]
     fn test_encode_decode_preserves_token() {
-        let iat = chrono::Utc::now();
-        let claims = auth::Claims::new(
-            auth::ResourceType::Node,
-            uuid::Uuid::new_v4(),
-            iat,
-            chrono::Duration::minutes(15),
-            auth::Endpoints::Wildcard,
-            Default::default(),
-        )
-        .unwrap();
-        let token = Jwt { claims };
-        let encoded = token.encode().unwrap();
-        let decoded = Jwt::decode(&encoded).unwrap();
-        assert_eq!(token.claims, decoded.claims);
+        temp_env::with_var_unset("SECRETS_ROOT", || {
+            let iat = chrono::Utc::now();
+            let claims = auth::Claims::new(
+                auth::ResourceType::Node,
+                uuid::Uuid::new_v4(),
+                iat,
+                chrono::Duration::minutes(15),
+                auth::Endpoints::Wildcard,
+                Default::default(),
+            )
+            .unwrap();
+            let token = Jwt { claims };
+            let encoded = token.encode().unwrap();
+            let decoded = Jwt::decode(&encoded).unwrap();
+            assert_eq!(token.claims, decoded.claims);
+        });
     }
 }
