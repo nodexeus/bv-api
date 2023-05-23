@@ -1,4 +1,5 @@
 use super::api::{self, org_service_server};
+use crate::auth::expiration_provider;
 use crate::{auth, models};
 use diesel_async::scoped_futures::ScopedFutureExt;
 use std::collections::HashMap;
@@ -124,8 +125,16 @@ async fn list(
     let orgs = models::Org::filter(member_id, conn).await?;
     let orgs = api::Org::from_models(orgs, conn).await?;
     let resp = api::OrgServiceListResponse { orgs };
+    let mut resp = tonic::Response::new(resp);
+    let auth::Resource::User(user_id) = claims.resource() else { panic!("Not user")  };
+    let iat = chrono::Utc::now();
+    let refresh_exp =
+        expiration_provider::ExpirationProvider::expiration(auth::REFRESH_EXPIRATION_USER_MINS)?;
+    let refresh = auth::Refresh::new(user_id, iat, refresh_exp)?;
+    let refresh = refresh.as_set_cookie()?;
+    resp.metadata_mut().insert("set-cookie", refresh.parse()?);
 
-    Ok(tonic::Response::new(resp))
+    Ok(resp)
 }
 
 async fn update(
