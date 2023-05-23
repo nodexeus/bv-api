@@ -1,6 +1,5 @@
 use super::api::{self, user_service_server};
 use crate::auth;
-use crate::auth::expiration_provider;
 use crate::mail;
 use crate::models;
 use diesel_async::scoped_futures::ScopedFutureExt;
@@ -57,16 +56,7 @@ async fn get(
     let resp = api::UserServiceGetResponse {
         user: Some(api::User::from_model(user)?),
     };
-    let mut resp = tonic::Response::new(resp);
-    let auth::Resource::User(user_id) = claims.resource() else { panic!("Not user")  };
-    let iat = chrono::Utc::now();
-    let refresh_exp =
-        expiration_provider::ExpirationProvider::expiration(auth::REFRESH_EXPIRATION_USER_MINS)?;
-    let refresh = auth::Refresh::new(user_id, iat, refresh_exp)?;
-    let refresh = refresh.as_set_cookie()?;
-    resp.metadata_mut().insert("set-cookie", refresh.parse()?);
-
-    Ok(resp)
+    Ok(tonic::Response::new(resp))
 }
 
 async fn create(

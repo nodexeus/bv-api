@@ -2,7 +2,6 @@ use super::{
     api::{self, invitation_service_server},
     helpers::required,
 };
-use crate::auth::expiration_provider;
 use crate::{auth, mail, models};
 use diesel_async::scoped_futures::ScopedFutureExt;
 use tonic::{Request, Status};
@@ -134,16 +133,7 @@ async fn list(
     let invitations = models::Invitation::filter(filter, conn).await?;
     let invitations = api::Invitation::from_models(invitations)?;
     let resp = api::InvitationServiceListResponse { invitations };
-    let mut resp = tonic::Response::new(resp);
-    let auth::Resource::User(user_id) = claims.resource() else { panic!("Not user")  };
-    let iat = chrono::Utc::now();
-    let refresh_exp =
-        expiration_provider::ExpirationProvider::expiration(auth::REFRESH_EXPIRATION_USER_MINS)?;
-    let refresh = auth::Refresh::new(user_id, iat, refresh_exp)?;
-    let refresh = refresh.as_set_cookie()?;
-    resp.metadata_mut().insert("set-cookie", refresh.parse()?);
-
-    Ok(resp)
+    Ok(tonic::Response::new(resp))
 }
 
 async fn accept(
