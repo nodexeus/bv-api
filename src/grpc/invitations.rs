@@ -144,11 +144,14 @@ async fn accept(
     let claims = auth::get_claims(&req, auth::Endpoint::InvitationAccept, conn).await?;
     let req = req.into_inner();
     let invitation = models::Invitation::find_by_id(req.invitation_id.parse()?, conn).await?;
-    let email = claims.data.get("email").ok_or_else(required("email"))?;
-    let user = models::User::find_by_email(email, conn).await?;
     let is_allowed = match claims.resource() {
-        auth::Resource::User(_) => false,
+        auth::Resource::User(user_id) => {
+            let user = models::User::find_by_id(user_id, conn).await?;
+            invitation.invitee_email == user.email
+        }
         auth::Resource::Org(org_id) => {
+            let email = claims.data.get("email").ok_or_else(required("email"))?;
+            let user = models::User::find_by_email(&email, conn).await?;
             invitation.created_for_org == org_id && invitation.invitee_email == user.email
         }
         auth::Resource::Host(_) => false,
@@ -189,11 +192,14 @@ async fn decline(
     let claims = auth::get_claims(&req, auth::Endpoint::InvitationDecline, conn).await?;
     let req = req.into_inner();
     let invitation = models::Invitation::find_by_id(req.invitation_id.parse()?, conn).await?;
-    let email = claims.data.get("email").ok_or_else(required("email"))?;
-    let user = models::User::find_by_email(email, conn).await?;
     let is_allowed = match claims.resource() {
-        auth::Resource::User(_) => false,
+        auth::Resource::User(user_id) => {
+            let user = models::User::find_by_id(user_id, conn).await?;
+            invitation.invitee_email == user.email
+        }
         auth::Resource::Org(org_id) => {
+            let email = claims.data.get("email").ok_or_else(required("email"))?;
+            let user = models::User::find_by_email(&email, conn).await?;
             invitation.created_for_org == org_id && invitation.invitee_email == user.email
         }
         auth::Resource::Host(_) => false,
