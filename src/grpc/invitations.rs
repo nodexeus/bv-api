@@ -151,7 +151,7 @@ async fn accept(
         }
         auth::Resource::Org(org_id) => {
             let email = claims.data.get("email").ok_or_else(required("email"))?;
-            let user = models::User::find_by_email(&email, conn).await?;
+            let user = models::User::find_by_email(email, conn).await?;
             invitation.created_for_org == org_id && invitation.invitee_email == user.email
         }
         auth::Resource::Host(_) => false,
@@ -199,7 +199,7 @@ async fn decline(
         }
         auth::Resource::Org(org_id) => {
             let email = claims.data.get("email").ok_or_else(required("email"))?;
-            let user = models::User::find_by_email(&email, conn).await?;
+            let user = models::User::find_by_email(email, conn).await?;
             invitation.created_for_org == org_id && invitation.invitee_email == user.email
         }
         auth::Resource::Host(_) => false,

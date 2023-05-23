@@ -28,7 +28,7 @@ export REFRESH_EXPIRATION_HOST_MINS=43200
 
 test:
 	@docker-compose up -d
-	@cargo test --package blockvisor_api --test grpc_tests -- grpc::auth::refresh_works_from_cookie --exact --nocapture
+	@cargo test --no-fail-fast
 	@docker-compose down
 
 test-with:

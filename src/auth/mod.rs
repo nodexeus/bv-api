@@ -52,7 +52,7 @@ async fn claims_from_api_key(_meta: &str, _conn: &mut AsyncPgConnection) -> crat
 
 pub fn get_refresh<T>(req: &tonic::Request<T>) -> crate::Result<Option<Refresh>> {
     let meta = match req.metadata().get("cookie") {
-        Some(meta) => dbg!(meta.to_str()?),
+        Some(meta) => meta.to_str()?,
         None => return Ok(None),
     };
     let Some(refresh_idx) = meta.find("refresh=") else { return Ok(None) };
@@ -66,12 +66,14 @@ pub fn get_refresh<T>(req: &tonic::Request<T>) -> crate::Result<Option<Refresh>>
     // Note that `refresh + 8` can never cause an out of bounds access, because we found the string
     // `"refresh="` and then `";"` after that, so there must be at least 10 characters occuring
     // after `refresh_idx`
-    let refresh = Refresh::decode(dbg!(&meta[refresh_idx + 8..end_idx]))?;
+    let refresh = Refresh::decode(&meta[refresh_idx + 8..end_idx])?;
     Ok(Some(refresh))
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::auth;
+
     use super::*;
 
     #[test]
@@ -90,14 +92,14 @@ mod tests {
         });
     }
 
-    #[test]
-    fn test_crafted_evil_refresh() {
+    #[tokio::test]
+    async fn test_crafted_evil_refresh() {
         temp_env::with_var_unset("SECRETS_ROOT", || {
             let mut req = tonic::Request::new(());
 
             req.metadata_mut()
                 .insert("cookie", ";refresh=".parse().unwrap());
-            assert_eq!(get_refresh(&req).unwrap(), None);
+            assert_eq!(get_refresh(&req).unwrap().is_err());
 
             req.metadata_mut()
                 .insert("cookie", "refresh=;".parse().unwrap());
@@ -105,24 +107,33 @@ mod tests {
         });
     }
 
-    #[test]
-    fn test_extra_cookies() {
+    #[tokio::test]
+    async fn test_extra_cookies() {
+        let db = crate::TestDb::setup().await;
+        let iat = chrono::Utc::now();
+        let exp = chrono::Duration::seconds(65);
+        let refresh = auth::Refresh::new(db.user().await.id, iat, exp).unwrap();
+        let refresh = refresh.encode().unwrap();
         temp_env::with_var_unset("SECRETS_ROOT", || {
             let mut req = tonic::Request::new(());
 
             req.metadata_mut().insert(
                 "cookie",
-                "other_meta=v1; refresh=123; another=v2; ".parse().unwrap(),
+                format!("other_meta=v1; refresh={refresh}; another=v2; ")
+                    .parse()
+                    .unwrap(),
             );
-            assert!(get_refresh(&req).is_err());
+            get_refresh(&req).unwrap().unwrap();
+
+            req.metadata_mut().insert(
+                "cookie",
+                format!("other_meta=v1; refresh={refresh}").parse().unwrap(),
+            );
+            get_refresh(&req).unwrap().unwrap();
 
             req.metadata_mut()
-                .insert("cookie", "other_meta=v1; refresh=123".parse().unwrap());
-            assert_eq!(get_refresh(&req).unwrap(), None);
-
-            req.metadata_mut()
-                .insert("cookie", "refresh=123;".parse().unwrap());
-            assert!(get_refresh(&req).is_err());
+                .insert("cookie", format!("refresh={refresh}").parse().unwrap());
+            get_refresh(&req).unwrap().unwrap();
         });
     }
 }

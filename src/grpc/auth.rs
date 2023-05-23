@@ -130,9 +130,11 @@ async fn refresh(
     let refresh = auth::get_refresh(&req)?;
     let req = req.into_inner();
     let token = auth::Jwt::decode_expired(&req.token)?;
-    let refresh = dbg!(req.refresh.map(|refresh| auth::Refresh::decode(&refresh)))
+    let refresh = req
+        .refresh
+        .map(|refresh| auth::Refresh::decode(&refresh))
         .transpose()?
-        .or(dbg!(refresh))
+        .or(refresh)
         .ok_or_else(|| {
             crate::Error::validation("Need refresh token from cookies or request body")
         })?;
