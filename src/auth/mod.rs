@@ -99,7 +99,7 @@ mod tests {
 
             req.metadata_mut()
                 .insert("cookie", ";refresh=".parse().unwrap());
-            assert_eq!(get_refresh(&req).unwrap().is_err());
+            assert!(get_refresh(&req).unwrap().is_none());
 
             req.metadata_mut()
                 .insert("cookie", "refresh=;".parse().unwrap());
