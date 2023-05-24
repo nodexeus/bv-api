@@ -113,7 +113,7 @@ message HostServiceDeleteResponse {
 }
 
 message HostServiceProvisionRequest {
-  string otp = 1;
+  string provision_token = 1;
   HostConnectionStatus status = 2;
   string name = 3;
   string version = 4;

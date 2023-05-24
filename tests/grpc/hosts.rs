@@ -45,10 +45,10 @@ async fn responds_permission_denied_with_token_ownership_for_update() {
 }
 
 #[tokio::test]
-async fn responds_not_found_for_wrong_otp() {
+async fn responds_not_found_for_wrong_provision_token() {
     let tester = super::Tester::new().await;
     let req = api::HostServiceProvisionRequest {
-        otp: "unknown-otp".into(),
+        provision_token: "unknown-provision-token".into(),
         status: api::HostConnectionStatus::Online.into(),
         name: "tester".to_string(),
         version: "3".to_string(),
@@ -76,7 +76,7 @@ async fn responds_ok_for_provision() {
         .await
         .unwrap();
     let req = api::HostServiceProvisionRequest {
-        otp: host_provision.id,
+        provision_token: host_provision.id,
         status: api::HostConnectionStatus::Online.into(),
         name: "tester".to_string(),
         version: "3".to_string(),
