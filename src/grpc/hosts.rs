@@ -215,14 +215,14 @@ async fn provision(
     conn: &mut diesel_async::AsyncPgConnection,
 ) -> super::Result<api::HostServiceProvisionResponse> {
     // This endpoint does not have any auth checking in it. This is because the access here is
-    // granted using the OTP of the request.
+    // granted using the provision token of the request.
     let req = req.into_inner();
-    let provision = models::HostProvision::find_by_id(&req.otp, conn).await?;
+    let provision = models::HostProvision::find_by_id(&req.provision_token, conn).await?;
     if provision.is_claimed() {
         return Err(tonic::Status::failed_precondition("Provision is already claimed").into());
     }
     let new_host = req.as_new(provision)?;
-    let host = models::HostProvision::claim(&req.otp, new_host, conn).await?;
+    let host = models::HostProvision::claim(&req.provision_token, new_host, conn).await?;
     let iat = chrono::Utc::now();
     let exp = expiration_provider::ExpirationProvider::expiration(auth::TOKEN_EXPIRATION_MINS)?;
     let claims = auth::Claims {

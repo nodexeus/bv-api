@@ -37,7 +37,7 @@ Fields set to None are _NOT_ updated resulting in not being able to set a field 
 see [OpenAPI doc](https://stakejoy.stoplight.io/docs/blockvisor-api/6119082e85f3b-claim-a-host-provision)
 Calling HostsService.Provision results in claiming the host provision earlier created during BV setup.
 
-The one-time-password (OTP) required in [ProvisionHostRequest](https://github.com/blockjoy/api-proto/blob/63e00e0fdc527b737da2b4b8e3d051dc89e0d148/blockjoy/api/v1/host.proto#L26)
+The provision token required in [ProvisionHostRequest](https://github.com/blockjoy/api-proto/blob/63e00e0fdc527b737da2b4b8e3d051dc89e0d148/blockjoy/api/v1/host.proto#L26)
 is assigned to the user who provisioned (registered) the host by showing it on the command-line.
 
 
