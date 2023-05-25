@@ -21,13 +21,13 @@ pub async fn get_claims<T>(
         .get("authorization")
         .ok_or_else(|| crate::Error::invalid_auth("No JWT or API key"))?
         .to_str()?;
-    let claims = if let Ok(claims) = claims_from_jwt(meta) {
-        claims
-    } else if let Ok(claims) = claims_from_api_key(meta, conn).await {
-        claims
-    } else {
-        let msg = "Neither JWT nor API key are valid";
-        return Err(crate::Error::invalid_auth(msg));
+    let claims = match (claims_from_jwt(meta), claims_from_api_key(meta, conn).await) {
+        (Ok(claims), _) => claims,
+        (_, Ok(claims)) => claims,
+        (Err(e1), Err(e2)) => {
+            let msg = format!("Neither JWT nor API key are valid: `{e1}` and `{e2}`");
+            return Err(crate::Error::invalid_auth(msg));
+        }
     };
 
     if !claims.endpoints.includes(endpoint) {
