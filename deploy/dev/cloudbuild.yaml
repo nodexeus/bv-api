@@ -5,7 +5,7 @@ steps:
   - -xe
   - -c
   - |
-    gcloud beta builds triggers run blockvisor-api-builder --branch ${BRANCH}
+    gcloud beta builds triggers run blockvisor-api-builder --branch ${BRANCH_NAME}
 - name: 'gcr.io/k8s-skaffold/skaffold'
   entrypoint: 'sh'
   args:
