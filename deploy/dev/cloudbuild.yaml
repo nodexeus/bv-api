@@ -1,11 +1,4 @@
 steps:
-- name: 'google/cloud-sdk:latest'
-  entrypoint: 'sh'
-  args:
-  - -xe
-  - -c
-  - |
-    gcloud beta builds triggers run blockvisor-api-builder --branch ${BRANCH_NAME}
 - name: 'gcr.io/k8s-skaffold/skaffold'
   entrypoint: 'sh'
   args:
