@@ -26,7 +26,7 @@ pub enum Error {
     #[error("{0}")]
     InsufficientPermissions(String),
 
-    #[error("Error processing JWT")]
+    #[error("Error processing JWT: {0}")]
     Jwt(#[from] jsonwebtoken::errors::Error),
 
     #[error("Error related to JSON parsing or serialization: {0}")]
