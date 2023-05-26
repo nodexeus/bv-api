@@ -4,6 +4,7 @@ pub mod blockchains;
 pub mod commands;
 pub mod discovery;
 pub mod helpers;
+pub mod host_provisions;
 pub mod hosts;
 pub mod invitations;
 pub mod key_files;
@@ -86,6 +87,8 @@ pub async fn server(db: models::DbPool, cloudflare: CloudflareApi) -> Router<Cor
     let blockchain = api::blockchain_service_server::BlockchainServiceServer::new(impler.clone());
     let command = api::command_service_server::CommandServiceServer::new(impler.clone());
     let discovery = api::discovery_service_server::DiscoveryServiceServer::new(impler.clone());
+    let host_provision =
+        api::host_provision_service_server::HostProvisionServiceServer::new(impler.clone());
     let host = api::host_service_server::HostServiceServer::new(impler.clone());
     let invitation = api::invitation_service_server::InvitationServiceServer::new(impler.clone());
     let key_file = api::key_file_service_server::KeyFileServiceServer::new(impler.clone());
@@ -113,6 +116,7 @@ pub async fn server(db: models::DbPool, cloudflare: CloudflareApi) -> Router<Cor
         .add_service(blockchain)
         .add_service(command)
         .add_service(discovery)
+        .add_service(host_provision)
         .add_service(host)
         .add_service(invitation)
         .add_service(key_file)

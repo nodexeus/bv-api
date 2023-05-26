@@ -6,6 +6,7 @@ mod babel;
 mod blockchains;
 mod commands;
 mod discovery;
+mod host_provisions;
 mod hosts;
 mod invitations;
 mod key_files;
