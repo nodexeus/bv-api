@@ -56,6 +56,9 @@ pub struct Host {
     /// If this host is not a cloud host, but rather a machine to be used for self-hosted machines,
     /// this value will be set to the id of the org that owns and operates this host.
     pub org_id: Option<uuid::Uuid>,
+    /// This is the id of the user that created this host. For older hosts, this value might not be
+    /// set.
+    pub created_by: Option<uuid::Uuid>,
 }
 
 impl Host {
@@ -201,6 +204,8 @@ pub struct NewHost<'a> {
     /// If this host is not a cloud host, but rather a machine to be used for self-hosted machines,
     /// this value should be set to the id of the org that owns and operates this host.
     pub org_id: Option<uuid::Uuid>,
+    /// This is the id of the user that created this host.
+    pub created_by: uuid::Uuid,
 }
 
 impl NewHost<'_> {
@@ -216,6 +221,9 @@ impl NewHost<'_> {
                 "{ip_gateway} is in range {ip_range_from} - {ip_range_to}",
             )));
         }
+
+        dbg!(super::User::find_all(conn).await?);
+        dbg!(&self);
 
         let host: Host = diesel::insert_into(hosts::table)
             .values(self)

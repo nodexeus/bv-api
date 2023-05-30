@@ -1,7 +1,8 @@
 use super::api::{self, host_service_server};
-use super::helpers;
-use crate::auth::expiration_provider;
-use crate::{auth, models};
+use crate::{
+    auth::{self, expiration_provider},
+    models,
+};
 use diesel_async::scoped_futures::ScopedFutureExt;
 
 /// This is a list of all the endpoints that a user is allowed to access with the jwt that they
@@ -61,41 +62,52 @@ impl host_service_server::HostService for super::GrpcImpl {
     ) -> super::Resp<api::HostServiceDeleteResponse> {
         self.trx(|c| delete(req, c).scope_boxed()).await
     }
-
-    async fn provision(
-        &self,
-        req: tonic::Request<api::HostServiceProvisionRequest>,
-    ) -> super::Resp<api::HostServiceProvisionResponse> {
-        self.trx(|c| provision(req, c).scope_boxed()).await
-    }
 }
 
 async fn create(
     req: tonic::Request<api::HostServiceCreateRequest>,
     conn: &mut diesel_async::AsyncPgConnection,
 ) -> super::Result<api::HostServiceCreateResponse> {
-    let claims = auth::get_claims(&req, auth::Endpoint::HostCreate, conn).await?;
     let req = req.into_inner();
     let org_id = req.org_id.as_ref().map(|id| id.parse()).transpose()?;
-    let is_allowed = match claims.resource() {
-        auth::Resource::User(user_id) => {
-            if let Some(org_id) = org_id {
-                models::Org::is_member(user_id, org_id, conn).await?
-            } else {
-                false
-            }
+    // We retrieve the id of the caller from the token that was used.
+    let caller_id = if let Some(org_id) = org_id {
+        // First we find the org and user that correspond to this token.
+        let org_user = models::OrgUser::by_token(&req.provision_token, conn)
+            .await
+            .map_err(|_| tonic::Status::permission_denied("Invalid token"))?;
+        // Now we check that the user belonging to this token is actually a member of the requested
+        // organization.
+        if org_user.org_id == org_id {
+            org_user.user_id
+        } else {
+            super::forbidden!("Access denied: not a member of this org");
         }
-        auth::Resource::Org(org) => org_id == Some(org),
-        auth::Resource::Host(_) => false,
-        auth::Resource::Node(_) => false,
+    } else {
+        // The API doesn't require an org_id to be supplied. This is for forwards compatibility with
+        // requests create hosts which do not have an org_id and can be used by any one. However,
+        // for now we just retrurn an error here.
+        super::forbidden!("Access denied: org_id is required");
     };
-    if !is_allowed {
-        super::forbidden!("Access denied");
-    }
-    let new_host = req.as_new()?;
+    let new_host = req.as_new(caller_id)?;
     let host = new_host.create(conn).await?;
+    let iat = chrono::Utc::now();
+    let claims = auth::Claims::new(
+        auth::ResourceType::Host,
+        host.id,
+        iat,
+        expiration_provider::ExpirationProvider::expiration(auth::TOKEN_EXPIRATION_MINS)?,
+        HOST_ENDPOINTS.iter().copied().collect(),
+    )?;
+    let token = auth::Jwt { claims };
+    let exp = expiration_provider::ExpirationProvider::expiration("REFRESH_EXPIRATION_HOST_MINS")?;
+    let refresh = auth::Refresh::new(host.id, iat, exp)?;
     let host = api::Host::from_model(host).await?;
-    let resp = api::HostServiceCreateResponse { host: Some(host) };
+    let resp = api::HostServiceCreateResponse {
+        host: Some(host),
+        token: token.encode()?,
+        refresh: refresh.encode()?,
+    };
     Ok(tonic::Response::new(resp))
 }
 
@@ -210,41 +222,6 @@ async fn delete(
     Ok(tonic::Response::new(resp))
 }
 
-async fn provision(
-    req: tonic::Request<api::HostServiceProvisionRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
-) -> super::Result<api::HostServiceProvisionResponse> {
-    // This endpoint does not have any auth checking in it. This is because the access here is
-    // granted using the provision token of the request.
-    let req = req.into_inner();
-    let provision = models::HostProvision::find_by_id(&req.provision_token, conn).await?;
-    if provision.is_claimed() {
-        return Err(tonic::Status::failed_precondition("Provision is already claimed").into());
-    }
-    let new_host = req.as_new(provision)?;
-    let host = models::HostProvision::claim(&req.provision_token, new_host, conn).await?;
-    let iat = chrono::Utc::now();
-    let exp = expiration_provider::ExpirationProvider::expiration(auth::TOKEN_EXPIRATION_MINS)?;
-    let claims = auth::Claims {
-        resource_type: auth::ResourceType::Host,
-        resource_id: host.id,
-        iat,
-        exp: iat + exp,
-        endpoints: HOST_ENDPOINTS.iter().copied().collect(),
-        data: Default::default(),
-    };
-    let jwt = auth::Jwt { claims };
-    let refresh_exp =
-        expiration_provider::ExpirationProvider::expiration("REFRESH_EXPIRATION_HOST_MINS")?;
-    let refresh = auth::Refresh::new(host.id, iat, refresh_exp)?;
-    let resp = api::HostServiceProvisionResponse {
-        host_id: host.id.to_string(),
-        token: jwt.encode()?,
-        refresh: refresh.encode()?,
-    };
-    Ok(tonic::Response::new(resp))
-}
-
 impl api::Host {
     pub async fn from_models(models: Vec<models::Host>) -> crate::Result<Vec<Self>> {
         models
@@ -279,7 +256,7 @@ impl api::Host {
 }
 
 impl api::HostServiceCreateRequest {
-    pub fn as_new(&self) -> crate::Result<models::NewHost<'_>> {
+    pub fn as_new(&self, user_id: uuid::Uuid) -> crate::Result<models::NewHost<'_>> {
         Ok(models::NewHost {
             name: &self.name,
             version: &self.version,
@@ -294,6 +271,7 @@ impl api::HostServiceCreateRequest {
             ip_range_to: self.ip_range_to.parse()?,
             ip_gateway: self.ip_gateway.parse()?,
             org_id: self.org_id.as_ref().map(|s| s.parse()).transpose()?,
+            created_by: user_id,
         })
     }
 }
@@ -318,53 +296,9 @@ impl api::HostServiceUpdateRequest {
     }
 }
 
-impl api::HostServiceProvisionRequest {
-    pub fn as_new(&self, provision: models::HostProvision) -> crate::Result<models::NewHost<'_>> {
-        let new_host = models::NewHost {
-            name: &self.name,
-            version: &self.version,
-            cpu_count: self.cpu_count.try_into()?,
-            mem_size_bytes: self.mem_size_bytes.try_into()?,
-            disk_size_bytes: self.disk_size_bytes.try_into()?,
-            os: &self.os,
-            os_version: &self.os_version,
-            ip_addr: &self.ip,
-            status: self.status().into_model()?,
-            ip_range_from: provision
-                .ip_range_from
-                .ok_or_else(helpers::required("provision.ip_range_from"))?,
-            ip_range_to: provision
-                .ip_range_to
-                .ok_or_else(helpers::required("provision.ip_range_to"))?,
-            ip_gateway: provision
-                .ip_gateway
-                .ok_or_else(helpers::required("provision.ip_gateway"))?,
-            org_id: provision.org_id,
-        };
-        Ok(new_host)
-    }
-}
-
 impl api::HostStatus {
     fn from_model(_model: models::ConnectionStatus) -> Self {
         // todo
         Self::Unspecified
-    }
-}
-
-impl api::HostConnectionStatus {
-    fn _from_model(model: models::ConnectionStatus) -> Self {
-        match model {
-            models::ConnectionStatus::Online => Self::Online,
-            models::ConnectionStatus::Offline => Self::Offline,
-        }
-    }
-
-    fn into_model(self) -> crate::Result<models::ConnectionStatus> {
-        match self {
-            Self::Unspecified => Err(crate::Error::unexpected("Unspecified ConnectionStatus")),
-            Self::Online => Ok(models::ConnectionStatus::Online),
-            Self::Offline => Ok(models::ConnectionStatus::Offline),
-        }
     }
 }

@@ -94,19 +94,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    host_provisions (id) {
-        id -> Text,
-        created_at -> Timestamptz,
-        claimed_at -> Nullable<Timestamptz>,
-        host_id -> Nullable<Uuid>,
-        ip_range_from -> Nullable<Inet>,
-        ip_range_to -> Nullable<Inet>,
-        ip_gateway -> Nullable<Inet>,
-        org_id -> Nullable<Uuid>,
-    }
-}
-
-diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::EnumConnStatus;
     use super::sql_types::EnumHostType;
@@ -137,6 +124,7 @@ diesel::table! {
         uptime -> Nullable<Int8>,
         host_type -> Nullable<EnumHostType>,
         org_id -> Nullable<Uuid>,
+        created_by -> Nullable<Uuid>,
     }
 }
 
@@ -258,6 +246,7 @@ diesel::table! {
         role -> EnumOrgRole,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        host_provision_token -> Varchar,
     }
 }
 
@@ -287,9 +276,8 @@ diesel::table! {
 
 diesel::joinable!(commands -> hosts (host_id));
 diesel::joinable!(commands -> nodes (node_id));
-diesel::joinable!(host_provisions -> hosts (host_id));
-diesel::joinable!(host_provisions -> orgs (org_id));
 diesel::joinable!(hosts -> orgs (org_id));
+diesel::joinable!(hosts -> users (created_by));
 diesel::joinable!(invitations -> orgs (created_for_org));
 diesel::joinable!(invitations -> users (created_by_user));
 diesel::joinable!(ip_addresses -> hosts (host_id));
@@ -304,7 +292,6 @@ diesel::joinable!(orgs_users -> users (user_id));
 diesel::allow_tables_to_appear_in_same_query!(
     blockchains,
     commands,
-    host_provisions,
     hosts,
     invitations,
     ip_addresses,

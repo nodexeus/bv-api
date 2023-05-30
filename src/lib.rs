@@ -145,8 +145,8 @@ mod test {
             self.pool.conn().await.unwrap()
         }
 
-        pub async fn create_node<'a>(
-            node: &models::NewNode<'a>,
+        pub async fn create_node(
+            node: &models::NewNode<'_>,
             host_id_param: &uuid::Uuid,
             ip_add_param: &str,
             dns_id: &str,
@@ -185,12 +185,12 @@ mod test {
         /// Seeds the database with some initial data that we need for running tests.
         async fn seed(&self) {
             self.pool
-                .trx(|c| Self::_seed(c).scope_boxed())
+                .trx(|c| Self::seed_(c).scope_boxed())
                 .await
                 .expect("Could not seed db");
         }
 
-        async fn _seed(conn: &mut diesel_async::AsyncPgConnection) -> crate::Result<()> {
+        async fn seed_(conn: &mut diesel_async::AsyncPgConnection) -> crate::Result<()> {
             diesel::sql_query("INSERT INTO blockchains (id,name,status,supported_node_types) values ('1fdbf4c3-ff16-489a-8d3d-87c8620b963c','Helium', 'production', '[]')")
                 .execute(conn)
                 .await.unwrap();
@@ -223,7 +223,7 @@ mod test {
             let user = models::NewUser::new("test@here.com", "Luuk", "Tester", "abc12345").unwrap();
             let admin = models::NewUser::new("admin@here.com", "Mr", "Admin", "abc12345").unwrap();
 
-            let _user = user.create(conn).await.unwrap();
+            let user = user.create(conn).await.unwrap();
             let admin = admin.create(conn).await.unwrap();
 
             models::NewOrgUser::new(org_id, admin.id, models::OrgRole::Admin)
@@ -247,6 +247,7 @@ mod test {
                 ip_range_to: "192.168.0.100".parse().unwrap(),
                 ip_gateway: "192.168.0.1".parse().unwrap(),
                 org_id: None,
+                created_by: user.id,
             };
 
             host1.create(conn).await.unwrap();
@@ -265,6 +266,7 @@ mod test {
                 ip_range_to: "192.12.0.20".parse().unwrap(),
                 ip_gateway: "192.12.0.1".parse().unwrap(),
                 org_id: Some(org_id),
+                created_by: user.id,
             };
 
             let host2 = host2.create(conn).await.unwrap();
