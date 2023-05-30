@@ -31,7 +31,6 @@ mod tests {
             );
             let expiration = (now + duration).timestamp();
 
-            println!("Now: {}, expires: {}", now.timestamp(), expiration);
             assert_eq!(duration.num_minutes(), 10);
             assert!(expiration > now.timestamp());
         });

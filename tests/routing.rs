@@ -29,8 +29,6 @@ async fn test_possible_routes() -> anyhow::Result<()> {
         let method = item.1;
         let expected_response_code = item.2;
 
-        println!("testing route #{cnt} {method} {route}");
-
         let req = Request::builder()
             .method(method)
             .header("content-type", "application/json")
@@ -38,7 +36,11 @@ async fn test_possible_routes() -> anyhow::Result<()> {
             .body(Body::empty())?;
         let response = app.clone().oneshot(req).await?;
 
-        assert_eq!(response.status(), expected_response_code);
+        assert_eq!(
+            response.status(),
+            expected_response_code,
+            "#{cnt} {method} {route} failed"
+        );
         cnt += 1;
     }
 
