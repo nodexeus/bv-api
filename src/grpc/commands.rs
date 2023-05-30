@@ -133,14 +133,14 @@ async fn pending(
     req: tonic::Request<api::CommandServicePendingRequest>,
     conn: &mut diesel_async::AsyncPgConnection,
 ) -> super::Result<api::CommandServicePendingResponse> {
-    let claims = auth::get_claims(&req, auth::Endpoint::CommandPending, conn).await?;
+    let claims = dbg!(auth::get_claims(&req, auth::Endpoint::CommandPending, conn).await)?;
     let req = req.into_inner();
-    let host_id = req.host_id.parse()?;
-    let host = models::Host::find_by_id(host_id, conn).await?;
+    let host_id = dbg!(req.host_id.parse())?;
+    let host = dbg!(models::Host::find_by_id(host_id, conn).await)?;
     let is_allowed = match claims.resource() {
         auth::Resource::User(user_id) => {
             if let Some(org_id) = host.org_id {
-                models::Org::is_member(user_id, org_id, conn).await?
+                dbg!(models::Org::is_member(user_id, org_id, conn).await)?
             } else {
                 false
             }
@@ -149,13 +149,13 @@ async fn pending(
         auth::Resource::Host(host_id) => host_id == host.id,
         auth::Resource::Node(_) => false,
     };
-    if !is_allowed {
+    if !dbg!(is_allowed) {
         super::forbidden!("Access denied");
     }
-    let cmds = models::Command::find_pending_by_host(host_id, conn).await?;
+    let cmds = dbg!(models::Command::find_pending_by_host(host_id, conn).await)?;
     let mut commands = Vec::with_capacity(cmds.len());
     for cmd in cmds {
-        let grpc_cmd = api::Command::from_model(&cmd, conn).await?;
+        let grpc_cmd = dbg!(api::Command::from_model(&cmd, conn).await)?;
         commands.push(grpc_cmd);
     }
     let resp = api::CommandServicePendingResponse { commands };
