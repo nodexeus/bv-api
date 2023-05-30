@@ -116,6 +116,7 @@ async fn create(
     }
     let node = new_node.create(req.host_id()?, &grpc.dns, conn).await?;
     create_notification(grpc, &node, conn).await?;
+    start_notification(grpc, &node, conn).await?;
     let created = api::NodeMessage::created(node.clone(), user.clone(), conn).await?;
     grpc.notifier.nodes_sender().send(&created).await?;
     let resp = api::NodeServiceCreateResponse {
