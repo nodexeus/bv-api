@@ -93,19 +93,25 @@ impl Blockchain {
         filter: &super::NodeSelfUpgradeFilter,
         conn: &mut AsyncPgConnection,
     ) -> crate::Result<()> {
-        let mut current_props =
-            BlockchainProperty::by_blockchain_node_type_recent(self, filter.node_type, conn)
-                .await?;
-        if current_props.iter().any(|x| x.version == filter.version) {
+        // First we query all the props to see if the version already exists.
+        let props =
+            BlockchainProperty::by_blockchain_node_type(self, filter.node_type, conn).await?;
+        if props.iter().any(|x| x.version == filter.version) {
             let (blockchain_id, version) = (filter.blockchain_id, &filter.version);
             warn!("Node type version {version} already exists in blockchain {blockchain_id}");
             return Ok(());
         }
-        let old_version = current_props.pop().map(|prop| prop.version);
-        let to_add = if let Some(old_version) = old_version {
-            current_props
+        // If the version doesn't exist yet, we copy the properties from the latest version.
+        let latest = props
+            .iter()
+            .map(|p| p.version.as_str())
+            .max_by(|v1, v2| super::semver_cmp(v1, v2).unwrap_or(std::cmp::Ordering::Equal))
+            .map(str::to_string);
+        let to_add = if let Some(latest) = latest {
+            // If there is a latest version, we can copy its props.
+            props
                 .into_iter()
-                .filter(|prop| prop.version == old_version)
+                .filter(|prop| prop.version == latest)
                 .map(|prop| BlockchainProperty {
                     id: uuid::Uuid::new_v4(),
                     version: filter.version.clone(),
@@ -113,6 +119,7 @@ impl Blockchain {
                 })
                 .collect()
         } else {
+            // If no latest version exists, we default to a fallback property.
             vec![BlockchainProperty {
                 id: uuid::Uuid::new_v4(),
                 blockchain_id: filter.blockchain_id,

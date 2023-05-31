@@ -1,5 +1,5 @@
-use crate::models::{self, schema::blockchain_properties, string_to_array};
-use diesel::{dsl, prelude::*};
+use crate::models::{self, schema::blockchain_properties};
+use diesel::prelude::*;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use std::collections::HashMap;
 
@@ -63,30 +63,6 @@ impl BlockchainProperty {
             .get_results(conn)
             .await?;
         Ok(props)
-    }
-
-    /// Returns the same values as `by_blockchain_node_type`, but takes only the values for the most
-    /// recent version.
-    pub async fn by_blockchain_node_type_recent(
-        blockchain: &super::Blockchain,
-        node_type: models::NodeType,
-        conn: &mut AsyncPgConnection,
-    ) -> crate::Result<Vec<Self>> {
-        let max_version = dsl::max(string_to_array(blockchain_properties::version, "."));
-        let max_version: Option<Vec<String>> = blockchain_properties::table
-            .filter(blockchain_properties::blockchain_id.eq(blockchain.id))
-            .filter(blockchain_properties::node_type.eq(node_type))
-            .select(max_version)
-            .get_result(conn)
-            .await?;
-        let current_version = string_to_array(blockchain_properties::version, ".");
-        let chains = blockchain_properties::table
-            .filter(blockchain_properties::blockchain_id.eq(blockchain.id))
-            .filter(blockchain_properties::node_type.eq(node_type))
-            .filter(current_version.eq(max_version.as_deref().unwrap_or(&[])))
-            .get_results(conn)
-            .await?;
-        Ok(chains)
     }
 
     /// Returns a map from blockchain_property_id to the `name` field of that blockchain property.
