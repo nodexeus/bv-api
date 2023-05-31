@@ -176,6 +176,6 @@ mod tests {
         };
         blockchain.add_version(&filter, &mut conn).await.unwrap();
         let n_properties_new_final = blockchain.properties(&mut conn).await.unwrap().len();
-        assert_eq!(n_properties + 1, n_properties_new_final);
+        assert_eq!(n_properties + 2, n_properties_new_final);
     }
 }
