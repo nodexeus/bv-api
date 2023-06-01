@@ -4,7 +4,6 @@ use crate::{
     grpc::{self, api},
     models,
 };
-use diesel_async::AsyncPgConnection;
 
 /// When we get a failed command back from blockvisord, we can try to recover from this. This is
 /// currently only implemented for failed node creates. Note that this function largely ignores
@@ -14,7 +13,7 @@ use diesel_async::AsyncPgConnection;
 pub(super) async fn recover(
     impler: &grpc::GrpcImpl,
     failed_cmd: &models::Command,
-    conn: &mut AsyncPgConnection,
+    conn: &mut models::Conn,
 ) {
     if failed_cmd.cmd == models::CommandType::CreateNode {
         recover_created(impler, failed_cmd, conn).await;
@@ -24,7 +23,7 @@ pub(super) async fn recover(
 async fn recover_created(
     impler: &grpc::GrpcImpl,
     failed_cmd: &models::Command,
-    conn: &mut AsyncPgConnection,
+    conn: &mut models::Conn,
 ) {
     let Some(node_id) = failed_cmd.node_id else {
         tracing::error!("`CreateNode` command has no node id!");
@@ -103,7 +102,7 @@ async fn recover_created(
 
 /// Send a delete message to blockvisord, to delete the given node. We do this to assist blockvisord
 /// to clean up after a failed node create.
-async fn send_delete(impler: &grpc::GrpcImpl, node: &models::Node, conn: &mut AsyncPgConnection) {
+async fn send_delete(impler: &grpc::GrpcImpl, node: &models::Node, conn: &mut models::Conn) {
     let cmd = models::NewCommand {
         host_id: node.host_id,
         cmd: models::CommandType::DeleteNode,

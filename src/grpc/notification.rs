@@ -1,8 +1,7 @@
 use anyhow::anyhow;
-use diesel_async::AsyncPgConnection;
 
 use super::api::{self, host_message, node_message, org_message};
-use crate::{auth::key_provider::KeyProvider, models, Result};
+use crate::{auth::key_provider::KeyProvider, models};
 
 /// Presents the following senders:
 /// |---------------|----------------------------------------------|
@@ -26,7 +25,7 @@ pub struct Notifier {
 }
 
 impl Notifier {
-    pub async fn new() -> Result<Self> {
+    pub async fn new() -> crate::Result<Self> {
         let options = Self::get_mqtt_options()?;
         let (client, mut event_loop) = rumqttc::AsyncClient::new(options, 10);
         client
@@ -64,7 +63,7 @@ impl Notifier {
         MqttClient::new(self.client.clone())
     }
 
-    fn get_mqtt_options() -> Result<rumqttc::MqttOptions> {
+    fn get_mqtt_options() -> crate::Result<rumqttc::MqttOptions> {
         let client_id = format!("blockvisor-api-{}", uuid::Uuid::new_v4());
         let host = KeyProvider::get_var("MQTT_SERVER_ADDRESS")?;
         let port = KeyProvider::get_var("MQTT_SERVER_PORT")?
@@ -93,7 +92,7 @@ impl<T: Notify + prost::Message> MqttClient<T> {
         }
     }
 
-    pub async fn send(&mut self, msg: &T) -> Result<()>
+    pub async fn send(&mut self, msg: &T) -> crate::Result<()>
     where
         T: std::fmt::Debug,
     {
@@ -179,7 +178,7 @@ impl api::OrgMessage {
     pub async fn created(
         model: models::Org,
         user: models::User,
-        conn: &mut AsyncPgConnection,
+        conn: &mut models::Conn,
     ) -> crate::Result<Self> {
         Ok(Self {
             message: Some(org_message::Message::Created(api::OrgCreated {
@@ -195,7 +194,7 @@ impl api::OrgMessage {
     pub async fn updated(
         model: models::Org,
         user: models::User,
-        conn: &mut AsyncPgConnection,
+        conn: &mut models::Conn,
     ) -> crate::Result<Self> {
         Ok(Self {
             message: Some(org_message::Message::Updated(api::OrgUpdated {
@@ -343,7 +342,7 @@ impl api::NodeMessage {
     pub async fn created(
         model: models::Node,
         user: models::User,
-        conn: &mut AsyncPgConnection,
+        conn: &mut models::Conn,
     ) -> crate::Result<Self> {
         Ok(Self {
             message: Some(node_message::Message::Created(api::NodeCreated {
@@ -358,7 +357,7 @@ impl api::NodeMessage {
     pub async fn updated(
         model: models::Node,
         user: Option<models::User>,
-        conn: &mut AsyncPgConnection,
+        conn: &mut models::Conn,
     ) -> crate::Result<Self> {
         Ok(Self {
             message: Some(node_message::Message::Updated(api::NodeUpdated {

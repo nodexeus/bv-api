@@ -27,7 +27,7 @@ impl blockchain_service_server::BlockchainService for super::GrpcImpl {
 
 async fn get(
     req: tonic::Request<api::BlockchainServiceGetRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::BlockchainServiceGetResponse> {
     let req: api::BlockchainServiceGetRequest = req.into_inner();
     let id = req.id.parse()?;
@@ -40,7 +40,7 @@ async fn get(
 
 async fn list(
     _: tonic::Request<api::BlockchainServiceListRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::BlockchainServiceListResponse> {
     // We need to combine info from two seperate sources: the database and cookbook. Since
     // cookbook is slow, the step where we call it is parallelized.
@@ -115,7 +115,7 @@ async fn try_get_networks(
 impl api::Blockchain {
     async fn from_models(
         models: Vec<models::Blockchain>,
-        conn: &mut diesel_async::AsyncPgConnection,
+        conn: &mut models::Conn,
     ) -> crate::Result<Vec<Self>> {
         let properties = models::BlockchainProperty::by_blockchains(&models, conn).await?;
         let mut properties_map: HashMap<uuid::Uuid, Vec<_>> = HashMap::new();
@@ -150,10 +150,7 @@ impl api::Blockchain {
             .collect()
     }
 
-    async fn from_model(
-        model: models::Blockchain,
-        conn: &mut diesel_async::AsyncPgConnection,
-    ) -> crate::Result<Self> {
+    async fn from_model(model: models::Blockchain, conn: &mut models::Conn) -> crate::Result<Self> {
         Ok(Self::from_models(vec![model], conn).await?[0].clone())
     }
 }

@@ -2,7 +2,7 @@ use super::schema::{orgs, orgs_users};
 use crate::Result;
 use chrono::{DateTime, Utc};
 use diesel::{dsl, prelude::*};
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use diesel_async::RunQueryDsl;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use uuid::Uuid;
@@ -20,14 +20,14 @@ pub struct Org {
 type NotDeleted = dsl::Filter<orgs::table, dsl::IsNull<orgs::deleted_at>>;
 
 impl Org {
-    pub async fn find_by_id(org_id: Uuid, conn: &mut AsyncPgConnection) -> Result<Self> {
+    pub async fn find_by_id(org_id: Uuid, conn: &mut super::Conn) -> Result<Self> {
         let org = Org::not_deleted().find(org_id).get_result(conn).await?;
         Ok(org)
     }
 
     pub async fn filter(
         member_id: Option<uuid::Uuid>,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<Vec<Self>> {
         let mut query = Self::not_deleted()
             .left_join(orgs_users::table)
@@ -45,10 +45,7 @@ impl Org {
         Ok(orgs)
     }
 
-    pub async fn memberships(
-        user_id: uuid::Uuid,
-        conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<OrgUser>> {
+    pub async fn memberships(user_id: uuid::Uuid, conn: &mut super::Conn) -> Result<Vec<OrgUser>> {
         let orgs = orgs_users::table
             .filter(orgs_users::user_id.eq(user_id))
             .select(OrgUser::as_select())
@@ -58,10 +55,7 @@ impl Org {
         Ok(orgs)
     }
 
-    pub async fn find_personal_org(
-        user: &super::User,
-        conn: &mut AsyncPgConnection,
-    ) -> Result<Org> {
+    pub async fn find_personal_org(user: &super::User, conn: &mut super::Conn) -> Result<Org> {
         let org = Self::not_deleted()
             .filter(orgs::is_personal)
             .filter(orgs_users::user_id.eq(user.id))
@@ -74,11 +68,7 @@ impl Org {
     }
 
     /// Checks if the user is a member.
-    pub async fn is_member(
-        user_id: Uuid,
-        org_id: Uuid,
-        conn: &mut AsyncPgConnection,
-    ) -> Result<bool> {
+    pub async fn is_member(user_id: Uuid, org_id: Uuid, conn: &mut super::Conn) -> Result<bool> {
         let target_user = orgs_users::table
             .filter(orgs_users::user_id.eq(user_id))
             .filter(orgs_users::org_id.eq(org_id));
@@ -90,11 +80,7 @@ impl Org {
 
     /// Checks if the user is a member with the role `Admin` or above (the other option being
     /// `Owner`).
-    pub async fn is_admin(
-        user_id: Uuid,
-        org_id: Uuid,
-        conn: &mut AsyncPgConnection,
-    ) -> Result<bool> {
+    pub async fn is_admin(user_id: Uuid, org_id: Uuid, conn: &mut super::Conn) -> Result<bool> {
         let target_user = orgs_users::table
             .filter(orgs_users::user_id.eq(user_id))
             .filter(orgs_users::org_id.eq(org_id))
@@ -109,7 +95,7 @@ impl Org {
         user_id: Uuid,
         org_id: Uuid,
         role: OrgRole,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> Result<OrgUser> {
         NewOrgUser::new(org_id, user_id, role).create(conn).await
     }
@@ -117,7 +103,7 @@ impl Org {
     pub async fn remove_org_user(
         user: &super::User,
         org: &Self,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> Result<()> {
         let org_user = orgs_users::table
             .filter(orgs_users::user_id.eq(user.id))
@@ -127,7 +113,7 @@ impl Org {
     }
 
     /// Marks the the given organization as deleted
-    pub async fn delete(org_id: Uuid, conn: &mut AsyncPgConnection) -> Result<()> {
+    pub async fn delete(org_id: Uuid, conn: &mut super::Conn) -> Result<()> {
         let to_delete = orgs::table
             .filter(orgs::id.eq(org_id))
             .filter(orgs::is_personal.eq(false));
@@ -140,7 +126,7 @@ impl Org {
 
     pub async fn node_counts(
         orgs: &[Self],
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<HashMap<uuid::Uuid, u64>> {
         use super::schema::nodes;
 
@@ -171,7 +157,7 @@ pub struct NewOrg<'a> {
 
 impl<'a> NewOrg<'a> {
     /// Creates a new organization
-    pub async fn create(self, user_id: Uuid, conn: &mut AsyncPgConnection) -> Result<Org> {
+    pub async fn create(self, user_id: Uuid, conn: &mut super::Conn) -> Result<Org> {
         let org: Org = diesel::insert_into(orgs::table)
             .values(self)
             .get_result(conn)
@@ -193,7 +179,7 @@ pub struct UpdateOrg<'a> {
 
 impl<'a> UpdateOrg<'a> {
     /// Updates an organization
-    pub async fn update(self, conn: &mut AsyncPgConnection) -> Result<Org> {
+    pub async fn update(self, conn: &mut super::Conn) -> Result<Org> {
         let org = diesel::update(orgs::table.find(self.id))
             .set((self, orgs::updated_at.eq(chrono::Utc::now())))
             .get_result(conn)
@@ -219,7 +205,7 @@ impl OrgUser {
     /// to that org.
     pub async fn by_orgs(
         orgs: &[super::Org],
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<HashMap<uuid::Uuid, Vec<Self>>> {
         let org_ids: Vec<uuid::Uuid> = orgs.iter().map(|o| o.id).collect();
         let org_users: Vec<Self> = orgs_users::table
@@ -236,7 +222,7 @@ impl OrgUser {
     pub async fn by_user_org(
         user_id: uuid::Uuid,
         org_id: uuid::Uuid,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<Self> {
         let org_user = orgs_users::table
             .filter(orgs_users::user_id.eq(user_id))
@@ -246,7 +232,7 @@ impl OrgUser {
         Ok(org_user)
     }
 
-    pub async fn by_token(token: &str, conn: &mut AsyncPgConnection) -> crate::Result<Self> {
+    pub async fn by_token(token: &str, conn: &mut super::Conn) -> crate::Result<Self> {
         let org_user = orgs_users::table
             .filter(orgs_users::host_provision_token.eq(token))
             .get_result(conn)
@@ -254,7 +240,7 @@ impl OrgUser {
         Ok(org_user)
     }
 
-    pub async fn reset_token(&self, conn: &mut AsyncPgConnection) -> crate::Result<String> {
+    pub async fn reset_token(&self, conn: &mut super::Conn) -> crate::Result<String> {
         let token = Self::token();
         let to_update = orgs_users::table
             .filter(orgs_users::user_id.eq(self.user_id))
@@ -293,7 +279,7 @@ impl NewOrgUser {
         }
     }
 
-    pub async fn create(self, conn: &mut AsyncPgConnection) -> Result<OrgUser> {
+    pub async fn create(self, conn: &mut super::Conn) -> Result<OrgUser> {
         let org_user = diesel::insert_into(orgs_users::table)
             .values((self, orgs_users::host_provision_token.eq(OrgUser::token())))
             .get_result(conn)

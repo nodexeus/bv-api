@@ -25,7 +25,7 @@ mod user;
 
 use diesel_async::pooled_connection::bb8::{Pool, PooledConnection};
 use diesel_async::scoped_futures::{ScopedBoxFuture, ScopedFutureExt};
-use diesel_async::{AsyncConnection, AsyncPgConnection};
+use diesel_async::AsyncConnection;
 use std::cmp;
 
 pub use blacklist_token::*;
@@ -42,6 +42,8 @@ pub use node_type::*;
 pub use org::*;
 pub use user::*;
 
+pub type Conn = diesel_async::AsyncPgConnection;
+
 diesel::sql_function!(fn lower(x: diesel::sql_types::Text) -> diesel::sql_types::Text);
 diesel::sql_function!(fn string_to_array(version: diesel::sql_types::Text, split: diesel::sql_types::Text) -> diesel::sql_types::Array<diesel::sql_types::Text>);
 
@@ -55,21 +57,17 @@ diesel::sql_function!(fn string_to_array(version: diesel::sql_types::Text, split
 /// we _can_ use the `?`-operator in our controllers.
 #[derive(Debug, Clone)]
 pub struct DbPool {
-    pool: Pool<diesel_async::AsyncPgConnection>,
+    pool: Pool<Conn>,
 }
 
 impl DbPool {
-    pub fn new(pool: Pool<diesel_async::AsyncPgConnection>) -> Self {
+    pub fn new(pool: Pool<Conn>) -> Self {
         Self { pool }
     }
 
     pub async fn trx<'a, F, T>(&self, f: F) -> Result<T, tonic::Status>
     where
-        F: for<'r> FnOnce(
-                &'r mut diesel_async::AsyncPgConnection,
-            ) -> ScopedBoxFuture<'a, 'r, crate::Result<T>>
-            + Send
-            + 'a,
+        F: for<'r> FnOnce(&'r mut Conn) -> ScopedBoxFuture<'a, 'r, crate::Result<T>> + Send + 'a,
         T: Send + 'a,
     {
         let res = self
@@ -84,7 +82,7 @@ impl DbPool {
 
     /// Returns a database connection that is not in a transition state. Use this for read-only
     /// endpoints.
-    pub async fn conn(&self) -> crate::Result<PooledConnection<'_, AsyncPgConnection>> {
+    pub async fn conn(&self) -> crate::Result<PooledConnection<'_, Conn>> {
         Ok(self.pool.get().await?)
     }
 

@@ -2,7 +2,7 @@ use super::schema::ip_addresses;
 use crate::{Error, Result};
 use anyhow::anyhow;
 use diesel::{dsl, prelude::*};
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use diesel_async::RunQueryDsl;
 use ipnet::{IpAddrRange, Ipv4AddrRange};
 use std::net::IpAddr;
 
@@ -30,7 +30,7 @@ impl NewIpAddressRange {
         }
     }
 
-    pub async fn create(self, conn: &mut AsyncPgConnection) -> Result<Vec<IpAddress>> {
+    pub async fn create(self, conn: &mut super::Conn) -> Result<Vec<IpAddress>> {
         let host_id = self.host_id;
         let start_range = Self::to_ipv4(self.from)?;
         let stop_range = Self::to_ipv4(self.to)?;
@@ -70,7 +70,7 @@ pub struct IpAddress {
 
 impl IpAddress {
     /// Helper returning the next valid IP address for host identified by `host_id`
-    pub async fn next_for_host(host_id: uuid::Uuid, conn: &mut AsyncPgConnection) -> Result<Self> {
+    pub async fn next_for_host(host_id: uuid::Uuid, conn: &mut super::Conn) -> Result<Self> {
         let ip: Self = ip_addresses::table
             .filter(ip_addresses::host_id.eq(host_id))
             .filter(ip_addresses::is_assigned.eq(false))
@@ -84,7 +84,7 @@ impl IpAddress {
     pub async fn assign(
         id: uuid::Uuid,
         host_id: uuid::Uuid,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> Result<Self> {
         let fields = UpdateIpAddress {
             id,
@@ -99,7 +99,7 @@ impl IpAddress {
     pub async fn unassign(
         id: uuid::Uuid,
         host_id: uuid::Uuid,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> Result<Self> {
         let fields = UpdateIpAddress {
             id,
@@ -114,14 +114,14 @@ impl IpAddress {
         from < ip && to > ip
     }
 
-    pub async fn assigned(ip: IpAddr, conn: &mut AsyncPgConnection) -> Result<bool> {
+    pub async fn assigned(ip: IpAddr, conn: &mut super::Conn) -> Result<bool> {
         let ip = ipnetwork::IpNetwork::new(ip, 32)?;
         let row = ip_addresses::table.filter(ip_addresses::ip.eq(ip));
         let assigned = diesel::select(dsl::exists(row)).get_result(conn).await?;
         Ok(assigned)
     }
 
-    pub async fn find_by_node(node_ip: IpAddr, conn: &mut AsyncPgConnection) -> Result<Self> {
+    pub async fn find_by_node(node_ip: IpAddr, conn: &mut super::Conn) -> Result<Self> {
         let ip = ipnetwork::IpNetwork::new(node_ip, 32)?;
         let ip = ip_addresses::table
             .filter(ip_addresses::ip.eq(ip))
@@ -140,7 +140,7 @@ pub struct UpdateIpAddress {
 }
 
 impl UpdateIpAddress {
-    pub async fn update(self, conn: &mut AsyncPgConnection) -> Result<IpAddress> {
+    pub async fn update(self, conn: &mut super::Conn) -> Result<IpAddress> {
         let ip = diesel::update(ip_addresses::table.find(self.id))
             .set(self)
             .get_result(conn)

@@ -5,7 +5,6 @@ use crate::firewall::create_rules_for_node;
 use crate::{auth, models};
 use anyhow::anyhow;
 use diesel_async::scoped_futures::ScopedFutureExt;
-use diesel_async::AsyncPgConnection;
 
 mod recover;
 mod success;
@@ -48,7 +47,7 @@ impl command_service_server::CommandService for super::GrpcImpl {
 async fn create(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::CommandServiceCreateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::CommandServiceCreateResponse> {
     let claims = auth::get_claims(&req, CommandCreate, conn).await?;
     let req = req.into_inner();
@@ -73,7 +72,7 @@ async fn create(
 
 async fn get(
     req: tonic::Request<api::CommandServiceGetRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::CommandServiceGetResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::CommandGet, conn).await?;
     let req = req.into_inner();
@@ -95,7 +94,7 @@ async fn get(
 async fn update(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::CommandServiceUpdateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::CommandServiceUpdateResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::CommandUpdate, conn).await?;
     let req = req.into_inner();
@@ -131,7 +130,7 @@ async fn update(
 
 async fn pending(
     req: tonic::Request<api::CommandServicePendingRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::CommandServicePendingResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::CommandPending, conn).await?;
     let req = req.into_inner();
@@ -166,7 +165,7 @@ async fn access_allowed(
     claims: auth::Claims,
     node: Option<&models::Node>,
     host: &models::Host,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> crate::Result<bool> {
     let allowed = match claims.resource() {
         auth::Resource::User(user_id) => {
@@ -208,7 +207,7 @@ async fn access_allowed(
 impl api::Command {
     pub async fn from_model(
         model: &models::Command,
-        conn: &mut diesel_async::AsyncPgConnection,
+        conn: &mut models::Conn,
     ) -> crate::Result<api::Command> {
         use api::command;
         use api::node_command::Command;
@@ -350,7 +349,7 @@ impl api::CommandServiceCreateRequest {
         })
     }
 
-    async fn host(&self, conn: &mut AsyncPgConnection) -> crate::Result<models::Host> {
+    async fn host(&self, conn: &mut models::Conn) -> crate::Result<models::Host> {
         use api::command_service_create_request::Command::*;
 
         let command = self.command.as_ref().ok_or_else(required("command"))?;
@@ -369,7 +368,7 @@ impl api::CommandServiceCreateRequest {
         Ok(host)
     }
 
-    async fn node(&self, conn: &mut AsyncPgConnection) -> crate::Result<Option<models::Node>> {
+    async fn node(&self, conn: &mut models::Conn) -> crate::Result<Option<models::Node>> {
         use api::command_service_create_request::Command::*;
 
         let command = self.command.as_ref().ok_or_else(required("command"))?;

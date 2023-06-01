@@ -6,7 +6,7 @@ use crate::{Error, Result};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use diesel_async::RunQueryDsl;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
@@ -62,14 +62,14 @@ pub struct Host {
 }
 
 impl Host {
-    pub async fn find_by_id(id: Uuid, conn: &mut AsyncPgConnection) -> Result<Self> {
+    pub async fn find_by_id(id: Uuid, conn: &mut super::Conn) -> Result<Self> {
         let host = hosts::table.find(id).get_result(conn).await?;
         Ok(host)
     }
 
     pub async fn find_by_ids(
         ids: impl IntoIterator<Item = uuid::Uuid>,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> Result<Vec<Self>> {
         let hosts = hosts::table
             .filter(hosts::id.eq_any(ids))
@@ -78,7 +78,7 @@ impl Host {
         Ok(hosts)
     }
 
-    pub async fn by_ids(ids: &[uuid::Uuid], conn: &mut AsyncPgConnection) -> Result<Vec<Self>> {
+    pub async fn by_ids(ids: &[uuid::Uuid], conn: &mut super::Conn) -> Result<Vec<Self>> {
         let hosts: Vec<Self> = hosts::table
             .filter(hosts::id.eq_any(ids))
             .get_results(conn)
@@ -91,7 +91,7 @@ impl Host {
     pub async fn filter(
         org_id: uuid::Uuid,
         os: Option<&str>,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> Result<Vec<Self>> {
         let mut query = hosts::table.filter(hosts::org_id.eq(org_id)).into_boxed();
 
@@ -103,7 +103,7 @@ impl Host {
         Ok(hosts)
     }
 
-    pub async fn find_by_name(name: &str, conn: &mut AsyncPgConnection) -> Result<Self> {
+    pub async fn find_by_name(name: &str, conn: &mut super::Conn) -> Result<Self> {
         let host = hosts::table
             .filter(hosts::name.eq(name))
             .get_result(conn)
@@ -111,7 +111,7 @@ impl Host {
         Ok(host)
     }
 
-    pub async fn delete(id: Uuid, conn: &mut AsyncPgConnection) -> Result<usize> {
+    pub async fn delete(id: Uuid, conn: &mut super::Conn) -> Result<usize> {
         let n_rows = diesel::delete(hosts::table.find(id)).execute(conn).await?;
         Ok(n_rows)
     }
@@ -126,7 +126,7 @@ impl Host {
         node_type: super::NodeType,
         org_id: uuid::Uuid,
         scheduler: super::NodeScheduler,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<Vec<Host>> {
         use super::schema::sql_types::EnumNodeType;
         use diesel::sql_types::{BigInt, Uuid};
@@ -210,7 +210,7 @@ pub struct NewHost<'a> {
 
 impl NewHost<'_> {
     /// Creates a new `Host` in the db, including the necessary related rows.
-    pub async fn create(self, conn: &mut AsyncPgConnection) -> Result<Host> {
+    pub async fn create(self, conn: &mut super::Conn) -> Result<Host> {
         let ip_gateway = self.ip_gateway.ip();
         let ip_range_from = self.ip_range_from.ip();
         let ip_range_to = self.ip_range_to.ip();
@@ -254,7 +254,7 @@ pub struct UpdateHost<'a> {
 }
 
 impl UpdateHost<'_> {
-    pub async fn update(self, conn: &mut AsyncPgConnection) -> Result<Host> {
+    pub async fn update(self, conn: &mut super::Conn) -> Result<Host> {
         let host = diesel::update(hosts::table.find(self.id))
             .set(self)
             .get_result(conn)
@@ -280,7 +280,7 @@ pub struct UpdateHostMetrics {
 
 impl UpdateHostMetrics {
     /// Performs a selective update of only the columns related to metrics of the provided nodes.
-    pub async fn update_metrics(updates: Vec<Self>, conn: &mut AsyncPgConnection) -> Result<()> {
+    pub async fn update_metrics(updates: Vec<Self>, conn: &mut super::Conn) -> Result<()> {
         for update in updates {
             diesel::update(hosts::table.find(update.id))
                 .set(update)

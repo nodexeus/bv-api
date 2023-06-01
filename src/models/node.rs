@@ -6,7 +6,7 @@ use crate::cookbook::get_hw_requirements;
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use diesel_async::RunQueryDsl;
 
 mod property;
 pub use property::NodeProperty;
@@ -131,14 +131,14 @@ pub struct NodeSelfUpgradeFilter {
 }
 
 impl Node {
-    pub async fn find_by_id(id: uuid::Uuid, conn: &mut AsyncPgConnection) -> crate::Result<Self> {
+    pub async fn find_by_id(id: uuid::Uuid, conn: &mut super::Conn) -> crate::Result<Self> {
         let node = nodes::table.find(id).get_result(conn).await?;
         Ok(node)
     }
 
     pub async fn find_by_ids(
         ids: impl IntoIterator<Item = uuid::Uuid>,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<Vec<Self>> {
         let mut ids: Vec<uuid::Uuid> = ids.into_iter().collect();
         ids.sort();
@@ -150,17 +150,11 @@ impl Node {
         Ok(node)
     }
 
-    pub async fn properties(
-        &self,
-        conn: &mut AsyncPgConnection,
-    ) -> crate::Result<Vec<NodeProperty>> {
+    pub async fn properties(&self, conn: &mut super::Conn) -> crate::Result<Vec<NodeProperty>> {
         NodeProperty::by_node(self, conn).await
     }
 
-    pub async fn filter(
-        filter: NodeFilter,
-        conn: &mut AsyncPgConnection,
-    ) -> crate::Result<Vec<Self>> {
+    pub async fn filter(filter: NodeFilter, conn: &mut super::Conn) -> crate::Result<Vec<Self>> {
         let mut query = nodes::table
             .filter(nodes::org_id.eq(filter.org_id))
             .offset(filter.offset.try_into()?)
@@ -184,7 +178,7 @@ impl Node {
         Ok(nodes)
     }
 
-    pub async fn update(self, conn: &mut AsyncPgConnection) -> crate::Result<Self> {
+    pub async fn update(self, conn: &mut super::Conn) -> crate::Result<Self> {
         let mut node_to_update = self.clone();
         node_to_update.updated_at = chrono::Utc::now();
         let node = diesel::update(nodes::table.find(node_to_update.id))
@@ -197,7 +191,7 @@ impl Node {
     pub async fn delete(
         node_id: uuid::Uuid,
         cf_api: &CloudflareApi,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<()> {
         let node = Node::find_by_id(node_id, conn).await?;
 
@@ -213,7 +207,7 @@ impl Node {
     }
 
     /// Finds the next possible host for this node to be tried on.
-    pub async fn find_host(&self, conn: &mut AsyncPgConnection) -> crate::Result<super::Host> {
+    pub async fn find_host(&self, conn: &mut super::Conn) -> crate::Result<super::Host> {
         let chain = super::Blockchain::find_by_id(self.blockchain_id, conn).await?;
         let requirements =
             get_hw_requirements(chain.name, self.node_type.to_string(), self.version.clone())
@@ -276,7 +270,7 @@ impl Node {
 
     pub async fn find_all_to_upgrade(
         filter: &NodeSelfUpgradeFilter,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<Vec<Self>> {
         use super::schema::blockchains;
 
@@ -344,7 +338,7 @@ impl NewNode<'_> {
         self,
         host_id: Option<uuid::Uuid>,
         cf_api: &CloudflareApi,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<Node> {
         let no_sched = || anyhow!("If there is no host_id, the scheduler is required");
         let host = match host_id {
@@ -389,7 +383,7 @@ impl NewNode<'_> {
     pub async fn find_host(
         &self,
         scheduler: super::NodeScheduler,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<super::Host> {
         use crate::Error::NoMatchingHostError;
 
@@ -446,7 +440,7 @@ pub struct UpdateNode<'a> {
 }
 
 impl UpdateNode<'_> {
-    pub async fn update(&self, conn: &mut AsyncPgConnection) -> crate::Result<Node> {
+    pub async fn update(&self, conn: &mut super::Conn) -> crate::Result<Node> {
         let node = diesel::update(nodes::table.find(self.id))
             .set((self, nodes::updated_at.eq(chrono::Utc::now())))
             .get_result(conn)
@@ -470,10 +464,7 @@ pub struct UpdateNodeMetrics {
 
 impl UpdateNodeMetrics {
     /// Performs a selective update of only the columns related to metrics of the provided nodes.
-    pub async fn update_metrics(
-        updates: Vec<Self>,
-        conn: &mut AsyncPgConnection,
-    ) -> crate::Result<()> {
+    pub async fn update_metrics(updates: Vec<Self>, conn: &mut super::Conn) -> crate::Result<()> {
         for update in updates {
             diesel::update(nodes::table.find(update.id))
                 .set(update)

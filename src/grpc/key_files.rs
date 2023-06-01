@@ -25,7 +25,7 @@ impl key_file_service_server::KeyFileService for super::GrpcImpl {
 
 async fn create(
     req: Request<api::KeyFileServiceCreateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::KeyFileServiceCreateResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::KeyFileCreate, conn).await?;
     let req = req.into_inner();
@@ -58,7 +58,7 @@ async fn create(
 
 async fn list(
     req: Request<api::KeyFileServiceListRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::KeyFileServiceListResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::KeyFileList, conn).await?;
     let req = req.into_inner();

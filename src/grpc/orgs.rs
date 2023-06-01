@@ -74,7 +74,7 @@ impl org_service_server::OrgService for super::GrpcImpl {
 async fn create(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::OrgServiceCreateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::OrgServiceCreateResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::OrgCreate, conn).await?;
     let req = req.into_inner();
@@ -94,7 +94,7 @@ async fn create(
 
 async fn get(
     req: tonic::Request<api::OrgServiceGetRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::OrgServiceGetResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::OrgGet, conn).await?;
     let req = req.into_inner();
@@ -119,7 +119,7 @@ async fn get(
 
 async fn list(
     req: tonic::Request<api::OrgServiceListRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::OrgServiceListResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::OrgList, conn).await?;
     let req = req.into_inner();
@@ -148,7 +148,7 @@ async fn list(
 async fn update(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::OrgServiceUpdateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::OrgServiceUpdateResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::OrgUpdate, conn).await?;
     let req = req.into_inner();
@@ -172,7 +172,7 @@ async fn update(
 async fn delete(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::OrgServiceDeleteRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::OrgServiceDeleteResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::OrgDelete, conn).await?;
     let req = req.into_inner();
@@ -198,7 +198,7 @@ async fn delete(
 async fn remove_member(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::OrgServiceRemoveMemberRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::OrgServiceRemoveMemberResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::OrgRemoveMember, conn).await?;
     let req = req.into_inner();
@@ -227,7 +227,7 @@ async fn remove_member(
 
 async fn get_provision_token(
     req: tonic::Request<api::OrgServiceGetProvisionTokenRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::OrgServiceGetProvisionTokenResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::OrgGetProvisionToken, conn).await?;
     let req = req.into_inner();
@@ -253,7 +253,7 @@ async fn get_provision_token(
 
 async fn reset_provision_token(
     req: tonic::Request<api::OrgServiceResetProvisionTokenRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::OrgServiceResetProvisionTokenResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::OrgResetProvisionToken, conn).await?;
     let req = req.into_inner();
@@ -282,7 +282,7 @@ impl api::Org {
     /// this each org.
     pub async fn from_models(
         models: Vec<models::Org>,
-        conn: &mut diesel_async::AsyncPgConnection,
+        conn: &mut models::Conn,
     ) -> crate::Result<Vec<Self>> {
         // We find all OrgUsers belonging to each model. This gives us a map from `org_id` to
         // `Vec<OrgUser>`.
@@ -334,10 +334,7 @@ impl api::Org {
             .collect()
     }
 
-    pub async fn from_model(
-        model: models::Org,
-        conn: &mut diesel_async::AsyncPgConnection,
-    ) -> crate::Result<Self> {
+    pub async fn from_model(model: models::Org, conn: &mut models::Conn) -> crate::Result<Self> {
         Ok(Self::from_models(vec![model], conn).await?[0].clone())
     }
 }
