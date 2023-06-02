@@ -26,7 +26,7 @@ async fn services(
     let err = |name| move |e| crate::Error::unexpected(format!("Couldn't find {name}: {e}"));
     let response = api::DiscoveryServiceServicesResponse {
         key_service_url: std::env::var("KEY_SERVICE_URL").map_err(err("key service url"))?,
-        registry_url: std::env::var(cookbook::COOKBOOK_URL).map_err(err("cookbook url"))?,
+        registry_url: KeyProvider::get_var(cookbook::COOKBOOK_URL)?,
         notification_url: format!("{mqtt_address}:{mqtt_port}"),
     };
     Ok(tonic::Response::new(response))
