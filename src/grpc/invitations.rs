@@ -49,7 +49,7 @@ impl invitation_service_server::InvitationService for super::GrpcImpl {
 async fn create(
     grpc: &super::GrpcImpl,
     req: Request<api::InvitationServiceCreateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::InvitationServiceCreateResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::InvitationCreate, conn).await?;
     let req = req.into_inner();
@@ -101,7 +101,7 @@ async fn create(
 
 async fn list(
     req: Request<api::InvitationServiceListRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::InvitationServiceListResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::InvitationCreate, conn).await?;
     let req = req.into_inner();
@@ -143,7 +143,7 @@ async fn list(
 async fn accept(
     grpc: &super::GrpcImpl,
     req: Request<api::InvitationServiceAcceptRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::InvitationServiceAcceptResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::InvitationAccept, conn).await?;
     let req = req.into_inner();
@@ -192,7 +192,7 @@ async fn accept(
 async fn decline(
     grpc: &super::GrpcImpl,
     req: Request<api::InvitationServiceDeclineRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::InvitationServiceDeclineResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::InvitationDecline, conn).await?;
     let req = req.into_inner();
@@ -232,7 +232,7 @@ async fn decline(
 async fn revoke(
     grpc: &super::GrpcImpl,
     req: Request<api::InvitationServiceRevokeRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::InvitationServiceRevokeResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::InvitationRevoke, conn).await?;
     let req = req.into_inner();
@@ -266,7 +266,7 @@ impl api::InvitationServiceCreateRequest {
     pub async fn as_new(
         &self,
         created_by_user: uuid::Uuid,
-        conn: &mut diesel_async::AsyncPgConnection,
+        conn: &mut models::Conn,
     ) -> crate::Result<models::NewInvitation<'_>> {
         let creator = models::User::find_by_id(created_by_user, conn).await?;
         let org_id = self.org_id.parse()?;

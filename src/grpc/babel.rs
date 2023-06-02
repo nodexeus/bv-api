@@ -3,7 +3,6 @@ use super::helpers::required;
 use crate::auth;
 use crate::models;
 use diesel_async::scoped_futures::ScopedFutureExt;
-use diesel_async::AsyncPgConnection;
 use tracing::log::{debug, info};
 
 // Implement the Babel service
@@ -21,7 +20,7 @@ impl babel_service_server::BabelService for super::GrpcImpl {
 async fn notify(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::BabelServiceNotifyRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::BabelServiceNotifyResponse> {
     // TODO: decide who is allowed to call this endpoint
     let _claims = auth::get_claims(&req, auth::Endpoint::BabelNotifiy, conn).await?;
@@ -61,7 +60,7 @@ async fn notify(
 impl api::BabelServiceNotifyRequest {
     async fn info_filter(
         self,
-        conn: &mut AsyncPgConnection,
+        conn: &mut models::Conn,
     ) -> crate::Result<models::NodeSelfUpgradeFilter> {
         let conf = self.config.ok_or_else(required("config"))?;
         let node_type: models::NodeType = conf.node_type.parse().map_err(|e| {

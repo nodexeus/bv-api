@@ -1,7 +1,7 @@
 use super::schema::node_key_files;
 use crate::Result;
 use diesel::prelude::*;
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use diesel_async::RunQueryDsl;
 
 #[derive(Debug, Queryable)]
 pub struct NodeKeyFile {
@@ -12,10 +12,7 @@ pub struct NodeKeyFile {
 }
 
 impl NodeKeyFile {
-    pub async fn find_by_node(
-        node: &super::Node,
-        conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<Self>> {
+    pub async fn find_by_node(node: &super::Node, conn: &mut super::Conn) -> Result<Vec<Self>> {
         let files = node_key_files::table
             .filter(node_key_files::node_id.eq(node.id))
             .get_results(conn)
@@ -35,7 +32,7 @@ pub struct NewNodeKeyFile<'a> {
 impl NewNodeKeyFile<'_> {
     pub async fn bulk_create(
         key_files: Vec<Self>,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> Result<Vec<NodeKeyFile>> {
         let files = diesel::insert_into(node_key_files::table)
             .values(key_files)

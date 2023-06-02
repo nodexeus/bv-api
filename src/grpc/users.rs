@@ -39,7 +39,7 @@ impl user_service_server::UserService for super::GrpcImpl {
 
 async fn get(
     req: tonic::Request<api::UserServiceGetRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::UserServiceGetResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::UserGet, conn).await?;
     let req = req.into_inner();
@@ -61,7 +61,7 @@ async fn get(
 
 async fn create(
     req: tonic::Request<api::UserServiceCreateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::UserServiceCreateResponse> {
     // This endpoint doesn't require authentication.
     let inner = req.into_inner();
@@ -78,7 +78,7 @@ async fn create(
 
 async fn update(
     req: tonic::Request<api::UserServiceUpdateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::UserServiceUpdateResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::UserUpdate, conn).await?;
     let req = req.into_inner();
@@ -101,7 +101,7 @@ async fn update(
 
 async fn delete(
     req: tonic::Request<api::UserServiceDeleteRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::UserServiceDeleteResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::UserUpdate, conn).await?;
     let req = req.into_inner();

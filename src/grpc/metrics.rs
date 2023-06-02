@@ -30,7 +30,7 @@ impl metrics_service_server::MetricsService for super::GrpcImpl {
 
 async fn node(
     req: tonic::Request<api::MetricsServiceNodeRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::MetricsServiceNodeResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::MetricsNode, conn).await?;
     let req = req.into_inner();
@@ -60,7 +60,7 @@ async fn node(
 
 async fn host(
     req: tonic::Request<api::MetricsServiceHostRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::MetricsServiceHostResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::MetricsNode, conn).await?;
     let req = req.into_inner();

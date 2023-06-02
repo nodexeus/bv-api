@@ -49,7 +49,7 @@ impl node_service_server::NodeService for super::GrpcImpl {
 
 async fn get(
     req: tonic::Request<api::NodeServiceGetRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::NodeServiceGetResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::NodeCreate, conn).await?;
     let req = req.into_inner();
@@ -71,7 +71,7 @@ async fn get(
 
 async fn list(
     req: tonic::Request<api::NodeServiceListRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::NodeServiceListResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::NodeList, conn).await?;
     let filter = req.into_inner().as_filter()?;
@@ -95,7 +95,7 @@ async fn list(
 async fn create(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::NodeServiceCreateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::NodeServiceCreateResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::NodeCreate, conn).await?;
     let auth::Resource::User(user_id) = claims.resource() else { super::forbidden!("Need user_id!") };
@@ -145,7 +145,7 @@ async fn create(
 async fn update(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::NodeServiceUpdateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::NodeServiceUpdateResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::NodeUpdate, conn).await?;
     let req = req.into_inner();
@@ -174,7 +174,7 @@ async fn update(
 async fn delete(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::NodeServiceDeleteRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::NodeServiceDeleteResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::NodeDelete, conn).await?;
     let auth::Resource::User(user_id) = claims.resource() else { super::forbidden!("Need user_id!") };
@@ -225,10 +225,7 @@ impl api::Node {
     /// This function is used to create a ui node from a database node. We want to include the
     /// `database_name` in the ui representation, but it is not in the node model. Therefore we
     /// perform a seperate query to the blockchains table.
-    pub async fn from_model(
-        node: models::Node,
-        conn: &mut diesel_async::AsyncPgConnection,
-    ) -> crate::Result<Self> {
+    pub async fn from_model(node: models::Node, conn: &mut models::Conn) -> crate::Result<Self> {
         let blockchain = models::Blockchain::find_by_id(node.blockchain_id, conn).await?;
         let user_fut = node
             .created_by
@@ -254,7 +251,7 @@ impl api::Node {
     /// function above, but rather it performs 1 query for n nodes. We like it this way :)
     pub async fn from_models(
         nodes: Vec<models::Node>,
-        conn: &mut diesel_async::AsyncPgConnection,
+        conn: &mut models::Conn,
     ) -> crate::Result<Vec<Self>> {
         let blockchain_ids: Vec<_> = nodes.iter().map(|n| n.blockchain_id).collect();
         let blockchains: HashMap<_, _> = models::Blockchain::find_by_ids(&blockchain_ids, conn)
@@ -750,7 +747,7 @@ impl api::FilteredIpAddr {
 pub(super) async fn create_notification(
     impler: &super::GrpcImpl,
     node: &models::Node,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> crate::Result<()> {
     let new_command = models::NewCommand {
         host_id: node.host_id,
@@ -769,7 +766,7 @@ pub(super) async fn create_notification(
 pub(super) async fn start_notification(
     impler: &super::GrpcImpl,
     node: &models::Node,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> crate::Result<()> {
     let new_command = models::NewCommand {
         host_id: node.host_id,

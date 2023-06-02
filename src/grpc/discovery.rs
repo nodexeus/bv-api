@@ -1,7 +1,7 @@
 use super::api::{self, discovery_service_server};
 use crate::{
     auth::{self, key_provider::KeyProvider},
-    cookbook,
+    cookbook, models,
 };
 
 #[tonic::async_trait]
@@ -18,7 +18,7 @@ impl discovery_service_server::DiscoveryService for super::GrpcImpl {
 
 async fn services(
     req: tonic::Request<api::DiscoveryServiceServicesRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::DiscoveryServiceServicesResponse> {
     auth::get_claims(&req, auth::Endpoint::DiscoveryServices, conn).await?;
     let mqtt_address = KeyProvider::get_var("MQTT_SERVER_ADDRESS")?;

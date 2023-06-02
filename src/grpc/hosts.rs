@@ -66,7 +66,7 @@ impl host_service_server::HostService for super::GrpcImpl {
 
 async fn create(
     req: tonic::Request<api::HostServiceCreateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::HostServiceCreateResponse> {
     let req = req.into_inner();
     let org_id = req.org_id.as_ref().map(|id| id.parse()).transpose()?;
@@ -115,7 +115,7 @@ async fn create(
 /// Get a host by id.
 async fn get(
     req: tonic::Request<api::HostServiceGetRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::HostServiceGetResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::HostGet, conn).await?;
     let req = req.into_inner();
@@ -145,7 +145,7 @@ async fn get(
 
 async fn list(
     req: tonic::Request<api::HostServiceListRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::HostServiceListResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::HostList, conn).await?;
     let req = req.into_inner();
@@ -167,7 +167,7 @@ async fn list(
 
 async fn update(
     req: tonic::Request<api::HostServiceUpdateRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::HostServiceUpdateResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::HostUpdate, conn).await?;
     let req = req.into_inner();
@@ -196,7 +196,7 @@ async fn update(
 
 async fn delete(
     req: tonic::Request<api::HostServiceDeleteRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::HostServiceDeleteResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::HostDelete, conn).await?;
     let req = req.into_inner();

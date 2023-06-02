@@ -76,7 +76,7 @@ impl auth_service_server::AuthService for super::GrpcImpl {
 
 async fn login(
     req: tonic::Request<api::AuthServiceLoginRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::AuthServiceLoginResponse> {
     // This endpoint requires no auth, it is where you get your token from.
     let inner = req.into_inner();
@@ -100,7 +100,7 @@ async fn login(
 
 async fn confirm(
     req: tonic::Request<api::AuthServiceConfirmRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::AuthServiceConfirmResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::AuthConfirm, conn).await?;
     let auth::Resource::User(user_id) = claims.resource() else { super::forbidden!("Must be user") };
@@ -124,7 +124,7 @@ async fn confirm(
 
 async fn refresh(
     req: tonic::Request<api::AuthServiceRefreshRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::AuthServiceRefreshResponse> {
     let refresh = auth::get_refresh(&req)?;
     let req = req.into_inner();
@@ -188,7 +188,7 @@ async fn refresh(
 /// then done through the `update` function.
 async fn reset_password(
     req: tonic::Request<api::AuthServiceResetPasswordRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::AuthServiceResetPasswordResponse> {
     let req = req.into_inner();
     // We are going to query the user and send them an email, but when something goes wrong we
@@ -206,7 +206,7 @@ async fn reset_password(
 
 async fn update_password(
     req: tonic::Request<api::AuthServiceUpdatePasswordRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::AuthServiceUpdatePasswordResponse> {
     let claims = auth::get_claims(&req, AuthUpdatePassword, conn).await?;
     let req = req.into_inner();
@@ -225,7 +225,7 @@ async fn update_password(
 
 async fn update_ui_password(
     req: tonic::Request<api::AuthServiceUpdateUiPasswordRequest>,
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut models::Conn,
 ) -> super::Result<api::AuthServiceUpdateUiPasswordResponse> {
     let claims = auth::get_claims(&req, auth::Endpoint::AuthUpdateUiPassword, conn).await?;
     let auth::Resource::User(user_id_) = claims.resource() else { super::forbidden!("Must be user") };

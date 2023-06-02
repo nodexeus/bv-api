@@ -1,6 +1,6 @@
 use super::schema::blockchains;
 use diesel::{dsl, prelude::*};
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use diesel_async::RunQueryDsl;
 use tracing::log::warn;
 
 mod property;
@@ -33,7 +33,7 @@ type NotDeleted =
     dsl::Filter<blockchains::table, dsl::NotEq<blockchains::status, BlockchainStatus>>;
 
 impl Blockchain {
-    pub async fn find_all(conn: &mut AsyncPgConnection) -> crate::Result<Vec<Self>> {
+    pub async fn find_all(conn: &mut super::Conn) -> crate::Result<Vec<Self>> {
         let chains = Self::not_deleted()
             .order_by(super::lower(blockchains::name))
             .get_results(conn)
@@ -42,7 +42,7 @@ impl Blockchain {
         Ok(chains)
     }
 
-    pub async fn find_by_id(id: uuid::Uuid, conn: &mut AsyncPgConnection) -> crate::Result<Self> {
+    pub async fn find_by_id(id: uuid::Uuid, conn: &mut super::Conn) -> crate::Result<Self> {
         let chain = Self::not_deleted().find(id).get_result(conn).await?;
 
         Ok(chain)
@@ -50,7 +50,7 @@ impl Blockchain {
 
     pub async fn find_by_ids(
         ids: &[uuid::Uuid],
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<Vec<Self>> {
         let chains = Self::not_deleted()
             .filter(blockchains::id.eq_any(ids))
@@ -61,7 +61,7 @@ impl Blockchain {
         Ok(chains)
     }
 
-    pub async fn find_by_name(blockchain: &str, c: &mut AsyncPgConnection) -> crate::Result<Self> {
+    pub async fn find_by_name(blockchain: &str, c: &mut super::Conn) -> crate::Result<Self> {
         blockchains::table
             .filter(super::lower(blockchains::name).eq(super::lower(blockchain)))
             .first(c)
@@ -71,12 +71,12 @@ impl Blockchain {
 
     pub async fn properties(
         &self,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<Vec<BlockchainProperty>> {
         BlockchainProperty::by_blockchain(self, conn).await
     }
 
-    pub async fn update(&self, c: &mut AsyncPgConnection) -> crate::Result<Self> {
+    pub async fn update(&self, c: &mut super::Conn) -> crate::Result<Self> {
         let mut self_to_update = self.clone();
         self_to_update.updated_at = chrono::Utc::now();
         diesel::update(blockchains::table.find(self_to_update.id))
@@ -91,7 +91,7 @@ impl Blockchain {
     pub async fn add_version(
         &self,
         filter: &super::NodeSelfUpgradeFilter,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<()> {
         // First we query all the props to see if the version already exists.
         let props =

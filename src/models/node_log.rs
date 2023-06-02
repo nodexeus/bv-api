@@ -1,6 +1,6 @@
 use super::schema::node_logs;
 use diesel::prelude::*;
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use diesel_async::RunQueryDsl;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
@@ -38,10 +38,7 @@ pub struct NodeLog {
 }
 
 impl NodeLog {
-    pub async fn by_node(
-        node: &super::Node,
-        conn: &mut AsyncPgConnection,
-    ) -> crate::Result<Vec<Self>> {
+    pub async fn by_node(node: &super::Node, conn: &mut super::Conn) -> crate::Result<Vec<Self>> {
         let deployments = node_logs::table
             .filter(node_logs::node_id.eq(node.id))
             .get_results(conn)
@@ -54,7 +51,7 @@ impl NodeLog {
     pub async fn by_node_since(
         node: &super::Node,
         since: chrono::DateTime<chrono::Utc>,
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<Self> {
         let deployment = node_logs::table
             .filter(node_logs::node_id.eq(node.id))
@@ -68,7 +65,7 @@ impl NodeLog {
     /// the number of `CreateSent` events that were undertaken.
     pub async fn hosts_tried(
         deployments: &[Self],
-        conn: &mut AsyncPgConnection,
+        conn: &mut super::Conn,
     ) -> crate::Result<Vec<(super::Host, usize)>> {
         let mut counts: HashMap<uuid::Uuid, usize> = HashMap::new();
         for deployment in deployments {
@@ -99,7 +96,7 @@ pub struct NewNodeLog<'a> {
 }
 
 impl NewNodeLog<'_> {
-    pub async fn create(self, conn: &mut AsyncPgConnection) -> crate::Result<NodeLog> {
+    pub async fn create(self, conn: &mut super::Conn) -> crate::Result<NodeLog> {
         let deployment = diesel::insert_into(node_logs::table)
             .values(self)
             .get_result(conn)
