@@ -20,7 +20,7 @@ async fn responds_correct_urls_forss() {
     assert_eq!(
         response.notification_url,
         format!(
-            "{}:{}",
+            "mqtt://{}:{}",
             std::env::var("MQTT_SERVER_ADDRESS").unwrap(),
             std::env::var("MQTT_SERVER_PORT").unwrap()
         )
