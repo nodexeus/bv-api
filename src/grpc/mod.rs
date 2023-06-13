@@ -22,7 +22,6 @@ use crate::cloudflare::CloudflareApi;
 use crate::models;
 use axum::Extension;
 use notification::Notifier;
-use std::env;
 use tonic::transport::server::Router;
 use tonic::transport::Server;
 use tower::layer::util::{Identity, Stack};
@@ -36,7 +35,7 @@ use tower_http::trace::TraceLayer;
 struct GrpcImpl {
     db: models::DbPool,
     notifier: Notifier,
-    dns: super::cloudflare::CloudflareApi,
+    dns: CloudflareApi,
 }
 
 impl std::ops::Deref for GrpcImpl {
@@ -71,7 +70,7 @@ type DbServer = Stack<Extension<models::DbPool>, TracedServer>;
 type CorsServer = Stack<Stack<CorsLayer, DbServer>, Identity>;
 
 pub async fn server(db: models::DbPool, cloudflare: CloudflareApi) -> Router<CorsServer> {
-    let notifier = Notifier::new()
+    let notifier = Notifier::new(&db.context.config.mqtt)
         .await
         .expect("Could not set up MQTT notifier!");
 
@@ -94,6 +93,8 @@ pub async fn server(db: models::DbPool, cloudflare: CloudflareApi) -> Router<Cor
     let organization = api::org_service_server::OrgServiceServer::new(impler.clone());
     let user = api::user_service_server::UserServiceServer::new(impler);
 
+    let request_limit = db.context.config.grpc.request_concurrency_limit;
+
     let cors_rules = CorsLayer::new()
         .allow_headers(tower_http::cors::Any)
         .allow_methods(tower_http::cors::Any)
@@ -107,7 +108,7 @@ pub async fn server(db: models::DbPool, cloudflare: CloudflareApi) -> Router<Cor
 
     Server::builder()
         .layer(middleware)
-        .concurrency_limit_per_connection(rate_limiting_settings())
+        .concurrency_limit_per_connection(request_limit)
         .add_service(authentication)
         .add_service(babel)
         .add_service(blockchain)
@@ -120,13 +121,6 @@ pub async fn server(db: models::DbPool, cloudflare: CloudflareApi) -> Router<Cor
         .add_service(node)
         .add_service(organization)
         .add_service(user)
-}
-
-fn rate_limiting_settings() -> usize {
-    env::var("REQUEST_CONCURRENCY_LIMIT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(32)
 }
 
 /// Function to convert the datetimes from the database into the API representation of a timestamp.

@@ -1,13 +1,14 @@
-use super::api::{self, command_service_server};
-use super::helpers::required;
-use crate::auth::Endpoint::CommandCreate;
-use crate::firewall::create_rules_for_node;
-use crate::{auth, models};
+mod recover;
+mod success;
+
 use anyhow::anyhow;
 use diesel_async::scoped_futures::ScopedFutureExt;
 
-mod recover;
-mod success;
+use super::api::{self, command_service_server};
+use super::helpers::required;
+use crate::auth::token::{Claims, Endpoint, Resource};
+use crate::firewall::create_rules_for_node;
+use crate::{auth, models};
 
 struct CommandResult<T> {
     commands: Vec<api::Command>,
@@ -61,7 +62,7 @@ async fn create(
     req: tonic::Request<api::CommandServiceCreateRequest>,
     conn: &mut models::Conn,
 ) -> crate::Result<CommandResult<api::CommandServiceCreateResponse>> {
-    let claims = auth::get_claims(&req, CommandCreate, conn).await?;
+    let claims = auth::get_claims(&req, Endpoint::CommandCreate, conn).await?;
     let req = req.into_inner();
     let node = req.node(conn).await?;
     let host = req.host(conn).await?;
@@ -88,7 +89,7 @@ async fn get(
     req: tonic::Request<api::CommandServiceGetRequest>,
     conn: &mut models::Conn,
 ) -> super::Result<api::CommandServiceGetResponse> {
-    let claims = auth::get_claims(&req, auth::Endpoint::CommandGet, conn).await?;
+    let claims = auth::get_claims(&req, Endpoint::CommandGet, conn).await?;
     let req = req.into_inner();
     let id = req.id.parse()?;
     let command = models::Command::find_by_id(id, conn).await?;
@@ -109,7 +110,7 @@ async fn update(
     req: tonic::Request<api::CommandServiceUpdateRequest>,
     conn: &mut models::Conn,
 ) -> crate::Result<CommandResult<api::CommandServiceUpdateResponse>> {
-    let claims = auth::get_claims(&req, auth::Endpoint::CommandUpdate, conn).await?;
+    let claims = auth::get_claims(&req, Endpoint::CommandUpdate, conn).await?;
     let req = req.into_inner();
     let command = models::Command::find_by_id(req.id.parse()?, conn).await?;
     let host = command.host(conn).await?;
@@ -152,21 +153,21 @@ async fn pending(
     req: tonic::Request<api::CommandServicePendingRequest>,
     conn: &mut models::Conn,
 ) -> super::Result<api::CommandServicePendingResponse> {
-    let claims = auth::get_claims(&req, auth::Endpoint::CommandPending, conn).await?;
+    let claims = auth::get_claims(&req, Endpoint::CommandPending, conn).await?;
     let req = req.into_inner();
     let host_id = req.host_id.parse()?;
     let host = models::Host::find_by_id(host_id, conn).await?;
     let is_allowed = match claims.resource() {
-        auth::Resource::User(user_id) => {
+        Resource::User(user_id) => {
             if let Some(org_id) = host.org_id {
                 models::Org::is_member(user_id, org_id, conn).await?
             } else {
                 false
             }
         }
-        auth::Resource::Org(org_id) => host.org_id == Some(org_id),
-        auth::Resource::Host(host_id) => host_id == host.id,
-        auth::Resource::Node(_) => false,
+        Resource::Org(org_id) => host.org_id == Some(org_id),
+        Resource::Host(host_id) => host_id == host.id,
+        Resource::Node(_) => false,
     };
     if !is_allowed {
         super::forbidden!("Access denied");
@@ -182,13 +183,13 @@ async fn pending(
 }
 
 async fn access_allowed(
-    claims: auth::Claims,
+    claims: Claims,
     node: Option<&models::Node>,
     host: &models::Host,
     conn: &mut models::Conn,
 ) -> crate::Result<bool> {
     let allowed = match claims.resource() {
-        auth::Resource::User(user_id) => {
+        Resource::User(user_id) => {
             if let Some(node) = &node {
                 models::Org::is_member(user_id, node.org_id, conn).await?
             } else if let Some(host_org_id) = host.org_id {
@@ -197,7 +198,7 @@ async fn access_allowed(
                 false
             }
         }
-        auth::Resource::Org(org_id) => {
+        Resource::Org(org_id) => {
             if let Some(node) = &node {
                 org_id == node.org_id
             } else if let Some(host_org_id) = host.org_id {
@@ -206,14 +207,14 @@ async fn access_allowed(
                 false
             }
         }
-        auth::Resource::Host(host_id) => {
+        Resource::Host(host_id) => {
             if let Some(node) = &node {
                 host_id == node.host_id
             } else {
                 host_id == host.id
             }
         }
-        auth::Resource::Node(node_id) => {
+        Resource::Node(node_id) => {
             if let Some(node) = &node {
                 node_id == node.id
             } else {
