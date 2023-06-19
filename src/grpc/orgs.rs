@@ -305,16 +305,17 @@ impl api::Org {
     ) -> crate::Result<Vec<Self>> {
         // We find all OrgUsers belonging to each model. This gives us a map from `org_id` to
         // `Vec<OrgUser>`.
-        let org_users = models::OrgUser::by_orgs(&models, conn).await?;
+        let org_users = dbg!(models::OrgUser::by_orgs(&models, conn).await?);
 
         // Now we get the actual users for each `OrgUser`, because we also need to provide the name
         // and email of each user.
         let user_ids: Vec<uuid::Uuid> = org_users.values().flatten().map(|ou| ou.user_id).collect();
-        let users: HashMap<uuid::Uuid, models::User> = models::User::find_by_ids(&user_ids, conn)
-            .await?
-            .into_iter()
-            .map(|u| (u.id, u))
-            .collect();
+        let users: HashMap<uuid::Uuid, models::User> =
+            dbg!(models::User::find_by_ids(&user_ids, conn)
+                .await?
+                .into_iter()
+                .map(|u| (u.id, u))
+                .collect());
 
         let node_counts = models::Org::node_counts(&models, conn).await?;
 
@@ -335,7 +336,7 @@ impl api::Org {
                     members: org_users
                         .iter()
                         .map(|ou| {
-                            let user = &users[&ou.user_id];
+                            let user = &users[&dbg!(ou.user_id)];
                             let mut org = api::OrgUser {
                                 user_id: ou.user_id.to_string(),
                                 org_id: ou.org_id.to_string(),
