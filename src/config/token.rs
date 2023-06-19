@@ -12,8 +12,6 @@ const JWT_SECRET_VAR: &str = "JWT_SECRET";
 const JWT_SECRET_ENTRY: &str = "token.secret.jwt";
 const REFRESH_SECRET_VAR: &str = "REFRESH_SECRET";
 const REFRESH_SECRET_ENTRY: &str = "token.secret.refresh";
-const PASSWORD_RESET_SECRET_VAR: &str = "PWD_RESET_SECRET";
-const PASSWORD_RESET_SECRET_ENTRY: &str = "token.secret.password_reset";
 
 // TODO: delete _MINS consts when the env vars are no longer in use
 const TOKEN_EXPIRE_VAR: &str = "TOKEN_EXPIRE";
@@ -73,12 +71,10 @@ impl TryFrom<&Provider> for Config {
 
 #[derive(Debug, Display, Error)]
 pub enum SecretError {
-    /// Failed to parse ${JWT_SECRET_ENTRY:?}: {0}
+    /// Failed to parse {JWT_SECRET_ENTRY:?}: {0}
     ParseJwt(provider::Error),
-    /// Failed to parse ${REFRESH_SECRET_ENTRY:?}: {0}
+    /// Failed to parse {REFRESH_SECRET_ENTRY:?}: {0}
     ParseRefresh(provider::Error),
-    /// Failed to parse ${PASSWORD_RESET_SECRET_ENTRY:?}: {0}
-    ParsePasswordReset(provider::Error),
 }
 
 #[derive(Debug, Deref, Deserialize, FromStr)]
@@ -89,16 +85,11 @@ pub struct JwtSecret(Redacted<String>);
 #[deref(forward)]
 pub struct RefreshSecret(Redacted<String>);
 
-#[derive(Debug, Deref, Deserialize, FromStr)]
-#[deref(forward)]
-pub struct PasswordResetSecret(Redacted<String>);
-
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SecretConfig {
     pub jwt: JwtSecret,
     pub refresh: RefreshSecret,
-    pub password_reset: PasswordResetSecret,
 }
 
 impl TryFrom<&Provider> for SecretConfig {
@@ -111,33 +102,26 @@ impl TryFrom<&Provider> for SecretConfig {
         let refresh = provider
             .read(REFRESH_SECRET_VAR, REFRESH_SECRET_ENTRY)
             .map_err(SecretError::ParseRefresh)?;
-        let password_reset = provider
-            .read(PASSWORD_RESET_SECRET_VAR, PASSWORD_RESET_SECRET_ENTRY)
-            .map_err(SecretError::ParsePasswordReset)?;
 
-        Ok(SecretConfig {
-            jwt,
-            refresh,
-            password_reset,
-        })
+        Ok(SecretConfig { jwt, refresh })
     }
 }
 
 #[derive(Debug, Display, Error)]
 pub enum ExpireError {
-    /// Failed to parse ${TOKEN_EXPIRE_ENTRY:?}: {0}
+    /// Failed to parse {TOKEN_EXPIRE_ENTRY:?}: {0}
     Token(provider::Error),
-    /// Failed to parse ${EXPIRE_REFRESH_ENTRY:?}: {0}
+    /// Failed to parse {EXPIRE_REFRESH_ENTRY:?}: {0}
     Refresh(provider::Error),
-    /// Failed to parse ${REFRESH_HOST_EXPIRE_ENTRY:?}: {0}
+    /// Failed to parse {REFRESH_HOST_EXPIRE_ENTRY:?}: {0}
     RefreshHost(provider::Error),
-    /// Failed to parse ${REFRESH_USER_EXPIRE_ENTRY:?}: {0}
+    /// Failed to parse {REFRESH_USER_EXPIRE_ENTRY:?}: {0}
     RefreshUser(provider::Error),
-    /// Failed to parse ${PASSWORD_RESET_EXPIRE_ENTRY:?}: {0}
+    /// Failed to parse {PASSWORD_RESET_EXPIRE_ENTRY:?}: {0}
     PasswordReset(provider::Error),
-    /// Failed to parse ${REGISTRATION_CONFIRMATION_EXPIRE_ENTRY:?}: {0}
+    /// Failed to parse {REGISTRATION_CONFIRMATION_EXPIRE_ENTRY:?}: {0}
     RegistrationConfirmation(provider::Error),
-    /// Failed to parse ${INVITATION_EXPIRE_ENTRY:?}: {0}
+    /// Failed to parse {INVITATION_EXPIRE_ENTRY:?}: {0}
     Invitation(provider::Error),
 }
 

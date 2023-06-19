@@ -32,13 +32,13 @@ const POOL_IDLE_TIMEOUT_DEFAULT: &str = "2m";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to parse ${DB_BIND_IP_ENTRY:?}: {0}
+    /// Failed to parse {DB_BIND_IP_ENTRY:?}: {0}
     BindIp(provider::Error),
     /// Failed to parse PoolConfig: {0}
     PoolConfig(PoolError),
-    /// Failed to parse ${DB_PORT_ENTRY:?}: {0}
+    /// Failed to parse {DB_PORT_ENTRY:?}: {0}
     Port(provider::Error),
-    /// Failed to parse ${DB_URL_ENTRY:?}: {0}
+    /// Failed to parse {DB_URL_ENTRY:?}: {0}
     Url(provider::Error),
 }
 
@@ -84,15 +84,15 @@ impl TryFrom<&Provider> for Config {
 
 #[derive(Debug, Display, Error)]
 pub enum PoolError {
-    /// Failed to parse ${POOL_MAX_CONNS_ENTRY:?}: {0}
+    /// Failed to parse {POOL_MAX_CONNS_ENTRY:?}: {0}
     MaxConns(provider::Error),
-    /// Failed to parse ${POOL_MIN_CONNS_ENTRY:?}: {0}
+    /// Failed to parse {POOL_MIN_CONNS_ENTRY:?}: {0}
     MinConns(provider::Error),
-    /// Failed to parse ${POOL_MAX_LIFETIME_ENTRY:?}: {0}
+    /// Failed to parse {POOL_MAX_LIFETIME_ENTRY:?}: {0}
     MaxLifetime(provider::Error),
-    /// Failed to parse ${POOL_IDLE_TIMEOUT_ENTRY:?}: {0}
+    /// Failed to parse {POOL_IDLE_TIMEOUT_ENTRY:?}: {0}
     IdleTimeout(provider::Error),
-    /// Failed to parse ${POOL_IDLE_TIMEOUT_DEFAULT:?}: {0}
+    /// Failed to parse {POOL_IDLE_TIMEOUT_DEFAULT:?}: {0}
     IdleTimeoutDefault(Box<super::Error>),
 }
 

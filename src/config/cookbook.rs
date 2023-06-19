@@ -17,9 +17,9 @@ const TOKEN_ENTRY: &str = "cookbook.token";
 pub enum Error {
     /// Failed to create authorization header: {0}
     AuthHeader(errors::InvalidMetadataValue),
-    /// Failed to parse ${URL_ENTRY:?}: {0}
+    /// Failed to parse {URL_ENTRY:?}: {0}
     ParseUrl(provider::Error),
-    /// Failed to parse ${TOKEN_ENTRY:?}: {0}
+    /// Failed to parse {TOKEN_ENTRY:?}: {0}
     ParseToken(provider::Error),
 }
 

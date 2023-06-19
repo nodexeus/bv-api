@@ -10,7 +10,7 @@ const URL_ENTRY: &str = "key_service.url";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to parse ${URL_ENTRY:?}: {0}
+    /// Failed to parse {URL_ENTRY:?}: {0}
     Url(provider::Error),
 }
 

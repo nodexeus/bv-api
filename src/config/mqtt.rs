@@ -21,13 +21,13 @@ const PASSWORD_ENTRY: &str = "mqtt.password";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to parse ${PASSWORD_ENTRY:?}: {0}
+    /// Failed to parse {PASSWORD_ENTRY:?}: {0}
     ParsePassword(provider::Error),
-    /// Failed to parse ${SERVER_ADDRESS_ENTRY:?}: {0}
+    /// Failed to parse {SERVER_ADDRESS_ENTRY:?}: {0}
     ParseServerAddress(provider::Error),
-    /// Failed to parse ${SERVER_PORT_ENTRY:?}: {0}
+    /// Failed to parse {SERVER_PORT_ENTRY:?}: {0}
     ParseServerPort(provider::Error),
-    /// Failed to parse ${USERNAME_ENTRY:?}: {0}
+    /// Failed to parse {USERNAME_ENTRY:?}: {0}
     ParseUsername(provider::Error),
 }
 
