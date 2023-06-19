@@ -40,6 +40,7 @@ password = 'PH*rE:\ZQlecB9/I?[#R$q3M;5yCb]Y+'
 
 [token.secret]
 jwt = "1245456"
+refresh = "987654321"
 password_reset = "019243439"
 
 [token.expire]

@@ -6,7 +6,7 @@ use thiserror::Error;
 use tonic::metadata::AsciiMetadataValue;
 
 use super::Expirable;
-use crate::config::token::JwtSecret;
+use crate::config::token::RefreshSecret;
 
 const ALGORITHM: Algorithm = Algorithm::HS512;
 
@@ -33,7 +33,7 @@ pub struct Cipher {
 }
 
 impl Cipher {
-    pub fn new(secret: &JwtSecret) -> Self {
+    pub fn new(secret: &RefreshSecret) -> Self {
         Cipher {
             header: Header::new(ALGORITHM),
             validation: Validation::new(ALGORITHM),

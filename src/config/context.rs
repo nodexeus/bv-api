@@ -25,7 +25,7 @@ pub struct Context {
 impl Context {
     pub fn new() -> Result<Arc<Self>, Error> {
         let config = Config::new().map_err(Error::Config)?;
-        let cipher = Arc::new(Cipher::new(&config.token.secret.jwt));
+        let cipher = Arc::new(Cipher::new(&config.token.secret));
 
         Ok(Arc::new(Context { config, cipher }))
     }
@@ -33,7 +33,7 @@ impl Context {
     #[cfg(any(test, feature = "integration-test"))]
     pub fn new_with_toml<P: AsRef<std::path::Path>>(toml: P) -> Result<Arc<Self>, Error> {
         let config = Config::new_with_toml(toml).map_err(Error::Config)?;
-        let cipher = Arc::new(Cipher::new(&config.token.secret.jwt));
+        let cipher = Arc::new(Cipher::new(&config.token.secret));
 
         Ok(Arc::new(Context { config, cipher }))
     }
