@@ -15,6 +15,7 @@ pub use provider::Provider;
 
 use std::any::type_name;
 use std::fmt;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -73,16 +74,21 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Result<Arc<Self>, Error> {
-        (&Provider::new(CONFIG_FILE).map_err(Error::Provider)?)
-            .try_into()
-            .map(Arc::new)
+        let config = Path::new(CONFIG_FILE);
+        let toml = if Path::exists(config) {
+            Some(config)
+        } else {
+            None
+        };
+
+        let provider = Provider::new(toml).map_err(Error::Provider)?;
+        TryInto::try_into(&provider).map(Arc::new)
     }
 
     #[cfg(any(test, feature = "integration-test"))]
     pub fn new_with_toml<P: AsRef<std::path::Path>>(toml: P) -> Result<Arc<Self>, Error> {
-        (&Provider::new(toml).map_err(Error::Provider)?)
-            .try_into()
-            .map(Arc::new)
+        let provider = Provider::new(Some(toml)).map_err(Error::Provider)?;
+        TryInto::try_into(&provider).map(Arc::new)
     }
 
     #[cfg(any(test, feature = "integration-test"))]

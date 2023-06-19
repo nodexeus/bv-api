@@ -30,6 +30,8 @@ pub enum Error {
     NoSourceDir(PathBuf),
     /// No toml entry: {0}
     NoTomlEntry(&'static str),
+    /// No toml config file.
+    NoTomlFile,
     /// No environment variable set: {0}
     NoVar(String),
     /// Failed to parse default value: {0}
@@ -62,11 +64,11 @@ pub enum Error {
 /// for an environment variable, and finally to check the toml file.
 pub struct Provider {
     secrets_root: Option<PathBuf>,
-    toml_table: Table,
+    toml_table: Option<Table>,
 }
 
 impl Provider {
-    pub fn new<P: AsRef<Path>>(toml: P) -> Result<Self, Error> {
+    pub fn new<P: AsRef<Path>>(toml: Option<P>) -> Result<Self, Error> {
         dotenv::dotenv().ok();
 
         let secrets_root = if let Ok(path) = env::var(SECRETS_ROOT) {
@@ -77,7 +79,13 @@ impl Provider {
             None
         };
 
-        let toml_table = Self::toml_table(toml)?;
+        let toml_table = if let Some(file) = toml {
+            debug!("Parsing additional config from file: `{:?}`", file.as_ref());
+            Some(Self::toml_table(file)?)
+        } else {
+            debug!("No `config.toml` file exists.");
+            None
+        };
 
         Ok(Provider {
             secrets_root,
@@ -89,7 +97,7 @@ impl Provider {
     pub fn new_with_toml<P: AsRef<Path>>(toml: P) -> Result<Self, Error> {
         Ok(Provider {
             secrets_root: None,
-            toml_table: Self::toml_table(toml)?,
+            toml_table: Some(Self::toml_table(toml)?),
         })
     }
 
@@ -97,7 +105,7 @@ impl Provider {
     pub fn new_temp_secret() -> Result<Self, Error> {
         Ok(Provider {
             secrets_root: Some(Self::secrets_root("/tmp")?),
-            toml_table: Table::new(),
+            toml_table: None,
         })
     }
 
@@ -195,7 +203,7 @@ impl Provider {
 
         match self.read_toml(entry) {
             Ok(parsed) => return Ok(parsed),
-            Err(Error::NoTomlEntry(..)) => (),
+            Err(Error::NoTomlEntry(..) | Error::NoTomlFile) => (),
             Err(err) => return Err(err),
         }
 
@@ -255,7 +263,11 @@ impl Provider {
         T: FromStr<Err = E>,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let mut table = &self.toml_table;
+        let mut table = if let Some(ref table) = self.toml_table {
+            Ok(table)
+        } else {
+            Err(Error::NoTomlFile)
+        }?;
 
         for path in entry.split('.') {
             match table.get(path) {
