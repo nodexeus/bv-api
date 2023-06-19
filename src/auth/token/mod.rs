@@ -1,4 +1,4 @@
-use crate::config::token::JwtSecret;
+use crate::config::token::SecretConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -12,10 +12,10 @@ pub struct Cipher {
 }
 
 impl Cipher {
-    pub fn new(secret: &JwtSecret) -> Self {
+    pub fn new(config: &SecretConfig) -> Self {
         Cipher {
-            jwt: jwt::Cipher::new(secret),
-            refresh: refresh::Cipher::new(secret),
+            jwt: jwt::Cipher::new(&config.jwt),
+            refresh: refresh::Cipher::new(&config.refresh),
         }
     }
 }

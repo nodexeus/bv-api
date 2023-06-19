@@ -10,6 +10,8 @@ use super::{HumanTime, Redacted};
 
 const JWT_SECRET_VAR: &str = "JWT_SECRET";
 const JWT_SECRET_ENTRY: &str = "token.secret.jwt";
+const REFRESH_SECRET_VAR: &str = "REFRESH_SECRET";
+const REFRESH_SECRET_ENTRY: &str = "token.secret.refresh";
 
 // TODO: delete _MINS consts when the env vars are no longer in use
 const TOKEN_EXPIRE_VAR: &str = "TOKEN_EXPIRE";
@@ -71,16 +73,23 @@ impl TryFrom<&Provider> for Config {
 pub enum SecretError {
     /// Failed to parse {JWT_SECRET_ENTRY:?}: {0}
     ParseJwt(provider::Error),
+    /// Failed to parse {REFRESH_SECRET_ENTRY:?}: {0}
+    ParseRefresh(provider::Error),
 }
 
 #[derive(Debug, Deref, Deserialize, FromStr)]
 #[deref(forward)]
 pub struct JwtSecret(Redacted<String>);
 
+#[derive(Debug, Deref, Deserialize, FromStr)]
+#[deref(forward)]
+pub struct RefreshSecret(Redacted<String>);
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SecretConfig {
     pub jwt: JwtSecret,
+    pub refresh: RefreshSecret,
 }
 
 impl TryFrom<&Provider> for SecretConfig {
@@ -90,8 +99,11 @@ impl TryFrom<&Provider> for SecretConfig {
         let jwt = provider
             .read(JWT_SECRET_VAR, JWT_SECRET_ENTRY)
             .map_err(SecretError::ParseJwt)?;
+        let refresh = provider
+            .read(REFRESH_SECRET_VAR, REFRESH_SECRET_ENTRY)
+            .map_err(SecretError::ParseRefresh)?;
 
-        Ok(SecretConfig { jwt })
+        Ok(SecretConfig { jwt, refresh })
     }
 }
 
