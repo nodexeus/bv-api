@@ -305,17 +305,16 @@ impl api::Org {
     ) -> crate::Result<Vec<Self>> {
         // We find all OrgUsers belonging to each model. This gives us a map from `org_id` to
         // `Vec<OrgUser>`.
-        let org_users = dbg!(models::OrgUser::by_orgs(&models, conn).await?);
+        let org_users = models::OrgUser::by_orgs(&models, conn).await?;
 
         // Now we get the actual users for each `OrgUser`, because we also need to provide the name
         // and email of each user.
         let user_ids: Vec<uuid::Uuid> = org_users.values().flatten().map(|ou| ou.user_id).collect();
-        let users: HashMap<uuid::Uuid, models::User> =
-            dbg!(models::User::find_by_ids(dbg!(&user_ids), conn)
-                .await?
-                .into_iter()
-                .map(|u| (u.id, u))
-                .collect());
+        let users: HashMap<uuid::Uuid, models::User> = models::User::find_by_ids(&user_ids, conn)
+            .await?
+            .into_iter()
+            .map(|u| (u.id, u))
+            .collect();
 
         let node_counts = models::Org::node_counts(&models, conn).await?;
 
@@ -335,17 +334,20 @@ impl api::Org {
                     updated_at: Some(super::try_dt_to_ts(model.updated_at)?),
                     members: org_users
                         .iter()
-                        .map(|ou| {
-                            let user = &users[&dbg!(ou.user_id)];
-                            let mut org = api::OrgUser {
-                                user_id: ou.user_id.to_string(),
-                                org_id: ou.org_id.to_string(),
-                                role: 0, // We use the setter to set this field for type-safety
-                                name: user.name(),
-                                email: user.email.clone(),
-                            };
-                            org.set_role(api::OrgRole::from_model(ou.role));
-                            org
+                        .flat_map(|ou| {
+                            // When a user gets deleted, we might not have a user for the current id
+                            // so we flat_map here and skip any user that don't exist.
+                            users.get(&ou.user_id).map(|user| {
+                                let mut org = api::OrgUser {
+                                    user_id: ou.user_id.to_string(),
+                                    org_id: ou.org_id.to_string(),
+                                    role: 0, // We use the setter to set this field for type-safety
+                                    name: user.name(),
+                                    email: user.email.clone(),
+                                };
+                                org.set_role(api::OrgRole::from_model(ou.role));
+                                org
+                            })
                         })
                         .collect(),
                     node_count: node_counts.get(&model.id).copied().unwrap_or(0),
