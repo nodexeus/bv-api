@@ -1,6 +1,25 @@
 # gRCP API protobuf definitions
 [![GitHub Super-Linter](https://github.com/blockjoy/api-proto/workflows/Lint%20Code%20Base/badge.svg)](https://github.com/marketplace/actions/super-linter)
 
+## Compilation for TypeScript
+
+Run this for the initial setup:
+```bash
+npm install protobufjs long nice-grpc-common grpc-tools ts-proto
+mkdir generated
+```
+
+Then each time you want to get new ts files from the changed protos run:
+```bash
+./node_modules/.bin/grpc_tools_node_protoc \
+    --plugin=protoc-gen-ts_proto=./node_modules/.bin/protoc-gen-ts_proto \
+    --ts_proto_out=./generated \
+    --ts_proto_opt=env=browser,outputServices=nice-grpc,outputServices=generic-definitions,outputJsonMethods=false,useExactTypes=false,esModuleInterop=true \
+    --proto_path=./ \
+    ./v1/*
+```
+
+
 ## API v1
 
 ### HostsService
@@ -18,7 +37,7 @@ Fields set to None are _NOT_ updated resulting in not being able to set a field 
 see [OpenAPI doc](https://stakejoy.stoplight.io/docs/blockvisor-api/6119082e85f3b-claim-a-host-provision)
 Calling HostsService.Provision results in claiming the host provision earlier created during BV setup.
 
-The one-time-password (OTP) required in [ProvisionHostRequest](https://github.com/blockjoy/api-proto/blob/63e00e0fdc527b737da2b4b8e3d051dc89e0d148/blockjoy/api/v1/host.proto#L26)
+The provision token required in [ProvisionHostRequest](https://github.com/blockjoy/api-proto/blob/63e00e0fdc527b737da2b4b8e3d051dc89e0d148/blockjoy/api/v1/host.proto#L26)
 is assigned to the user who provisioned (registered) the host by showing it on the command-line.
 
 

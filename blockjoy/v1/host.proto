@@ -1,0 +1,144 @@
+syntax = "proto3";
+
+package blockjoy.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message Host {
+  // This is the id of the host.
+  string id = 1;
+  // This is the randomly generated name of the host.
+  string name = 2;
+  // The version of the blockjoy control software running on the host.
+  string version = 3;
+  // The number of logical cores the machine has, _not_ the number of physical
+  // cores.
+  optional uint64 cpu_count = 5;
+  // The amount of physical memory the machine has.
+  optional uint64 mem_size_bytes = 6;
+  // The size of the physical disks the machine has.
+  optional uint64 disk_size_bytes = 7;
+  // The operating system running on the machine, i.e. "BSD" or "Linux".
+  string os = 8;
+  // The version of said operating system running on the host.
+  string os_version = 9;
+  // The ip address on which the machine is reachable.
+  string ip = 10;
+  // Current status of the machine, or `UNSPECIFIED`.
+  HostStatus status = 11;
+  // The moment this host was created. Corresponds to the moment that the
+  // host_provision was
+  google.protobuf.Timestamp created_at = 12;
+  // The lowest ip address that this host may assign to a node.
+  optional string ip_range_from = 13;
+  // The highest ip address that this host may assign to a node.
+  optional string ip_range_to = 14;
+  // The ip gateway of this host.
+  optional string ip_gateway = 15;
+  // The organization that this host belongs to.
+  optional string org_id = 16;
+}
+
+// Manage hosts.
+service HostService {
+  // Create a single host
+  rpc Create(HostServiceCreateRequest) returns (HostServiceCreateResponse);
+  rpc Get(HostServiceGetRequest) returns (HostServiceGetResponse);
+  rpc List(HostServiceListRequest) returns (HostServiceListResponse);
+  // Update a single host
+  rpc Update(HostServiceUpdateRequest) returns (HostServiceUpdateResponse);
+  // Delete a single host
+  rpc Delete(HostServiceDeleteRequest) returns (HostServiceDeleteResponse);
+}
+
+message HostServiceCreateRequest {
+  // Each user has a token within an organization that we use to identify which
+  // user created this organization.
+  string provision_token = 1;
+  // A name to recognise the host by.
+  string name = 2;
+  // The version of the blockvisor software running on the host.
+  string version = 3;
+  // The number of logical cores on this computer, _not_ the number of physical
+  // cores.
+  uint64 cpu_count = 4;
+  // The amount of memory that this computer has, in bytes.
+  uint64 mem_size_bytes = 5;
+  // The amount of storage that this computer has, in bytes.
+  uint64 disk_size_bytes = 6;
+  // The operating system running on this computer.
+  string os = 7;
+  // The version of said operating system.
+  string os_version = 8;
+  string ip_addr = 9;
+  string ip_range_from = 10;
+  string ip_range_to = 11;
+  string ip_gateway = 12;
+  // The organization that this host belongs to. This field _must_ be populated
+  // with the current organization id.
+  optional string org_id = 13;
+}
+
+message HostServiceCreateResponse {
+  Host host = 1;
+  string token = 2;
+  string refresh = 3;
+}
+
+message HostServiceGetRequest {
+  string id = 1;
+}
+
+message HostServiceGetResponse {
+  Host host = 1;
+}
+
+message HostServiceListRequest {
+  string org_id = 1;
+  // If this value is provided, only hosts with the given status are returned.
+  optional HostStatus status = 2;
+}
+
+message HostServiceListResponse {
+  repeated Host hosts = 1;
+}
+
+message HostServiceUpdateRequest {
+  string id = 1;
+  optional string name = 2;
+  optional string version = 3;
+  optional string os = 5;
+  optional string os_version = 6;
+}
+
+message HostServiceUpdateResponse {
+}
+
+message HostServiceDeleteRequest {
+  string id = 1;
+}
+
+message HostServiceDeleteResponse {
+}
+
+enum HostConnectionStatus {
+  HOST_CONNECTION_STATUS_UNSPECIFIED = 0;
+  HOST_CONNECTION_STATUS_ONLINE = 1;
+  HOST_CONNECTION_STATUS_OFFLINE = 2;
+}
+
+// Possible states the container is described with
+enum HostStatus {
+  HOST_STATUS_UNSPECIFIED = 0;
+  HOST_STATUS_CREATING = 1;
+  HOST_STATUS_RUNNING = 2;
+  HOST_STATUS_STARTING = 3;
+  HOST_STATUS_STOPPING = 4;
+  HOST_STATUS_STOPPED = 5;
+  HOST_STATUS_UPGRADING = 6;
+  HOST_STATUS_UPGRADED = 7;
+  HOST_STATUS_DELETING = 8;
+  HOST_STATUS_DELETED = 9;
+  HOST_STATUS_INSTALLING = 10;
+  HOST_STATUS_SNAPSHOTTING = 11;
+}
