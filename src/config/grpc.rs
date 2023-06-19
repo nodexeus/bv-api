@@ -10,7 +10,7 @@ const REQUEST_CONCURRENCY_LIMIT_DEFAULT: usize = 32;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to parse ${REQUEST_CONCURRENCY_LIMIT_ENTRY:?}: {0}
+    /// Failed to parse {REQUEST_CONCURRENCY_LIMIT_ENTRY:?}: {0}
     RequestConcurrencyLimit(provider::Error),
 }
 

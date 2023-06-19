@@ -14,9 +14,9 @@ const UI_BASE_URL_ENTRY: &str = "mail.ui_base_url";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to parse ${SENDGRID_API_KEY_ENTRY:?}: {0}
+    /// Failed to parse {SENDGRID_API_KEY_ENTRY:?}: {0}
     ParseSendgridApiKey(provider::Error),
-    /// Failed to parse ${UI_BASE_URL_ENTRY:?}: {0}
+    /// Failed to parse {UI_BASE_URL_ENTRY:?}: {0}
     ParseUiBaseUrl(provider::Error),
 }
 

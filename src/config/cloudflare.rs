@@ -20,15 +20,15 @@ const API_TOKEN_ENTRY: &str = "cloudflare.api.token";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to parse ${API_BASE_URL_ENTRY:?}: {0}
+    /// Failed to parse {API_BASE_URL_ENTRY:?}: {0}
     ParseApiBaseUrl(provider::Error),
-    /// Failed to parse ${API_TOKEN_ENTRY:?}: {0}
+    /// Failed to parse {API_TOKEN_ENTRY:?}: {0}
     ParseApiToken(provider::Error),
-    /// Failed to parse ${API_ZONE_ID_ENTRY:?}: {0}
+    /// Failed to parse {API_ZONE_ID_ENTRY:?}: {0}
     ParseApiZoneId(provider::Error),
-    /// Failed to parse ${DNS_BASE_ENTRY:?}: {0}
+    /// Failed to parse {DNS_BASE_ENTRY:?}: {0}
     ParseDnsBase(provider::Error),
-    /// Failed to parse ${DNS_TTL_ENTRY:?}: {0}
+    /// Failed to parse {DNS_TTL_ENTRY:?}: {0}
     ParseDnsTtl(provider::Error),
 }
 
