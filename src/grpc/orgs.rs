@@ -311,7 +311,7 @@ impl api::Org {
         // and email of each user.
         let user_ids: Vec<uuid::Uuid> = org_users.values().flatten().map(|ou| ou.user_id).collect();
         let users: HashMap<uuid::Uuid, models::User> =
-            dbg!(models::User::find_by_ids(&user_ids, conn)
+            dbg!(models::User::find_by_ids(dbg!(&user_ids), conn)
                 .await?
                 .into_iter()
                 .map(|u| (u.id, u))
