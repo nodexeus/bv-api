@@ -1,8 +1,9 @@
 use super::api::{self, blockchain_service_server, SupportedNodeProperty};
-use crate::cookbook::get_networks;
-use crate::models;
+use crate::config::cookbook::Config;
+use crate::{cookbook, models};
 use futures_util::future::join_all;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[tonic::async_trait]
 impl blockchain_service_server::BlockchainService for super::GrpcImpl {
@@ -61,9 +62,16 @@ async fn list(
             let name = blockchain.name.clone();
             let node_type = node_properties.node_type.to_string();
             let version = node_properties.version.clone();
-            network_futs.push(try_get_networks(blockchain.id, name, node_type, version));
+            network_futs.push(try_get_networks(
+                conn.context.config.cookbook.clone(),
+                blockchain.id,
+                name,
+                node_type,
+                version,
+            ));
         }
     }
+
     let networks = join_all(network_futs).await;
 
     // Now that we have fetched our networks, we have to stuff them into the DTO's. To do this
@@ -94,6 +102,7 @@ async fn list(
 /// because calls to cookbook sometimes fail and we don't want this whole endpoint to crash when
 /// cookbook is having a sad day.
 async fn try_get_networks(
+    config: Arc<Config>,
     blockchain_id: uuid::Uuid,
     name: String,
     node_type: String,
@@ -102,7 +111,7 @@ async fn try_get_networks(
     // We prepare an error message because we are moving all the arguments used to construct it.
     let err_msg = format!("Could not get networks for {name} {node_type} version {version:?}");
 
-    let networks = match get_networks(name, node_type, version).await {
+    let networks = match cookbook::get_networks(&config, name, node_type, version).await {
         Ok(nets) => nets.into_iter().map(Into::into).collect(),
         Err(e) => {
             tracing::error!("{err_msg}: {e}");

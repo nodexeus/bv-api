@@ -1,12 +1,9 @@
-use crate::auth::key_provider::KeyProvider;
+use crate::config::cookbook::Config;
 use crate::grpc::api;
 use crate::{Error, Result as ApiResult};
 use anyhow::{anyhow, Context};
 use cookbook_grpc::cook_book_service_client;
 use tonic::Request;
-
-pub const COOKBOOK_URL: &str = "COOKBOOK_URL";
-pub const COOKBOOK_TOKEN: &str = "COOKBOOK_TOKEN";
 
 #[derive(Debug, Clone, Copy)]
 pub struct HardwareRequirements {
@@ -28,29 +25,26 @@ pub mod cookbook_grpc {
 }
 
 pub async fn get_hw_requirements(
+    config: &Config,
     protocol: String,
     node_type: String,
     node_version: String,
 ) -> ApiResult<HardwareRequirements> {
-    let id = cookbook_grpc::ConfigIdentifier {
+    let mut client =
+        cook_book_service_client::CookBookServiceClient::connect(config.url.as_str().to_string())
+            .await
+            .map_err(|e| Error::UnexpectedError(anyhow!("Can't connect to cookbook: {e}")))?;
+
+    let mut request = Request::new(cookbook_grpc::ConfigIdentifier {
         protocol,
         node_type,
         node_version,
         status: 1,
-    };
-    let cb_url = KeyProvider::get_var(COOKBOOK_URL).map_err(Error::Key)?;
-    let cb_token = base64::encode(KeyProvider::get_var(COOKBOOK_TOKEN)?);
-    let mut client = cook_book_service_client::CookBookServiceClient::connect(cb_url)
-        .await
-        .map_err(|e| Error::UnexpectedError(anyhow!("Can't connect to cookbook: {e}")))?;
-    let mut request = Request::new(id);
+    });
 
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {cb_token}")
-            .parse()
-            .map_err(|e| Error::UnexpectedError(anyhow!("Can't set cookbook auth header: {e}")))?,
-    );
+    request
+        .metadata_mut()
+        .insert("authorization", config.token.auth_header()?);
 
     let response = client.requirements(request).await?;
     let inner = response.into_inner();
@@ -66,29 +60,26 @@ pub async fn get_hw_requirements(
 /// of supported networks. These are things like "mainnet" and "goerli". If no version is provided,
 /// we default to using the latest version.
 pub async fn get_networks(
+    config: &Config,
     protocol: String,
     node_type: String,
     node_version: String,
 ) -> ApiResult<Vec<BlockchainNetwork>> {
-    let id = cookbook_grpc::ConfigIdentifier {
+    let mut client =
+        cook_book_service_client::CookBookServiceClient::connect(config.url.as_str().to_string())
+            .await
+            .with_context(|| "Can't connect to cookbook")?;
+
+    let mut request = Request::new(cookbook_grpc::ConfigIdentifier {
         protocol,
         node_type,
         node_version,
         status: 1,
-    };
-    let cb_url = KeyProvider::get_var(COOKBOOK_URL).map_err(Error::Key)?;
-    let cb_token = base64::encode(KeyProvider::get_var(COOKBOOK_TOKEN)?);
-    let mut client = cook_book_service_client::CookBookServiceClient::connect(cb_url)
-        .await
-        .with_context(|| "Can't connect to cookbook")?;
-    let mut request = Request::new(id);
+    });
 
-    request.metadata_mut().insert(
-        "authorization",
-        format!("Bearer {cb_token}")
-            .parse()
-            .with_context(|| "Can't set cookbook auth header")?,
-    );
+    request
+        .metadata_mut()
+        .insert("authorization", config.token.auth_header()?);
 
     let response = client.net_configurations(request).await?;
     let inner = response.into_inner();

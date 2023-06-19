@@ -2,7 +2,7 @@ use super::node_type::*;
 use super::schema::nodes;
 use super::string_to_array;
 use crate::cloudflare::CloudflareApi;
-use crate::cookbook::get_hw_requirements;
+use crate::cookbook;
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
@@ -214,9 +214,13 @@ impl Node {
     /// Finds the next possible host for this node to be tried on.
     pub async fn find_host(&self, conn: &mut super::Conn) -> crate::Result<super::Host> {
         let chain = super::Blockchain::find_by_id(self.blockchain_id, conn).await?;
-        let requirements =
-            get_hw_requirements(chain.name, self.node_type.to_string(), self.version.clone())
-                .await?;
+        let requirements = cookbook::get_hw_requirements(
+            &conn.context.config.cookbook,
+            chain.name,
+            self.node_type.to_string(),
+            self.version.clone(),
+        )
+        .await?;
 
         let candidates = match self.scheduler() {
             Some(scheduler) => {
@@ -360,10 +364,7 @@ impl NewNode<'_> {
             .to_string();
 
         let ip_gateway = host.ip_gateway.ip().to_string();
-
-        let dns_record_id = cf_api
-            .get_node_dns(self.name.clone(), ip_addr.clone())
-            .await?;
+        let dns_record_id = cf_api.get_node_dns(&self.name, ip_addr.clone()).await?;
 
         diesel::insert_into(nodes::table)
             .values((
@@ -393,7 +394,8 @@ impl NewNode<'_> {
         use crate::Error::NoMatchingHostError;
 
         let chain = super::Blockchain::find_by_id(self.blockchain_id, conn).await?;
-        let requirements = get_hw_requirements(
+        let requirements = cookbook::get_hw_requirements(
+            &conn.context.config.cookbook,
             chain.name,
             self.node_type.to_string(),
             self.version.to_string(),
@@ -483,14 +485,16 @@ impl UpdateNodeMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Context;
     use crate::models;
+    use crate::TestDb;
 
     #[tokio::test]
     async fn can_filter_nodes() -> anyhow::Result<()> {
-        let mut name = String::from("test_");
-        name.push_str(&petname::petname(3, "_"));
+        let context = Context::new_with_default_toml().unwrap();
+        let db = TestDb::setup(context).await;
+        let name = format!("test_{}", petname::petname(3, "_"));
 
-        let db = crate::TestDb::setup().await;
         let cloudflare = crate::TestCloudflareApi::new().await;
         let cloudflare_api = cloudflare.get_cloudflare_api();
         let blockchain = db.blockchain().await;

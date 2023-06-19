@@ -1,4 +1,3 @@
-use crate::mail;
 use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2,
@@ -11,6 +10,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use super::schema::users;
+use crate::mail::MailClient;
 
 #[derive(Debug, Clone, Queryable)]
 pub struct User {
@@ -47,8 +47,8 @@ impl User {
     }
 
     pub async fn email_reset_password(&self, conn: &mut super::Conn) -> crate::Result<()> {
-        let client = mail::MailClient::new();
-        client.reset_password(self, conn).await
+        let client = MailClient::new(&conn.context.config);
+        client.reset_password(self, &conn.context.cipher).await
     }
 
     pub async fn find_all(conn: &mut super::Conn) -> crate::Result<Vec<Self>> {

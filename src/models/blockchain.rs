@@ -143,11 +143,15 @@ impl Blockchain {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::Context;
     use crate::models::{NodeSelfUpgradeFilter, NodeType};
+    use crate::TestDb;
 
     #[tokio::test]
     async fn test_add_version_existing_version() {
-        let db = crate::TestDb::setup().await;
+        let context = Context::new_with_default_toml().unwrap();
+        let db = TestDb::setup(context).await;
+
         let mut conn = db.conn().await;
         let node_type = NodeType::Validator;
         let blockchain = db.blockchain().await;
@@ -164,8 +168,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_version_non_existing_version() {
-        let db = crate::TestDb::setup().await;
+        let context = Context::new_with_default_toml().unwrap();
+        let db = TestDb::setup(context).await;
         let mut conn = db.conn().await;
+
         let node_type = NodeType::Validator;
         let blockchain = db.blockchain().await;
         let n_properties = blockchain.properties(&mut conn).await.unwrap().len();
