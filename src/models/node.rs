@@ -27,6 +27,7 @@ pub enum ContainerStatus {
     Deleted,
     Installing,
     Snapshotting,
+    Failed,
 }
 
 /// NodeSyncStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
@@ -302,7 +303,7 @@ impl Node {
     }
 
     fn filtered_ip_addrs(value: serde_json::Value) -> crate::Result<Vec<FilteredIpAddr>> {
-        let addrs: Vec<FilteredIpAddr> = serde_json::from_value(value)?;
+        let addrs = serde_json::from_value(value)?;
         Ok(addrs)
     }
 }

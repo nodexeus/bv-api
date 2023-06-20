@@ -5,7 +5,6 @@ pub mod cloudflare;
 pub mod config;
 pub mod cookbook;
 pub mod error;
-pub mod firewall;
 pub mod grpc;
 pub mod http;
 pub mod hybrid_server;
