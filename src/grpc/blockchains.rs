@@ -139,12 +139,11 @@ impl api::Blockchain {
             .into_iter()
             .map(|model| {
                 let properties = properties_map.get(&model.id).cloned().unwrap_or_default();
-                let mut blockchain = Self {
+                Ok(Self {
                     id: model.id.to_string(),
                     name: model.name,
                     // TODO: make this column mandatory
                     description: model.description.unwrap_or_default(),
-                    status: 0, // We use the setter to set this field for type-safety
                     project_url: model.project_url,
                     repo_url: model.repo_url,
                     version: model.version,
@@ -152,9 +151,7 @@ impl api::Blockchain {
                     created_at: Some(super::try_dt_to_ts(model.created_at)?),
                     updated_at: Some(super::try_dt_to_ts(model.updated_at)?),
                     networks: vec![],
-                };
-                blockchain.set_status(api::BlockchainStatus::from_model(model.status));
-                Ok(blockchain)
+                })
             })
             .collect()
     }
@@ -205,17 +202,5 @@ impl api::SupportedNodeProperty {
         };
         prop.set_ui_type(api::UiType::from_model(model.ui_type));
         prop
-    }
-}
-
-impl api::BlockchainStatus {
-    fn from_model(model: models::BlockchainStatus) -> Self {
-        match model {
-            models::BlockchainStatus::Development => Self::Development,
-            models::BlockchainStatus::Alpha => Self::Alpha,
-            models::BlockchainStatus::Beta => Self::Beta,
-            models::BlockchainStatus::Production => Self::Production,
-            models::BlockchainStatus::Deleted => Self::Deleted,
-        }
     }
 }

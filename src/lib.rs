@@ -212,7 +212,7 @@ mod test {
         }
 
         async fn seed_(conn: &mut Conn) -> crate::Result<()> {
-            diesel::sql_query("INSERT INTO blockchains (id, name, status) values ('ab5d8cfc-77b1-4265-9fee-ba71ba9de092','Ethereum', 'production');")
+            diesel::sql_query("INSERT INTO blockchains (id, name) values ('ab5d8cfc-77b1-4265-9fee-ba71ba9de092','Ethereum');")
                 .execute(conn)
                 .await.unwrap();
             diesel::sql_query("INSERT INTO blockchain_properties VALUES ('5972a35a-333c-421f-ab64-a77f4ae17533', 'ab5d8cfc-77b1-4265-9fee-ba71ba9de092', '3.3.0', 'validator', 'keystore-file', NULL, 'file_upload', FALSE, FALSE);").execute(conn).await.unwrap();
