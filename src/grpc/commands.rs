@@ -7,7 +7,6 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use super::api::{self, command_service_server};
 use super::helpers::required;
 use crate::auth::token::{Claims, Endpoint, Resource};
-use crate::firewall::create_rules_for_node;
 use crate::{auth, models};
 
 struct CommandResult<T> {
@@ -272,7 +271,7 @@ impl api::Command {
                 let node = models::Node::find_by_id(node_id()?, conn).await?;
                 let cmd = Command::Update(api::NodeUpdate {
                     self_update: Some(node.self_update),
-                    rules: create_rules_for_node(&node)?,
+                    rules: Self::rules(&node)?,
                 });
                 node_cmd_default_id(cmd)
             }
@@ -283,10 +282,8 @@ impl api::Command {
                     protocol: blockchain.name,
                     node_version: node.version.to_lowercase(),
                     node_type: 0, // We use the setter to set this field for type-safety
-                    status: 0,    // We use the setter to set this field for type-safety
                 };
                 image.set_node_type(api::NodeType::from_model(node.node_type));
-                image.set_status(api::ContainerImageStatus::Development);
                 let cmd = Command::Upgrade(api::NodeUpgrade { image: Some(image) });
                 node_cmd_default_id(cmd)
             }
@@ -308,18 +305,14 @@ impl api::Command {
                     protocol: blockchain.name,
                     node_version: node.version.to_lowercase(),
                     node_type: 0, // We use the setter to set this field for type-safety
-                    status: 0,    // We use the setter to set this field for type-safety
                 };
                 image.set_node_type(api::NodeType::from_model(node.node_type));
-                image.set_status(api::ContainerImageStatus::Development);
-                let network = api::Parameter::new("network", &node.network);
                 let properties = node
                     .properties(conn)
                     .await?
                     .into_iter()
                     .map(|p| (&id_to_name_map[&p.blockchain_property_id], p.value))
                     .map(|(name, value)| api::Parameter::new(name, &value))
-                    .chain([network])
                     .collect();
                 let mut node_create = api::NodeCreate {
                     name: node.name.clone(),
@@ -330,7 +323,8 @@ impl api::Command {
                     gateway: node.ip_gateway.clone(),
                     self_update: node.self_update,
                     properties,
-                    rules: create_rules_for_node(&node)?,
+                    rules: Self::rules(&node)?,
+                    network: node.network,
                 };
                 node_create.set_node_type(api::NodeType::from_model(node.node_type));
                 let cmd = Command::Create(node_create);
@@ -352,6 +346,39 @@ impl api::Command {
             CreateBVS => host_cmd(model.host_id.to_string()),
             StopBVS => host_cmd(model.host_id.to_string()),
         }
+    }
+
+    pub fn rules(node: &models::Node) -> crate::Result<Vec<api::Rule>> {
+        fn firewall_rules(
+            // I'll leave the Vec for now, maybe we need it later
+            denied_or_allowed_ips: Vec<models::FilteredIpAddr>,
+            action: api::Action,
+        ) -> crate::Result<Vec<api::Rule>> {
+            let mut rules = vec![];
+            for ip in denied_or_allowed_ips {
+                // Validate IP
+                if !cidr_utils::cidr::IpCidr::is_ip_cidr(&ip.ip) {
+                    return Err(crate::Error::Cidr);
+                }
+
+                rules.push(api::Rule {
+                    name: "".to_string(),
+                    action: action as i32,
+                    direction: api::Direction::In as i32,
+                    protocol: api::Protocol::Both as i32,
+                    ips: Some(ip.ip),
+                    ports: vec![],
+                });
+            }
+
+            Ok(rules)
+        }
+
+        let rules = firewall_rules(node.allow_ips()?, api::Action::Allow)?
+            .into_iter()
+            .chain(firewall_rules(node.deny_ips()?, api::Action::Deny)?)
+            .collect();
+        Ok(rules)
     }
 }
 
@@ -438,5 +465,18 @@ impl api::Parameter {
             name: name.to_owned(),
             value: val.to_owned(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_create_firewall_rules() {
+        let context = crate::config::Context::new_with_default_toml().unwrap();
+        let db = crate::TestDb::setup(context).await;
+        let node = db.node().await;
+        api::Command::rules(&node).unwrap();
     }
 }

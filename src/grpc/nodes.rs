@@ -610,6 +610,7 @@ impl api::ContainerStatus {
             models::ContainerStatus::Deleted => Self::Deleted,
             models::ContainerStatus::Installing => Self::Installing,
             models::ContainerStatus::Snapshotting => Self::Snapshotting,
+            models::ContainerStatus::Failed => Self::Failed,
         }
     }
 
@@ -627,6 +628,7 @@ impl api::ContainerStatus {
             Self::Deleted => models::ContainerStatus::Deleted,
             Self::Installing => models::ContainerStatus::Installing,
             Self::Snapshotting => models::ContainerStatus::Snapshotting,
+            Self::Failed => models::ContainerStatus::Failed,
         }
     }
 }
