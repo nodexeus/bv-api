@@ -6,10 +6,6 @@ pub mod sql_types {
     pub struct BlockchainPropertyUiType;
 
     #[derive(diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "enum_blockchain_status"))]
-    pub struct EnumBlockchainStatus;
-
-    #[derive(diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "enum_conn_status"))]
     pub struct EnumConnStatus;
 
@@ -81,14 +77,10 @@ diesel::table! {
 }
 
 diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::EnumBlockchainStatus;
-
     blockchains (id) {
         id -> Uuid,
         name -> Text,
         description -> Nullable<Text>,
-        status -> EnumBlockchainStatus,
         project_url -> Nullable<Text>,
         repo_url -> Nullable<Text>,
         version -> Nullable<Text>,
