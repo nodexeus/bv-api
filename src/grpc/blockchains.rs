@@ -163,28 +163,27 @@ impl api::Blockchain {
 
 impl api::SupportedNodeType {
     fn from_models(models: Vec<models::BlockchainProperty>) -> crate::Result<Vec<Self>> {
-        // First we partition the properties by version
-        let mut properties: HashMap<(models::NodeType, &str), Vec<_>> = HashMap::new();
-        for model in &models {
+        // First we partition the properties by node type and version.
+        let mut properties: HashMap<(models::NodeType, String), Vec<_>> = HashMap::new();
+        for model in models {
             properties
-                .entry((model.node_type, &model.version))
+                .entry((model.node_type, model.version.clone()))
                 .or_default()
                 .push(model);
         }
 
-        models
-            .iter()
-            .map(|model| {
-                let properties = &properties[&(model.node_type, model.version.as_str())];
+        properties
+            .into_iter()
+            .map(|((node_type, version), properties)| {
                 let mut props = api::SupportedNodeType {
                     node_type: 0, // We use the setter to set this field for type-safety
-                    version: model.version.to_string(),
+                    version,
                     properties: properties
                         .iter()
                         .map(|prop| api::SupportedNodeProperty::from_model(prop))
                         .collect(),
                 };
-                props.set_node_type(api::NodeType::from_model(model.node_type));
+                props.set_node_type(api::NodeType::from_model(node_type));
                 Ok(props)
             })
             .collect()
