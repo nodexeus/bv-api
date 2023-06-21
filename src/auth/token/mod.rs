@@ -140,7 +140,7 @@ pub enum Endpoints {
 }
 
 impl Endpoints {
-    pub(super) fn includes(&self, endpoint: Endpoint) -> bool {
+    pub fn includes(&self, endpoint: Endpoint) -> bool {
         match self {
             Self::Wildcard => true,
             Self::Single(this) => this.matches(endpoint),

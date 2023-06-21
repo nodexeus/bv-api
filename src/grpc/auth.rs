@@ -136,7 +136,7 @@ async fn refresh(
 ) -> super::Result<api::AuthServiceRefreshResponse> {
     let refresh = auth::get_refresh(&req, &conn.context)?;
     let req = req.into_inner();
-    let decoded = conn.context.cipher.jwt.decode_expired(&req.token)?;
+    let mut decoded = conn.context.cipher.jwt.decode_expired(&req.token)?;
     let refresh = req
         .refresh
         .map(|refresh| conn.context.cipher.refresh.decode(&refresh))
@@ -168,6 +168,18 @@ async fn refresh(
     };
     if refresh.resource_id != resource_id {
         super::forbidden!("Jwt and refresh grantee don't match");
+    }
+
+    // The following is a workaround that sort of patches existing host tokens. Removeme
+    if !decoded.endpoints.includes(Endpoint::HostUpdate) {
+        decoded.endpoints = match decoded.endpoints {
+            auth::token::Endpoints::Wildcard => auth::token::Endpoints::Wildcard,
+            auth::token::Endpoints::Single(e) => auth::token::Endpoints::Single(e),
+            auth::token::Endpoints::Multiple(mut es) => {
+                es.insert(7, Endpoint::HostUpdate);
+                auth::token::Endpoints::Multiple(es)
+            }
+        }
     }
 
     let iat = chrono::Utc::now();
