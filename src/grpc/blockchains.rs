@@ -180,7 +180,7 @@ impl api::SupportedNodeType {
                     version,
                     properties: properties
                         .iter()
-                        .map(|prop| api::SupportedNodeProperty::from_model(prop))
+                        .map(api::SupportedNodeProperty::from_model)
                         .collect(),
                 };
                 props.set_node_type(api::NodeType::from_model(node_type));
