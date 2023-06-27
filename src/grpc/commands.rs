@@ -40,7 +40,7 @@ impl command_service_server::CommandService for super::GrpcImpl {
         &self,
         req: tonic::Request<api::CommandServiceUpdateRequest>,
     ) -> super::Resp<api::CommandServiceUpdateResponse> {
-        let result = self.trx(|c| update(req, c).scope_boxed()).await?;
+        let result = self.trx(|c| update(self, req, c).scope_boxed()).await?;
         for command in &result.commands {
             self.notifier.commands_sender().send(command).await?;
         }
@@ -106,6 +106,7 @@ async fn get(
 }
 
 async fn update(
+    impler: &super::GrpcImpl,
     req: tonic::Request<api::CommandServiceUpdateRequest>,
     conn: &mut models::Conn,
 ) -> crate::Result<CommandResult<api::CommandServiceUpdateResponse>> {
@@ -131,7 +132,7 @@ async fn update(
             // We got back an error status code. In practice, blockvisord sends 0 for
             // success and 1 for failure, but we treat every non-zero exit code as an
             // error, not just 1.
-            if let Ok(cmds) = recover::recover(&cmd, conn).await {
+            if let Ok(cmds) = recover::recover(impler, &cmd, conn).await {
                 commands.extend(cmds);
             }
         }

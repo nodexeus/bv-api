@@ -14,10 +14,6 @@ async fn responds_correct_urls_forss() {
         tester.context().config.key_service.url.to_string()
     );
     assert_eq!(
-        response.registry_url,
-        tester.context().config.cookbook.url.to_string()
-    );
-    assert_eq!(
         response.notification_url,
         tester.context().config.mqtt.notification_url()
     );

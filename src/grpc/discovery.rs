@@ -22,7 +22,6 @@ async fn services(
 
     let response = api::DiscoveryServiceServicesResponse {
         key_service_url: conn.context.config.key_service.url.to_string(),
-        registry_url: conn.context.config.cookbook.url.to_string(),
         notification_url: conn.context.config.mqtt.notification_url(),
     };
 

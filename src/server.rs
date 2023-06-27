@@ -1,5 +1,6 @@
 use crate::cloudflare::CloudflareApi;
 use crate::config::Context;
+use crate::cookbook::Cookbook;
 use crate::grpc::server as grpc_server;
 use crate::http::server as http_server;
 use crate::hybrid_server::hybrid as hybrid_server;
@@ -29,9 +30,10 @@ pub async fn start(context: Arc<Context>) -> anyhow::Result<()> {
 
     let db = models::DbPool::new(pool, context.clone());
     let cloudflare = CloudflareApi::new(config.cloudflare.clone());
+    let cookbook = Cookbook::new_s3(&config.cookbook);
 
     let rest = http_server(db.clone()).await.into_make_service();
-    let grpc = grpc_server(db, cloudflare).await.into_service();
+    let grpc = grpc_server(db, cloudflare, cookbook).await.into_service();
     let hybrid = hybrid_server(rest, grpc);
 
     axum::Server::bind(&config.database.bind_addr())

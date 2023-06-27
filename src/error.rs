@@ -93,6 +93,9 @@ pub enum Error {
 
     #[error("One or more nodes could not be upgraded {0}")]
     UpgradeProcessError(String),
+
+    #[error("Storage error: {0}")]
+    S3(#[from] aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::get_object::GetObjectError>),
 }
 
 impl Error {
@@ -198,7 +201,7 @@ impl IntoResponse for Error {
     }
 }
 
-pub fn error_chain_fmt(
+fn error_chain_fmt(
     e: &impl std::error::Error,
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {

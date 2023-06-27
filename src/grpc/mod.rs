@@ -2,6 +2,7 @@ pub mod auth;
 pub mod babel;
 pub mod blockchains;
 pub mod commands;
+pub mod cookbook;
 pub mod discovery;
 pub mod helpers;
 pub mod hosts;
@@ -35,6 +36,7 @@ use tower_http::trace::TraceLayer;
 struct GrpcImpl {
     db: models::DbPool,
     notifier: Notifier,
+    cookbook: super::cookbook::Cookbook,
     dns: CloudflareApi,
 }
 
@@ -69,7 +71,11 @@ type TracedServer = Stack<TraceLayer<SharedClassifier<GrpcErrorsAsFailures>>, Id
 type DbServer = Stack<Extension<models::DbPool>, TracedServer>;
 type CorsServer = Stack<Stack<CorsLayer, DbServer>, Identity>;
 
-pub async fn server(db: models::DbPool, cloudflare: CloudflareApi) -> Router<CorsServer> {
+pub async fn server(
+    db: models::DbPool,
+    cloudflare: CloudflareApi,
+    cookbook: crate::cookbook::Cookbook,
+) -> Router<CorsServer> {
     let notifier = Notifier::new(&db.context.config.mqtt)
         .await
         .expect("Could not set up MQTT notifier!");
@@ -78,12 +84,14 @@ pub async fn server(db: models::DbPool, cloudflare: CloudflareApi) -> Router<Cor
         db: db.clone(),
         notifier,
         dns: cloudflare,
+        cookbook,
     };
 
     let authentication = api::auth_service_server::AuthServiceServer::new(impler.clone());
     let babel = api::babel_service_server::BabelServiceServer::new(impler.clone());
     let blockchain = api::blockchain_service_server::BlockchainServiceServer::new(impler.clone());
     let command = api::command_service_server::CommandServiceServer::new(impler.clone());
+    let cookbook = api::cookbook_service_server::CookbookServiceServer::new(impler.clone());
     let discovery = api::discovery_service_server::DiscoveryServiceServer::new(impler.clone());
     let host = api::host_service_server::HostServiceServer::new(impler.clone());
     let invitation = api::invitation_service_server::InvitationServiceServer::new(impler.clone());
@@ -113,6 +121,7 @@ pub async fn server(db: models::DbPool, cloudflare: CloudflareApi) -> Router<Cor
         .add_service(babel)
         .add_service(blockchain)
         .add_service(command)
+        .add_service(cookbook)
         .add_service(discovery)
         .add_service(host)
         .add_service(invitation)

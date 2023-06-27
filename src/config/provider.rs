@@ -69,8 +69,6 @@ pub struct Provider {
 
 impl Provider {
     pub fn new<P: AsRef<Path>>(toml: Option<P>) -> Result<Self, Error> {
-        dotenv::dotenv().ok();
-
         let secrets_root = if let Ok(path) = env::var(SECRETS_ROOT) {
             debug!("Parsing config from directory: `{SECRETS_ROOT}`");
             Some(Self::secrets_root(path)?)

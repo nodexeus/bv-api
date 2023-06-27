@@ -17,16 +17,18 @@ use error::{Error, Result};
 pub const MIGRATIONS: diesel_migrations::EmbeddedMigrations =
     diesel_migrations::embed_migrations!();
 
-pub use test::TestCloudflareApi;
-pub use test::TestDb;
+pub use test::{TestCloudflareApi, TestCookbook, TestDb};
 
 mod test {
     use crate::auth::token::refresh::Refresh;
     use crate::cloudflare::CloudflareApi;
     use crate::config::cloudflare::{ApiConfig, Config as CloudflareConfig, DnsConfig};
     use crate::config::Context;
+    use crate::cookbook::{self, Cookbook, Location};
+    use crate::grpc::api;
+    use crate::models;
     use crate::models::schema::{blockchains, commands, nodes, orgs};
-    use crate::models::{self, Conn};
+    use crate::models::Conn;
     use diesel::migration::MigrationSource;
     use diesel::prelude::*;
     use diesel_async::pooled_connection::bb8::Pool;
@@ -35,6 +37,7 @@ mod test {
     use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
     use rand::Rng;
     use std::sync::Arc;
+    use std::time::Duration;
     use uuid::Uuid;
 
     pub struct TestCloudflareApi {
@@ -87,6 +90,68 @@ mod test {
                     base: "base".into(),
                     ttl: 3600,
                 },
+            };
+            Arc::new(config)
+        }
+    }
+
+    pub struct TestCookbook {
+        mock: mockito::ServerGuard,
+    }
+
+    struct MockStorage {}
+
+    #[tonic::async_trait]
+    impl cookbook::Client for MockStorage {
+        async fn read_file(&self, _: Location<'_>, _: &str, _: &str) -> crate::Result<Vec<u8>> {
+            Ok(cookbook::script::TEST_SCRIPT.bytes().collect())
+        }
+
+        async fn download_url(
+            &self,
+            _: Location<'_>,
+            _: &str,
+            _: &str,
+            _: Duration,
+        ) -> crate::Result<String> {
+            panic!("We're not using this in tests.")
+        }
+
+        async fn list(&self, _: Location<'_>) -> crate::Result<Vec<api::ConfigIdentifier>> {
+            panic!("We're not using this in tests.")
+        }
+    }
+
+    impl TestCookbook {
+        pub async fn new() -> Self {
+            let mock = Self::mock_cookbook_api().await;
+            Self { mock }
+        }
+
+        pub fn get_cookbook_api(&self) -> Cookbook {
+            Cookbook::new_with_client(&self.mock_config(), MockStorage {})
+        }
+
+        async fn mock_cookbook_api() -> mockito::ServerGuard {
+            let mut r2_server = mockito::Server::new_async().await;
+            r2_server
+                .mock("POST", mockito::Matcher::Regex(r"^/*".to_string()))
+                .with_status(200)
+                .with_body("{\"data\":\"id\"}")
+                .create_async()
+                .await;
+            r2_server
+        }
+
+        pub fn mock_config(&self) -> Arc<crate::config::cookbook::Config> {
+            let config = crate::config::cookbook::Config {
+                dir_chains_prefix: "fake".to_string(),
+                r2_bucket: "news".to_string(),
+                r2_url: self.mock.url().parse().unwrap(),
+                presigned_url_expiration: "1d".parse().unwrap(),
+                region: "eu-west-3".to_string(),
+                key_id: "not actually a".parse().unwrap(),
+                key: "key".parse().unwrap(),
             };
             Arc::new(config)
         }
@@ -152,10 +217,9 @@ mod test {
                 main_db_url,
             };
 
+            let mut conn = PgConnection::establish(&db.test_db_url).unwrap();
             for migration in super::MIGRATIONS.migrations().unwrap() {
-                migration
-                    .run(&mut PgConnection::establish(&db.test_db_url).unwrap())
-                    .unwrap();
+                migration.run(&mut conn).unwrap();
             }
 
             db.seed().await;

@@ -26,7 +26,7 @@ use blockvisor_api::cloudflare::CloudflareApi;
 use blockvisor_api::config::Context;
 use blockvisor_api::grpc::api::auth_service_client::AuthServiceClient;
 use blockvisor_api::models::{self, Conn};
-use blockvisor_api::{TestCloudflareApi, TestDb};
+use blockvisor_api::{TestCloudflareApi, TestCookbook, TestDb};
 
 type AuthService = AuthServiceClient<tonic::transport::Channel>;
 
@@ -41,6 +41,7 @@ pub struct Tester {
     db: TestDb,
     server_input: Arc<TempPath>,
     cloudflare: Arc<Option<TestCloudflareApi>>,
+    cookbook: Arc<Option<TestCookbook>>,
 }
 
 impl Tester {
@@ -57,11 +58,13 @@ impl Tester {
         let uds = UnixListener::bind(&*socket).unwrap();
         let stream = UnixListenerStream::new(uds);
 
-        let mock = TestCloudflareApi::new().await;
-        let cloudflare_api = mock.get_cloudflare_api();
+        let mock_cloudflare = TestCloudflareApi::new().await;
+        let cloudflare_api = mock_cloudflare.get_cloudflare_api();
+        let mock_cookbook = TestCookbook::new().await;
+        let cookbook = mock_cookbook.get_cookbook_api();
 
         tokio::spawn(async {
-            blockvisor_api::grpc::server(pool, cloudflare_api)
+            blockvisor_api::grpc::server(pool, cloudflare_api, cookbook)
                 .await
                 .serve_with_incoming(stream)
                 .await
@@ -71,7 +74,8 @@ impl Tester {
         Tester {
             db,
             server_input: Arc::clone(&socket),
-            cloudflare: Arc::new(Some(mock)),
+            cloudflare: Arc::new(Some(mock_cloudflare)),
+            cookbook: Arc::new(Some(mock_cookbook)),
         }
     }
 
