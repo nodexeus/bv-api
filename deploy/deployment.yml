@@ -147,6 +147,9 @@ data:
   REQUEST_CONCURRENCY_LIMIT: "128"
   SENDGRID_API_KEY: "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"
   UI_BASE_URL: "https://app.alpha.blockvisor.dev"
+  DIR_CHAINS_PREFIX: "chains"
+  DIR_BUNDLES_PREFIX: "bundle"
+  BUNDLE_STAGE: "dev"
 ---
 apiVersion: apps/v1
 kind: Deployment
