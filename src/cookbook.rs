@@ -67,12 +67,13 @@ impl Client for aws_sdk_s3::Client {
         path: &str,
         expiration: Duration,
     ) -> crate::Result<String> {
+        let path = path.to_lowercase();
         let exp = aws_sdk_s3::presigning::PresigningConfig::expires_in(expiration)
             .with_context(|| format!("Failed to create presigning config from {expiration:?}"))?;
         let url = self
             .get_object()
             .bucket(bucket)
-            .key(path)
+            .key(&path)
             .presigned(exp)
             .await
             .with_context(|| format!("Failed to create presigned url for {path}"))?
