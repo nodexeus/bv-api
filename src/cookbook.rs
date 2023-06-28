@@ -46,7 +46,7 @@ pub trait Client: Send + Sync {
 impl Client for aws_sdk_s3::Client {
     async fn read_file(&self, bucket: &str, path: &str) -> crate::Result<Vec<u8>> {
         let path = path.to_lowercase();
-        let response = self.get_object().bucket(bucket).key(&path).send().await?;
+        let response = dbg!(self.get_object().bucket(bucket).key(&path).send().await)?;
         let metadata = response.metadata().ok_or_else(required("metadata"))?;
         if !metadata.contains_key("status") {
             let err = format!("File at `{path}` not does not exist");
@@ -83,10 +83,11 @@ impl Client for aws_sdk_s3::Client {
     }
 
     async fn list(&self, bucket: &str, path: &str) -> crate::Result<Vec<String>> {
+        let path = path.to_lowercase();
         let resp = self
             .list_objects_v2()
             .bucket(bucket)
-            .prefix(path)
+            .prefix(&path)
             .send()
             .await
             .with_context(|| format!("Cannot `list` for path `{path}`"))?;

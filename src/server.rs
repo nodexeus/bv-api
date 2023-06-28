@@ -20,15 +20,13 @@ pub async fn start(context: Arc<Context>) -> anyhow::Result<()> {
         config.database.url.as_str(),
         establish_connection,
     );
-    let pool = dbg!(
-        Pool::builder()
-            .max_size(config.database.pool.max_conns)
-            .min_idle(Some(config.database.pool.min_conns))
-            .max_lifetime(Some(*config.database.pool.max_lifetime))
-            .idle_timeout(Some(*config.database.pool.idle_timeout))
-            .build(manager)
-            .await
-    )?;
+    let pool = Pool::builder()
+        .max_size(config.database.pool.max_conns)
+        .min_idle(Some(config.database.pool.min_conns))
+        .max_lifetime(Some(*config.database.pool.max_lifetime))
+        .idle_timeout(Some(*config.database.pool.idle_timeout))
+        .build(manager)
+        .await?;
 
     let db = models::DbPool::new(pool, context.clone());
     let cloudflare = CloudflareApi::new(config.cloudflare.clone());
@@ -38,12 +36,10 @@ pub async fn start(context: Arc<Context>) -> anyhow::Result<()> {
     let grpc = grpc_server(db, cloudflare, cookbook).await.into_service();
     let hybrid = hybrid_server(rest, grpc);
 
-    dbg!(
-        axum::Server::bind(&config.database.bind_addr())
-            .serve(hybrid)
-            .await
-    )
-    .map_err(Into::into)
+    axum::Server::bind(&config.database.bind_addr())
+        .serve(hybrid)
+        .await
+        .map_err(Into::into)
 }
 
 fn root_certs() -> rustls::RootCertStore {
@@ -65,7 +61,7 @@ fn establish_connection(config: &str) -> BoxFuture<ConnectionResult<AsyncPgConne
         let tls = tokio_postgres_rustls::MakeRustlsConnect::new(rustls_config);
         let (client, conn) = tokio_postgres::connect(config, tls)
             .await
-            .map_err(|e| ConnectionError::BadConnection(dbg!(e).to_string()))?;
+            .map_err(|e| ConnectionError::BadConnection(e.to_string()))?;
         tokio::spawn(async move {
             if let Err(e) = conn.await {
                 eprintln!("Database connection: {e}");

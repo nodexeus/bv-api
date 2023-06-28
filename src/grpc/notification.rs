@@ -88,12 +88,10 @@ impl<T: Notify + prost::Message> MqttClient<T> {
         const QOS: rumqttc::QoS = rumqttc::QoS::ExactlyOnce;
         let payload = msg.encode_to_vec();
 
-        tracing::info!("Sending {msg:?} over channels: {:?}", msg.channels());
         for channel in msg.channels() {
             self.client
                 .publish(&channel, QOS, RETAIN, payload.clone())
                 .await?;
-            tracing::info!("Sent {msg:?} over channel {channel}");
         }
         Ok(())
     }

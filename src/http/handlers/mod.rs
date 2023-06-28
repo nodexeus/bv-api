@@ -28,8 +28,6 @@ pub async fn mqtt_acl(
     Extension(db): Extension<models::DbPool>,
     Json(payload): Json<MqttAclRequest>,
 ) -> crate::Result<impl IntoResponse> {
-    tracing::info!("Got acl payload: {payload:?}");
-
     match db.context.cipher.jwt.decode(&payload.username) {
         Ok(token) => {
             let policy = MqttPolicy { db };
