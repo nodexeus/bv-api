@@ -5,6 +5,7 @@ use argon2::{
 use chrono::{DateTime, Utc};
 use diesel::{dsl, prelude::*};
 use diesel_async::RunQueryDsl;
+use password_hash::PasswordVerifier;
 use rand::rngs::OsRng;
 use uuid::Uuid;
 use validator::Validate;
@@ -34,17 +35,16 @@ impl User {
     }
 
     pub fn verify_password(&self, password: &str) -> crate::Result<()> {
-        let argon2 = Argon2::default();
-        let salt: password_hash::Salt = self.salt.as_str().try_into()?;
-        let parsed_hash = argon2.hash_password(password.as_bytes(), salt)?;
-
-        if let Some(output) = parsed_hash.hash {
-            if self.hashword == output.to_string() {
-                return Ok(());
-            }
-        }
-
-        Err(crate::Error::invalid_auth("Invalid email or password."))
+        let arg2 = Argon2::default();
+        let hash = argon2::PasswordHash {
+            algorithm: argon2::Algorithm::default().ident(),
+            version: None,
+            params: Default::default(),
+            salt: Some(password_hash::Salt::from_b64(&self.salt)?),
+            hash: Some(self.hashword.parse()?),
+        };
+        arg2.verify_password(password.as_bytes(), &hash)
+            .map_err(|_| crate::Error::invalid_auth("Invalid email or password."))
     }
 
     pub async fn email_reset_password(&self, conn: &mut super::Conn) -> crate::Result<()> {
@@ -70,7 +70,7 @@ impl User {
 
     pub async fn find_by_email(email: &str, conn: &mut super::Conn) -> crate::Result<Self> {
         let users = Self::not_deleted()
-            .filter(super::lower(users::email).eq(&email.to_lowercase()))
+            .filter(super::lower(users::email).eq(&email.trim().to_lowercase()))
             .get_result(conn)
             .await?;
         Ok(users)
@@ -172,7 +172,7 @@ impl User {
 #[diesel(table_name = users)]
 pub struct NewUser<'a> {
     #[validate(email)]
-    email: &'a str,
+    email: String,
     first_name: &'a str,
     last_name: &'a str,
     hashword: String,
@@ -190,7 +190,7 @@ impl<'a> NewUser<'a> {
         let salt = SaltString::generate(&mut OsRng);
         if let Some(hashword) = argon2.hash_password(password.as_bytes(), &salt)?.hash {
             let create_user = Self {
-                email,
+                email: email.trim().to_lowercase(),
                 first_name,
                 last_name,
                 hashword: hashword.to_string(),
@@ -259,23 +259,24 @@ pub struct UserPayAddress {
     pub pay_address: Option<String>,
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn test_password_is_backwards_compatible() {
-//         let user = User {
-//             id: uuid::Uuid::new_v4(),
-//             email: "shitballer@joe.com".to_string(),
-//             hashword: "tsLFiNniPopvXVlcShrRNy7BpnYO7hlKrq5g0RRlDtQ".to_string(),
-//             salt: "/SEfUgXQ1JsvQZwiSvlzoQ".to_string(),
-//             created_at: chrono::Utc::now(),
-//             first_name: "Joe".to_string(),
-//             last_name: "Ballington".to_string(),
-//             confirmed_at: Some(chrono::Utc::now()),
-//             deleted_at: None,
-//         };
-//         user.verify_password("password").unwrap()
-//     }
-// }
+    #[test]
+    fn test_password_is_backwards_compatible() {
+        let user = User {
+            id: uuid::Uuid::new_v4(),
+            email: "shitballer@joe.com".to_string(),
+            hashword: "8reOLS3bLZB4vQvqy8Xqoa+mS82d9qidx7j1KTtmICY".to_string(),
+            salt: "s2UTzLjLAz4xzhDBTFQtcg".to_string(),
+            created_at: chrono::Utc::now(),
+            first_name: "Joe".to_string(),
+            last_name: "Ballington".to_string(),
+            confirmed_at: Some(chrono::Utc::now()),
+            deleted_at: None,
+        };
+        user.verify_password("A password that cannot be hacked!1")
+            .unwrap()
+    }
+}

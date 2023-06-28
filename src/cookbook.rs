@@ -45,7 +45,8 @@ pub trait Client: Send + Sync {
 #[tonic::async_trait]
 impl Client for aws_sdk_s3::Client {
     async fn read_file(&self, bucket: &str, path: &str) -> crate::Result<Vec<u8>> {
-        let response = self.get_object().bucket(bucket).key(path).send().await?;
+        let path = path.to_lowercase();
+        let response = self.get_object().bucket(bucket).key(&path).send().await?;
         let metadata = response.metadata().ok_or_else(required("metadata"))?;
         if !metadata.contains_key("status") {
             let err = format!("File at `{path}` not does not exist");

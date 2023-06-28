@@ -61,8 +61,8 @@ async fn list(
             network_futs.push(try_get_networks(
                 &grpc.cookbook,
                 blockchain.id,
-                blockchain.name.to_lowercase(),
-                node_properties.node_type.to_string().to_lowercase(),
+                blockchain.name.clone(),
+                node_properties.node_type.to_string(),
                 node_properties.version.clone(),
             ));
         }

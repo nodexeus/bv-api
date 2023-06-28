@@ -138,10 +138,10 @@ async fn create(
     let req = req.into_inner();
     let blockchain = models::Blockchain::find_by_id(req.blockchain_id.parse()?, conn).await?;
     // We want to cast a string like `NODE_TYPE_VALIDATOR` to `validator`.
-    let node_type = req.node_type().as_str_name()[10..].to_lowercase();
+    let node_type = &req.node_type().as_str_name()[10..];
     let reqs = grpc
         .cookbook
-        .rhai_metadata(&blockchain.name, &node_type, &req.version)
+        .rhai_metadata(&blockchain.name, node_type, &req.version)
         .await?
         .requirements;
     let new_node = req.as_new(user.id, reqs)?;
