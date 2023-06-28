@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use aws_sdk_s3::config::Credentials;
 
 use crate::config;
@@ -231,10 +231,9 @@ impl api::ConfigIdentifier {
         // relevant parts by `/`-splitting the path.
         let key = key.as_ref();
         let parts: Vec<&str> = key.split('/').collect();
-        let parts: [&str; 5] = parts
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("{key} is not splittable in 5 `/`-separated parts"))?;
-        let [_, protocol, node_type, node_version, _] = parts;
+        let [_, protocol, node_type, node_version, ..] = &parts[..] else {
+            return Err(anyhow!("{key} is not splittable in at least 4 `/`-separated parts").into());
+        };
         let id = api::ConfigIdentifier {
             protocol: protocol.to_string(),
             node_type: node_type.to_string(),
