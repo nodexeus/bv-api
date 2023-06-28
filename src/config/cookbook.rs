@@ -21,7 +21,7 @@ const AWS_ACCESS_KEY_ID_ENTRY: &str = "cookbook.aws_access_key_id";
 const AWS_SECRET_ACCESS_KEY_VAR: &str = "AWS_SECRET_ACCESS_KEY";
 const AWS_SECRET_ACCESS_KEY_ENTRY: &str = "cookbook.aws_secret_access_key";
 const BUNDLE_BUCKET_VAR: &str = "R2_BUNDLE_BUCKET";
-const BUNDLE_BUCKET_ENTRY: &str = "cookbook.bundle_dir";
+const BUNDLE_BUCKET_ENTRY: &str = "cookbook.bundle_bucket";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

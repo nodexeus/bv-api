@@ -258,3 +258,24 @@ pub struct UserPayAddress {
     // TODO: This field should not need to be optional
     pub pay_address: Option<String>,
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+
+//     #[test]
+//     fn test_password_is_backwards_compatible() {
+//         let user = User {
+//             id: uuid::Uuid::new_v4(),
+//             email: "shitballer@joe.com".to_string(),
+//             hashword: "tsLFiNniPopvXVlcShrRNy7BpnYO7hlKrq5g0RRlDtQ".to_string(),
+//             salt: "/SEfUgXQ1JsvQZwiSvlzoQ".to_string(),
+//             created_at: chrono::Utc::now(),
+//             first_name: "Joe".to_string(),
+//             last_name: "Ballington".to_string(),
+//             confirmed_at: Some(chrono::Utc::now()),
+//             deleted_at: None,
+//         };
+//         user.verify_password("password").unwrap()
+//     }
+// }
