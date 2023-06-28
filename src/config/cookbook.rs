@@ -12,8 +12,8 @@ const R2_BUCKET_VAR: &str = "R2_BUCKET";
 const R2_BUCKET_ENTRY: &str = "cookbook.r2_bucket";
 const R2_URL_VAR: &str = "R2_URL";
 const R2_URL_ENTRY: &str = "cookbook.url";
-const PRESIGNED_URL_EXPIRATION_SECS_VAR: &str = "PRESIGNED_URL_EXPIRATION_SECS";
-const PRESIGNED_URL_EXPIRATION_SECS_ENTRY: &str = "cookbook.expiration";
+const PRESIGNED_URL_EXPIRATION_VAR: &str = "PRESIGNED_URL_EXPIRATION";
+const PRESIGNED_URL_EXPIRATION_ENTRY: &str = "cookbook.expiration";
 const REGION_VAR: &str = "AWS_REGION";
 const REGION_ENTRY: &str = "cookbook.aws_region";
 const AWS_ACCESS_KEY_ID_VAR: &str = "AWS_ACCESS_KEY_ID";
@@ -35,7 +35,7 @@ pub enum Error {
     ReadBucket(provider::Error),
     /// Failed to parse {R2_URL_VAR:?}: {0}
     ReadUrl(provider::Error),
-    /// Failed to parse {PRESIGNED_URL_EXPIRATION_SECS_VAR:?}: {0}
+    /// Failed to parse {PRESIGNED_URL_EXPIRATION_VAR:?}: {0}
     ReadExpiration(provider::Error),
     /// Failed to parse {REGION_VAR:?}: {0}
     ReadRegion(provider::Error),
@@ -78,10 +78,7 @@ impl TryFrom<&Provider> for Config {
                 .read(R2_URL_VAR, R2_URL_ENTRY)
                 .map_err(Error::ReadUrl)?,
             presigned_url_expiration: provider
-                .read(
-                    PRESIGNED_URL_EXPIRATION_SECS_VAR,
-                    PRESIGNED_URL_EXPIRATION_SECS_ENTRY,
-                )
+                .read(PRESIGNED_URL_EXPIRATION_VAR, PRESIGNED_URL_EXPIRATION_ENTRY)
                 .map_err(Error::ReadExpiration)?,
             region: provider
                 .read(REGION_VAR, REGION_ENTRY)
