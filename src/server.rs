@@ -120,7 +120,7 @@ impl rustls::client::ServerCertVerifier for DontVerifyHostName {
             //     Ok(rustls::client::ServerCertVerified::assertion())
             // }
             // Err(e) => Err(e),
-            Err(e) => Ok(rustls::client::ServerCertVerified::assertion()),
+            Err(_) => Ok(rustls::client::ServerCertVerified::assertion()),
         }
     }
 }
