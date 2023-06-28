@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -179,13 +180,22 @@ impl Cookbook {
         protocol: &str,
         node_type: &str,
     ) -> crate::Result<Vec<api::ConfigIdentifier>> {
-        let path = format!("{}/{protocol}/{node_type}", self.prefix);
-        self.client
-            .list(&self.bucket, &path)
-            .await?
-            .iter()
-            .map(api::ConfigIdentifier::from_key)
-            .collect()
+        // We retrieve the config identifiers from the folder structure on S3. Suppose there exist
+        // some files:
+        // prefix/eth/validator/0.0.3/data.txt
+        // prefix/eth/validator/0.0.3/babel.rhai
+        // prefix/eth/validator/0.0.6/babel.rhai
+        // Then we want to return the configidentifiers from this that have version 0.0.3 and 0.0.6.
+        // Since we are filtering by protocol and node_type, we will only need to deduplicate using
+        // the version field, so we throw everything into a map from version to the config
+        // identifier, and use that map to construct our final result.
+        let path = format!("{prefix}/{protocol}/{node_type}", prefix = self.prefix);
+        let mut idents: HashMap<String, _> = HashMap::new();
+        for ident in self.client.list(&self.bucket, &path).await?.iter() {
+            let ident = api::ConfigIdentifier::from_key(ident)?;
+            idents.insert(ident.node_type.clone(), ident);
+        }
+        Ok(idents.into_values().collect())
     }
 
     pub async fn list_bundles(&self) -> crate::Result<Vec<api::BundleIdentifier>> {
