@@ -218,7 +218,8 @@ impl bundle_service_server::BundleService for super::GrpcImpl {
         &self,
         req: tonic::Request<api::BundleServiceRetrieveRequest>,
     ) -> super::Resp<api::BundleServiceRetrieveResponse> {
-        retrieve(self, req).await
+        let mut conn = self.conn().await?;
+        retrieve(self, req, &mut conn).await
     }
 
     /// List all available bundle versions.
@@ -226,7 +227,8 @@ impl bundle_service_server::BundleService for super::GrpcImpl {
         &self,
         req: tonic::Request<api::BundleServiceListBundleVersionsRequest>,
     ) -> super::Resp<api::BundleServiceListBundleVersionsResponse> {
-        list_bundle_versions(self, req).await
+        let mut conn = self.conn().await?;
+        list_bundle_versions(self, req, &mut conn).await
     }
 
     /// Delete bundle from storage.
@@ -234,14 +236,17 @@ impl bundle_service_server::BundleService for super::GrpcImpl {
         &self,
         req: tonic::Request<api::BundleServiceDeleteRequest>,
     ) -> super::Resp<api::BundleServiceDeleteResponse> {
-        delete(self, req).await
+        let mut conn = self.conn().await?;
+        delete(self, req, &mut conn).await
     }
 }
 
 async fn retrieve(
     grpc: &super::GrpcImpl,
     req: tonic::Request<api::BundleServiceRetrieveRequest>,
+    conn: &mut Conn,
 ) -> super::Resp<api::BundleServiceRetrieveResponse> {
+    auth::get_claims(&req, Endpoint::BundleRetrieve, conn).await?;
     let req = req.into_inner();
     let id = req.id.ok_or_else(required("id"))?;
     let url = grpc.cookbook.bundle_download_url(&id.version).await?;
@@ -254,8 +259,10 @@ async fn retrieve(
 /// List all available bundle versions.
 async fn list_bundle_versions(
     grpc: &super::GrpcImpl,
-    _: tonic::Request<api::BundleServiceListBundleVersionsRequest>,
+    req: tonic::Request<api::BundleServiceListBundleVersionsRequest>,
+    conn: &mut Conn,
 ) -> super::Resp<api::BundleServiceListBundleVersionsResponse> {
+    auth::get_claims(&req, Endpoint::BundleListBundleVersions, conn).await?;
     let identifiers = grpc.cookbook.list_bundles().await?;
     let resp = api::BundleServiceListBundleVersionsResponse { identifiers };
     Ok(tonic::Response::new(resp))
@@ -264,8 +271,10 @@ async fn list_bundle_versions(
 /// Delete bundle from storage.
 async fn delete(
     _grpc: &super::GrpcImpl,
-    _req: tonic::Request<api::BundleServiceDeleteRequest>,
+    req: tonic::Request<api::BundleServiceDeleteRequest>,
+    conn: &mut Conn,
 ) -> super::Resp<api::BundleServiceDeleteResponse> {
+    auth::get_claims(&req, Endpoint::BundleDelete, conn).await?;
     // This endpoint is not currently used.
     Err(tonic::Status::unimplemented("Sod off"))
 }

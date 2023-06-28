@@ -335,9 +335,11 @@ pub enum Endpoint {
     CookbookRequirements = 1304,
     CookbookNetConfigurations = 1305,
     CookbookListBabelVersions = 1306,
-    CookbookAddStage = 1307,
-    CookbookRemoveStage = 1308,
-    CookbookDelete = 1309,
+
+    BundleAll = 1400,
+    BundleRetrieve = 1401,
+    BundleListBundleVersions = 1402,
+    BundleDelete = 1403,
 }
 
 const SPACE_PER_SERVICE: u64 = 100;

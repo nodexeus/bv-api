@@ -171,12 +171,13 @@ async fn refresh(
     }
 
     // The following is a workaround that sort of patches existing host tokens. Removeme
-    if !decoded.endpoints.includes(Endpoint::HostUpdate) {
+    if !decoded.endpoints.includes(Endpoint::CookbookAll) {
         decoded.endpoints = match decoded.endpoints {
             auth::token::Endpoints::Wildcard => auth::token::Endpoints::Wildcard,
             auth::token::Endpoints::Single(e) => auth::token::Endpoints::Single(e),
             auth::token::Endpoints::Multiple(mut es) => {
-                es.insert(7, Endpoint::HostUpdate);
+                es.push(Endpoint::BundleAll);
+                es.push(Endpoint::CookbookAll);
                 auth::token::Endpoints::Multiple(es)
             }
         }
