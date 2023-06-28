@@ -366,7 +366,7 @@ impl api::Node {
                     node.created_by.and_then(|u_id| users.get(&u_id)),
                     props_map[&node.id].clone(),
                     &orgs[&node.org_id],
-                    &hosts[&node.org_id],
+                    &hosts[&node.host_id],
                 )
             })
             .collect()
