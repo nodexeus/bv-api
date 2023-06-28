@@ -58,15 +58,12 @@ async fn list(
     let mut network_futs = vec![];
     for blockchain in &blockchains {
         for node_properties in blockchain.properties(conn).await? {
-            let name = blockchain.name.clone();
-            let node_type = node_properties.node_type.to_string();
-            let version = node_properties.version.clone();
             network_futs.push(try_get_networks(
                 &grpc.cookbook,
                 blockchain.id,
-                name,
-                node_type,
-                version,
+                blockchain.name.to_lowercase(),
+                node_properties.node_type.to_string().to_lowercase(),
+                node_properties.version.clone(),
             ));
         }
     }

@@ -127,7 +127,7 @@ impl Cookbook {
         Self {
             prefix: config.dir_chains_prefix.clone(),
             bucket: config.r2_bucket.clone(),
-            bundle_bucket: format!("{}-{}", config.bundle_dir, config.bundle_stage),
+            bundle_bucket: config.bundle_bucket.clone(),
             expiration: config.presigned_url_expiration.to_std(),
             client: Arc::new(client),
             engine,

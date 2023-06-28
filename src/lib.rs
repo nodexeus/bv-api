@@ -145,8 +145,7 @@ mod test {
                 region: "eu-west-3".to_string(),
                 key_id: "not actually a".parse().unwrap(),
                 key: "key".parse().unwrap(),
-                bundle_dir: "bundles".to_string(),
-                bundle_stage: "prod".to_string(),
+                bundle_bucket: "bundles".to_string(),
             };
             Arc::new(config)
         }
