@@ -116,10 +116,11 @@ impl rustls::client::ServerCertVerifier for DontVerifyHostName {
         );
         match outcome {
             Ok(o) => Ok(o),
-            Err(rustls::Error::UnsupportedNameType) => {
-                Ok(rustls::client::ServerCertVerified::assertion())
-            }
-            Err(e) => Err(e),
+            // Err(rustls::Error::UnsupportedNameType) => {
+            //     Ok(rustls::client::ServerCertVerified::assertion())
+            // }
+            // Err(e) => Err(e),
+            Err(e) => Ok(rustls::client::ServerCertVerified::assertion()),
         }
     }
 }

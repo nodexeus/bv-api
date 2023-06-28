@@ -426,3 +426,14 @@ pub mod script {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_identifier_from_key() {
+        api::ConfigIdentifier::from_key("chains/testing/validator/0.0.1").unwrap();
+        api::ConfigIdentifier::from_key("chains/testing/validator/0.0.1/babel.rhai").unwrap();
+    }
+}
