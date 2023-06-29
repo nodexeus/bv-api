@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package blockjoy.v1;
 
-import "blockjoy/v1/blockchain.proto";
 import "blockjoy/v1/node.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -13,13 +12,16 @@ message Command {
   optional string response = 2;
   // A command may have an exit code.
   optional int32 exit_code = 3;
+  // A client may acknowledge that they have received a command, even if they
+  // have not finished processing it.
+  optional google.protobuf.Timestamp acked_at = 4;
   // The rest of the fields are split in two. There are commands that are meant
   // to instrument hosts, and commands that are meant to instrument nodes. The
   // reason we have this dichotomy is because the commands that go to a node
   // typically look different from those that go to a host.
   oneof command {
-    NodeCommand node = 4;
-    HostCommand host = 5;
+    NodeCommand node = 5;
+    HostCommand host = 6;
   }
 }
 
@@ -34,6 +36,9 @@ service CommandService {
   // Update a single command status
   rpc Update(CommandServiceUpdateRequest) returns
     (CommandServiceUpdateResponse);
+  // Use this method to acknowledge that you have received an command and either
+  // already started processing it, or will soon start processing it.
+  rpc Ack(CommandServiceAckRequest) returns (CommandServiceAckResponse);
   // Get pending commands for host. Pending is means that their execution has
   // not completed, be that successfully or unsuccessfully. This is defined as
   // commands that do not have an `exit_code`. To mark a command as no longer
@@ -81,6 +86,13 @@ message CommandServiceUpdateRequest {
 
 message CommandServiceUpdateResponse {
   Command command = 1;
+}
+
+message CommandServiceAckRequest {
+  string id = 1;
+}
+
+message CommandServiceAckResponse {
 }
 
 message CommandServicePendingRequest {

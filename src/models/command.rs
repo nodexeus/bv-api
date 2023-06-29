@@ -1,6 +1,5 @@
 use crate::models::schema::commands;
 use crate::Result;
-use chrono::{DateTime, Utc};
 use diesel::{dsl, prelude::*};
 use diesel_async::RunQueryDsl;
 use uuid::Uuid;
@@ -33,9 +32,10 @@ pub struct Command {
     pub sub_cmd: Option<String>,
     pub response: Option<String>,
     pub exit_status: Option<i32>,
-    pub created_at: DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
     pub node_id: Option<Uuid>,
+    pub acked_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 type Pending = dsl::Filter<commands::table, dsl::IsNull<commands::exit_status>>;
@@ -74,6 +74,14 @@ impl Command {
         Ok(Some(super::Node::find_by_id(node_id, conn).await?))
     }
 
+    pub async fn ack(&self, conn: &mut super::Conn) -> Result<()> {
+        diesel::update(commands::table.find(self.id))
+            .set(commands::acked_at.eq(chrono::Utc::now()))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
     fn pending() -> Pending {
         commands::table.filter(commands::exit_status.is_null())
     }
@@ -104,7 +112,7 @@ pub struct UpdateCommand<'a> {
     pub id: Uuid,
     pub response: Option<&'a str>,
     pub exit_status: Option<i32>,
-    pub completed_at: DateTime<Utc>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl UpdateCommand<'_> {

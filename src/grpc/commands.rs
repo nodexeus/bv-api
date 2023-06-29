@@ -47,6 +47,13 @@ impl command_service_server::CommandService for super::GrpcImpl {
         Ok(result.resp)
     }
 
+    async fn ack(
+        &self,
+        req: tonic::Request<api::CommandServiceAckRequest>,
+    ) -> super::Resp<api::CommandServiceAckResponse> {
+        self.trx(|c| ack(req, c).scope_boxed()).await
+    }
+
     async fn pending(
         &self,
         req: tonic::Request<api::CommandServicePendingRequest>,
@@ -149,6 +156,27 @@ async fn update(
     })
 }
 
+async fn ack(
+    req: tonic::Request<api::CommandServiceAckRequest>,
+    conn: &mut models::Conn,
+) -> super::Result<api::CommandServiceAckResponse> {
+    let claims = auth::get_claims(&req, Endpoint::CommandAck, conn).await?;
+    let req = req.into_inner();
+    let command = models::Command::find_by_id(req.id.parse()?, conn).await?;
+    let host = command.host(conn).await?;
+    let node = command.node(conn).await?;
+    let is_allowed = access_allowed(claims, node.as_ref(), &host, conn).await?;
+    if !is_allowed {
+        super::forbidden!("Access denied");
+    }
+    if command.acked_at.is_some() {
+        super::forbidden!("Already acknowledged");
+    }
+    command.ack(conn).await?;
+    let resp = api::CommandServiceAckResponse {};
+    Ok(tonic::Response::new(resp))
+}
+
 async fn pending(
     req: tonic::Request<api::CommandServicePendingRequest>,
     conn: &mut models::Conn,
@@ -232,6 +260,7 @@ impl api::Command {
                 id: model.id.to_string(),
                 response: model.response.clone(),
                 exit_code: model.exit_status,
+                acked_at: model.acked_at.map(super::try_dt_to_ts).transpose()?,
                 command: Some(command::Command::Node(api::NodeCommand {
                     node_id,
                     host_id: model.host_id.to_string(),
@@ -250,6 +279,7 @@ impl api::Command {
                 id: model.id.to_string(),
                 response: model.response.clone(),
                 exit_code: model.exit_status,
+                acked_at: model.acked_at.map(super::try_dt_to_ts).transpose()?,
                 command: Some(command::Command::Host(api::HostCommand { host_id })),
             })
         };
@@ -445,7 +475,7 @@ impl api::CommandServiceUpdateRequest {
             id: self.id.parse()?,
             response: self.response.as_deref(),
             exit_status: self.exit_code,
-            completed_at: chrono::Utc::now(),
+            completed_at: self.exit_code.map(|_| chrono::Utc::now()),
         })
     }
 }
