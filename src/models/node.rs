@@ -229,7 +229,6 @@ impl Node {
                     requirements,
                     self.blockchain_id,
                     self.node_type,
-                    self.org_id,
                     scheduler,
                     conn,
                 )
@@ -406,7 +405,6 @@ impl NewNode<'_> {
             requirements,
             self.blockchain_id,
             self.node_type,
-            self.org_id,
             scheduler,
             conn,
         )

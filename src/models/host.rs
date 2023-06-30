@@ -121,7 +121,6 @@ impl Host {
         requirements: HardwareRequirements,
         blockchain_id: uuid::Uuid,
         node_type: super::NodeType,
-        org_id: uuid::Uuid,
         scheduler: super::NodeScheduler,
         conn: &mut super::Conn,
     ) -> crate::Result<Vec<Host>> {
@@ -148,7 +147,7 @@ impl Host {
                 hosts.mem_size_bytes - (SELECT COALESCE(SUM(mem_size_bytes), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) as av_mem,
                 hosts.disk_size_bytes - (SELECT COALESCE(SUM(disk_size_bytes), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) as av_disk,
                 (SELECT COUNT(*) FROM ip_addresses WHERE ip_addresses.host_id = hosts.id AND NOT ip_addresses.is_assigned) as ips,
-                (SELECT COUNT(*) FROM nodes WHERE host_id = hosts.id AND blockchain_id = $4 AND node_type = $5 AND org_id = $6) as n_similar
+                (SELECT COUNT(*) FROM nodes WHERE host_id = hosts.id AND blockchain_id = $4 AND node_type = $5 AND host_type = 'cloud') as n_similar
             FROM
                 hosts
         ) AS resouces
@@ -172,7 +171,6 @@ impl Host {
             .bind::<BigInt, _>(requirements.disk_size_gb as i64 * 1000 * 1000 * 1000)
             .bind::<Uuid, _>(blockchain_id)
             .bind::<EnumNodeType, _>(node_type)
-            .bind::<Uuid, _>(org_id)
             .get_results(conn)
             .await?;
         let host_ids: Vec<_> = hosts.into_iter().map(|h| h.host_id).collect();
