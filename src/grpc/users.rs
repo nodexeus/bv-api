@@ -2,7 +2,7 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 
 use super::api::{self, user_service_server};
 use crate::auth::token::{Endpoint, Resource};
-// use crate::mail::MailClient;
+use crate::mail::MailClient;
 use crate::{auth, models};
 
 #[tonic::async_trait]
@@ -49,14 +49,9 @@ async fn create(
     let new_user = inner.as_new()?;
     let new_user = new_user.create(conn).await?;
 
-    // Since new users can't create accounts on their own initiative anymore, we don't need to
-    // confirm email addresses anymore.
-    // MailClient::new(&conn.context.config)
-    //     .registration_confirmation(&new_user, &conn.context.cipher)
-    //     .await?;
-
-    // Instead we immediately mark the user as confirmed immediately
-    models::User::confirm(new_user.id, conn).await?;
+    MailClient::new(&conn.context.config)
+        .registration_confirmation(&new_user, &conn.context.cipher)
+        .await?;
 
     let resp = api::UserServiceCreateResponse {
         user: Some(api::User::from_model(new_user)?),
