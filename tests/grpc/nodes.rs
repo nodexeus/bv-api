@@ -169,6 +169,49 @@ async fn responds_ok_with_valid_data_for_update_config() {
 }
 
 #[tokio::test]
+async fn responds_ok_for_start_stop_restart() {
+    let tester = super::Tester::new().await;
+    let node = tester.node().await;
+    let req = api::NodeServiceStartRequest {
+        id: node.id.to_string(),
+    };
+    tester.send_admin(Service::start, req).await.unwrap();
+    validate_command(&tester).await;
+    let req = api::NodeServiceStopRequest {
+        id: node.id.to_string(),
+    };
+    tester.send_admin(Service::stop, req).await.unwrap();
+    validate_command(&tester).await;
+    let req = api::NodeServiceRestartRequest {
+        id: node.id.to_string(),
+    };
+    tester.send_admin(Service::restart, req).await.unwrap();
+    validate_command(&tester).await;
+}
+
+#[tokio::test]
+async fn responds_permission_denied_with_user_token_for_update_status() {
+    let tester = super::Tester::new().await;
+
+    let user = tester.user().await;
+    let claims = tester.user_token(&user).await;
+    let jwt = tester.context().cipher.jwt.encode(&claims).unwrap();
+
+    let node = tester.node().await;
+    let req = api::NodeServiceUpdateStatusRequest {
+        id: node.id.to_string(),
+        version: Some("v2".to_string()),
+        container_status: None,
+        address: Some("address".to_string()),
+    };
+    let status = tester
+        .send_with(Service::update_status, req, &jwt)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::PermissionDenied);
+}
+
+#[tokio::test]
 async fn responds_internal_with_invalid_data_for_update_config() {
     let tester = super::Tester::new().await;
     let req = api::NodeServiceUpdateConfigRequest {
