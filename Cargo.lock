@@ -569,6 +569,7 @@ dependencies = [
  "rumqttc",
  "rustls 0.21.2",
  "rustls-native-certs",
+ "semver",
  "sendgrid",
  "serde",
  "serde_json",

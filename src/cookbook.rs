@@ -205,12 +205,13 @@ impl Cookbook {
     }
 
     pub async fn list_bundles(&self) -> crate::Result<Vec<api::BundleIdentifier>> {
-        self.client
+        Ok(self
+            .client
             .list(&self.bundle_bucket, "/")
             .await?
             .iter()
-            .map(api::BundleIdentifier::from_key)
-            .collect()
+            .flat_map(api::BundleIdentifier::from_key)
+            .collect())
     }
 
     pub async fn rhai_metadata(
@@ -265,10 +266,15 @@ impl api::ConfigIdentifier {
 
 impl api::BundleIdentifier {
     fn from_key(key: impl AsRef<str>) -> crate::Result<Self> {
-        // This `from_key` implementation is much simpler than the one for `ConfigIdentifier`, but
-        // its signature is purposefully the same so it looks nice and symmetrical.
+        // "0.1.0/bvd-bundle.tgz"
+        let key = key.as_ref();
+        // "0.1.0"
+        let Some(version) = key.strip_suffix(&format!("/{BUNDLE_NAME}")) else {
+            return Err(anyhow!("File name should end in /{BUNDLE_NAME}, but is {key}").into());
+        };
+        semver::Version::parse(version).context("cannot parse version")?;
         let id = api::BundleIdentifier {
-            version: key.as_ref().to_owned(),
+            version: version.to_owned(),
         };
         Ok(id)
     }
