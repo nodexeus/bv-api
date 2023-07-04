@@ -48,7 +48,14 @@ service HostService {
   rpc Get(HostServiceGetRequest) returns (HostServiceGetResponse);
   rpc List(HostServiceListRequest) returns (HostServiceListResponse);
   // Update a single host
+  // This shall be used only by Host.
   rpc Update(HostServiceUpdateRequest) returns (HostServiceUpdateResponse);
+  // Start a single host
+  rpc Start(HostServiceStartRequest) returns (HostServiceStartResponse);
+  // Stop a single host
+  rpc Stop(HostServiceStopRequest) returns (HostServiceStopResponse);
+  // Restart a single host
+  rpc Restart(HostServiceRestartRequest) returns (HostServiceRestartResponse);
   // Delete a single host
   rpc Delete(HostServiceDeleteRequest) returns (HostServiceDeleteResponse);
 }
@@ -119,6 +126,27 @@ message HostServiceUpdateRequest {
 }
 
 message HostServiceUpdateResponse {
+}
+
+message HostServiceStartRequest {
+  string id = 1;
+}
+
+message HostServiceStartResponse {
+}
+
+message HostServiceStopRequest {
+  string id = 1;
+}
+
+message HostServiceStopResponse {
+}
+
+message HostServiceRestartRequest {
+  string id = 1;
+}
+
+message HostServiceRestartResponse {
 }
 
 message HostServiceDeleteRequest {

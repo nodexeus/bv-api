@@ -54,8 +54,20 @@ service NodeService {
   rpc Get(NodeServiceGetRequest) returns (NodeServiceGetResponse);
   /* Get nodes belonging to org */
   rpc List(NodeServiceListRequest) returns (NodeServiceListResponse);
-  /* Update a single blockchain node */
-  rpc Update(NodeServiceUpdateRequest) returns (NodeServiceUpdateResponse);
+  /* Update a single blockchain node configuration */
+  rpc UpdateConfig(NodeServiceUpdateConfigRequest) returns
+      (NodeServiceUpdateConfigResponse);
+  /* Update a single blockchain node status.
+     This shall be used only by Host running the Node.
+   */
+  rpc UpdateStatus(NodeServiceUpdateStatusRequest) returns
+      (NodeServiceUpdateStatusResponse);
+  /* Start a single node */
+  rpc Start(NodeServiceStartRequest) returns (NodeServiceStartResponse);
+  /* Stop a single node */
+  rpc Stop(NodeServiceStopRequest) returns (NodeServiceStopResponse);
+  /* Restart a single node */
+  rpc Restart(NodeServiceRestartRequest) returns (NodeServiceRestartResponse);
   /* Delete a single node */
   rpc Delete(NodeServiceDeleteRequest) returns (NodeServiceDeleteResponse);
 }
@@ -132,25 +144,55 @@ message NodeServiceListResponse {
   uint64 node_count = 2;
 }
 
-// This request is used for updating a node.
-message NodeServiceUpdateRequest {
+// This request is used for updating a node configuration.
+message NodeServiceUpdateConfigRequest {
+  // The UUID of the node that you want to update.
+  string id = 1;
+  // Whether or not the node software should update itself.
+  optional bool self_update = 2;
+  // A list of ip addresses allowed to access public ports on this node.
+  repeated FilteredIpAddr allow_ips = 3;
+  // A list of ip addresses denied all access to any ports on this node.
+  repeated FilteredIpAddr deny_ips = 4;
+}
+
+message NodeServiceUpdateConfigResponse {
+}
+
+// This request is used for updating a node status.
+message NodeServiceUpdateStatusRequest {
   // The UUID of the node that you want to update.
   string id = 1;
   // The version of the blockchain software that should now be ran on the node.
   optional string version = 2;
-  // Whether or not the node software should update itself.
-  optional bool self_update = 4;
   // Set the container status field to this value.
-  optional ContainerStatus container_status = 5;
+  optional ContainerStatus container_status = 3;
   // Update the P2P address of the blockchain node.
-  optional string address = 6;
-  // A list of ip addresses allowed to access public ports on this node.
-  repeated FilteredIpAddr allow_ips = 7;
-  // A list of ip addresses denied all access to any ports on this node.
-  repeated FilteredIpAddr deny_ips = 8;
+  optional string address = 4;
 }
 
-message NodeServiceUpdateResponse {
+message NodeServiceUpdateStatusResponse {
+}
+
+message NodeServiceStartRequest {
+  string id = 1;
+}
+
+message NodeServiceStartResponse {
+}
+
+message NodeServiceStopRequest {
+  string id = 1;
+}
+
+message NodeServiceStopResponse {
+}
+
+message NodeServiceRestartRequest {
+  string id = 1;
+}
+
+message NodeServiceRestartResponse {
 }
 
 message NodeServiceDeleteRequest {

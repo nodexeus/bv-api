@@ -46,6 +46,30 @@ async fn responds_permission_denied_with_token_ownership_for_update() {
 }
 
 #[tokio::test]
+async fn responds_permission_denied_with_user_token_for_update() {
+    let tester = super::Tester::new().await;
+
+    let user = tester.user().await;
+    let claims = tester.user_token(&user).await;
+    let jwt = tester.context().cipher.jwt.encode(&claims).unwrap();
+
+    let other_host = tester.host2().await;
+    let req = api::HostServiceUpdateRequest {
+        id: other_host.id.to_string(),
+        name: Some("hostus mostus maximus".to_string()),
+        version: Some("3".to_string()),
+        os: Some("LuukOS".to_string()),
+        os_version: Some("5".to_string()),
+    };
+
+    let status = tester
+        .send_with(Service::update, req, &jwt)
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::PermissionDenied);
+}
+
+#[tokio::test]
 async fn responds_ok_for_create() {
     type OrgService = api::org_service_client::OrgServiceClient<super::Channel>;
 
@@ -124,6 +148,31 @@ async fn responds_ok_for_delete() {
         .await
         .unwrap();
     tester.send_with(Service::delete, req, &jwt).await.unwrap();
+}
+
+#[tokio::test]
+async fn responds_ok_for_start_stop_restart() {
+    let tester = super::Tester::new().await;
+
+    let host = tester.host().await;
+    let user = tester.user().await;
+    let claims = tester.user_token(&user).await;
+    let jwt = tester.context().cipher.jwt.encode(&claims).unwrap();
+
+    let req = api::HostServiceStartRequest {
+        id: host.id.to_string(),
+    };
+    tester.send_with(Service::start, req, &jwt).await.unwrap();
+
+    let req = api::HostServiceStopRequest {
+        id: host.id.to_string(),
+    };
+    tester.send_with(Service::stop, req, &jwt).await.unwrap();
+
+    let req = api::HostServiceRestartRequest {
+        id: host.id.to_string(),
+    };
+    tester.send_with(Service::restart, req, &jwt).await.unwrap();
 }
 
 #[tokio::test]

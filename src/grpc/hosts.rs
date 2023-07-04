@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
 use diesel_async::scoped_futures::ScopedFutureExt;
+use uuid::Uuid;
 
 use super::api::{self, host_service_server};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::token::{Claims, Endpoint, Resource, ResourceType};
+use crate::models::CommandType;
 use crate::{auth, models};
 
 /// This is a list of all the endpoints that a user is allowed to access with the jwt that they
@@ -25,6 +27,11 @@ const HOST_ENDPOINTS: [Endpoint; 13] = [
     Endpoint::MetricsAll,
     Endpoint::NodeAll,
 ];
+
+struct HostCommandResult<T> {
+    commands: Vec<api::Command>,
+    resp: tonic::Response<T>,
+}
 
 #[tonic::async_trait]
 impl host_service_server::HostService for super::GrpcImpl {
@@ -59,6 +66,59 @@ impl host_service_server::HostService for super::GrpcImpl {
         req: tonic::Request<api::HostServiceUpdateRequest>,
     ) -> super::Resp<api::HostServiceUpdateResponse> {
         self.trx(|c| update(req, c).scope_boxed()).await
+    }
+
+    async fn start(
+        &self,
+        req: tonic::Request<api::HostServiceStartRequest>,
+    ) -> super::Resp<api::HostServiceStartResponse> {
+        let result = self
+            .trx(|c| {
+                async {
+                    let claims = auth::get_claims(&req, Endpoint::HostStart, c).await?;
+                    change_host_state(&req.into_inner().id, CommandType::RestartBVS, claims, c)
+                        .await
+                }
+                .scope_boxed()
+            })
+            .await?;
+        self.send_commands_notify(&result.commands).await?;
+        Ok(result.resp)
+    }
+
+    async fn stop(
+        &self,
+        req: tonic::Request<api::HostServiceStopRequest>,
+    ) -> super::Resp<api::HostServiceStopResponse> {
+        let result = self
+            .trx(|c| {
+                async {
+                    let claims = auth::get_claims(&req, Endpoint::HostStop, c).await?;
+                    change_host_state(&req.into_inner().id, CommandType::StopBVS, claims, c).await
+                }
+                .scope_boxed()
+            })
+            .await?;
+        self.send_commands_notify(&result.commands).await?;
+        Ok(result.resp)
+    }
+
+    async fn restart(
+        &self,
+        req: tonic::Request<api::HostServiceRestartRequest>,
+    ) -> super::Resp<api::HostServiceRestartResponse> {
+        let result = self
+            .trx(|c| {
+                async {
+                    let claims = auth::get_claims(&req, Endpoint::HostRestart, c).await?;
+                    change_host_state(&req.into_inner().id, CommandType::RestartBVS, claims, c)
+                        .await
+                }
+                .scope_boxed()
+            })
+            .await?;
+        self.send_commands_notify(&result.commands).await?;
+        Ok(result.resp)
     }
 
     async fn delete(
@@ -175,6 +235,23 @@ async fn update(
     let req = req.into_inner();
     let host_id = req.id.parse()?;
     let host = models::Host::find_by_id(host_id, conn).await?;
+    if !matches!(claims.resource(), Resource::Host(host_id) if host.id == host_id) {
+        super::forbidden!("Access not allowed - only host may update its own status")
+    }
+    let updater = req.as_update()?;
+    updater.update(conn).await?;
+    let resp = api::HostServiceUpdateResponse {};
+    Ok(tonic::Response::new(resp))
+}
+
+async fn change_host_state<Res: Default>(
+    id: &str,
+    cmd_type: CommandType,
+    claims: Claims,
+    conn: &mut models::Conn,
+) -> crate::Result<HostCommandResult<Res>> {
+    let host_id = id.parse()?;
+    let host = models::Host::find_by_id(host_id, conn).await?;
     let is_allowed = match claims.resource() {
         Resource::User(user_id) => models::Org::is_member(user_id, host.org_id, conn).await?,
         Resource::Org(org_id) => org_id == host.org_id,
@@ -182,12 +259,13 @@ async fn update(
         Resource::Node(_) => false,
     };
     if !is_allowed {
-        super::forbidden!("Not allowed to delete host {host_id}!");
+        super::forbidden!("Access not allowed")
     }
-    let updater = req.as_update()?;
-    updater.update(conn).await?;
-    let resp = api::HostServiceUpdateResponse {};
-    Ok(tonic::Response::new(resp))
+
+    Ok(HostCommandResult {
+        commands: vec![host_cmd(host_id, cmd_type, conn).await?],
+        resp: tonic::Response::new(Default::default()),
+    })
 }
 
 async fn delete(
@@ -211,6 +289,21 @@ async fn delete(
     let resp = api::HostServiceDeleteResponse {};
 
     Ok(tonic::Response::new(resp))
+}
+
+async fn host_cmd(
+    host_id: Uuid,
+    command_type: CommandType,
+    conn: &mut models::Conn,
+) -> crate::Result<api::Command> {
+    let command = models::NewCommand {
+        host_id,
+        cmd: command_type,
+        sub_cmd: None,
+        node_id: None,
+    };
+    let command = command.create(conn).await?;
+    api::Command::from_model(&command, conn).await
 }
 
 impl api::Host {

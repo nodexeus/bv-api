@@ -41,6 +41,15 @@ struct GrpcImpl {
     dns: CloudflareApi,
 }
 
+impl GrpcImpl {
+    async fn send_commands_notify(&self, commands: &[api::Command]) -> crate::Result<()> {
+        for command in commands {
+            self.notifier.commands_sender().send(command).await?;
+        }
+        Ok(())
+    }
+}
+
 impl std::ops::Deref for GrpcImpl {
     type Target = models::DbPool;
 
