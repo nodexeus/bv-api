@@ -283,6 +283,9 @@ pub enum Endpoint {
     HostUpdate = 404,
     HostDelete = 405,
     HostProvision = 406,
+    HostStart = 407,
+    HostStop = 408,
+    HostRestart = 409,
 
     HostProvisionAll = 500,
     HostProvisionGet = 501,
@@ -307,8 +310,12 @@ pub enum Endpoint {
     NodeCreate = 901,
     NodeGet = 902,
     NodeList = 903,
-    NodeUpdate = 904,
+    NodeUpdateConfig = 904,
     NodeDelete = 905,
+    NodeUpdateStatus = 906,
+    NodeStart = 907,
+    NodeStop = 908,
+    NodeRestart = 909,
 
     OrgAll = 1000,
     OrgCreate = 1001,

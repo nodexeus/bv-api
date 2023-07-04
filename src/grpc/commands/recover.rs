@@ -32,7 +32,7 @@ async fn recover_created(
     let mut vec = vec![];
     let Some(node_id) = failed_cmd.node_id else {
         tracing::error!("`CreateNode` command has no node id!");
-        return Err(crate::Error::ValidationError (
+        return Err(crate::Error::ValidationError(
             "CreateNode command has no node id".to_string(),
         ));
     };
@@ -47,13 +47,13 @@ async fn recover_created(
     //    blockvisord, or mark the current node as failed and send an MQTT message to the front end.
     let Ok(mut node) = models::Node::find_by_id(node_id, conn).await else {
         tracing::error!("Could not get node for node_id {node_id}");
-        return Err(crate::Error::ValidationError (
+        return Err(crate::Error::ValidationError(
             "Could not get node for node_id".to_string(),
         ));
     };
     let Ok(blockchain) = models::Blockchain::find_by_id(node.blockchain_id, conn).await else {
         tracing::error!("Could not get blockchain for node {node_id}");
-        return Err(crate::Error::ValidationError (
+        return Err(crate::Error::ValidationError(
             "Could not get blockchain for node".to_string(),
         ));
     };
@@ -76,7 +76,7 @@ async fn recover_created(
     };
     let Ok(_) = new_log.create(conn).await else {
         tracing::error!("Failed to create deployment log entry!");
-        return Err(crate::Error::ValidationError (
+        return Err(crate::Error::ValidationError(
             "Failed to create deployment log entry".to_string(),
         ));
     };
@@ -97,7 +97,7 @@ async fn recover_created(
         };
         let Ok(_) = new_log.create(conn).await else {
             tracing::error!("Failed to create cancelation log entry!");
-            return Err(crate::Error::ValidationError (
+            return Err(crate::Error::ValidationError(
                 "Failed to create cancelation log entry".to_string(),
             ));
         };
@@ -106,13 +106,15 @@ async fn recover_created(
     node.host_id = host.id;
     let Ok(node) = node.update(conn).await else {
         tracing::error!("Could not update node!");
-        return Err(crate::Error::ValidationError (
+        return Err(crate::Error::ValidationError(
             "Could not update node".to_string(),
         ));
     };
 
     // 4. We notify blockvisor of our retry via an MQTT message.
-    if let Ok(cmd) = grpc::nodes::create_create_node_command(&node, conn).await {
+    if let Ok(cmd) =
+        grpc::nodes::create_node_command(&node, models::CommandType::CreateNode, conn).await
+    {
         if let Ok(create_cmd) = api::Command::from_model(&cmd, conn).await {
             vec.push(create_cmd)
         } else {
@@ -122,7 +124,9 @@ async fn recover_created(
         tracing::error!("Could not create node create command while recovering");
     }
     // we also start the node.
-    if let Ok(cmd) = grpc::nodes::create_restart_node_command(&node, conn).await {
+    if let Ok(cmd) =
+        grpc::nodes::create_node_command(&node, models::CommandType::RestartNode, conn).await
+    {
         if let Ok(start_cmd) = api::Command::from_model(&cmd, conn).await {
             vec.push(start_cmd);
         } else {

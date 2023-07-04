@@ -8,7 +8,7 @@ use diesel_async::RunQueryDsl;
 type Service = api::node_service_client::NodeServiceClient<super::Channel>;
 
 #[tokio::test]
-async fn responds_ok_for_update() {
+async fn responds_ok_for_update_config() {
     let tester = super::Tester::new().await;
 
     let host = tester.host().await;
@@ -17,12 +17,9 @@ async fn responds_ok_for_update() {
 
     let node = tester.node().await;
     let node_id = node.id.to_string();
-    let req = api::NodeServiceUpdateRequest {
+    let req = api::NodeServiceUpdateConfigRequest {
         id: node_id.clone(),
         self_update: Some(true),
-        container_status: None,
-        address: None,
-        version: Some("newer is always better".to_string()),
         allow_ips: vec![api::FilteredIpAddr {
             ip: "127.0.0.1".to_string(),
             description: Some("wow so allowed".to_string()),
@@ -33,7 +30,10 @@ async fn responds_ok_for_update() {
         }],
     };
 
-    tester.send_with(Service::update, req, &jwt).await.unwrap();
+    tester
+        .send_with(Service::update_config, req, &jwt)
+        .await
+        .unwrap();
 
     let mut conn = tester.conn().await;
     let node = models::Node::find_by_id(node_id.parse().unwrap(), &mut conn)
@@ -152,46 +152,50 @@ async fn responds_invalid_argument_with_invalid_data_for_create() {
 }
 
 #[tokio::test]
-async fn responds_ok_with_valid_data_for_update() {
+async fn responds_ok_with_valid_data_for_update_config() {
     let tester = super::Tester::new().await;
     let node = tester.node().await;
-    let req = api::NodeServiceUpdateRequest {
+    let req = api::NodeServiceUpdateConfigRequest {
         id: node.id.to_string(),
-        version: Some("10".to_string()),
         self_update: Some(false),
-        container_status: None,
-        address: Some("My main noderoni".to_string()),
         allow_ips: vec![],
         deny_ips: vec![],
     };
-    tester.send_admin(Service::update, req).await.unwrap();
+    tester
+        .send_admin(Service::update_config, req)
+        .await
+        .unwrap();
     validate_command(&tester).await;
 }
 
 #[tokio::test]
-async fn responds_internal_with_invalid_data_for_update() {
+async fn responds_internal_with_invalid_data_for_update_config() {
     let tester = super::Tester::new().await;
-    let req = api::NodeServiceUpdateRequest {
+    let req = api::NodeServiceUpdateConfigRequest {
         // This is an invalid uuid so the api call should fail.
         id: "wowowow".to_string(),
-        version: Some("stri-bu".to_string()),
         ..Default::default()
     };
-    let status = tester.send_admin(Service::update, req).await.unwrap_err();
+    let status = tester
+        .send_admin(Service::update_config, req)
+        .await
+        .unwrap_err();
     assert_eq!(status.code(), tonic::Code::InvalidArgument);
     validate_command(&tester).await;
 }
 
 #[tokio::test]
-async fn responds_not_found_with_invalid_id_for_update() {
+async fn responds_not_found_with_invalid_id_for_update_config() {
     let tester = super::Tester::new().await;
-    let req = api::NodeServiceUpdateRequest {
+    let req = api::NodeServiceUpdateConfigRequest {
         // This uuid will not exist, so the api call should fail.
         id: uuid::Uuid::new_v4().to_string(),
-        version: Some("stri-bu".to_string()),
         ..Default::default()
     };
-    let status = tester.send_admin(Service::update, req).await.unwrap_err();
+    let status = tester
+        .send_admin(Service::update_config, req)
+        .await
+        .unwrap_err();
     assert_eq!(status.code(), tonic::Code::NotFound, "{status:?}");
     validate_command(&tester).await;
 }

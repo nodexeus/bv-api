@@ -16,26 +16,6 @@ struct CommandResult<T> {
 
 #[tonic::async_trait]
 impl command_service_server::CommandService for super::GrpcImpl {
-    async fn create(
-        &self,
-        req: tonic::Request<api::CommandServiceCreateRequest>,
-    ) -> super::Resp<api::CommandServiceCreateResponse> {
-        let result = self.trx(|c| create(req, c).scope_boxed()).await?;
-        for command in &result.commands {
-            self.notifier.commands_sender().send(command).await?;
-        }
-        Ok(result.resp)
-    }
-
-    async fn get(
-        &self,
-        req: tonic::Request<api::CommandServiceGetRequest>,
-    ) -> super::Resp<api::CommandServiceGetResponse> {
-        let mut conn = self.conn().await?;
-        let resp = get(req, &mut conn).await?;
-        Ok(resp)
-    }
-
     async fn update(
         &self,
         req: tonic::Request<api::CommandServiceUpdateRequest>,
@@ -62,54 +42,6 @@ impl command_service_server::CommandService for super::GrpcImpl {
         let resp = pending(req, &mut conn).await?;
         Ok(resp)
     }
-}
-
-async fn create(
-    req: tonic::Request<api::CommandServiceCreateRequest>,
-    conn: &mut models::Conn,
-) -> crate::Result<CommandResult<api::CommandServiceCreateResponse>> {
-    let claims = auth::get_claims(&req, Endpoint::CommandCreate, conn).await?;
-    let req = req.into_inner();
-    let node = req.node(conn).await?;
-    let host = req.host(conn).await?;
-    let is_allowed = access_allowed(claims, node.as_ref(), &host, conn).await?;
-    if !is_allowed {
-        super::forbidden!("Access denied");
-    }
-    let command_type = req.command_type()?;
-    let command = req
-        .as_new(host.id, node.map(|n| n.id), command_type)?
-        .create(conn)
-        .await?;
-    let command = api::Command::from_model(&command, conn).await?;
-    let resp = tonic::Response::new(api::CommandServiceCreateResponse {
-        command: Some(command.clone()),
-    });
-    Ok(CommandResult {
-        commands: vec![command],
-        resp,
-    })
-}
-
-async fn get(
-    req: tonic::Request<api::CommandServiceGetRequest>,
-    conn: &mut models::Conn,
-) -> super::Result<api::CommandServiceGetResponse> {
-    let claims = auth::get_claims(&req, Endpoint::CommandGet, conn).await?;
-    let req = req.into_inner();
-    let id = req.id.parse()?;
-    let command = models::Command::find_by_id(id, conn).await?;
-    let host = command.host(conn).await?;
-    let node = command.node(conn).await?;
-    let is_allowed = access_allowed(claims, node.as_ref(), &host, conn).await?;
-    if !is_allowed {
-        super::forbidden!("Access denied");
-    }
-    let command = api::Command::from_model(&command, conn).await?;
-    let resp = api::CommandServiceGetResponse {
-        command: Some(command),
-    };
-    Ok(tonic::Response::new(resp))
 }
 
 async fn update(
@@ -291,7 +223,6 @@ impl api::Command {
             UpdateNode => {
                 let node = models::Node::find_by_id(node_id()?, conn).await?;
                 let cmd = Command::Update(api::NodeUpdate {
-                    self_update: Some(node.self_update),
                     rules: Self::rules(&node)?,
                 });
                 node_cmd_default_id(cmd)
@@ -342,7 +273,6 @@ impl api::Command {
                     node_type: 0, // We use the setter to set this field for type-safety
                     ip: node.ip_addr.clone(),
                     gateway: node.ip_gateway.clone(),
-                    self_update: node.self_update,
                     properties,
                     rules: Self::rules(&node)?,
                     network: node.network,
@@ -400,72 +330,6 @@ impl api::Command {
             .chain(firewall_rules(node.deny_ips()?, api::Action::Deny)?)
             .collect();
         Ok(rules)
-    }
-}
-
-impl api::CommandServiceCreateRequest {
-    fn as_new(
-        &self,
-        host_id: uuid::Uuid,
-        node_id: Option<uuid::Uuid>,
-        command_type: models::CommandType,
-    ) -> crate::Result<models::NewCommand<'_>> {
-        Ok(models::NewCommand {
-            host_id,
-            cmd: command_type,
-            sub_cmd: None,
-            node_id,
-        })
-    }
-
-    async fn host(&self, conn: &mut models::Conn) -> crate::Result<models::Host> {
-        use api::command_service_create_request::Command::*;
-
-        let command = self.command.as_ref().ok_or_else(required("command"))?;
-        let host_id = match command {
-            StartNode(api::StartNodeCommand { node_id, .. })
-            | StopNode(api::StopNodeCommand { node_id, .. })
-            | RestartNode(api::RestartNodeCommand { node_id, .. }) => {
-                let node = models::Node::find_by_id(node_id.parse()?, conn).await?;
-                node.host_id
-            }
-            StartHost(api::StartHostCommand { host_id, .. })
-            | StopHost(api::StopHostCommand { host_id, .. })
-            | RestartHost(api::RestartHostCommand { host_id, .. }) => host_id.parse()?,
-        };
-        let host = models::Host::find_by_id(host_id, conn).await?;
-        Ok(host)
-    }
-
-    async fn node(&self, conn: &mut models::Conn) -> crate::Result<Option<models::Node>> {
-        use api::command_service_create_request::Command::*;
-
-        let command = self.command.as_ref().ok_or_else(required("command"))?;
-        let node_id = match command {
-            StartNode(start) => start.node_id.parse()?,
-            StopNode(stop) => stop.node_id.parse()?,
-            RestartNode(restart) => restart.node_id.parse()?,
-            StartHost(_) => return Ok(None),
-            StopHost(_) => return Ok(None),
-            RestartHost(_) => return Ok(None),
-        };
-        let node = models::Node::find_by_id(node_id, conn).await?;
-        Ok(Some(node))
-    }
-
-    fn command_type(&self) -> crate::Result<models::CommandType> {
-        use api::command_service_create_request::Command::*;
-
-        let command = self.command.as_ref().ok_or_else(required("command"))?;
-        let command_type = match command {
-            StartNode(_) => models::CommandType::RestartNode,
-            StopNode(_) => models::CommandType::KillNode,
-            RestartNode(_) => models::CommandType::RestartNode,
-            StartHost(_) => models::CommandType::RestartBVS,
-            StopHost(_) => models::CommandType::StopBVS,
-            RestartHost(_) => models::CommandType::RestartBVS,
-        };
-        Ok(command_type)
     }
 }
 
