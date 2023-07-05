@@ -207,7 +207,7 @@ impl Cookbook {
     pub async fn list_bundles(&self) -> crate::Result<Vec<api::BundleIdentifier>> {
         Ok(self
             .client
-            .list(&self.bundle_bucket, "/")
+            .list(&self.bundle_bucket, "")
             .await?
             .iter()
             .flat_map(api::BundleIdentifier::from_key)
