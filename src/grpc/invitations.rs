@@ -5,6 +5,7 @@ use super::api::{self, invitation_service_server};
 use super::helpers::required;
 use crate::auth::token::{Endpoint, Resource};
 use crate::mail::{self, MailClient};
+use crate::models::InvitationFilter;
 use crate::{auth, models};
 
 #[tonic::async_trait]
@@ -81,10 +82,22 @@ async fn create(
         super::forbidden!("Access denied");
     }
 
+    let org_id = req.org_id.parse()?;
+    let filter = InvitationFilter {
+        org_id: Some(org_id),
+        invitee_email: Some(&req.invitee_email),
+        created_by: None,
+        accepted: Some(false),
+        declined: Some(false),
+    };
+    if let Ok(_) = models::Invitation::filter(filter, conn).await {
+        super::forbidden!("User is already invited");
+    }
+
     // Check if the user-to-invite is not already a member of the organization
     let invited_user = models::User::find_by_email(&req.invitee_email, conn).await;
     if let Ok(invited_user) = &invited_user {
-        if models::Org::is_member(invited_user.id, req.org_id.parse()?, conn).await? {
+        if models::Org::is_member(invited_user.id, org_id, conn).await? {
             super::forbidden!("Already a member");
         }
     }
