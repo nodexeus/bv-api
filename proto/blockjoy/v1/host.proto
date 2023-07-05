@@ -155,3 +155,9 @@ message HostServiceDeleteRequest {
 
 message HostServiceDeleteResponse {
 }
+
+enum HostConnectionStatus {
+  HOST_CONNECTION_STATUS_UNSPECIFIED = 0;
+  HOST_CONNECTION_STATUS_ONLINE = 1;
+  HOST_CONNECTION_STATUS_OFFLINE = 2;
+}
