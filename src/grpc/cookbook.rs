@@ -1,5 +1,5 @@
 use super::{
-    api::{self, bundle_service_server, cookbook_service_server},
+    api::{self, bundle_service_server, cookbook_service_server, manifest_service_server},
     helpers::required,
 };
 use crate::{
@@ -277,4 +277,32 @@ async fn delete(
     auth::get_claims(&req, Endpoint::BundleDelete, conn).await?;
     // This endpoint is not currently used.
     Err(tonic::Status::unimplemented("Sod off"))
+}
+
+// ---------------------------------------- Manifest Service ----------------------------------------
+#[tonic::async_trait]
+impl manifest_service_server::ManifestService for super::GrpcImpl {
+    /// Retrieve image for specific version and state.
+    async fn retrieve_download_manifest(
+        &self,
+        req: tonic::Request<api::ManifestServiceRetrieveDownloadManifestRequest>,
+    ) -> super::Resp<api::ManifestServiceRetrieveDownloadManifestResponse> {
+        let mut conn = self.conn().await?;
+        retrieve_download_manifest(self, req, &mut conn).await
+    }
+}
+
+async fn retrieve_download_manifest(
+    grpc: &super::GrpcImpl,
+    req: tonic::Request<api::ManifestServiceRetrieveDownloadManifestRequest>,
+    conn: &mut Conn,
+) -> super::Resp<api::ManifestServiceRetrieveDownloadManifestResponse> {
+    auth::get_claims(&req, Endpoint::ManifestRetrieveDownload, conn).await?;
+    let req = req.into_inner();
+    let id = req.id.ok_or_else(required("id"))?;
+    let manifest = grpc.cookbook.get_download_manifest(id, req.network).await?;
+    let resp = api::ManifestServiceRetrieveDownloadManifestResponse {
+        manifest: Some(manifest),
+    };
+    Ok(tonic::Response::new(resp))
 }
