@@ -5,7 +5,6 @@ use super::api::{self, invitation_service_server};
 use super::helpers::required;
 use crate::auth::token::{Endpoint, Resource};
 use crate::mail::{self, MailClient};
-use crate::models::InvitationFilter;
 use crate::{auth, models};
 
 #[tonic::async_trait]
@@ -83,14 +82,7 @@ async fn create(
     }
 
     let org_id = req.org_id.parse()?;
-    let filter = InvitationFilter {
-        org_id: Some(org_id),
-        invitee_email: Some(&req.invitee_email),
-        created_by: None,
-        accepted: Some(false),
-        declined: Some(false),
-    };
-    if let Ok(_) = models::Invitation::filter(filter, conn).await {
+    if models::Invitation::has_open_invite(org_id, &req.invitee_email, conn).await? {
         super::forbidden!("User is already invited");
     }
 

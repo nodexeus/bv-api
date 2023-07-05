@@ -1,7 +1,7 @@
 use super::schema::invitations;
 use crate::Result;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
+use diesel::{dsl, prelude::*};
 use diesel_async::RunQueryDsl;
 
 #[derive(Debug, Queryable)]
@@ -64,6 +64,21 @@ impl Invitation {
             .get_results(conn)
             .await?;
         Ok(invites)
+    }
+
+    pub async fn has_open_invite(
+        org_id: uuid::Uuid,
+        email: &str,
+        conn: &mut super::Conn,
+    ) -> Result<bool> {
+        let invitation = invitations::table
+            .filter(invitations::created_for_org.eq(org_id))
+            .filter(invitations::invitee_email.eq(email))
+            .filter(invitations::accepted_at.is_null())
+            .filter(invitations::declined_at.is_null());
+        Ok(diesel::select(dsl::exists(invitation))
+            .get_result(conn)
+            .await?)
     }
 
     pub async fn accept(self, conn: &mut super::Conn) -> Result<Self> {
