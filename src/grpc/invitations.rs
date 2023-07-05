@@ -225,8 +225,7 @@ async fn decline(
         }
         Resource::Org(org_id) => {
             let email = claims.data.get("email").ok_or_else(required("email"))?;
-            let user = models::User::find_by_email(email, conn).await?;
-            invitation.created_for_org == org_id && invitation.invitee_email == user.email
+            invitation.created_for_org == org_id && invitation.invitee_email == *email
         }
         Resource::Host(_) => false,
         Resource::Node(_) => false,
