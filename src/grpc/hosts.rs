@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 
 use diesel_async::scoped_futures::ScopedFutureExt;
-use uuid::Uuid;
+
+use crate::auth::claims::Claims;
+use crate::auth::endpoint::Endpoint;
+use crate::auth::resource::{HostId, OrgId, Resource, UserId};
+use crate::auth::token::refresh::Refresh;
+use crate::models::{self, CommandType};
+use crate::timestamp::NanosUtc;
 
 use super::api::{self, host_service_server};
-use crate::auth::token::refresh::Refresh;
-use crate::auth::token::{Claims, Endpoint, Resource, ResourceType};
-use crate::models::CommandType;
-use crate::{auth, models};
 
 /// This is a list of all the endpoints that a user is allowed to access with the jwt that they
 /// generate on login. It does not contain endpoints like confirm, because those are accessed by a
@@ -29,7 +31,7 @@ const HOST_ENDPOINTS: [Endpoint; 13] = [
 ];
 
 #[tonic::async_trait]
-impl host_service_server::HostService for super::GrpcImpl {
+impl host_service_server::HostService for super::Grpc {
     async fn create(
         &self,
         req: tonic::Request<api::HostServiceCreateRequest>,
@@ -129,24 +131,21 @@ async fn create(
     };
     let new_host = req.as_new(caller_id, org_id)?;
     let host = new_host.create(conn).await?;
-    let iat = chrono::Utc::now();
-    let exp = conn.context.config.token.expire.token.try_into()?;
-    let claims = Claims::new(
-        ResourceType::Host,
-        host.id,
-        iat,
-        exp,
-        HOST_ENDPOINTS.iter().copied().collect(),
-    )?;
 
-    let refresh_exp = conn.context.config.token.expire.refresh_host.try_into()?;
-    let refresh = Refresh::new(host.id, iat, refresh_exp)?;
+    let resource = Resource::Host(host.id);
+    let expires = conn.context.config.token.expire.token.try_into()?;
+    let claims = Claims::from_now(expires, resource, HOST_ENDPOINTS);
+    let token = conn.context.cipher().jwt.encode(&claims)?;
+
+    let expires = conn.context.config.token.expire.refresh_host.try_into()?;
+    let refresh = Refresh::from_now(expires, host.id);
+    let encoded = conn.context.cipher().refresh.encode(&refresh)?;
 
     let host = api::Host::from_model(host, conn).await?;
     let resp = api::HostServiceCreateResponse {
         host: Some(host),
-        token: conn.context.cipher.jwt.encode(&claims)?.into(),
-        refresh: conn.context.cipher.refresh.encode(&refresh)?.into(),
+        token: token.into(),
+        refresh: encoded.into(),
     };
 
     Ok(tonic::Response::new(resp))
@@ -157,7 +156,7 @@ async fn get(
     req: tonic::Request<api::HostServiceGetRequest>,
     conn: &mut models::Conn,
 ) -> super::Result<api::HostServiceGetResponse> {
-    let claims = auth::get_claims(&req, Endpoint::HostGet, conn).await?;
+    let claims = conn.claims(&req, Endpoint::HostGet).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
     let host = models::Host::find_by_id(host_id, conn).await?;
@@ -181,7 +180,7 @@ async fn list(
     req: tonic::Request<api::HostServiceListRequest>,
     conn: &mut models::Conn,
 ) -> super::Result<api::HostServiceListResponse> {
-    let claims = auth::get_claims(&req, Endpoint::HostList, conn).await?;
+    let claims = conn.claims(&req, Endpoint::HostList).await?;
     let req = req.into_inner();
     let org_id = req.org_id.parse()?;
     let is_allowed = match claims.resource() {
@@ -203,7 +202,7 @@ async fn update(
     req: tonic::Request<api::HostServiceUpdateRequest>,
     conn: &mut models::Conn,
 ) -> super::Result<api::HostServiceUpdateResponse> {
-    let claims = auth::get_claims(&req, Endpoint::HostUpdate, conn).await?;
+    let claims = conn.claims(&req, Endpoint::HostUpdate).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
     let host = models::Host::find_by_id(host_id, conn).await?;
@@ -220,7 +219,7 @@ async fn delete(
     req: tonic::Request<api::HostServiceDeleteRequest>,
     conn: &mut models::Conn,
 ) -> super::Result<api::HostServiceDeleteResponse> {
-    let claims = auth::get_claims(&req, Endpoint::HostDelete, conn).await?;
+    let claims = conn.claims(&req, Endpoint::HostDelete).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
     let host = models::Host::find_by_id(host_id, conn).await?;
@@ -243,7 +242,7 @@ async fn start(
     req: tonic::Request<api::HostServiceStartRequest>,
     conn: &mut models::Conn,
 ) -> crate::Result<super::Outcome<api::HostServiceStartResponse>> {
-    let claims = auth::get_claims(&req, Endpoint::HostStart, conn).await?;
+    let claims = conn.claims(&req, Endpoint::HostStart).await?;
     change_host_state(&req.into_inner().id, CommandType::RestartBVS, claims, conn).await
 }
 
@@ -251,7 +250,7 @@ async fn stop(
     req: tonic::Request<api::HostServiceStopRequest>,
     conn: &mut models::Conn,
 ) -> crate::Result<super::Outcome<api::HostServiceStopResponse>> {
-    let claims = auth::get_claims(&req, Endpoint::HostStop, conn).await?;
+    let claims = conn.claims(&req, Endpoint::HostStop).await?;
     change_host_state(&req.into_inner().id, CommandType::StopBVS, claims, conn).await
 }
 
@@ -259,7 +258,7 @@ async fn restart(
     req: tonic::Request<api::HostServiceRestartRequest>,
     conn: &mut models::Conn,
 ) -> crate::Result<super::Outcome<api::HostServiceRestartResponse>> {
-    let claims = auth::get_claims(&req, Endpoint::HostRestart, conn).await?;
+    let claims = conn.claims(&req, Endpoint::HostRestart).await?;
     change_host_state(&req.into_inner().id, CommandType::RestartBVS, claims, conn).await
 }
 
@@ -284,7 +283,7 @@ async fn change_host_state<Res: Default>(
 }
 
 async fn host_cmd(
-    host_id: Uuid,
+    host_id: HostId,
     command_type: CommandType,
     conn: &mut models::Conn,
 ) -> crate::Result<api::Command> {
@@ -325,7 +324,7 @@ impl api::Host {
                     os: model.os,
                     os_version: model.os_version,
                     ip: model.ip_addr,
-                    created_at: Some(super::try_dt_to_ts(model.created_at)?),
+                    created_at: Some(NanosUtc::from(model.created_at).into()),
                     ip_range_from: model.ip_range_from.ip().to_string(),
                     ip_range_to: model.ip_range_to.ip().to_string(),
                     ip_gateway: model.ip_gateway.ip().to_string(),
@@ -343,11 +342,7 @@ impl api::Host {
 }
 
 impl api::HostServiceCreateRequest {
-    pub fn as_new(
-        &self,
-        user_id: uuid::Uuid,
-        org_id: uuid::Uuid,
-    ) -> crate::Result<models::NewHost<'_>> {
+    pub fn as_new(&self, user_id: UserId, org_id: OrgId) -> crate::Result<models::NewHost<'_>> {
         Ok(models::NewHost {
             name: &self.name,
             version: &self.version,

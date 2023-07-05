@@ -1,21 +1,19 @@
-use argon2::{
-    password_hash::{PasswordHasher, SaltString},
-    Argon2,
-};
+use argon2::password_hash::{PasswordHasher, SaltString};
+use argon2::Argon2;
 use chrono::{DateTime, Utc};
 use diesel::{dsl, prelude::*};
 use diesel_async::RunQueryDsl;
 use password_hash::PasswordVerifier;
 use rand::rngs::OsRng;
-use uuid::Uuid;
 use validator::Validate;
 
+use crate::auth::resource::UserId;
+
 use super::schema::users;
-use crate::mail::MailClient;
 
 #[derive(Debug, Clone, Queryable)]
 pub struct User {
-    pub id: Uuid,
+    pub id: UserId,
     pub email: String,
     pub hashword: String,
     pub salt: String,
@@ -30,7 +28,7 @@ pub struct User {
 type NotDeleted = dsl::Filter<users::table, dsl::IsNull<users::deleted_at>>;
 
 impl User {
-    pub async fn find_by_id(id: Uuid, conn: &mut super::Conn) -> crate::Result<Self> {
+    pub async fn find_by_id(id: UserId, conn: &mut super::Conn) -> crate::Result<Self> {
         let user = User::not_deleted().find(id).get_result(conn).await?;
         Ok(user)
     }
@@ -49,8 +47,7 @@ impl User {
     }
 
     pub async fn email_reset_password(&self, conn: &mut super::Conn) -> crate::Result<()> {
-        let client = MailClient::new(&conn.context.config);
-        client.reset_password(self, &conn.context.cipher).await
+        conn.context.mail.reset_password(self).await
     }
 
     pub async fn find_all(conn: &mut super::Conn) -> crate::Result<Vec<Self>> {
@@ -59,7 +56,7 @@ impl User {
     }
 
     pub async fn find_by_ids(
-        mut user_ids: Vec<uuid::Uuid>,
+        mut user_ids: Vec<UserId>,
         conn: &mut super::Conn,
     ) -> crate::Result<Vec<Self>> {
         user_ids.sort();
@@ -116,7 +113,7 @@ impl User {
         }
     }
 
-    pub async fn confirm(user_id: uuid::Uuid, conn: &mut super::Conn) -> crate::Result<()> {
+    pub async fn confirm(user_id: UserId, conn: &mut super::Conn) -> crate::Result<()> {
         let target_user = Self::not_deleted()
             .find(user_id)
             .filter(users::confirmed_at.is_null());
@@ -138,7 +135,7 @@ impl User {
         }
     }
 
-    pub async fn is_confirmed(id: Uuid, conn: &mut super::Conn) -> crate::Result<bool> {
+    pub async fn is_confirmed(id: UserId, conn: &mut super::Conn) -> crate::Result<bool> {
         let is_confirmed = Self::not_deleted()
             .find(id)
             .select(users::confirmed_at.is_not_null())
@@ -148,7 +145,7 @@ impl User {
     }
 
     /// Mark user deleted if no more nodes belong to it
-    pub async fn delete(id: Uuid, conn: &mut super::Conn) -> crate::Result<()> {
+    pub async fn delete(id: UserId, conn: &mut super::Conn) -> crate::Result<()> {
         diesel::update(users::table.find(id))
             .set(users::deleted_at.eq(chrono::Utc::now()))
             .execute(conn)
@@ -230,7 +227,7 @@ impl<'a> NewUser<'a> {
 #[derive(Debug, Clone, AsChangeset)]
 #[diesel(table_name = users)]
 pub struct UpdateUser<'a> {
-    pub id: uuid::Uuid,
+    pub id: UserId,
     pub first_name: Option<&'a str>,
     pub last_name: Option<&'a str>,
     pub external_id: Option<&'a str>,
@@ -247,30 +244,34 @@ impl<'a> UpdateUser<'a> {
     }
 }
 
+// TODO: delete?
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct UserLogin {
-    pub(crate) id: Uuid,
+    pub(crate) id: uuid::Uuid,
     pub(crate) email: String,
     pub(crate) fee_bps: i64,
     pub(crate) staking_quota: i64,
     pub(crate) token: String,
 }
 
+// TODO: delete?
 #[derive(Debug, Clone, Queryable)]
 pub struct UserPayAddress {
-    pub id: Uuid,
+    pub id: UserId,
     // TODO: This field should not need to be optional
     pub pay_address: Option<String>,
 }
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+
     use super::*;
 
     #[test]
     fn test_password_is_backwards_compatible() {
         let user = User {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             email: "shitballer@joe.com".to_string(),
             hashword: "8reOLS3bLZB4vQvqy8Xqoa+mS82d9qidx7j1KTtmICY".to_string(),
             salt: "s2UTzLjLAz4xzhDBTFQtcg".to_string(),

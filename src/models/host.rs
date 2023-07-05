@@ -1,11 +1,14 @@
-use super::schema::hosts;
-use super::Paginate;
-use crate::{cookbook::script::HardwareRequirements, Result};
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use diesel::{dsl, prelude::*};
 use diesel_async::RunQueryDsl;
-use std::collections::HashMap;
-use uuid::Uuid;
+
+use crate::auth::resource::{HostId, OrgId, UserId};
+use crate::{cookbook::script::HardwareRequirements, Result};
+
+use super::schema::hosts;
+use super::Paginate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
 #[ExistingTypePath = "crate::models::schema::sql_types::EnumConnStatus"]
@@ -24,7 +27,7 @@ pub enum HostType {
 #[derive(Debug, Clone, Queryable)]
 #[diesel(table_name = hosts)]
 pub struct Host {
-    pub id: Uuid,
+    pub id: HostId,
     pub version: String,
     pub name: String,
     pub ip_addr: String,
@@ -52,27 +55,27 @@ pub struct Host {
     pub uptime: Option<i64>,
     pub host_type: Option<HostType>,
     /// The id of the org that owns and operates this host.
-    pub org_id: uuid::Uuid,
+    pub org_id: OrgId,
     /// This is the id of the user that created this host. For older hosts, this value might not be
     /// set.
-    pub created_by: Option<uuid::Uuid>,
+    pub created_by: Option<UserId>,
 }
 
 #[derive(Clone, Debug)]
 pub struct HostFilter {
-    pub org_id: uuid::Uuid,
+    pub org_id: OrgId,
     pub offset: u64,
     pub limit: u64,
 }
 
 impl Host {
-    pub async fn find_by_id(id: Uuid, conn: &mut super::Conn) -> Result<Self> {
+    pub async fn find_by_id(id: HostId, conn: &mut super::Conn) -> Result<Self> {
         let host = hosts::table.find(id).get_result(conn).await?;
         Ok(host)
     }
 
     pub async fn find_by_ids(
-        ids: impl IntoIterator<Item = uuid::Uuid>,
+        ids: impl IntoIterator<Item = HostId>,
         conn: &mut super::Conn,
     ) -> Result<Vec<Self>> {
         let hosts = hosts::table
@@ -82,7 +85,7 @@ impl Host {
         Ok(hosts)
     }
 
-    pub async fn by_ids(ids: &[uuid::Uuid], conn: &mut super::Conn) -> Result<Vec<Self>> {
+    pub async fn by_ids(ids: &[HostId], conn: &mut super::Conn) -> Result<Vec<Self>> {
         let hosts: Vec<Self> = hosts::table
             .filter(hosts::id.eq_any(ids))
             .get_results(conn)
@@ -115,7 +118,7 @@ impl Host {
         Ok(host)
     }
 
-    pub async fn delete(id: Uuid, conn: &mut super::Conn) -> Result<usize> {
+    pub async fn delete(id: HostId, conn: &mut super::Conn) -> Result<usize> {
         let n_rows = diesel::delete(hosts::table.find(id)).execute(conn).await?;
         Ok(n_rows)
     }
@@ -137,7 +140,7 @@ impl Host {
         #[derive(Debug, QueryableByName)]
         struct HostCandidate {
             #[diesel(sql_type = Uuid)]
-            host_id: uuid::Uuid,
+            host_id: HostId,
         }
 
         // SAFETY: We are using `format!` to place a custom generated ORDER BY clause into a sql
@@ -226,9 +229,9 @@ pub struct NewHost<'a> {
     pub ip_range_to: ipnetwork::IpNetwork,
     pub ip_gateway: ipnetwork::IpNetwork,
     /// The id of the org that owns and operates this host.
-    pub org_id: uuid::Uuid,
+    pub org_id: OrgId,
     /// This is the id of the user that created this host.
-    pub created_by: uuid::Uuid,
+    pub created_by: UserId,
 }
 
 impl NewHost<'_> {
@@ -255,7 +258,7 @@ impl NewHost<'_> {
 #[derive(Debug, Clone, AsChangeset)]
 #[diesel(table_name = hosts)]
 pub struct UpdateHost<'a> {
-    pub id: Uuid,
+    pub id: HostId,
     pub name: Option<&'a str>,
     pub version: Option<&'a str>,
     pub cpu_count: Option<i64>,
@@ -280,10 +283,10 @@ impl UpdateHost<'_> {
     }
 }
 
-#[derive(Debug, Default, AsChangeset)]
+#[derive(Debug, AsChangeset)]
 #[diesel(table_name = hosts)]
 pub struct UpdateHostMetrics {
-    pub id: uuid::Uuid,
+    pub id: HostId,
     pub used_cpu: Option<i32>,
     pub used_memory: Option<i64>,
     pub used_disk_space: Option<i64>,

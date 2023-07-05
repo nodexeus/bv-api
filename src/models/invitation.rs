@@ -1,14 +1,17 @@
-use super::schema::invitations;
-use crate::Result;
 use chrono::{DateTime, Utc};
 use diesel::{dsl, prelude::*};
 use diesel_async::RunQueryDsl;
 
+use crate::auth::resource::{OrgId, UserId};
+use crate::Result;
+
+use super::schema::invitations;
+
 #[derive(Debug, Queryable)]
 pub struct Invitation {
     pub id: uuid::Uuid,
-    pub created_by: uuid::Uuid,
-    pub org_id: uuid::Uuid,
+    pub created_by: UserId,
+    pub org_id: OrgId,
     pub invitee_email: String,
     pub created_at: DateTime<Utc>,
     pub accepted_at: Option<DateTime<Utc>>,
@@ -65,7 +68,7 @@ impl Invitation {
     }
 
     pub async fn has_open_invite(
-        org_id: uuid::Uuid,
+        org_id: OrgId,
         email: &str,
         conn: &mut super::Conn,
     ) -> Result<bool> {
@@ -104,7 +107,7 @@ impl Invitation {
 
     pub async fn remove_by_org_user(
         user_email: &str,
-        org_id: uuid::Uuid,
+        org_id: OrgId,
         conn: &mut super::Conn,
     ) -> Result<()> {
         let to_delete = invitations::table
@@ -118,8 +121,8 @@ impl Invitation {
 #[derive(Debug, Insertable)]
 #[diesel(table_name = invitations)]
 pub struct NewInvitation {
-    pub created_by: uuid::Uuid,
-    pub org_id: uuid::Uuid,
+    pub created_by: UserId,
+    pub org_id: OrgId,
     pub invitee_email: String,
 }
 
@@ -135,9 +138,9 @@ impl NewInvitation {
 }
 
 pub struct InvitationFilter<'a> {
-    pub org_id: Option<uuid::Uuid>,
+    pub org_id: Option<OrgId>,
     pub invitee_email: Option<&'a str>,
-    pub created_by: Option<uuid::Uuid>,
+    pub created_by: Option<UserId>,
     pub accepted: Option<bool>,
     pub declined: Option<bool>,
 }
