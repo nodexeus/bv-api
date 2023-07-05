@@ -348,6 +348,9 @@ pub enum Endpoint {
     BundleRetrieve = 1401,
     BundleListBundleVersions = 1402,
     BundleDelete = 1403,
+
+    ManifestAll = 1501,
+    ManifestRetrieveDownload = 1502,
 }
 
 const SPACE_PER_SERVICE: u64 = 100;
