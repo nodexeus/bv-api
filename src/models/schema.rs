@@ -298,6 +298,7 @@ diesel::table! {
         last_name -> Varchar,
         confirmed_at -> Nullable<Timestamptz>,
         deleted_at -> Nullable<Timestamptz>,
+        external_id -> Nullable<Text>,
     }
 }
 
