@@ -7,12 +7,14 @@ use std::collections::HashSet;
 
 use diesel_async::scoped_futures::ScopedFutureExt;
 
+use crate::auth::endpoint::Endpoint;
+use crate::auth::resource::Resource;
+use crate::models;
+
 use super::api::{self, metrics_service_server};
-use crate::auth::token::{Endpoint, Resource};
-use crate::{auth, models};
 
 #[tonic::async_trait]
-impl metrics_service_server::MetricsService for super::GrpcImpl {
+impl metrics_service_server::MetricsService for super::Grpc {
     /// Update the metrics for the nodes provided in this request. Since this endpoint is called
     /// often (e.g. if we have 10,000 nodes, 170 calls per second) we take care to perform a single
     /// query for this whole list of metrics that comes in.
@@ -41,7 +43,7 @@ async fn node(
     req: tonic::Request<api::MetricsServiceNodeRequest>,
     conn: &mut models::Conn,
 ) -> crate::Result<super::Outcome<api::MetricsServiceNodeResponse>> {
-    let claims = auth::get_claims(&req, Endpoint::MetricsNode, conn).await?;
+    let claims = conn.claims(&req, Endpoint::MetricsNode).await?;
     let req = req.into_inner();
     let updates: Vec<models::UpdateNodeMetrics> = req
         .metrics
@@ -72,7 +74,7 @@ async fn host(
     req: tonic::Request<api::MetricsServiceHostRequest>,
     conn: &mut models::Conn,
 ) -> crate::Result<super::Outcome<api::MetricsServiceHostResponse>> {
-    let claims = auth::get_claims(&req, Endpoint::MetricsNode, conn).await?;
+    let claims = conn.claims(&req, Endpoint::MetricsNode).await?;
     let req = req.into_inner();
     let updates: Vec<models::UpdateHostMetrics> = req
         .metrics

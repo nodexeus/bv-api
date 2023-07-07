@@ -6,6 +6,10 @@ pub mod sql_types {
     pub struct BlockchainPropertyUiType;
 
     #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "enum_api_resource"))]
+    pub struct EnumApiResource;
+
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "enum_conn_status"))]
     pub struct EnumConnStatus;
 
@@ -56,6 +60,23 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "token_type"))]
     pub struct TokenType;
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::EnumApiResource;
+
+    api_keys (id) {
+        id -> Uuid,
+        user_id -> Uuid,
+        label -> Text,
+        key_hash -> Text,
+        key_salt -> Text,
+        resource -> EnumApiResource,
+        resource_id -> Uuid,
+        created_at -> Timestamptz,
+        updated_at -> Nullable<Timestamptz>,
+    }
 }
 
 diesel::table! {
@@ -300,6 +321,7 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(api_keys -> users (user_id));
 diesel::joinable!(blockchain_properties -> blockchains (blockchain_id));
 diesel::joinable!(commands -> hosts (host_id));
 diesel::joinable!(commands -> nodes (node_id));
@@ -319,6 +341,7 @@ diesel::joinable!(orgs_users -> orgs (org_id));
 diesel::joinable!(orgs_users -> users (user_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    api_keys,
     blockchain_properties,
     blockchains,
     commands,

@@ -6,7 +6,7 @@ use diesel_async::RunQueryDsl;
 type Service = api::host_service_client::HostServiceClient<super::Channel>;
 
 #[tokio::test]
-async fn responds_forbiddenenticated_without_token_for_update() {
+async fn responds_unauthenticated_without_token_for_update() {
     let tester = super::Tester::new().await;
     let host = tester.host().await;
 
@@ -27,7 +27,7 @@ async fn responds_permission_denied_with_token_ownership_for_update() {
 
     let host = tester.host().await;
     let claims = tester.host_token(&host);
-    let jwt = tester.context().cipher.jwt.encode(&claims).unwrap();
+    let jwt = tester.cipher().jwt.encode(&claims).unwrap();
 
     let other_host = tester.host2().await;
     let req = api::HostServiceUpdateRequest {
@@ -51,7 +51,7 @@ async fn responds_permission_denied_with_user_token_for_update() {
 
     let user = tester.user().await;
     let claims = tester.user_token(&user).await;
-    let jwt = tester.context().cipher.jwt.encode(&claims).unwrap();
+    let jwt = tester.cipher().jwt.encode(&claims).unwrap();
 
     let other_host = tester.host2().await;
     let req = api::HostServiceUpdateRequest {
@@ -108,7 +108,7 @@ async fn responds_ok_for_update() {
 
     let host = tester.host().await;
     let claims = tester.host_token(&host);
-    let jwt = tester.context().cipher.jwt.encode(&claims).unwrap();
+    let jwt = tester.cipher().jwt.encode(&claims).unwrap();
 
     let req = api::HostServiceUpdateRequest {
         id: host.id.to_string(),
@@ -127,7 +127,7 @@ async fn responds_ok_for_delete() {
 
     let host = tester.host().await;
     let claims = tester.host_token(&host);
-    let jwt = tester.context().cipher.jwt.encode(&claims).unwrap();
+    let jwt = tester.cipher().jwt.encode(&claims).unwrap();
 
     let req = api::HostServiceDeleteRequest {
         id: host.id.to_string(),
@@ -157,7 +157,7 @@ async fn responds_ok_for_start_stop_restart() {
     let host = tester.host().await;
     let user = tester.user().await;
     let claims = tester.user_token(&user).await;
-    let jwt = tester.context().cipher.jwt.encode(&claims).unwrap();
+    let jwt = tester.cipher().jwt.encode(&claims).unwrap();
 
     let req = api::HostServiceStartRequest {
         id: host.id.to_string(),
@@ -176,7 +176,7 @@ async fn responds_ok_for_start_stop_restart() {
 }
 
 #[tokio::test]
-async fn responds_forbiddenenticated_without_token_for_delete() {
+async fn responds_unauthenticated_without_token_for_delete() {
     let tester = super::Tester::new().await;
     let host = tester.host().await;
     let req = api::HostServiceDeleteRequest {
@@ -198,7 +198,7 @@ async fn responds_permission_denied_for_delete() {
     let other_host = tester.host2().await;
     // now we generate a token for the wrong host.
     let claims = tester.host_token(&other_host);
-    let jwt = tester.context().cipher.jwt.encode(&claims).unwrap();
+    let jwt = tester.cipher().jwt.encode(&claims).unwrap();
 
     let status = tester
         .send_with(Service::delete, req, &jwt)

@@ -1,8 +1,12 @@
-use prost::Message;
+use std::time::Duration;
 
-use super::api::{self, host_message, node_message, org_message};
+use prost::Message;
+use tracing::warn;
+
 use crate::config::mqtt;
 use crate::models;
+
+use super::api::{self, host_message, node_message, org_message};
 
 /// Presents the following senders:
 /// |---------------|----------------------------------------------|
@@ -32,17 +36,13 @@ impl Notifier {
         let (client, mut event_loop) = rumqttc::AsyncClient::new(options, 10);
         client
             .subscribe("/bv/hosts/#", rumqttc::QoS::AtLeastOnce)
-            .await
-            .unwrap();
+            .await?;
 
         tokio::spawn(async move {
             loop {
-                match event_loop.poll().await {
-                    Ok(_) => {}
-                    Err(e) => {
-                        tracing::warn!("MQTT failure, ignoring and continuing to poll: {e}");
-                        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-                    }
+                if let Err(err) = event_loop.poll().await {
+                    warn!("MQTT polling failure: {err}");
+                    tokio::time::sleep(Duration::from_secs(10)).await;
                 }
             }
         });
@@ -439,14 +439,13 @@ impl api::Command {
 mod tests {
     use super::*;
     use crate::config::Context;
-    use crate::TestDb;
+    use crate::tests::TestDb;
 
     #[tokio::test]
     async fn test_send_hosts() {
-        let context = Context::new_with_default_toml().unwrap();
-        let db = TestDb::setup(context).await;
+        let context = Context::from_default_toml().await.unwrap();
+        let db = TestDb::setup(context.clone()).await;
         let mut conn = db.conn().await;
-        let notifier = Notifier::new(&db.pool.context.config.mqtt).await.unwrap();
 
         let host = db.host().await;
         let user = db.user().await;
@@ -454,23 +453,22 @@ mod tests {
         let msg = api::HostMessage::created(host.clone(), user.clone(), &mut conn)
             .await
             .unwrap();
-        notifier.sender().send(msg).await.unwrap();
+        context.notifier.sender().send(msg).await.unwrap();
 
         let msg = api::HostMessage::updated(host.clone(), user.clone(), &mut conn)
             .await
             .unwrap();
-        notifier.sender().send(msg).await.unwrap();
+        context.notifier.sender().send(msg).await.unwrap();
 
         let msg = api::HostMessage::deleted(host, user);
-        notifier.sender().send(msg).await.unwrap();
+        context.notifier.sender().send(msg).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_send_nodes() {
-        let context = Context::new_with_default_toml().unwrap();
-        let db = TestDb::setup(context).await;
+        let context = Context::from_default_toml().await.unwrap();
+        let db = TestDb::setup(context.clone()).await;
         let mut conn = db.conn().await;
-        let notifier = Notifier::new(&db.pool.context.config.mqtt).await.unwrap();
 
         let node = db.node().await;
         let user = db.user().await;
@@ -479,27 +477,26 @@ mod tests {
             .await
             .unwrap();
         let msg = api::NodeMessage::created(node_model.clone(), user.clone());
-        notifier.sender().send(msg).await.unwrap();
+        context.notifier.sender().send(msg).await.unwrap();
 
         let msg = api::NodeMessage::updated(node.clone(), Some(user.clone()), &mut conn)
             .await
             .unwrap();
-        notifier.sender().send(msg).await.unwrap();
+        context.notifier.sender().send(msg).await.unwrap();
 
         let msg = api::NodeMessage::deleted(node, user);
-        notifier.sender().send(msg).await.unwrap();
+        context.notifier.sender().send(msg).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_send_commands() {
-        let context = Context::new_with_default_toml().unwrap();
-        let db = TestDb::setup(context).await;
-        let notifier = Notifier::new(&db.pool.context.config.mqtt).await.unwrap();
+        let context = Context::from_default_toml().await.unwrap();
+        let db = TestDb::setup(context.clone()).await;
 
         let command = db.command().await;
         let mut conn = db.conn().await;
 
         let command = api::Command::from_model(&command, &mut conn).await.unwrap();
-        notifier.sender().send(command).await.unwrap();
+        context.notifier.sender().send(command).await.unwrap();
     }
 }
