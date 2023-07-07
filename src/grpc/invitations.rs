@@ -299,9 +299,9 @@ impl api::Invitation {
 
         models
             .into_iter()
-            .map(|i| {
+            .filter_map(|i| orgs.get(&i.org_id).map(|o| (i, o)))
+            .map(|(i, org)| {
                 let creator = &creators[&i.created_by];
-                let org = &orgs[&i.org_id];
                 Self::new(i, creator, org)
             })
             .collect()
