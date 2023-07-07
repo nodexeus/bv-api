@@ -125,8 +125,6 @@ impl Resource {
 #[derive(
     Clone, Copy, Debug, Display, PartialEq, Eq, Serialize, Deserialize, EnumString, IntoStaticStr,
 )]
-#[serde(rename_all = "snake_case")]
-#[strum(serialize_all = "snake_case")]
 pub enum ResourceType {
     User,
     Org,
