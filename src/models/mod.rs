@@ -19,6 +19,7 @@ mod node_type;
 mod org;
 mod paginate;
 pub mod schema;
+pub mod subscription;
 mod user;
 
 pub use blacklist_token::*;

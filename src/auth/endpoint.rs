@@ -120,6 +120,12 @@ pub enum Endpoint {
     ApiKeyUpdate = 1603,
     ApiKeyRegenerate = 1604,
     ApiKeyDelete = 1605,
+
+    SubscriptionAll = 1700,
+    SubscriptionCreate = 1701,
+    SubscriptionGet = 1702,
+    SubscriptionList = 1703,
+    SubscriptionDelete = 1704,
 }
 
 impl Endpoint {
