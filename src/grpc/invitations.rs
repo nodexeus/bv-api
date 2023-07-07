@@ -301,7 +301,7 @@ impl api::Invitation {
             .into_iter()
             .map(|i| {
                 let creator = &creators[&i.created_by];
-                let org = orgs.get(&i.org_id).cloned().unwrap_or_default();
+                let org = &orgs[&i.org_id];
                 Self::new(i, creator, org)
             })
             .collect()
