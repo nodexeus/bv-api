@@ -445,7 +445,7 @@ impl api::Node {
                     node.clone(),
                     &blockchains[&node.blockchain_id],
                     node.created_by.and_then(|u_id| users.get(&u_id)),
-                    props_map[&node.id].clone(),
+                    props_map.get(&node.id).cloned().unwrap_or_default(),
                     &orgs[&node.org_id],
                     &hosts[&node.host_id],
                 )
