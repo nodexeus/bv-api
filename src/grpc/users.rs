@@ -134,6 +134,7 @@ impl api::User {
             last_name: model.last_name,
             created_at: Some(super::try_dt_to_ts(model.created_at)?),
             updated_at: None,
+            external_id: model.external_id,
         };
         Ok(user)
     }
@@ -156,6 +157,7 @@ impl api::UserServiceUpdateRequest {
             id: self.id.parse()?,
             first_name: self.first_name.as_deref(),
             last_name: self.last_name.as_deref(),
+            external_id: self.external_id.as_deref(),
         })
     }
 }
