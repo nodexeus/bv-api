@@ -131,6 +131,7 @@ pub async fn server(db: DbPool) -> Router<CorsServer> {
     let node = api::node_service_server::NodeServiceServer::new(grpc.clone());
     let organization = api::org_service_server::OrgServiceServer::new(grpc.clone());
     let user = api::user_service_server::UserServiceServer::new(grpc.clone());
+    let manifest = api::manifest_service_server::ManifestServiceServer::new(grpc.clone());
 
     let request_concurrency_limit = grpc.context.config.grpc.request_concurrency_limit;
 
@@ -163,4 +164,5 @@ pub async fn server(db: DbPool) -> Router<CorsServer> {
         .add_service(node)
         .add_service(organization)
         .add_service(user)
+        .add_service(manifest)
 }
