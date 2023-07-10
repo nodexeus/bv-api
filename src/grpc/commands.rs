@@ -177,7 +177,7 @@ impl api::Command {
         use models::CommandType::*;
 
         // Extract the node id from the model, if there is one.
-        let node_id = || model.node_id.ok_or_else(required("command.node_id"));
+        let node_id = || model.node_id.ok_or_else(required("command.node_id "));
         // Closure to conveniently construct a api:: from the data that we need to have.
         let node_cmd = |command, node_id| -> Result<api::Command, crate::error::Error> {
             Ok(api::Command {
