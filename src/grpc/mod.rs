@@ -13,6 +13,7 @@ pub mod metrics;
 pub mod nodes;
 pub mod notification;
 pub mod orgs;
+pub mod subscription;
 pub mod users;
 
 #[allow(clippy::large_enum_variant)]
@@ -130,6 +131,8 @@ pub async fn server(db: DbPool) -> Router<CorsServer> {
     let metrics = api::metrics_service_server::MetricsServiceServer::new(grpc.clone());
     let node = api::node_service_server::NodeServiceServer::new(grpc.clone());
     let organization = api::org_service_server::OrgServiceServer::new(grpc.clone());
+    let subscription =
+        api::subscription_service_server::SubscriptionServiceServer::new(grpc.clone());
     let user = api::user_service_server::UserServiceServer::new(grpc.clone());
     let manifest = api::manifest_service_server::ManifestServiceServer::new(grpc.clone());
 
@@ -163,6 +166,7 @@ pub async fn server(db: DbPool) -> Router<CorsServer> {
         .add_service(metrics)
         .add_service(node)
         .add_service(organization)
+        .add_service(subscription)
         .add_service(user)
         .add_service(manifest)
 }

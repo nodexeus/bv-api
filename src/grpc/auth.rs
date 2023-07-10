@@ -27,6 +27,7 @@ const USER_ENDPOINTS: &[Endpoint] = &[
     Endpoint::MetricsAll,
     Endpoint::NodeAll,
     Endpoint::OrgAll,
+    Endpoint::SubscriptionAll,
     Endpoint::UserAll,
 ];
 
