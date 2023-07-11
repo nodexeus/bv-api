@@ -6,7 +6,7 @@ use anyhow::{anyhow, Context};
 use aws_sdk_s3::config::Credentials;
 
 use crate::config;
-use crate::grpc::{api, helpers::required};
+use crate::grpc::api;
 
 pub const RHAI_FILE_NAME: &str = "babel.rhai";
 pub const BABEL_IMAGE_NAME: &str = "blockjoy.gz";
@@ -54,11 +54,6 @@ impl Client for aws_sdk_s3::Client {
             .send()
             .await
             .with_context(|| format!("Can't read file `{bucket}:{path}`"))?;
-        // let metadata = response.metadata().ok_or_else(required("metadata"))?;
-        // if !metadata.contains_key("status") {
-        //     let err = format!("File at `{bucket}:{path}` not does not exist");
-        //     return Err(crate::Error::unexpected(err));
-        // }
         let bytes = response
             .body
             .collect()
