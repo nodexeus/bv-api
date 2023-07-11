@@ -28,9 +28,7 @@ impl invitation_service_server::InvitationService for super::Grpc {
         &self,
         req: Request<api::InvitationServiceListRequest>,
     ) -> super::Resp<api::InvitationServiceListResponse> {
-        let mut conn = self.conn().await?;
-        let resp = list(req, &mut conn).await?;
-        Ok(resp)
+        self.run(|c| list(req, c).scope_boxed()).await
     }
 
     async fn accept(

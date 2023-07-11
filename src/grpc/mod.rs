@@ -54,7 +54,7 @@ macro_rules! forbidden {
 use forbidden;
 
 type Result<T> = crate::Result<tonic::Response<T>>;
-type Resp<T> = std::result::Result<tonic::Response<T>, tonic::Status>;
+type Resp<T, E = tonic::Status> = std::result::Result<tonic::Response<T>, E>;
 type TracedServer = Stack<TraceLayer<SharedClassifier<GrpcErrorsAsFailures>>, Identity>;
 type DbServer = Stack<Extension<DbPool>, TracedServer>;
 type CorsServer = Stack<Stack<CorsLayer, DbServer>, Identity>;

@@ -36,9 +36,7 @@ impl command_service_server::CommandService for super::Grpc {
         &self,
         req: tonic::Request<api::CommandServicePendingRequest>,
     ) -> super::Resp<api::CommandServicePendingResponse> {
-        let mut conn = self.conn().await?;
-        let resp = pending(req, &mut conn).await?;
-        Ok(resp)
+        self.run(|c| pending(req, c).scope_boxed()).await
     }
 }
 

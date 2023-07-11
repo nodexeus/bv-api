@@ -65,47 +65,35 @@ impl subscription_service_server::SubscriptionService for Grpc {
         &self,
         req: Request<api::SubscriptionServiceCreateRequest>,
     ) -> super::Resp<api::SubscriptionServiceCreateResponse> {
-        self.trx(|tx| create(req, tx).scope_boxed())
-            .await
-            .map(Response::new)
+        self.trx(|c| create(req, c).scope_boxed()).await
     }
 
     async fn get(
         &self,
         req: Request<api::SubscriptionServiceGetRequest>,
     ) -> super::Resp<api::SubscriptionServiceGetResponse> {
-        let mut conn = self.conn().await?;
-        get(req, &mut conn)
-            .await
-            .map_err(Into::into)
-            .map(Response::new)
+        self.run(|c| get(req, c).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: Request<api::SubscriptionServiceListRequest>,
     ) -> super::Resp<api::SubscriptionServiceListResponse> {
-        let mut conn = self.conn().await?;
-        list(req, &mut conn)
-            .await
-            .map_err(Into::into)
-            .map(Response::new)
+        self.run(|c| list(req, c).scope_boxed()).await
     }
 
     async fn delete(
         &self,
         req: Request<api::SubscriptionServiceDeleteRequest>,
     ) -> super::Resp<api::SubscriptionServiceDeleteResponse> {
-        self.trx(|tx| delete(req, tx).scope_boxed())
-            .await
-            .map(Response::new)
+        self.trx(|tx| delete(req, tx).scope_boxed()).await
     }
 }
 
 async fn create(
     req: Request<api::SubscriptionServiceCreateRequest>,
     conn: &mut Conn,
-) -> Result<api::SubscriptionServiceCreateResponse, Error> {
+) -> super::Resp<api::SubscriptionServiceCreateResponse, Error> {
     let claims = conn.claims(&req, Endpoint::SubscriptionCreate).await?;
 
     let req = req.into_inner();
@@ -124,15 +112,16 @@ async fn create(
     let sub = NewSubscription::new(org_id, user_id, req.external_id);
     let created = sub.create(conn).await.map_err(Error::CreateSub)?;
 
-    Ok(api::SubscriptionServiceCreateResponse {
+    let resp = api::SubscriptionServiceCreateResponse {
         subscription: Some(api::Subscription::from_model(created)),
-    })
+    };
+    Ok(Response::new(resp))
 }
 
 async fn get(
     req: Request<api::SubscriptionServiceGetRequest>,
     conn: &mut Conn,
-) -> Result<api::SubscriptionServiceGetResponse, Error> {
+) -> super::Resp<api::SubscriptionServiceGetResponse, Error> {
     let claims = conn.claims(&req, Endpoint::SubscriptionGet).await?;
 
     let req = req.into_inner();
@@ -143,15 +132,16 @@ async fn get(
         .await
         .map_err(Error::FindByOrg)?;
 
-    Ok(api::SubscriptionServiceGetResponse {
+    let resp = api::SubscriptionServiceGetResponse {
         subscription: Some(api::Subscription::from_model(sub)),
-    })
+    };
+    Ok(Response::new(resp))
 }
 
 async fn list(
     req: Request<api::SubscriptionServiceListRequest>,
     conn: &mut Conn,
-) -> Result<api::SubscriptionServiceListResponse, Error> {
+) -> super::Resp<api::SubscriptionServiceListResponse, Error> {
     let claims = conn.claims(&req, Endpoint::SubscriptionList).await?;
 
     let req = req.into_inner();
@@ -166,13 +156,14 @@ async fn list(
         .map(api::Subscription::from_model)
         .collect();
 
-    Ok(api::SubscriptionServiceListResponse { subscriptions })
+    let resp = api::SubscriptionServiceListResponse { subscriptions };
+    Ok(Response::new(resp))
 }
 
 async fn delete(
     req: Request<api::SubscriptionServiceDeleteRequest>,
     conn: &mut Conn,
-) -> Result<api::SubscriptionServiceDeleteResponse, Error> {
+) -> super::Resp<api::SubscriptionServiceDeleteResponse, Error> {
     let claims = conn.claims(&req, Endpoint::SubscriptionDelete).await?;
 
     let req = req.into_inner();
@@ -192,7 +183,8 @@ async fn delete(
         .await
         .map_err(Error::DeleteSub)?;
 
-    Ok(api::SubscriptionServiceDeleteResponse {})
+    let resp = api::SubscriptionServiceDeleteResponse {};
+    Ok(Response::new(resp))
 }
 
 impl api::Subscription {

@@ -20,9 +20,7 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceGetRequest>,
     ) -> super::Resp<api::UserServiceGetResponse> {
-        let mut conn = self.conn().await?;
-        let resp = get(req, &mut conn).await?;
-        Ok(resp)
+        self.run(|c| get(req, c).scope_boxed()).await
     }
 
     async fn update(
