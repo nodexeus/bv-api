@@ -138,7 +138,7 @@ impl api::User {
             last_name: model.last_name,
             created_at: Some(NanosUtc::from(model.created_at).into()),
             updated_at: None,
-            external_id: model.external_id,
+            billing_id: model.billing_id,
         };
         Ok(user)
     }
@@ -161,7 +161,7 @@ impl api::UserServiceUpdateRequest {
             id: self.id.parse()?,
             first_name: self.first_name.as_deref(),
             last_name: self.last_name.as_deref(),
-            external_id: self.external_id.as_deref(),
+            billing_id: self.billing_id.as_deref(),
         })
     }
 }

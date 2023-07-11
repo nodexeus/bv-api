@@ -22,7 +22,7 @@ pub struct User {
     pub last_name: String,
     pub confirmed_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
-    pub external_id: Option<String>,
+    pub billing_id: Option<String>,
 }
 
 type NotDeleted = dsl::Filter<users::table, dsl::IsNull<users::deleted_at>>;
@@ -230,7 +230,7 @@ pub struct UpdateUser<'a> {
     pub id: UserId,
     pub first_name: Option<&'a str>,
     pub last_name: Option<&'a str>,
-    pub external_id: Option<&'a str>,
+    pub billing_id: Option<&'a str>,
 }
 
 impl<'a> UpdateUser<'a> {
@@ -280,7 +280,7 @@ mod tests {
             last_name: "Ballington".to_string(),
             confirmed_at: Some(chrono::Utc::now()),
             deleted_at: None,
-            external_id: None,
+            billing_id: None,
         };
         user.verify_password("A password that cannot be hacked!1")
             .unwrap()
