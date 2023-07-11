@@ -292,8 +292,8 @@ async fn delete(
         host_id: node.host_id,
         cmd: models::CommandType::DeleteNode,
         sub_cmd: Some(&node_id),
-        // Note that the `node_id` goes into the `sub_cmd` field, not the node_id
-        // field, because the node was just deleted.
+        // Note that the `node_id` goes into the `sub_cmd` field, not the node_id field, because the
+        // node was just deleted.
         node_id: None,
     };
     let cmd = new_command.create(conn).await?;

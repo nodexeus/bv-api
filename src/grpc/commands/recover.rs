@@ -149,8 +149,8 @@ async fn send_delete(
     let cmd = models::NewCommand {
         host_id: node.host_id,
         cmd: models::CommandType::DeleteNode,
-        sub_cmd: None,
-        node_id: Some(node.id),
+        sub_cmd: Some(node.id),
+        node_id: None,
     };
     let Ok(cmd) = cmd.create(conn).await else {
         error!("Could not create node delete command while recovering");
