@@ -87,10 +87,41 @@ async fn ack(
     let req = req.into_inner();
     let command = models::Command::find_by_id(req.id.parse()?, conn).await?;
     let host = command.host(conn).await?;
-    let node = command.node(conn).await?;
-    let is_allowed = access_allowed(claims, node.as_ref(), &host, conn).await?;
-    if !is_allowed {
-        super::forbidden!("Access denied for command ack of {}", req.id);
+    let node: Option<models::Node> = command.node(conn).await?;
+    let reason = match claims.resource() {
+        Resource::User(user_id) => {
+            if let Some(node) = &node {
+                (!models::Org::is_member(user_id, node.org_id, conn).await?)
+                    .then(|| "user not a member")
+            } else {
+                (!models::Org::is_member(user_id, host.org_id, conn).await?)
+                    .then(|| "user not a member")
+            }
+        }
+        Resource::Org(org_id) => {
+            if let Some(node) = &node {
+                (org_id != node.org_id).then(|| "org incorrect node id")
+            } else {
+                (org_id != host.org_id).then(|| "org incorrect host id")
+            }
+        }
+        Resource::Host(host_id) => {
+            if let Some(node) = &node {
+                (host_id != node.host_id).then(|| "host incorrect node host id")
+            } else {
+                (host_id != host.id).then(|| "host incorrect node id")
+            }
+        }
+        Resource::Node(node_id) => {
+            if let Some(node) = &node {
+                (node_id != node.id).then(|| "node incorrect id")
+            } else {
+                None
+            }
+        }
+    };
+    if let Some(reason) = reason {
+        super::forbidden!("Access denied for command ack of {}: `{reason}`", req.id);
     }
     if command.acked_at.is_none() {
         command.ack(conn).await?;
