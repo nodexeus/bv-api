@@ -86,35 +86,37 @@ async fn ack(
     let claims = conn.claims(&req, Endpoint::CommandAck).await?;
     let req = req.into_inner();
     let command = models::Command::find_by_id(req.id.parse()?, conn).await?;
+    println!("this claims: {claims:?} is going to ack this command: {command:?}");
+
     let host = command.host(conn).await?;
     let node: Option<models::Node> = command.node(conn).await?;
     let reason = match claims.resource() {
         Resource::User(user_id) => {
             if let Some(node) = &node {
                 (!models::Org::is_member(user_id, node.org_id, conn).await?)
-                    .then(|| "user not a member")
+                    .then_some("user not a member")
             } else {
                 (!models::Org::is_member(user_id, host.org_id, conn).await?)
-                    .then(|| "user not a member")
+                    .then_some("user not a member")
             }
         }
         Resource::Org(org_id) => {
             if let Some(node) = &node {
-                (org_id != node.org_id).then(|| "org incorrect node id")
+                (org_id != node.org_id).then_some("org incorrect node id")
             } else {
-                (org_id != host.org_id).then(|| "org incorrect host id")
+                (org_id != host.org_id).then_some("org incorrect host id")
             }
         }
         Resource::Host(host_id) => {
             if let Some(node) = &node {
-                (host_id != node.host_id).then(|| "host incorrect node host id")
+                (host_id != node.host_id).then_some("host incorrect node host id")
             } else {
-                (host_id != host.id).then(|| "host incorrect node id")
+                (host_id != host.id).then_some("host incorrect node id")
             }
         }
         Resource::Node(node_id) => {
             if let Some(node) = &node {
-                (node_id != node.id).then(|| "node incorrect id")
+                (node_id != node.id).then_some("node incorrect id")
             } else {
                 None
             }
