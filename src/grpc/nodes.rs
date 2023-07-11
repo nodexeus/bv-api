@@ -29,18 +29,14 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceGetRequest>,
     ) -> super::Resp<api::NodeServiceGetResponse> {
-        let mut conn = self.conn().await?;
-        let resp = get(req, &mut conn).await?;
-        Ok(resp)
+        self.run(|c| get(req, c).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::NodeServiceListRequest>,
     ) -> super::Resp<api::NodeServiceListResponse> {
-        let mut conn = self.conn().await?;
-        let resp = list(req, &mut conn).await?;
-        Ok(resp)
+        self.run(|c| list(req, c).scope_boxed()).await
     }
 
     async fn update_config(
@@ -291,6 +287,7 @@ async fn delete(
 
     // Send delete node command
     let node_id = node.id.to_string();
+
     let new_command = models::NewCommand {
         host_id: node.host_id,
         cmd: models::CommandType::DeleteNode,

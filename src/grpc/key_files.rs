@@ -21,9 +21,7 @@ impl key_file_service_server::KeyFileService for super::Grpc {
         &self,
         req: Request<api::KeyFileServiceListRequest>,
     ) -> super::Resp<api::KeyFileServiceListResponse> {
-        let mut conn = self.conn().await?;
-        let resp = list(req, &mut conn).await?;
-        Ok(resp)
+        self.run(|c| list(req, c).scope_boxed()).await
     }
 }
 

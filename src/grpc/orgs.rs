@@ -26,18 +26,14 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceGetRequest>,
     ) -> super::Resp<api::OrgServiceGetResponse> {
-        let mut conn = self.conn().await?;
-        let resp = get(req, &mut conn).await?;
-        Ok(resp)
+        self.run(|c| get(req, c).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::OrgServiceListRequest>,
     ) -> super::Resp<api::OrgServiceListResponse> {
-        let mut conn = self.conn().await?;
-        let resp = list(req, &mut conn).await?;
-        Ok(resp)
+        self.run(|c| list(req, c).scope_boxed()).await
     }
 
     async fn update(
@@ -74,18 +70,16 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceGetProvisionTokenRequest>,
     ) -> super::Resp<api::OrgServiceGetProvisionTokenResponse> {
-        let mut conn = self.conn().await?;
-        let resp = get_provision_token(req, &mut conn).await?;
-        Ok(resp)
+        self.run(|c| get_provision_token(req, c).scope_boxed())
+            .await
     }
 
     async fn reset_provision_token(
         &self,
         req: tonic::Request<api::OrgServiceResetProvisionTokenRequest>,
     ) -> super::Resp<api::OrgServiceResetProvisionTokenResponse> {
-        let mut conn = self.conn().await?;
-        let resp = reset_provision_token(req, &mut conn).await?;
-        Ok(resp)
+        self.run(|c| reset_provision_token(req, c).scope_boxed())
+            .await
     }
 }
 
