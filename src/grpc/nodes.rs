@@ -135,7 +135,7 @@ async fn list(
         Resource::Node(_) => false,
     };
     if !is_allowed {
-        super::forbidden!("Access denied");
+        super::forbidden!("Access denied for nodes list");
     }
     let (node_count, nodes) = models::Node::filter(filter, conn).await?;
     let nodes = api::Node::from_models(nodes, conn).await?;

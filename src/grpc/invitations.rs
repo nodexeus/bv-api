@@ -81,7 +81,7 @@ async fn create(
         Resource::Node(_) => todo!(),
     };
     if !is_allowed {
-        super::forbidden!("Access denied");
+        super::forbidden!("Access denied for invitations create");
     }
 
     let org_id = req.org_id.parse()?;
@@ -145,7 +145,7 @@ async fn list(
         let user = models::User::find_by_email(invitee_email, conn).await?;
         ResourceEntry::new_user(user.id)
     } else {
-        super::forbidden!("Access denied");
+        super::forbidden!("Access denied for invitations list");
     };
 
     let _ = claims.ensure(entry.into(), conn).await?;
@@ -163,7 +163,8 @@ async fn accept(
 ) -> crate::Result<super::Outcome<api::InvitationServiceAcceptResponse>> {
     let claims = conn.claims(&req, Endpoint::InvitationAccept).await?;
     let req = req.into_inner();
-    let invitation = models::Invitation::find_by_id(req.invitation_id.parse()?, conn).await?;
+    let invitation_id = req.invitation_id.parse()?;
+    let invitation = models::Invitation::find_by_id(invitation_id, conn).await?;
     let is_allowed = match claims.resource() {
         Resource::User(user_id) => {
             let user = models::User::find_by_id(user_id, conn).await?;
@@ -178,7 +179,7 @@ async fn accept(
         Resource::Node(_) => false,
     };
     if !is_allowed {
-        super::forbidden!("Access denied");
+        super::forbidden!("Access denied for invitations accept of {invitation_id}");
     }
     if invitation.accepted_at.is_some() {
         return Err(Status::failed_precondition("Invitation already accepted").into());
@@ -207,7 +208,8 @@ async fn decline(
 ) -> crate::Result<super::Outcome<api::InvitationServiceDeclineResponse>> {
     let claims = conn.claims(&req, Endpoint::InvitationDecline).await?;
     let req = req.into_inner();
-    let invitation = models::Invitation::find_by_id(req.invitation_id.parse()?, conn).await?;
+    let invitation_id = req.invitation_id.parse()?;
+    let invitation = models::Invitation::find_by_id(invitation_id, conn).await?;
     let is_allowed = match claims.resource() {
         Resource::User(user_id) => {
             let user = models::User::find_by_id(user_id, conn).await?;
@@ -221,7 +223,7 @@ async fn decline(
         Resource::Node(_) => false,
     };
     if !is_allowed {
-        super::forbidden!("Access denied");
+        super::forbidden!("Access denied for invitations decline of {invitation_id}");
     }
     if invitation.accepted_at.is_some() {
         return Err(Status::failed_precondition("Invite is accepted").into());
@@ -243,7 +245,8 @@ async fn revoke(
 ) -> crate::Result<super::Outcome<api::InvitationServiceRevokeResponse>> {
     let claims = conn.claims(&req, Endpoint::InvitationRevoke).await?;
     let req = req.into_inner();
-    let invitation = models::Invitation::find_by_id(req.invitation_id.parse()?, conn).await?;
+    let invitation_id = req.invitation_id.parse()?;
+    let invitation = models::Invitation::find_by_id(invitation_id, conn).await?;
     let is_allowed = match claims.resource() {
         Resource::User(user_id) => models::Org::is_member(user_id, invitation.org_id, conn).await?,
         Resource::Org(_) => false,
@@ -251,7 +254,7 @@ async fn revoke(
         Resource::Node(_) => false,
     };
     if !is_allowed {
-        super::forbidden!("Access denied");
+        super::forbidden!("Access denied for invitations revoke of {invitation_id}");
     }
     if invitation.accepted_at.is_some() {
         return Err(Status::failed_precondition("Invite is accepted").into());

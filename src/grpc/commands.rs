@@ -51,7 +51,7 @@ async fn update(
     let node = command.node(conn).await?;
     let is_allowed = access_allowed(claims, node.as_ref(), &host, conn).await?;
     if !is_allowed {
-        super::forbidden!("Access denied");
+        super::forbidden!("Access denied for command update of {}", req.id);
     }
     let update_cmd = req.as_update()?;
     let cmd = update_cmd.update(conn).await?;
@@ -90,7 +90,7 @@ async fn ack(
     let node = command.node(conn).await?;
     let is_allowed = access_allowed(claims, node.as_ref(), &host, conn).await?;
     if !is_allowed {
-        super::forbidden!("Access denied");
+        super::forbidden!("Access denied for command ack of {}", req.id);
     }
     if command.acked_at.is_none() {
         command.ack(conn).await?;
@@ -114,7 +114,7 @@ async fn pending(
         Resource::Node(_) => false,
     };
     if !is_allowed {
-        super::forbidden!("Access denied");
+        super::forbidden!("Access denied for command pending");
     }
     let cmds = models::Command::find_pending_by_host(host_id, conn).await?;
     let mut commands = Vec::with_capacity(cmds.len());
