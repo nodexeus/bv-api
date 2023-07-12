@@ -7,7 +7,11 @@ use crate::auth::claims::Claims;
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::{HostId, OrgId, Resource, UserId};
 use crate::auth::token::refresh::Refresh;
-use crate::models::{self, CommandType};
+use crate::config::Context;
+use crate::database::{Conn, Transaction};
+use crate::models::command::NewCommand;
+use crate::models::host::{HostFilter, NewHost, UpdateHost};
+use crate::models::{CommandType, ConnectionStatus, Host, Node, Org, OrgUser};
 use crate::timestamp::NanosUtc;
 
 use super::api::{self, host_service_server};
@@ -38,7 +42,9 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceCreateRequest>,
     ) -> super::Resp<api::HostServiceCreateResponse> {
-        self.trx(|c| create(req, c).scope_boxed()).await
+        self.context
+            .write(|conn, ctx| create(req, conn, ctx).scope_boxed())
+            .await
     }
 
     /// Get a host by id.
@@ -46,21 +52,27 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceGetRequest>,
     ) -> super::Resp<api::HostServiceGetResponse> {
-        self.run(|c| get(req, c).scope_boxed()).await
+        self.context
+            .read(|conn, ctx| get(req, conn, ctx).scope_boxed())
+            .await
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::HostServiceListRequest>,
     ) -> super::Resp<api::HostServiceListResponse> {
-        self.run(|c| list(req, c).scope_boxed()).await
+        self.context
+            .read(|conn, ctx| list(req, conn, ctx).scope_boxed())
+            .await
     }
 
     async fn update(
         &self,
         req: tonic::Request<api::HostServiceUpdateRequest>,
     ) -> super::Resp<api::HostServiceUpdateResponse> {
-        self.trx(|c| update(req, c).scope_boxed()).await
+        self.context
+            .write(|conn, ctx| update(req, conn, ctx).scope_boxed())
+            .await
     }
 
     async fn delete(
@@ -74,9 +86,8 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceStartRequest>,
     ) -> super::Resp<api::HostServiceStartResponse> {
-        self.trx(|c| start(req, c).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.context
+            .write(|conn, ctx| start(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -84,9 +95,8 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceStopRequest>,
     ) -> super::Resp<api::HostServiceStopResponse> {
-        self.trx(|c| stop(req, c).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.context
+            .write(|conn, ctx| stop(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -94,9 +104,8 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceRestartRequest>,
     ) -> super::Resp<api::HostServiceRestartResponse> {
-        self.trx(|c| restart(req, c).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.context
+            .write(|conn, ctx| restart(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -104,21 +113,23 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceRegionsRequest>,
     ) -> super::Resp<api::HostServiceRegionsResponse> {
-        let resp = regions(req, &mut self.conn().await?).await?;
-        Ok(resp)
+        self.context
+            .read(|conn, ctx| delete(req, conn, ctx).scope_boxed())
+            .await
     }
 }
 
 async fn create(
     req: tonic::Request<api::HostServiceCreateRequest>,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
+    ctx: &Context,
 ) -> super::Result<api::HostServiceCreateResponse> {
     let req = req.into_inner();
     let org_id = req.org_id.as_ref().map(|id| id.parse()).transpose()?;
     // We retrieve the id of the caller from the token that was used.
     let (caller_id, org_id) = if let Some(org_id) = org_id {
         // First we find the org and user that correspond to this token.
-        let org_user = models::OrgUser::by_token(&req.provision_token, conn)
+        let org_user = OrgUser::by_token(&req.provision_token, conn)
             .await
             .map_err(|_| tonic::Status::permission_denied("Invalid token"))?;
         // Now we check that the user belonging to this token is actually a member of the requested
@@ -130,7 +141,7 @@ async fn create(
         }
     } else {
         // First we find the org and user that correspond to this token.
-        let org_user = models::OrgUser::by_token(&req.provision_token, conn)
+        let org_user = OrgUser::by_token(&req.provision_token, conn)
             .await
             .map_err(|_| tonic::Status::permission_denied("Invalid token"))?;
         (org_user.user_id, org_user.org_id)
@@ -144,13 +155,13 @@ async fn create(
     let host = new_host.create(conn).await?;
 
     let resource = Resource::Host(host.id);
-    let expires = conn.context.config.token.expire.token.try_into()?;
+    let expires = ctx.config.token.expire.token.try_into()?;
     let claims = Claims::from_now(expires, resource, HOST_ENDPOINTS);
-    let token = conn.context.cipher().jwt.encode(&claims)?;
+    let token = ctx.cipher().jwt.encode(&claims)?;
 
-    let expires = conn.context.config.token.expire.refresh_host.try_into()?;
+    let expires = ctx.config.token.expire.refresh_host.try_into()?;
     let refresh = Refresh::from_now(expires, host.id);
-    let encoded = conn.context.cipher().refresh.encode(&refresh)?;
+    let encoded = ctx.cipher().refresh.encode(&refresh)?;
 
     let host = api::Host::from_model(host, conn).await?;
     let resp = api::HostServiceCreateResponse {
@@ -165,19 +176,18 @@ async fn create(
 /// Get a host by id.
 async fn get(
     req: tonic::Request<api::HostServiceGetRequest>,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
+    ctx: &Context,
 ) -> super::Result<api::HostServiceGetResponse> {
-    let claims = conn.claims(&req, Endpoint::HostGet).await?;
+    let claims = ctx.claims(&req, Endpoint::HostGet).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
-    let host = models::Host::find_by_id(host_id, conn).await?;
+    let host = Host::find_by_id(host_id, conn).await?;
     let is_allowed = match claims.resource() {
-        Resource::User(user_id) => models::Org::is_member(user_id, host.org_id, conn).await?,
+        Resource::User(user_id) => Org::is_member(user_id, host.org_id, conn).await?,
         Resource::Org(org) => host.org_id == org,
         Resource::Host(host_id) => host.id == host_id,
-        Resource::Node(node_id) => {
-            models::Node::find_by_id(node_id, conn).await?.host_id == host.id
-        }
+        Resource::Node(node_id) => Node::find_by_id(node_id, conn).await?.host_id == host.id,
     };
     if !is_allowed {
         super::forbidden!("Access denied for hosts get of {}", req.id);
@@ -189,13 +199,14 @@ async fn get(
 
 async fn list(
     req: tonic::Request<api::HostServiceListRequest>,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
+    ctx: &Context,
 ) -> super::Result<api::HostServiceListResponse> {
-    let claims = conn.claims(&req, Endpoint::HostList).await?;
+    let claims = ctx.claims(&req, Endpoint::HostList).await?;
     let req = req.into_inner();
     let org_id = req.org_id.parse()?;
     let is_allowed = match claims.resource() {
-        Resource::User(user_id) => models::Org::is_member(user_id, org_id, conn).await?,
+        Resource::User(user_id) => Org::is_member(user_id, org_id, conn).await?,
         Resource::Org(org_id_) => org_id == org_id_,
         Resource::Host(_) => false,
         Resource::Node(_) => false,
@@ -203,7 +214,7 @@ async fn list(
     if !is_allowed {
         super::forbidden!("Access denied for hosts list");
     }
-    let (host_count, hosts) = models::Host::filter(req.as_filter()?, conn).await?;
+    let (host_count, hosts) = Host::filter(req.as_filter()?, conn).await?;
     let hosts = api::Host::from_models(hosts, conn).await?;
     let resp = api::HostServiceListResponse { hosts, host_count };
     Ok(tonic::Response::new(resp))
@@ -211,12 +222,13 @@ async fn list(
 
 async fn update(
     req: tonic::Request<api::HostServiceUpdateRequest>,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
+    ctx: &Context,
 ) -> super::Result<api::HostServiceUpdateResponse> {
-    let claims = conn.claims(&req, Endpoint::HostUpdate).await?;
+    let claims = ctx.claims(&req, Endpoint::HostUpdate).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
-    let host = models::Host::find_by_id(host_id, conn).await?;
+    let host = Host::find_by_id(host_id, conn).await?;
     if !matches!(claims.resource(), Resource::Host(host_id) if host.id == host_id) {
         super::forbidden!("Access denied for hosts update");
     }
@@ -233,14 +245,15 @@ async fn update(
 
 async fn delete(
     req: tonic::Request<api::HostServiceDeleteRequest>,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
+    ctx: &Context,
 ) -> super::Result<api::HostServiceDeleteResponse> {
-    let claims = conn.claims(&req, Endpoint::HostDelete).await?;
+    let claims = ctx.claims(&req, Endpoint::HostDelete).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
-    let host = models::Host::find_by_id(host_id, conn).await?;
+    let host = Host::find_by_id(host_id, conn).await?;
     let is_allowed = match claims.resource() {
-        Resource::User(user_id) => models::Org::is_member(user_id, host.org_id, conn).await?,
+        Resource::User(user_id) => Org::is_member(user_id, host.org_id, conn).await?,
         Resource::Org(org_id) => org_id == host.org_id,
         Resource::Host(host_id) => host_id == host.id,
         Resource::Node(_) => false,
@@ -248,7 +261,7 @@ async fn delete(
     if !is_allowed {
         super::forbidden!("Access denied for hosts delete of {}", req.id);
     }
-    models::Host::delete(host_id, conn).await?;
+    Host::delete(host_id, conn).await?;
     let resp = api::HostServiceDeleteResponse {};
 
     Ok(tonic::Response::new(resp))
@@ -256,25 +269,28 @@ async fn delete(
 
 async fn start(
     req: tonic::Request<api::HostServiceStartRequest>,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
+    ctx: &Context,
 ) -> crate::Result<super::Outcome<api::HostServiceStartResponse>> {
-    let claims = conn.claims(&req, Endpoint::HostStart).await?;
+    let claims = ctx.claims(&req, Endpoint::HostStart).await?;
     change_host_state(&req.into_inner().id, CommandType::RestartBVS, claims, conn).await
 }
 
 async fn stop(
     req: tonic::Request<api::HostServiceStopRequest>,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
+    ctx: &Context,
 ) -> crate::Result<super::Outcome<api::HostServiceStopResponse>> {
-    let claims = conn.claims(&req, Endpoint::HostStop).await?;
+    let claims = ctx.claims(&req, Endpoint::HostStop).await?;
     change_host_state(&req.into_inner().id, CommandType::StopBVS, claims, conn).await
 }
 
 async fn restart(
     req: tonic::Request<api::HostServiceRestartRequest>,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
+    ctx: &Context,
 ) -> crate::Result<super::Outcome<api::HostServiceRestartResponse>> {
-    let claims = conn.claims(&req, Endpoint::HostRestart).await?;
+    let claims = ctx.claims(&req, Endpoint::HostRestart).await?;
     change_host_state(&req.into_inner().id, CommandType::RestartBVS, claims, conn).await
 }
 
@@ -282,12 +298,12 @@ async fn change_host_state<Res: Default>(
     id: &str,
     cmd_type: CommandType,
     claims: Claims,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
 ) -> crate::Result<super::Outcome<Res>> {
     let host_id = id.parse()?;
-    let host = models::Host::find_by_id(host_id, conn).await?;
+    let host = Host::find_by_id(host_id, conn).await?;
     let is_allowed = match claims.resource() {
-        Resource::User(user_id) => models::Org::is_member(user_id, host.org_id, conn).await?,
+        Resource::User(user_id) => Org::is_member(user_id, host.org_id, conn).await?,
         Resource::Org(org_id) => org_id == host.org_id,
         Resource::Host(host_id) => host_id == host.id,
         Resource::Node(_) => false,
@@ -301,9 +317,9 @@ async fn change_host_state<Res: Default>(
 async fn host_cmd(
     host_id: HostId,
     command_type: CommandType,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
 ) -> crate::Result<api::Command> {
-    let command = models::NewCommand {
+    let command = NewCommand {
         host_id,
         cmd: command_type,
         sub_cmd: None,
@@ -351,14 +367,11 @@ async fn regions(
 }
 
 impl api::Host {
-    pub async fn from_models(
-        models: Vec<models::Host>,
-        conn: &mut models::Conn,
-    ) -> crate::Result<Vec<Self>> {
-        let node_counts = models::Host::node_counts(&models, conn).await?;
+    pub async fn from_models(models: Vec<Host>, conn: &mut Conn<'_>) -> crate::Result<Vec<Self>> {
+        let node_counts = Host::node_counts(&models, conn).await?;
 
-        let org_ids = models.iter().map(|h| h.org_id).collect();
-        let orgs: HashMap<_, _> = models::Org::find_by_ids(org_ids, conn)
+        let org_ids: Vec<_> = models.iter().map(|h| h.org_id).collect();
+        let orgs: HashMap<_, _> = Org::find_by_ids(org_ids, conn)
             .await?
             .into_iter()
             .map(|org| (org.id, org))
@@ -397,7 +410,7 @@ impl api::Host {
             .collect()
     }
 
-    pub async fn from_model(model: models::Host, conn: &mut models::Conn) -> crate::Result<Self> {
+    pub async fn from_model(model: Host, conn: &mut Conn<'_>) -> crate::Result<Self> {
         Ok(Self::from_models(vec![model], conn).await?[0].clone())
     }
 }
@@ -409,7 +422,7 @@ impl api::HostServiceCreateRequest {
         org_id: OrgId,
         region: Option<&models::Region>,
     ) -> crate::Result<models::NewHost<'_>> {
-        Ok(models::NewHost {
+        Ok(NewHost {
             name: &self.name,
             version: &self.version,
             cpu_count: self.cpu_count.try_into()?,
@@ -418,7 +431,7 @@ impl api::HostServiceCreateRequest {
             os: &self.os,
             os_version: &self.os_version,
             ip_addr: &self.ip_addr,
-            status: models::ConnectionStatus::Online,
+            status: ConnectionStatus::Online,
             ip_range_from: self.ip_range_from.parse()?,
             ip_range_to: self.ip_range_to.parse()?,
             ip_gateway: self.ip_gateway.parse()?,
@@ -431,8 +444,8 @@ impl api::HostServiceCreateRequest {
 }
 
 impl api::HostServiceListRequest {
-    fn as_filter(&self) -> crate::Result<models::HostFilter> {
-        Ok(models::HostFilter {
+    fn as_filter(&self) -> crate::Result<HostFilter> {
+        Ok(HostFilter {
             org_id: self.org_id.parse()?,
             offset: self.offset,
             limit: self.limit,
@@ -441,11 +454,8 @@ impl api::HostServiceListRequest {
 }
 
 impl api::HostServiceUpdateRequest {
-    pub fn as_update(
-        &self,
-        region: Option<&models::Region>,
-    ) -> crate::Result<models::UpdateHost<'_>> {
-        Ok(models::UpdateHost {
+    pub fn as_update(&self, region: Option<&Region>) -> crate::Result<UpdateHost<'_>> {
+        Ok(UpdateHost {
             id: self.id.parse()?,
             name: self.name.as_deref(),
             version: self.version.as_deref(),

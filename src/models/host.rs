@@ -1,14 +1,21 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use diesel::{dsl, prelude::*};
+use diesel::dsl;
+use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
+use uuid::Uuid;
 
 use crate::auth::resource::{HostId, OrgId, UserId};
-use crate::{cookbook::script::HardwareRequirements, Result};
+use crate::cookbook::script::HardwareRequirements;
+use crate::database::Conn;
+use crate::Result;
 
+use super::ip_address::NewIpAddressRange;
+use super::node_scheduler::NodeScheduler;
+use super::node_type::NodeType;
+use super::paginate::Paginate;
 use super::schema::hosts;
-use super::Paginate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
 #[ExistingTypePath = "crate::models::schema::sql_types::EnumConnStatus"]
@@ -83,12 +90,12 @@ pub struct HostRequirements {
 }
 
 impl Host {
-    pub async fn find_by_id(id: HostId, conn: &mut super::Conn) -> Result<Self> {
+    pub async fn find_by_id(id: HostId, conn: &mut Conn<'_>) -> Result<Self> {
         let host = hosts::table.find(id).get_result(conn).await?;
         Ok(host)
     }
 
-    pub async fn find_by_ids(mut ids: Vec<HostId>, conn: &mut super::Conn) -> Result<Vec<Self>> {
+    pub async fn find_by_ids(mut ids: Vec<HostId>, conn: &mut Conn<'_>) -> Result<Vec<Self>> {
         ids.sort();
         ids.dedup();
         let hosts = hosts::table
@@ -98,7 +105,7 @@ impl Host {
         Ok(hosts)
     }
 
-    pub async fn by_ids(ids: &[HostId], conn: &mut super::Conn) -> Result<Vec<Self>> {
+    pub async fn by_ids(ids: &[HostId], conn: &mut Conn<'_>) -> Result<Vec<Self>> {
         let hosts: Vec<Self> = hosts::table
             .filter(hosts::id.eq_any(ids))
             .get_results(conn)
@@ -108,7 +115,7 @@ impl Host {
     }
 
     /// For each provided argument, filters the hosts by that argument.
-    pub async fn filter(filter: HostFilter, conn: &mut super::Conn) -> Result<(u64, Vec<Self>)> {
+    pub async fn filter(filter: HostFilter, conn: &mut Conn<'_>) -> Result<(u64, Vec<Self>)> {
         let HostFilter {
             org_id,
             offset,
@@ -123,7 +130,7 @@ impl Host {
         Ok((total.try_into()?, hosts))
     }
 
-    pub async fn find_by_name(name: &str, conn: &mut super::Conn) -> Result<Self> {
+    pub async fn find_by_name(name: &str, conn: &mut Conn<'_>) -> Result<Self> {
         let host = hosts::table
             .filter(hosts::name.eq(name))
             .get_result(conn)
@@ -131,7 +138,7 @@ impl Host {
         Ok(host)
     }
 
-    pub async fn delete(id: HostId, conn: &mut super::Conn) -> Result<usize> {
+    pub async fn delete(id: HostId, conn: &mut Conn<'_>) -> Result<usize> {
         let n_rows = diesel::delete(hosts::table.find(id)).execute(conn).await?;
         Ok(n_rows)
     }
@@ -143,7 +150,7 @@ impl Host {
     pub async fn host_candidates(
         reqs: HostRequirements,
         limit: Option<i64>,
-        conn: &mut super::Conn,
+        conn: &mut Conn<'_>,
     ) -> crate::Result<Vec<Host>> {
         use super::schema::sql_types::EnumNodeType;
         use diesel::sql_types::{BigInt, Nullable, Uuid};
@@ -226,15 +233,15 @@ impl Host {
 
     pub async fn node_counts(
         hosts: &[Self],
-        conn: &mut super::Conn,
-    ) -> crate::Result<HashMap<uuid::Uuid, u64>> {
+        conn: &mut Conn<'_>,
+    ) -> crate::Result<HashMap<Uuid, u64>> {
         use super::schema::nodes;
 
         let mut host_ids: Vec<_> = hosts.iter().map(|h| h.id).collect();
         host_ids.sort();
         host_ids.dedup();
 
-        let counts: Vec<(uuid::Uuid, i64)> = nodes::table
+        let counts: Vec<(Uuid, i64)> = nodes::table
             .filter(nodes::host_id.eq_any(host_ids))
             .group_by(nodes::host_id)
             .select((nodes::host_id, dsl::count(nodes::id)))
@@ -306,7 +313,7 @@ pub struct NewHost<'a> {
 
 impl NewHost<'_> {
     /// Creates a new `Host` in the db, including the necessary related rows.
-    pub async fn create(self, conn: &mut super::Conn) -> Result<Host> {
+    pub async fn create(self, conn: &mut Conn<'_>) -> Result<Host> {
         let ip_addr = self.ip_addr.parse()?;
         let ip_gateway = self.ip_gateway.ip();
         let ip_range_from = self.ip_range_from.ip();
@@ -318,7 +325,7 @@ impl NewHost<'_> {
             .await?;
 
         // Create IP range for new host
-        let create_range = super::NewIpAddressRange::try_new(ip_range_from, ip_range_to, host.id)?;
+        let create_range = NewIpAddressRange::try_new(ip_range_from, ip_range_to, host.id)?;
         create_range.create(&[ip_addr, ip_gateway], conn).await?;
 
         Ok(host)
@@ -345,7 +352,7 @@ pub struct UpdateHost<'a> {
 }
 
 impl UpdateHost<'_> {
-    pub async fn update(self, conn: &mut super::Conn) -> Result<Host> {
+    pub async fn update(self, conn: &mut Conn<'_>) -> Result<Host> {
         let host = diesel::update(hosts::table.find(self.id))
             .set(self)
             .get_result(conn)
@@ -371,7 +378,7 @@ pub struct UpdateHostMetrics {
 
 impl UpdateHostMetrics {
     /// Performs a selective update of only the columns related to metrics of the provided nodes.
-    pub async fn update_metrics(updates: Vec<Self>, conn: &mut super::Conn) -> Result<Vec<Host>> {
+    pub async fn update_metrics(updates: Vec<Self>, conn: &mut Conn<'_>) -> Result<Vec<Host>> {
         let mut results = Vec::with_capacity(updates.len());
         for update in updates {
             let updated = diesel::update(hosts::table.find(update.id))
