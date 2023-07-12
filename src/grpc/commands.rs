@@ -108,7 +108,7 @@ async fn ack(
             }
         }
         Resource::Host(host_id) => {
-            if let Some(node) = &node {
+            if let Some(node) = dbg!(&node) {
                 (host_id != node.host_id).then_some("host incorrect node host id")
             } else {
                 (host_id != host.id).then_some("host incorrect node id")
