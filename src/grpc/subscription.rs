@@ -133,7 +133,7 @@ async fn get(
         .map_err(Error::FindByOrg)?;
 
     let resp = api::SubscriptionServiceGetResponse {
-        subscription: Some(api::Subscription::from_model(sub)),
+        subscription: sub.map(api::Subscription::from_model),
     };
     Ok(Response::new(resp))
 }

@@ -234,7 +234,7 @@ impl Cookbook {
         );
         let mut manifest: manifest::DownloadManifest =
             serde_json::from_str(&self.client.read_string(&self.bucket, &path).await?)?;
-        for mut chunk in manifest.chunks.iter_mut() {
+        for chunk in manifest.chunks.iter_mut() {
             chunk.url = self
                 .client
                 .download_url(&self.bucket, &chunk.key, self.expiration)
