@@ -12,8 +12,8 @@ use crate::config::Context;
 use crate::database::Conn;
 use crate::models::schema::nodes;
 use crate::models::{
-    string_to_array, Blockchain, Host, IpAddress, NodeLog, NodeScheduler, NodeType, Paginate,
-    ResourceAffinity, SimilarNodeAffinity,
+    string_to_array, Blockchain, Host, HostRequirements, HostType, IpAddress, NodeLog,
+    NodeScheduler, NodeType, Paginate, Region, ResourceAffinity, SimilarNodeAffinity,
 };
 
 /// ContainerStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
@@ -238,11 +238,11 @@ impl Node {
                     requirements,
                     blockchain_id: self.blockchain_id,
                     node_type: self.node_type,
-                    host_type: Some(super::HostType::Cloud),
+                    host_type: Some(HostType::Cloud),
                     scheduler,
                     org_id: None,
                 };
-                super::Host::host_candidates(reqs, Some(2), conn).await?
+                Host::host_candidates(reqs, Some(2), conn).await?
             }
             None => vec![Host::find_by_id(self.host_id, conn).await?],
         };
@@ -273,15 +273,15 @@ impl Node {
 
     pub async fn scheduler(&self, conn: &mut Conn<'_>) -> crate::Result<Option<NodeScheduler>> {
         let Some(resource) = self.scheduler_resource else { return Ok(None); };
-        Ok(Some(super::NodeScheduler {
+        Ok(Some(NodeScheduler {
             region: self.region(conn).await?,
             similarity: self.scheduler_similarity,
             resource,
         }))
     }
 
-    pub async fn region(&self, conn: &mut super::Conn) -> crate::Result<Option<super::Region>> {
-        let region = self.scheduler_region.map(|r| super::Region::by_id(r, conn));
+    pub async fn region(&self, conn: &mut Conn<'_>) -> crate::Result<Option<Region>> {
+        let region = self.scheduler_region.map(|r| Region::by_id(r, conn));
         OptionFuture::from(region).await.transpose()
     }
 
@@ -371,8 +371,8 @@ impl NewNode<'_> {
         let host = match host {
             Some(host) => host,
             None => {
-                self.find_host(self.scheduler(conn).await?.ok_or_else(no_sched)?, conn)
-                    .await?
+                let scheduler = self.scheduler(conn).await?.ok_or_else(no_sched)?;
+                self.find_host(scheduler, conn, ctx).await?
             }
         };
         let ip_addr = IpAddress::next_for_host(host.id, conn)
@@ -423,11 +423,11 @@ impl NewNode<'_> {
             requirements,
             blockchain_id: self.blockchain_id,
             node_type: self.node_type,
-            host_type: Some(super::HostType::Cloud),
+            host_type: Some(HostType::Cloud),
             scheduler,
             org_id: None,
         };
-        let candidates = super::Host::host_candidates(requirements, Some(1), conn).await?;
+        let candidates = Host::host_candidates(requirements, Some(1), conn).await?;
         // Just take the first one if there is one.
         let best = candidates
             .into_iter()
@@ -438,11 +438,9 @@ impl NewNode<'_> {
 
     async fn scheduler(&self, conn: &mut Conn<'_>) -> crate::Result<Option<NodeScheduler>> {
         let Some(resource) = self.scheduler_resource else { return Ok(None); };
-        let region = self
-            .scheduler_region
-            .map(|id| super::Region::by_id(id, conn));
+        let region = self.scheduler_region.map(|id| Region::by_id(id, conn));
         let region = OptionFuture::from(region).await.transpose()?;
-        Ok(Some(super::NodeScheduler {
+        Ok(Some(NodeScheduler {
             region,
             similarity: self.scheduler_similarity,
             resource,
@@ -520,7 +518,7 @@ mod tests {
 
     #[tokio::test]
     async fn can_filter_nodes() -> anyhow::Result<()> {
-        let (context, db) = Context::with_mocked().await.unwrap();
+        let (ctx, db) = Context::with_mocked().await.unwrap();
         let name = format!("test_{}", petname::petname(3, "_"));
 
         let blockchain = db.blockchain().await;
@@ -555,7 +553,7 @@ mod tests {
         let mut conn = db.conn().await;
         let host = db.host().await;
         let host_id = host.id;
-        req.create(Some(host), &mut conn, &context).await.unwrap();
+        req.create(Some(host), &mut conn, &ctx).await.unwrap();
 
         let filter = NodeFilter {
             status: vec![NodeChainStatus::Unknown],

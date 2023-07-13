@@ -16,7 +16,7 @@ pub enum Error {
     /// Server error: {0}
     Server(hyper::Error),
     /// Stopping server because of: {0}
-    Shutdown(Arc<Shutdown>),
+    Shutdown(Shutdown),
 }
 
 pub async fn start(context: Arc<Context>) -> Result<(), Error> {
@@ -33,8 +33,9 @@ pub async fn start(context: Arc<Context>) -> Result<(), Error> {
     }
 }
 
+#[derive(Clone)]
 pub struct Alert {
-    shutdown_tx: Sender<Arc<Shutdown>>,
+    shutdown_tx: Sender<Shutdown>,
 }
 
 impl Alert {
@@ -44,12 +45,12 @@ impl Alert {
         Alert { shutdown_tx }
     }
 
-    pub fn shutdown_rx(&self) -> Receiver<Arc<Shutdown>> {
+    pub fn shutdown_rx(&self) -> Receiver<Shutdown> {
         self.shutdown_tx.subscribe()
     }
 
-    pub fn shutdown(&self, reason: Shutdown) {
-        if let Err(err) = self.shutdown_tx.send(Arc::new(reason)) {
+    pub fn shutdown<S: Into<Shutdown>>(&self, reason: S) {
+        if let Err(err) = self.shutdown_tx.send(reason.into()) {
             error!("Failed to send shutdown signal: {err}");
         }
     }
@@ -61,10 +62,19 @@ impl Default for Alert {
     }
 }
 
-#[derive(Debug, Display)]
+#[derive(Clone, Debug, Display)]
 pub enum Shutdown {
     /// Shutdown Error: {0}
-    Error(Box<dyn std::error::Error + Send + Sync + 'static>),
+    Error(Arc<Box<dyn std::error::Error + Send + Sync + 'static>>),
     /// Shutdown reason: {0}
     Reason(String),
+}
+
+impl<E> From<E> for Shutdown
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    fn from(err: E) -> Self {
+        Shutdown::Error(Arc::new(Box::new(err)))
+    }
 }

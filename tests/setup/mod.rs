@@ -81,7 +81,7 @@ impl Tester {
         }
     }
 
-    pub async fn conn(&self) -> Conn {
+    pub async fn conn(&self) -> Conn<'_> {
         self.db.conn().await
     }
 

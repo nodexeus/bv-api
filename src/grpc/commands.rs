@@ -24,10 +24,7 @@ impl command_service_server::CommandService for super::Grpc {
         &self,
         req: tonic::Request<api::CommandServiceUpdateRequest>,
     ) -> super::Resp<api::CommandServiceUpdateResponse> {
-        self.context
-            .write(|conn, ctx| update(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| update(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -35,8 +32,7 @@ impl command_service_server::CommandService for super::Grpc {
         &self,
         req: tonic::Request<api::CommandServiceAckRequest>,
     ) -> super::Resp<api::CommandServiceAckResponse> {
-        self.context
-            .write(|conn, ctx| ack(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| ack(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -44,8 +40,7 @@ impl command_service_server::CommandService for super::Grpc {
         &self,
         req: tonic::Request<api::CommandServicePendingRequest>,
     ) -> super::Resp<api::CommandServicePendingResponse> {
-        self.context
-            .read(|conn, ctx| pending(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| pending(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -54,8 +49,8 @@ async fn update(
     req: tonic::Request<api::CommandServiceUpdateRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::CommandServiceUpdateResponse>> {
-    let claims = ctx.claims(&req, Endpoint::CommandUpdate).await?;
+) -> super::Result<api::CommandServiceUpdateResponse> {
+    let claims = ctx.claims(&req, Endpoint::CommandUpdate, conn).await?;
     let req = req.into_inner();
     let command = Command::find_by_id(req.id.parse()?, conn).await?;
     let host = command.host(conn).await?;
@@ -81,13 +76,16 @@ async fn update(
         }
         None => vec![],
     };
+
     let command = api::Command::from_model(&cmd, conn).await?;
     let resp = api::CommandServiceUpdateResponse {
         command: Some(command.clone()),
     };
-    Ok(super::Outcome::new(resp)
-        .with_msg(command)
-        .with_msgs(commands))
+
+    ctx.notifier.send([command]).await?;
+    ctx.notifier.send(commands).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn ack(
@@ -95,7 +93,7 @@ async fn ack(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::CommandServiceAckResponse> {
-    let claims = ctx.claims(&req, Endpoint::CommandAck).await?;
+    let claims = ctx.claims(&req, Endpoint::CommandAck, conn).await?;
     let req = req.into_inner();
     let command = Command::find_by_id(req.id.parse()?, conn).await?;
     let host = command.host(conn).await?;
@@ -116,7 +114,7 @@ async fn pending(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::CommandServicePendingResponse> {
-    let claims = ctx.claims(&req, Endpoint::CommandPending).await?;
+    let claims = ctx.claims(&req, Endpoint::CommandPending, conn).await?;
     let req = req.into_inner();
     let host_id = req.host_id.parse()?;
     let host = Host::find_by_id(host_id, conn).await?;

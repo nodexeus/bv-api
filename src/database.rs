@@ -244,12 +244,12 @@ pub mod tests {
     use crate::auth::resource::{HostId, NodeId, OrgId};
     use crate::models::node::NewNode;
     use crate::models::schema::{blockchains, commands, nodes, orgs};
-    use crate::models::{Blockchain, Command, CommandType, Host, Node, Org, User};
+    use crate::models::{Blockchain, Command, CommandType, Host, Node, Org, Region, User};
 
     use super::*;
 
     pub struct TestDb {
-        pool: Arc<Pool>,
+        pool: Pool,
         test_db_name: String,
         main_db_url: String,
     }
@@ -289,7 +289,6 @@ pub mod tests {
                 .build(manager)
                 .await
                 .map(Pool)
-                .map(Arc::new)
                 .expect("Pool");
 
             let db = TestDb {
@@ -304,7 +303,7 @@ pub mod tests {
             db
         }
 
-        pub fn pool(&self) -> Arc<Pool> {
+        pub fn pool(&self) -> Pool {
             self.pool.clone()
         }
 
@@ -429,8 +428,8 @@ pub mod tests {
         use crate::models::org::NewOrgUser;
         use crate::models::user::NewUser;
         use crate::models::{
-            Blockchain, ConnectionStatus, Host, IpAddress, NodeChainStatus, NodeProperty, NodeType,
-            OrgRole, ResourceAffinity, User,
+            Blockchain, ConnectionStatus, Host, HostType, IpAddress, NodeChainStatus, NodeProperty,
+            NodeType, OrgRole, ResourceAffinity, User,
         };
 
         use super::*;
@@ -446,7 +445,8 @@ pub mod tests {
             let blockchain = blockchains(conn).await;
             let org_id = orgs(conn).await;
             let user = users(org_id, conn).await;
-            let host = hosts(user, org_id, conn).await;
+            let region = region(conn).await;
+            let host = hosts(user, org_id, &region, conn).await;
             let (ip_gateway, ip_addr) = ip_addresses(&host, conn).await;
             nodes(org_id, host, blockchain, ip_gateway, ip_addr, conn).await;
         }
@@ -503,7 +503,11 @@ pub mod tests {
             user
         }
 
-        async fn hosts(user: User, org_id: OrgId, conn: &mut Conn<'_>) -> Host {
+        async fn region(conn: &mut Conn<'_>) -> Region {
+            Region::get_or_create("moneyland", conn).await.unwrap()
+        }
+
+        async fn hosts(user: User, org_id: OrgId, region: &Region, conn: &mut Conn<'_>) -> Host {
             let host1 = NewHost {
                 name: "Host-1",
                 version: "0.1.0",
@@ -519,6 +523,8 @@ pub mod tests {
                 ip_gateway: "192.168.0.1".parse().unwrap(),
                 org_id,
                 created_by: user.id,
+                region_id: Some(region.id),
+                host_type: HostType::Cloud,
             };
 
             host1.create(conn).await.unwrap();
@@ -527,8 +533,8 @@ pub mod tests {
                 name: "Host-2",
                 version: "0.1.0",
                 cpu_count: 16,
-                mem_size_bytes: 1_612_312,  // 1.6 MB
-                disk_size_bytes: 1_612_312, // 1.6 MB
+                mem_size_bytes: 1_612_312_123_123,  // 1.6 TB
+                disk_size_bytes: 1_612_312_123_123, // 1.6 TB
                 os: "LuukOS",
                 os_version: "3",
                 ip_addr: "192.168.2.1",
@@ -538,6 +544,8 @@ pub mod tests {
                 ip_gateway: "192.12.0.1".parse().unwrap(),
                 org_id,
                 created_by: user.id,
+                region_id: Some(region.id),
+                host_type: HostType::Cloud,
             };
 
             host2.create(conn).await.unwrap()

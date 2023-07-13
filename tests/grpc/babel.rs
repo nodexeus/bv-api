@@ -178,14 +178,8 @@ async fn test_nothing_to_notify_no_nodes_to_update_diff_node_type() {
             let ip = ip_address.clone();
             async move {
                 let blockchain_id = blockchain.id.to_owned();
-                let req = create_new_node(
-                    i,
-                    org.id,
-                    &blockchain_id,
-                    user.id,
-                    "1.0.0",
-                    NodeType::Miner,
-                );
+                let req =
+                    create_new_node(i, org.id, &blockchain_id, user.id, "1.0.0", NodeType::Miner);
                 let mut conn = t.conn().await.unwrap();
                 TestDb::create_node(&req, &h, &ip, format!("dns-id-{}", i).as_str(), &mut conn)
                     .await;

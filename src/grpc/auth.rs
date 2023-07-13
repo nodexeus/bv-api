@@ -39,8 +39,7 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceLoginRequest>,
     ) -> super::Resp<api::AuthServiceLoginResponse> {
-        self.context
-            .write(|conn, ctx| login(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| login(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -48,8 +47,7 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceConfirmRequest>,
     ) -> super::Resp<api::AuthServiceConfirmResponse> {
-        self.context
-            .write(|conn, ctx| confirm(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| confirm(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -57,8 +55,7 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceRefreshRequest>,
     ) -> super::Resp<api::AuthServiceRefreshResponse> {
-        self.context
-            .write(|conn, ctx| refresh(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| refresh(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -68,8 +65,7 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceResetPasswordRequest>,
     ) -> super::Resp<api::AuthServiceResetPasswordResponse> {
-        self.context
-            .write(|conn, ctx| reset_password(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| reset_password(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -77,8 +73,7 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceUpdatePasswordRequest>,
     ) -> super::Resp<api::AuthServiceUpdatePasswordResponse> {
-        self.context
-            .write(|conn, ctx| update_password(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| update_password(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -86,8 +81,7 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceUpdateUiPasswordRequest>,
     ) -> super::Resp<api::AuthServiceUpdateUiPasswordResponse> {
-        self.context
-            .write(|conn, ctx| update_ui_password(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| update_ui_password(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -108,12 +102,12 @@ async fn login(
     let refresh = Refresh::from_now(expires, user.id);
 
     let resp = api::AuthServiceLoginResponse {
-        token: ctx.cipher().jwt.encode(&claims)?.into(),
-        refresh: ctx.cipher().refresh.encode(&refresh)?.into(),
+        token: ctx.auth.cipher.jwt.encode(&claims)?.into(),
+        refresh: ctx.auth.cipher.refresh.encode(&refresh)?.into(),
     };
 
     let mut resp = tonic::Response::new(resp);
-    let cookie = ctx.cipher().refresh.cookie(&refresh)?;
+    let cookie = ctx.auth.cipher.refresh.cookie(&refresh)?;
     resp.metadata_mut().insert("set-cookie", cookie.header()?);
 
     Ok(resp)
@@ -124,7 +118,7 @@ async fn confirm(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::AuthServiceConfirmResponse> {
-    let claims = ctx.claims(&req, Endpoint::AuthConfirm).await?;
+    let claims = ctx.claims(&req, Endpoint::AuthConfirm, conn).await?;
     let user_id = match claims.resource().user() {
         Some(id) => id,
         None => super::forbidden!("Must be user"),
@@ -139,12 +133,12 @@ async fn confirm(
     User::confirm(user_id, conn).await?;
 
     let resp = api::AuthServiceConfirmResponse {
-        token: ctx.cipher().jwt.encode(&claims)?.into(),
-        refresh: ctx.cipher().refresh.encode(&refresh)?.into(),
+        token: ctx.auth.cipher.jwt.encode(&claims)?.into(),
+        refresh: ctx.auth.cipher.refresh.encode(&refresh)?.into(),
     };
 
     let mut resp = tonic::Response::new(resp);
-    let cookie = ctx.cipher().refresh.cookie(&refresh)?;
+    let cookie = ctx.auth.cipher.refresh.cookie(&refresh)?;
     resp.metadata_mut().insert("set-cookie", cookie.header()?);
 
     Ok(resp)
@@ -159,13 +153,13 @@ async fn refresh(
 
     let req = req.into_inner();
     let mut decoded = if let RequestToken::Bearer(token) = req.token.parse()? {
-        ctx.cipher().jwt.decode_expired(&token)?
+        ctx.auth.cipher.jwt.decode_expired(&token)?
     } else {
         return Err(crate::Error::invalid_auth("Not bearer."));
     };
 
     let refresh = match (req.refresh, fallback) {
-        (Some(refresh), _) => ctx.cipher().refresh.decode(&refresh.into())?,
+        (Some(refresh), _) => ctx.auth.cipher.refresh.decode(&refresh.into())?,
         (None, Some(fallback)) => fallback,
         (None, None) => {
             return Err(crate::Error::validation(
@@ -234,12 +228,12 @@ async fn refresh(
     let expires = ctx.config.token.expire.token.try_into()?;
     let expirable = Expirable::from_now(expires);
     let claims = Claims::new(resource, expirable, decoded.endpoints).with_data(decoded.data);
-    let token = ctx.cipher().jwt.encode(&claims)?;
+    let token = ctx.auth.cipher.jwt.encode(&claims)?;
 
     let expires = refresh.expirable().duration();
     let refresh = Refresh::from_now(expires, resource_id);
-    let encoded = ctx.cipher().refresh.encode(&refresh)?;
-    let cookie = ctx.cipher().refresh.cookie(&refresh)?;
+    let encoded = ctx.auth.cipher.refresh.encode(&refresh)?;
+    let cookie = ctx.auth.cipher.refresh.cookie(&refresh)?;
 
     let resp = api::AuthServiceRefreshResponse {
         token: token.into(),
@@ -278,7 +272,7 @@ async fn update_password(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::AuthServiceUpdatePasswordResponse> {
-    let claims = ctx.claims(&req, Endpoint::AuthUpdatePassword).await?;
+    let claims = ctx.claims(&req, Endpoint::AuthUpdatePassword, conn).await?;
     let req = req.into_inner();
 
     // Only users have passwords; orgs, hosts and nodes do not.
@@ -304,7 +298,9 @@ async fn update_ui_password(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::AuthServiceUpdateUiPasswordResponse> {
-    let claims = ctx.claims(&req, Endpoint::AuthUpdateUiPassword).await?;
+    let claims = ctx
+        .claims(&req, Endpoint::AuthUpdateUiPassword, conn)
+        .await?;
     let req = req.into_inner();
     let user_id = req.user_id.parse()?;
     let claims = claims.ensure_user(user_id)?;

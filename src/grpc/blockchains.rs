@@ -18,8 +18,7 @@ impl blockchain_service_server::BlockchainService for super::Grpc {
         &self,
         req: tonic::Request<api::BlockchainServiceGetRequest>,
     ) -> super::Resp<api::BlockchainServiceGetResponse> {
-        self.context
-            .read(|conn, ctx| get(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| get(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -27,8 +26,7 @@ impl blockchain_service_server::BlockchainService for super::Grpc {
         &self,
         req: tonic::Request<api::BlockchainServiceListRequest>,
     ) -> super::Resp<api::BlockchainServiceListResponse> {
-        self.context
-            .read(|conn, ctx| list(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
             .await
     }
 }

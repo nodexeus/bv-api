@@ -65,8 +65,7 @@ impl ApiKeyService for Grpc {
         &self,
         req: Request<api::CreateApiKeyRequest>,
     ) -> super::Resp<api::CreateApiKeyResponse> {
-        self.context
-            .write(|conn, ctx| create(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -74,8 +73,7 @@ impl ApiKeyService for Grpc {
         &self,
         req: Request<api::ListApiKeyRequest>,
     ) -> super::Resp<api::ListApiKeyResponse> {
-        self.context
-            .read(|conn, ctx| list(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -83,8 +81,7 @@ impl ApiKeyService for Grpc {
         &self,
         req: Request<api::UpdateApiKeyRequest>,
     ) -> super::Resp<api::UpdateApiKeyResponse> {
-        self.context
-            .write(|conn, ctx| update(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| update(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -92,8 +89,7 @@ impl ApiKeyService for Grpc {
         &self,
         req: Request<api::RegenerateApiKeyRequest>,
     ) -> super::Resp<api::RegenerateApiKeyResponse> {
-        self.context
-            .write(|conn, ctx| regenerate(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| regenerate(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -101,8 +97,7 @@ impl ApiKeyService for Grpc {
         &self,
         req: Request<api::DeleteApiKeyRequest>,
     ) -> super::Resp<api::DeleteApiKeyResponse> {
-        self.context
-            .write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -112,7 +107,7 @@ async fn create(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Resp<api::CreateApiKeyResponse, Error> {
-    let claims = ctx.claims(&req, Endpoint::ApiKeyCreate).await?;
+    let claims = ctx.claims(&req, Endpoint::ApiKeyCreate, conn).await?;
 
     let req = req.into_inner();
     let scope = req.scope.ok_or(Error::MissingCreateScope)?;
@@ -135,7 +130,7 @@ async fn list(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Resp<api::ListApiKeyResponse, Error> {
-    let claims = ctx.claims(&req, Endpoint::ApiKeyList).await?;
+    let claims = ctx.claims(&req, Endpoint::ApiKeyList, conn).await?;
     let user_id = claims.resource().user().ok_or(Error::ClaimsNotUser)?;
 
     let keys = ApiKey::find_by_user(user_id, conn).await?;
@@ -150,7 +145,7 @@ async fn update(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Resp<api::UpdateApiKeyResponse, Error> {
-    let claims = ctx.claims(&req, Endpoint::ApiKeyUpdate).await?;
+    let claims = ctx.claims(&req, Endpoint::ApiKeyUpdate, conn).await?;
 
     let req = req.into_inner();
     let key_id = req.id.parse().map_err(Error::ParseKeyId)?;
@@ -192,7 +187,7 @@ async fn regenerate(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Resp<api::RegenerateApiKeyResponse, Error> {
-    let claims = ctx.claims(&req, Endpoint::ApiKeyRegenerate).await?;
+    let claims = ctx.claims(&req, Endpoint::ApiKeyRegenerate, conn).await?;
 
     let req = req.into_inner();
     let key_id = req.id.parse().map_err(Error::ParseKeyId)?;
@@ -216,7 +211,7 @@ async fn delete(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Resp<api::DeleteApiKeyResponse, Error> {
-    let claims = ctx.claims(&req, Endpoint::ApiKeyDelete).await?;
+    let claims = ctx.claims(&req, Endpoint::ApiKeyDelete, conn).await?;
 
     let req = req.into_inner();
     let key_id = req.id.parse().map_err(Error::ParseKeyId)?;

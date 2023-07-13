@@ -67,8 +67,7 @@ impl subscription_service_server::SubscriptionService for Grpc {
         &self,
         req: Request<api::SubscriptionServiceCreateRequest>,
     ) -> super::Resp<api::SubscriptionServiceCreateResponse> {
-        self.context
-            .write(|conn, ctx| create(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -76,8 +75,7 @@ impl subscription_service_server::SubscriptionService for Grpc {
         &self,
         req: Request<api::SubscriptionServiceGetRequest>,
     ) -> super::Resp<api::SubscriptionServiceGetResponse> {
-        self.context
-            .read(|conn, ctx| get(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| get(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -85,8 +83,7 @@ impl subscription_service_server::SubscriptionService for Grpc {
         &self,
         req: Request<api::SubscriptionServiceListRequest>,
     ) -> super::Resp<api::SubscriptionServiceListResponse> {
-        self.context
-            .read(|conn, ctx| list(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -94,8 +91,7 @@ impl subscription_service_server::SubscriptionService for Grpc {
         &self,
         req: Request<api::SubscriptionServiceDeleteRequest>,
     ) -> super::Resp<api::SubscriptionServiceDeleteResponse> {
-        self.context
-            .write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -105,7 +101,7 @@ async fn create(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Resp<api::SubscriptionServiceCreateResponse, Error> {
-    let claims = ctx.claims(&req, Endpoint::SubscriptionCreate).await?;
+    let claims = ctx.claims(&req, Endpoint::SubscriptionCreate, conn).await?;
 
     let req = req.into_inner();
     let org_id = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -134,7 +130,7 @@ async fn get(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Resp<api::SubscriptionServiceGetResponse, Error> {
-    let claims = ctx.claims(&req, Endpoint::SubscriptionGet).await?;
+    let claims = ctx.claims(&req, Endpoint::SubscriptionGet, conn).await?;
 
     let req = req.into_inner();
     let org_id = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -155,7 +151,7 @@ async fn list(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Resp<api::SubscriptionServiceListResponse, Error> {
-    let claims = ctx.claims(&req, Endpoint::SubscriptionList).await?;
+    let claims = ctx.claims(&req, Endpoint::SubscriptionList, conn).await?;
 
     let req = req.into_inner();
     let user_id = req.user_id.ok_or(Error::MissingUserId)?;
@@ -178,7 +174,7 @@ async fn delete(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Resp<api::SubscriptionServiceDeleteResponse, Error> {
-    let claims = ctx.claims(&req, Endpoint::SubscriptionDelete).await?;
+    let claims = ctx.claims(&req, Endpoint::SubscriptionDelete, conn).await?;
 
     let req = req.into_inner();
     let sub_id = req.id.parse().map_err(Error::ParseSubId)?;

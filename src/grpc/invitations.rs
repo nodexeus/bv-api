@@ -22,10 +22,7 @@ impl invitation_service_server::InvitationService for super::Grpc {
         &self,
         req: Request<api::InvitationServiceCreateRequest>,
     ) -> super::Resp<api::InvitationServiceCreateResponse> {
-        self.context
-            .write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -33,8 +30,7 @@ impl invitation_service_server::InvitationService for super::Grpc {
         &self,
         req: Request<api::InvitationServiceListRequest>,
     ) -> super::Resp<api::InvitationServiceListResponse> {
-        self.context
-            .read(|conn, ctx| list(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -42,10 +38,7 @@ impl invitation_service_server::InvitationService for super::Grpc {
         &self,
         req: Request<api::InvitationServiceAcceptRequest>,
     ) -> super::Resp<api::InvitationServiceAcceptResponse> {
-        self.context
-            .write(|conn, ctx| accept(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| accept(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -53,10 +46,7 @@ impl invitation_service_server::InvitationService for super::Grpc {
         &self,
         req: Request<api::InvitationServiceDeclineRequest>,
     ) -> super::Resp<api::InvitationServiceDeclineResponse> {
-        self.context
-            .write(|conn, ctx| decline(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| decline(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -64,10 +54,7 @@ impl invitation_service_server::InvitationService for super::Grpc {
         &self,
         req: Request<api::InvitationServiceRevokeRequest>,
     ) -> super::Resp<api::InvitationServiceRevokeResponse> {
-        self.context
-            .write(|conn, ctx| revoke(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| revoke(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -76,8 +63,8 @@ async fn create(
     req: Request<api::InvitationServiceCreateRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::InvitationServiceCreateResponse>> {
-    let claims = ctx.claims(&req, Endpoint::InvitationCreate).await?;
+) -> super::Result<api::InvitationServiceCreateResponse> {
+    let claims = ctx.claims(&req, Endpoint::InvitationCreate, conn).await?;
     let req = req.into_inner();
     // In principle, it is allowed for resources other than a user to create an invite, but we
     // currently include a field `created_by_user` with a created invite.
@@ -136,7 +123,10 @@ async fn create(
     let org = Org::find_by_id(invitation.org_id, conn).await?;
     let msg = api::OrgMessage::invitation_created(org, invitation, conn).await?;
     let resp = api::InvitationServiceCreateResponse {};
-    Ok(super::Outcome::new(resp).with_msg(msg))
+
+    ctx.notifier.send([msg]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn list(
@@ -144,7 +134,7 @@ async fn list(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::InvitationServiceListResponse> {
-    let claims = ctx.claims(&req, Endpoint::InvitationList).await?;
+    let claims = ctx.claims(&req, Endpoint::InvitationList, conn).await?;
     let req = req.into_inner();
 
     let entry = if let Some(org_id) = &req.org_id {
@@ -171,8 +161,8 @@ async fn accept(
     req: Request<api::InvitationServiceAcceptRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::InvitationServiceAcceptResponse>> {
-    let claims = ctx.claims(&req, Endpoint::InvitationAccept).await?;
+) -> super::Result<api::InvitationServiceAcceptResponse> {
+    let claims = ctx.claims(&req, Endpoint::InvitationAccept, conn).await?;
     let req = req.into_inner();
     let invitation_id = req.invitation_id.parse()?;
     let invitation = Invitation::find_by_id(invitation_id, conn).await?;
@@ -208,15 +198,18 @@ async fn accept(
     let user = User::find_by_id(org_user.user_id, conn).await?;
     let msg = api::OrgMessage::invitation_accepted(org, invitation, user, conn).await?;
     let resp = api::InvitationServiceAcceptResponse {};
-    Ok(super::Outcome::new(resp).with_msg(msg))
+
+    ctx.notifier.send([msg]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn decline(
     req: Request<api::InvitationServiceDeclineRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::InvitationServiceDeclineResponse>> {
-    let claims = ctx.claims(&req, Endpoint::InvitationDecline).await?;
+) -> super::Result<api::InvitationServiceDeclineResponse> {
+    let claims = ctx.claims(&req, Endpoint::InvitationDecline, conn).await?;
     let req = req.into_inner();
     let invitation_id = req.invitation_id.parse()?;
     let invitation = Invitation::find_by_id(invitation_id, conn).await?;
@@ -246,15 +239,18 @@ async fn decline(
     let org = Org::find_by_id(invitation.org_id, conn).await?;
     let msg = api::OrgMessage::invitation_declined(org, invitation, conn).await?;
     let resp = api::InvitationServiceDeclineResponse {};
-    Ok(super::Outcome::new(resp).with_msg(msg))
+
+    ctx.notifier.send([msg]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn revoke(
     req: Request<api::InvitationServiceRevokeRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::InvitationServiceRevokeResponse>> {
-    let claims = ctx.claims(&req, Endpoint::InvitationRevoke).await?;
+) -> super::Result<api::InvitationServiceRevokeResponse> {
+    let claims = ctx.claims(&req, Endpoint::InvitationRevoke, conn).await?;
     let req = req.into_inner();
     let invitation_id = req.invitation_id.parse()?;
     let invitation = Invitation::find_by_id(invitation_id, conn).await?;
@@ -277,7 +273,10 @@ async fn revoke(
     let org = Org::find_by_id(invitation.org_id, conn).await?;
     let msg = api::OrgMessage::invitation_declined(org, invitation, conn).await?;
     let resp = api::InvitationServiceRevokeResponse {};
-    Ok(super::Outcome::new(resp).with_msg(msg))
+
+    ctx.notifier.send([msg]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 impl api::InvitationServiceCreateRequest {

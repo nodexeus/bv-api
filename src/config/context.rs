@@ -7,13 +7,12 @@ use tokio::sync::Mutex;
 
 use crate::auth::claims::Claims;
 use crate::auth::endpoint::Endpoint;
-use crate::auth::token::Cipher;
 use crate::auth::{self, Auth};
 use crate::cookbook::Cookbook;
-use crate::database::{Database, Pool};
+use crate::database::{Conn, Pool};
 use crate::dns::{Cloudflare, Dns};
-use crate::grpc::notification::Notifier;
 use crate::mail::MailClient;
+use crate::mqtt::Notifier;
 use crate::server::Alert;
 
 use super::Config;
@@ -41,25 +40,25 @@ pub enum Error {
     /// Builder is missing Pool.
     MissingPool,
     /// Failed to create Notifier: {0}
-    Notifier(crate::Error),
+    Notifier(crate::mqtt::notifier::Error),
     /// Failed to create database Pool: {0}
     Pool(crate::database::Error),
 }
 
 /// Service `Context` containing metadata that can be passed down to handlers.
 ///
-/// Each field is wrapped in an Arc so other structs may clone them to retain
-/// internally as desired (and preferably on construction).
+/// Each field is wrapped in an Arc (or cloneable) so other structs may retain
+/// their own internal reference.
 #[derive(Clone)]
 pub struct Context {
-    pub alert: Arc<Alert>,
+    pub alert: Alert,
     pub auth: Arc<Auth>,
     pub cookbook: Arc<Cookbook>,
     pub config: Arc<Config>,
     pub dns: Arc<Box<dyn Dns + Send + Sync + 'static>>,
     pub mail: Arc<MailClient>,
     pub notifier: Arc<Notifier>,
-    pub pool: Arc<Pool>,
+    pub pool: Pool,
     pub rng: Arc<Mutex<OsRng>>,
 }
 
@@ -75,18 +74,24 @@ impl Context {
     }
 
     pub async fn builder_from(config: Config) -> Result<Builder, Error> {
+        let alert = Alert::default();
         let auth = Auth::new(&config.token).map_err(Error::Auth)?;
-        let cipher = auth.cipher.clone();
+        let cookbook = Cookbook::new_s3(&config.cookbook);
+        let dns = Cloudflare::new(config.cloudflare.clone());
+        let mail = MailClient::new(&config, auth.cipher.clone());
         let pool = Pool::new(&config.database).await.map_err(Error::Pool)?;
+        let notifier = Notifier::new(config.mqtt.options())
+            .await
+            .map_err(Error::Notifier)?;
 
         Ok(Builder::default()
-            .alert(Alert::default())
+            .alert(alert)
             .auth(auth)
-            .cookbook(Cookbook::new_s3(&config.cookbook))
-            .dns(Cloudflare::new(config.cloudflare.clone()))
-            .mail(MailClient::new(&config, cipher))
-            .notifier(Notifier::new(&config.mqtt).await.map_err(Error::Notifier)?)
-            .pool(Arc::new(pool))
+            .cookbook(cookbook)
+            .dns(dns)
+            .mail(mail)
+            .notifier(notifier)
+            .pool(pool)
             .config(config))
     }
 
@@ -97,34 +102,38 @@ impl Context {
         use crate::tests::TestCookbook;
 
         let config = Config::from_default_toml().map_err(Error::Config)?;
-        let auth = Auth::new(&config.token).map_err(Error::Auth)?;
-        let cipher = auth.cipher.clone();
         let db = TestDb::new(&config.database).await;
 
+        let alert = Alert::default();
+        let auth = Auth::new(&config.token).map_err(Error::Auth)?;
+        let cookbook = TestCookbook::new().await.get_cookbook_api();
+        let dns = MockDns::new().await;
+        let mail = MailClient::new(&config, auth.cipher.clone());
+        let notifier = Notifier::new(config.mqtt.options())
+            .await
+            .map_err(Error::Notifier)?;
+        let pool = db.pool();
+
         Builder::default()
-            .alert(Alert::default())
+            .alert(alert)
             .auth(auth)
-            .cookbook(TestCookbook::new().await.get_cookbook_api())
-            .dns(MockDns::new().await)
-            .mail(MailClient::new(&config, cipher))
-            .notifier(Notifier::new(&config.mqtt).await.map_err(Error::Notifier)?)
-            .pool(db.pool())
+            .cookbook(cookbook)
+            .dns(dns)
+            .mail(mail)
+            .notifier(notifier)
+            .pool(pool)
             .config(config)
             .build()
             .map(|ctx| (ctx, db))
-    }
-
-    pub fn cipher(&self) -> &Cipher {
-        &self.auth.cipher
     }
 
     pub async fn claims<T>(
         &self,
         req: &tonic::Request<T>,
         endpoint: Endpoint,
+        conn: &mut Conn<'_>,
     ) -> Result<Claims, auth::Error> {
-        let mut conn = self.pool.conn().await?;
-        self.auth.claims(req, endpoint, &mut conn).await
+        self.auth.claims(req, endpoint, conn).await
     }
 }
 
@@ -138,14 +147,14 @@ pub struct Builder {
     dns: Option<Box<dyn Dns + Send + Sync + 'static>>,
     mail: Option<MailClient>,
     notifier: Option<Notifier>,
-    pool: Option<Arc<Pool>>,
+    pool: Option<Pool>,
     rng: Option<OsRng>,
 }
 
 impl Builder {
     pub fn build(self) -> Result<Arc<Context>, Error> {
         Ok(Arc::new(Context {
-            alert: self.alert.ok_or(Error::MissingAlert).map(Arc::new)?,
+            alert: self.alert.ok_or(Error::MissingAlert)?,
             auth: self.auth.ok_or(Error::MissingAuth).map(Arc::new)?,
             cookbook: self.cookbook.ok_or(Error::MissingCookbook).map(Arc::new)?,
             config: self.config.ok_or(Error::MissingConfig).map(Arc::new)?,
@@ -195,7 +204,7 @@ impl Builder {
         self
     }
 
-    pub fn pool(mut self, pool: Arc<Pool>) -> Self {
+    pub fn pool(mut self, pool: Pool) -> Self {
         self.pool = Some(pool);
         self
     }

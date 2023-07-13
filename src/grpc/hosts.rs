@@ -11,7 +11,9 @@ use crate::config::Context;
 use crate::database::{Conn, Transaction};
 use crate::models::command::NewCommand;
 use crate::models::host::{HostFilter, NewHost, UpdateHost};
-use crate::models::{CommandType, ConnectionStatus, Host, Node, Org, OrgUser};
+use crate::models::{
+    Blockchain, CommandType, ConnectionStatus, Host, HostType, Node, Org, OrgUser, Region,
+};
 use crate::timestamp::NanosUtc;
 
 use super::api::{self, host_service_server};
@@ -42,8 +44,7 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceCreateRequest>,
     ) -> super::Resp<api::HostServiceCreateResponse> {
-        self.context
-            .write(|conn, ctx| create(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -52,8 +53,7 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceGetRequest>,
     ) -> super::Resp<api::HostServiceGetResponse> {
-        self.context
-            .read(|conn, ctx| get(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| get(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -61,8 +61,7 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceListRequest>,
     ) -> super::Resp<api::HostServiceListResponse> {
-        self.context
-            .read(|conn, ctx| list(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -70,8 +69,7 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceUpdateRequest>,
     ) -> super::Resp<api::HostServiceUpdateResponse> {
-        self.context
-            .write(|conn, ctx| update(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| update(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -79,15 +77,15 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceDeleteRequest>,
     ) -> super::Resp<api::HostServiceDeleteResponse> {
-        self.trx(|c| delete(req, c).scope_boxed()).await
+        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
+            .await
     }
 
     async fn start(
         &self,
         req: tonic::Request<api::HostServiceStartRequest>,
     ) -> super::Resp<api::HostServiceStartResponse> {
-        self.context
-            .write(|conn, ctx| start(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| start(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -95,8 +93,7 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceStopRequest>,
     ) -> super::Resp<api::HostServiceStopResponse> {
-        self.context
-            .write(|conn, ctx| stop(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| stop(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -104,8 +101,7 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceRestartRequest>,
     ) -> super::Resp<api::HostServiceRestartResponse> {
-        self.context
-            .write(|conn, ctx| restart(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| restart(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -113,8 +109,7 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceRegionsRequest>,
     ) -> super::Resp<api::HostServiceRegionsResponse> {
-        self.context
-            .read(|conn, ctx| delete(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| regions(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -149,7 +144,7 @@ async fn create(
     let region = req
         .region
         .as_deref()
-        .map(|r| models::Region::get_or_create(r, conn));
+        .map(|r| Region::get_or_create(r, conn));
     let region = OptionFuture::from(region).await.transpose()?;
     let new_host = req.as_new(caller_id, org_id, region.as_ref())?;
     let host = new_host.create(conn).await?;
@@ -157,11 +152,11 @@ async fn create(
     let resource = Resource::Host(host.id);
     let expires = ctx.config.token.expire.token.try_into()?;
     let claims = Claims::from_now(expires, resource, HOST_ENDPOINTS);
-    let token = ctx.cipher().jwt.encode(&claims)?;
+    let token = ctx.auth.cipher.jwt.encode(&claims)?;
 
     let expires = ctx.config.token.expire.refresh_host.try_into()?;
     let refresh = Refresh::from_now(expires, host.id);
-    let encoded = ctx.cipher().refresh.encode(&refresh)?;
+    let encoded = ctx.auth.cipher.refresh.encode(&refresh)?;
 
     let host = api::Host::from_model(host, conn).await?;
     let resp = api::HostServiceCreateResponse {
@@ -179,7 +174,7 @@ async fn get(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::HostServiceGetResponse> {
-    let claims = ctx.claims(&req, Endpoint::HostGet).await?;
+    let claims = ctx.claims(&req, Endpoint::HostGet, conn).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
     let host = Host::find_by_id(host_id, conn).await?;
@@ -202,7 +197,7 @@ async fn list(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::HostServiceListResponse> {
-    let claims = ctx.claims(&req, Endpoint::HostList).await?;
+    let claims = ctx.claims(&req, Endpoint::HostList, conn).await?;
     let req = req.into_inner();
     let org_id = req.org_id.parse()?;
     let is_allowed = match claims.resource() {
@@ -225,17 +220,14 @@ async fn update(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::HostServiceUpdateResponse> {
-    let claims = ctx.claims(&req, Endpoint::HostUpdate).await?;
+    let claims = ctx.claims(&req, Endpoint::HostUpdate, conn).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
     let host = Host::find_by_id(host_id, conn).await?;
     if !matches!(claims.resource(), Resource::Host(host_id) if host.id == host_id) {
         super::forbidden!("Access denied for hosts update");
     }
-    let region = req
-        .region
-        .as_ref()
-        .map(|r| models::Region::get_or_create(r, conn));
+    let region = req.region.as_ref().map(|r| Region::get_or_create(r, conn));
     let region = OptionFuture::from(region).await.transpose()?;
     let updater = req.as_update(region.as_ref())?;
     updater.update(conn).await?;
@@ -248,7 +240,7 @@ async fn delete(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::HostServiceDeleteResponse> {
-    let claims = ctx.claims(&req, Endpoint::HostDelete).await?;
+    let claims = ctx.claims(&req, Endpoint::HostDelete, conn).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
     let host = Host::find_by_id(host_id, conn).await?;
@@ -271,27 +263,48 @@ async fn start(
     req: tonic::Request<api::HostServiceStartRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::HostServiceStartResponse>> {
-    let claims = ctx.claims(&req, Endpoint::HostStart).await?;
-    change_host_state(&req.into_inner().id, CommandType::RestartBVS, claims, conn).await
+) -> super::Result<api::HostServiceStartResponse> {
+    let claims = ctx.claims(&req, Endpoint::HostStart, conn).await?;
+    change_host_state(
+        &req.into_inner().id,
+        CommandType::RestartBVS,
+        claims,
+        conn,
+        ctx,
+    )
+    .await
 }
 
 async fn stop(
     req: tonic::Request<api::HostServiceStopRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::HostServiceStopResponse>> {
-    let claims = ctx.claims(&req, Endpoint::HostStop).await?;
-    change_host_state(&req.into_inner().id, CommandType::StopBVS, claims, conn).await
+) -> super::Result<api::HostServiceStopResponse> {
+    let claims = ctx.claims(&req, Endpoint::HostStop, conn).await?;
+    change_host_state(
+        &req.into_inner().id,
+        CommandType::StopBVS,
+        claims,
+        conn,
+        ctx,
+    )
+    .await
 }
 
 async fn restart(
     req: tonic::Request<api::HostServiceRestartRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::HostServiceRestartResponse>> {
-    let claims = ctx.claims(&req, Endpoint::HostRestart).await?;
-    change_host_state(&req.into_inner().id, CommandType::RestartBVS, claims, conn).await
+) -> super::Result<api::HostServiceRestartResponse> {
+    let claims = ctx.claims(&req, Endpoint::HostRestart, conn).await?;
+    change_host_state(
+        &req.into_inner().id,
+        CommandType::RestartBVS,
+        claims,
+        conn,
+        ctx,
+    )
+    .await
 }
 
 async fn change_host_state<Res: Default>(
@@ -299,7 +312,8 @@ async fn change_host_state<Res: Default>(
     cmd_type: CommandType,
     claims: Claims,
     conn: &mut Conn<'_>,
-) -> crate::Result<super::Outcome<Res>> {
+    ctx: &Context,
+) -> super::Result<Res> {
     let host_id = id.parse()?;
     let host = Host::find_by_id(host_id, conn).await?;
     let is_allowed = match claims.resource() {
@@ -311,7 +325,11 @@ async fn change_host_state<Res: Default>(
     if !is_allowed {
         super::forbidden!("Access not allowed")
     }
-    Ok(super::Outcome::new(Default::default()).with_msg(host_cmd(host_id, cmd_type, conn).await?))
+
+    let msg = host_cmd(host_id, cmd_type, conn).await?;
+    ctx.notifier.send([msg]).await?;
+
+    Ok(tonic::Response::new(Default::default()))
 }
 
 async fn host_cmd(
@@ -331,14 +349,15 @@ async fn host_cmd(
 
 async fn regions(
     req: tonic::Request<api::HostServiceRegionsRequest>,
-    conn: &mut models::Conn,
+    conn: &mut Conn<'_>,
+    ctx: &Context,
 ) -> super::Result<api::HostServiceRegionsResponse> {
-    let claims = conn.claims(&req, Endpoint::HostRegions).await?;
+    let claims = ctx.claims(&req, Endpoint::HostRegions, conn).await?;
     let req = req.into_inner();
     let org_id = req.org_id.parse()?;
-    let org = models::Org::find_by_id(org_id, conn).await?;
+    let org = Org::find_by_id(org_id, conn).await?;
     let is_allowed = match claims.resource() {
-        Resource::User(user_id) => models::Org::is_member(user_id, org_id, conn).await?,
+        Resource::User(user_id) => Org::is_member(user_id, org_id, conn).await?,
         Resource::Org(org_id) => org_id == org.id,
         Resource::Host(_) => false,
         Resource::Node(_) => false,
@@ -347,20 +366,18 @@ async fn regions(
         super::forbidden!("Access not allowed")
     }
     let host_type = req.host_type().into_model();
-    let blockchain = models::Blockchain::find_by_id(req.blockchain_id.parse()?, conn).await?;
+    let blockchain = Blockchain::find_by_id(req.blockchain_id.parse()?, conn).await?;
     let node_type = req.node_type().into_model();
-    let requirements = conn
-        .context
+    let requirements = ctx
         .cookbook
         .rhai_metadata(&blockchain.name, &node_type.to_string(), &req.version)
         .await?
         .requirements;
-    let regions =
-        models::Host::regions_for(org_id, blockchain, node_type, requirements, host_type, conn)
-            .await?
-            .into_iter()
-            .map(|r| r.name)
-            .collect();
+    let regions = Host::regions_for(org_id, blockchain, node_type, requirements, host_type, conn)
+        .await?
+        .into_iter()
+        .map(|r| r.name)
+        .collect();
     let mut resp = api::HostServiceRegionsResponse { regions };
     resp.regions.sort();
     Ok(tonic::Response::new(resp))
@@ -378,7 +395,7 @@ impl api::Host {
             .collect();
 
         let region_ids = models.iter().flat_map(|h| h.region_id).collect();
-        let regions: HashMap<_, _> = models::Region::by_ids(region_ids, conn)
+        let regions: HashMap<_, _> = Region::by_ids(region_ids, conn)
             .await?
             .into_iter()
             .map(|region| (region.id, region))
@@ -420,8 +437,8 @@ impl api::HostServiceCreateRequest {
         &self,
         user_id: UserId,
         org_id: OrgId,
-        region: Option<&models::Region>,
-    ) -> crate::Result<models::NewHost<'_>> {
+        region: Option<&Region>,
+    ) -> crate::Result<NewHost<'_>> {
         Ok(NewHost {
             name: &self.name,
             version: &self.version,
@@ -438,7 +455,7 @@ impl api::HostServiceCreateRequest {
             org_id,
             created_by: user_id,
             region_id: region.map(|r| r.id),
-            host_type: models::HostType::Cloud,
+            host_type: HostType::Cloud,
         })
     }
 }
@@ -475,11 +492,11 @@ impl api::HostServiceUpdateRequest {
 }
 
 impl api::HostType {
-    fn into_model(self) -> Option<models::HostType> {
+    fn into_model(self) -> Option<HostType> {
         match self {
             api::HostType::Unspecified => None,
-            api::HostType::Cloud => Some(models::HostType::Cloud),
-            api::HostType::Private => Some(models::HostType::Private),
+            api::HostType::Cloud => Some(HostType::Cloud),
+            api::HostType::Private => Some(HostType::Private),
         }
     }
 }

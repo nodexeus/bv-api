@@ -17,8 +17,7 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceRetrievePluginRequest>,
     ) -> super::Resp<api::CookbookServiceRetrievePluginResponse> {
-        self.context
-            .read(|conn, ctx| retrieve_plugin(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| retrieve_plugin(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -27,8 +26,7 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceRetrieveImageRequest>,
     ) -> super::Resp<api::CookbookServiceRetrieveImageResponse> {
-        self.context
-            .read(|conn, ctx| retrieve_image(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| retrieve_image(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -37,8 +35,7 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceRetrieveKernelRequest>,
     ) -> super::Resp<api::CookbookServiceRetrieveKernelResponse> {
-        self.context
-            .read(|conn, ctx| retrieve_kernel(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| retrieve_kernel(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -47,8 +44,7 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceRequirementsRequest>,
     ) -> super::Resp<api::CookbookServiceRequirementsResponse> {
-        self.context
-            .read(|conn, ctx| requirements(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| requirements(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -57,8 +53,7 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceNetConfigurationsRequest>,
     ) -> super::Resp<api::CookbookServiceNetConfigurationsResponse> {
-        self.context
-            .read(|conn, ctx| net_configurations(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| net_configurations(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -67,18 +62,19 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceListBabelVersionsRequest>,
     ) -> super::Resp<api::CookbookServiceListBabelVersionsResponse> {
-        self.context
-            .read(|conn, ctx| list_babel_versions(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| list_babel_versions(req, conn, ctx).scope_boxed())
             .await
     }
 }
 
 async fn retrieve_plugin(
     req: tonic::Request<api::CookbookServiceRetrievePluginRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::CookbookServiceRetrievePluginResponse> {
-    let _claims = ctx.claims(&req, Endpoint::CookbookRetrievePlugin).await?;
+    let _claims = ctx
+        .claims(&req, Endpoint::CookbookRetrievePlugin, conn)
+        .await?;
     let req = req.into_inner();
     let id = req.id.ok_or_else(required("id"))?;
     let rhai_content = ctx
@@ -102,10 +98,12 @@ async fn retrieve_plugin(
 
 async fn retrieve_image(
     req: tonic::Request<api::CookbookServiceRetrieveImageRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::CookbookServiceRetrieveImageResponse> {
-    let _claims = ctx.claims(&req, Endpoint::CookbookRetrieveImage).await?;
+    let _claims = ctx
+        .claims(&req, Endpoint::CookbookRetrieveImage, conn)
+        .await?;
     let req = req.into_inner();
     let id = req.id.ok_or_else(required("id"))?;
     let url = ctx
@@ -126,10 +124,12 @@ async fn retrieve_image(
 
 async fn retrieve_kernel(
     req: tonic::Request<api::CookbookServiceRetrieveKernelRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::CookbookServiceRetrieveKernelResponse> {
-    let _claims = ctx.claims(&req, Endpoint::CookbookRetrieveKernel).await?;
+    let _claims = ctx
+        .claims(&req, Endpoint::CookbookRetrieveKernel, conn)
+        .await?;
     let req = req.into_inner();
     let id = req.id.ok_or_else(required("id"))?;
     let url = ctx
@@ -150,10 +150,12 @@ async fn retrieve_kernel(
 
 async fn requirements(
     req: tonic::Request<api::CookbookServiceRequirementsRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::CookbookServiceRequirementsResponse> {
-    let _claims = ctx.claims(&req, Endpoint::CookbookRequirements).await?;
+    let _claims = ctx
+        .claims(&req, Endpoint::CookbookRequirements, conn)
+        .await?;
     let req = req.into_inner();
     let id = req.id.ok_or_else(required("id"))?;
     let requirements = ctx
@@ -171,11 +173,11 @@ async fn requirements(
 
 async fn net_configurations(
     req: tonic::Request<api::CookbookServiceNetConfigurationsRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::CookbookServiceNetConfigurationsResponse> {
     let _claims = ctx
-        .claims(&req, Endpoint::CookbookNetConfigurations)
+        .claims(&req, Endpoint::CookbookNetConfigurations, conn)
         .await?;
     let req = req.into_inner();
     let id = req.id.ok_or_else(required("id"))?;
@@ -202,11 +204,11 @@ async fn net_configurations(
 
 async fn list_babel_versions(
     req: tonic::Request<api::CookbookServiceListBabelVersionsRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::CookbookServiceListBabelVersionsResponse> {
     let _claims = ctx
-        .claims(&req, Endpoint::CookbookListBabelVersions)
+        .claims(&req, Endpoint::CookbookListBabelVersions, conn)
         .await?;
     let req = req.into_inner();
     let identifiers = ctx.cookbook.list(&req.protocol, &req.node_type).await?;
@@ -250,10 +252,10 @@ impl bundle_service_server::BundleService for super::Grpc {
 
 async fn retrieve(
     req: tonic::Request<api::BundleServiceRetrieveRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::BundleServiceRetrieveResponse> {
-    let _claims = ctx.claims(&req, Endpoint::BundleRetrieve).await?;
+    let _claims = ctx.claims(&req, Endpoint::BundleRetrieve, conn).await?;
     let req = req.into_inner();
     let id = req.id.ok_or_else(required("id"))?;
     let url = ctx.cookbook.bundle_download_url(&id.version).await?;
@@ -266,10 +268,12 @@ async fn retrieve(
 /// List all available bundle versions.
 async fn list_bundle_versions(
     req: tonic::Request<api::BundleServiceListBundleVersionsRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::BundleServiceListBundleVersionsResponse> {
-    let _claims = ctx.claims(&req, Endpoint::BundleListBundleVersions).await?;
+    let _claims = ctx
+        .claims(&req, Endpoint::BundleListBundleVersions, conn)
+        .await?;
     let identifiers = ctx.cookbook.list_bundles().await?;
     let resp = api::BundleServiceListBundleVersionsResponse { identifiers };
     Ok(tonic::Response::new(resp))
@@ -278,10 +282,10 @@ async fn list_bundle_versions(
 /// Delete bundle from storage.
 async fn delete(
     req: tonic::Request<api::BundleServiceDeleteRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::BundleServiceDeleteResponse> {
-    let _claims = ctx.claims(&req, Endpoint::BundleDelete).await?;
+    let _claims = ctx.claims(&req, Endpoint::BundleDelete, conn).await?;
     // This endpoint is not currently used.
     Err(anyhow::anyhow!("Sod off").into())
 }
@@ -302,10 +306,12 @@ impl manifest_service_server::ManifestService for super::Grpc {
 
 async fn retrieve_download_manifest(
     req: tonic::Request<api::ManifestServiceRetrieveDownloadManifestRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::ManifestServiceRetrieveDownloadManifestResponse> {
-    let _claims = ctx.claims(&req, Endpoint::ManifestRetrieveDownload).await?;
+    let _claims = ctx
+        .claims(&req, Endpoint::ManifestRetrieveDownload, conn)
+        .await?;
     let req = req.into_inner();
     let id = req.id.ok_or_else(required("id"))?;
     let manifest = ctx.cookbook.get_download_manifest(id, req.network).await?;

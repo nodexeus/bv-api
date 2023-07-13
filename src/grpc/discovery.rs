@@ -12,18 +12,17 @@ impl discovery_service_server::DiscoveryService for super::Grpc {
         &self,
         req: tonic::Request<api::DiscoveryServiceServicesRequest>,
     ) -> super::Resp<api::DiscoveryServiceServicesResponse> {
-        self.context
-            .read(|conn, ctx| services(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| services(req, conn, ctx).scope_boxed())
             .await
     }
 }
 
 async fn services(
     req: tonic::Request<api::DiscoveryServiceServicesRequest>,
-    _conn: &mut Conn<'_>,
+    conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::DiscoveryServiceServicesResponse> {
-    let _claims = ctx.claims(&req, Endpoint::DiscoveryServices).await?;
+    let _claims = ctx.claims(&req, Endpoint::DiscoveryServices, conn).await?;
 
     let response = api::DiscoveryServiceServicesResponse {
         key_service_url: ctx.config.key_service.url.to_string(),

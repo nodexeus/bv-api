@@ -9,12 +9,10 @@ use uuid::Uuid;
 use crate::auth::resource::{HostId, OrgId, UserId};
 use crate::cookbook::script::HardwareRequirements;
 use crate::database::Conn;
+use crate::models::ip_address::NewIpAddressRange;
+use crate::models::Paginate;
 use crate::Result;
 
-use super::ip_address::NewIpAddressRange;
-use super::node_scheduler::NodeScheduler;
-use super::node_type::NodeType;
-use super::paginate::Paginate;
 use super::schema::hosts;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
@@ -260,7 +258,7 @@ impl Host {
         node_type: super::NodeType,
         requirements: HardwareRequirements,
         host_type: Option<HostType>,
-        conn: &mut super::Conn,
+        conn: &mut Conn<'_>,
     ) -> crate::Result<Vec<super::Region>> {
         let scheduler = super::NodeScheduler {
             region: None,
@@ -268,7 +266,7 @@ impl Host {
             resource: super::ResourceAffinity::LeastResources,
         };
         let org_id = (host_type == Some(HostType::Private)).then_some(org_id);
-        let requirements = super::HostRequirements {
+        let requirements = HostRequirements {
             requirements,
             blockchain_id: blockchain.id,
             node_type,

@@ -17,7 +17,7 @@ pub mod command;
 pub use command::{Command, CommandType};
 
 pub mod host;
-pub use host::{ConnectionStatus, Host, HostType};
+pub use host::{ConnectionStatus, Host, HostRequirements, HostType};
 
 pub mod invitation;
 pub use invitation::Invitation;

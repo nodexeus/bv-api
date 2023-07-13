@@ -15,8 +15,7 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceCreateRequest>,
     ) -> super::Resp<api::UserServiceCreateResponse> {
-        self.context
-            .write(|conn, ctx| create(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -24,8 +23,7 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceGetRequest>,
     ) -> super::Resp<api::UserServiceGetResponse> {
-        self.context
-            .write(|conn, ctx| get(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| get(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -33,8 +31,7 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceUpdateRequest>,
     ) -> super::Resp<api::UserServiceUpdateResponse> {
-        self.context
-            .write(|conn, ctx| update(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| update(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -42,8 +39,7 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceDeleteRequest>,
     ) -> super::Resp<api::UserServiceDeleteResponse> {
-        self.context
-            .write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -51,8 +47,7 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceGetBillingRequest>,
     ) -> super::Resp<api::UserServiceGetBillingResponse> {
-        self.context
-            .read(|conn, ctx| get_billing(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| get_billing(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -60,8 +55,7 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceUpdateBillingRequest>,
     ) -> super::Resp<api::UserServiceUpdateBillingResponse> {
-        self.context
-            .write(|conn, ctx| update_billing(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| update_billing(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -69,8 +63,7 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceDeleteBillingRequest>,
     ) -> super::Resp<api::UserServiceDeleteBillingResponse> {
-        self.context
-            .write(|conn, ctx| delete_billing(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| delete_billing(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -82,7 +75,7 @@ async fn create(
 ) -> super::Result<api::UserServiceCreateResponse> {
     // Temporary: we require authentication to create a new user. This means that somebody needs to
     // either be logged in, or have an email with an invitation token in there.
-    let _claims = ctx.claims(&req, Endpoint::UserCreate).await?;
+    let _claims = ctx.claims(&req, Endpoint::UserCreate, conn).await?;
 
     let inner = req.into_inner();
     let new_user = inner.as_new()?;
@@ -101,7 +94,7 @@ async fn get(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::UserServiceGetResponse> {
-    let claims = ctx.claims(&req, Endpoint::UserGet).await?;
+    let claims = ctx.claims(&req, Endpoint::UserGet, conn).await?;
     let req = req.into_inner();
     let user = User::find_by_id(req.id.parse()?, conn).await?;
     let is_allowed = match claims.resource() {
@@ -124,7 +117,7 @@ async fn update(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::UserServiceUpdateResponse> {
-    let claims = ctx.claims(&req, Endpoint::UserUpdate).await?;
+    let claims = ctx.claims(&req, Endpoint::UserUpdate, conn).await?;
     let req = req.into_inner();
     let user = User::find_by_id(req.id.parse()?, conn).await?;
     let is_allowed = match claims.resource() {
@@ -148,7 +141,7 @@ async fn delete(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::UserServiceDeleteResponse> {
-    let claims = ctx.claims(&req, Endpoint::UserDelete).await?;
+    let claims = ctx.claims(&req, Endpoint::UserDelete, conn).await?;
     let req = req.into_inner();
     let user = User::find_by_id(req.id.parse()?, conn).await?;
     let is_allowed = match claims.resource() {
@@ -170,7 +163,7 @@ async fn get_billing(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::UserServiceGetBillingResponse> {
-    let claims = ctx.claims(&req, Endpoint::UserGetBilling).await?;
+    let claims = ctx.claims(&req, Endpoint::UserGetBilling, conn).await?;
     let req = req.into_inner();
     let user_id = req.user_id.parse()?;
     let is_allowed = match claims.resource() {
@@ -194,7 +187,7 @@ async fn update_billing(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::UserServiceUpdateBillingResponse> {
-    let claims = ctx.claims(&req, Endpoint::UserUpdateBilling).await?;
+    let claims = ctx.claims(&req, Endpoint::UserUpdateBilling, conn).await?;
     let req = req.into_inner();
     let user_id = req.user_id.parse()?;
     let is_allowed = match claims.resource() {
@@ -220,7 +213,7 @@ async fn delete_billing(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::UserServiceDeleteBillingResponse> {
-    let claims = ctx.claims(&req, Endpoint::UserDeleteBilling).await?;
+    let claims = ctx.claims(&req, Endpoint::UserDeleteBilling, conn).await?;
     let req = req.into_inner();
     let user_id = req.user_id.parse()?;
     let is_allowed = match claims.resource() {

@@ -11,7 +11,6 @@ pub mod invitations;
 pub mod key_files;
 pub mod metrics;
 pub mod nodes;
-pub mod notification;
 pub mod orgs;
 pub mod subscription;
 pub mod users;
@@ -24,6 +23,7 @@ pub mod api {
 use std::sync::Arc;
 
 use axum::Extension;
+use derive_more::Deref;
 use tonic::transport::server::Router;
 use tonic::transport::Server;
 use tower::layer::util::{Identity, Stack};
@@ -33,8 +33,6 @@ use tower_http::trace::TraceLayer;
 
 use crate::config::Context;
 use crate::database::Pool;
-
-use self::notification::{MqttMessage, Notifier};
 
 /// This macro bails out of the current function with a `tonic::Status::permission_denied` error.
 /// The arguments that can be supplied here are the same as the arguments to the format macro.
@@ -55,54 +53,19 @@ use forbidden;
 type Result<T> = crate::Result<tonic::Response<T>>;
 type Resp<T, E = tonic::Status> = std::result::Result<tonic::Response<T>, E>;
 type TraceServer = Stack<TraceLayer<SharedClassifier<GrpcErrorsAsFailures>>, Identity>;
-type PoolServer = Stack<Extension<Arc<Pool>>, TraceServer>;
+type PoolServer = Stack<Extension<Pool>, TraceServer>;
 type CorsServer = Stack<Stack<CorsLayer, PoolServer>, Identity>;
 
 /// This struct implements all the gRPC service traits.
-#[derive(Clone)]
+#[derive(Clone, Deref)]
 struct Grpc {
+    #[deref]
     pub context: Arc<Context>,
-    pub notifier: Arc<Notifier>,
 }
 
 impl Grpc {
     fn new(context: Arc<Context>) -> Self {
-        let notifier = context.notifier.clone();
-
-        Grpc { context, notifier }
-    }
-}
-
-#[must_use]
-struct Outcome<T> {
-    inner: T,
-    messages: Vec<MqttMessage>,
-}
-
-impl<T> Outcome<T> {
-    pub fn new(resp: T) -> Self {
-        Self {
-            inner: resp,
-            messages: vec![],
-        }
-    }
-
-    pub fn with_msg(mut self, msg: impl Into<MqttMessage>) -> Self {
-        self.messages.push(msg.into());
-        self
-    }
-
-    pub fn with_msgs(mut self, msgs: Vec<impl Into<MqttMessage>>) -> Self {
-        self.messages.extend(msgs.into_iter().map(Into::into));
-        self
-    }
-
-    pub async fn into_resp(self, notifier: &notification::Notifier) -> Resp<T> {
-        let mut sender = notifier.sender();
-        for message in self.messages {
-            sender.send(message).await?;
-        }
-        Ok(tonic::Response::new(self.inner))
+        Grpc { context }
     }
 }
 

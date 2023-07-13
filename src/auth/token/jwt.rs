@@ -76,19 +76,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_encode_decode_preserves_token() {
-        let context = Context::from_default_toml().await.unwrap();
+        let ctx = Context::from_default_toml().await.unwrap();
 
         let resource = ResourceEntry::new_node(Uuid::new_v4().into()).into();
         let expirable = Expirable::from_now(chrono::Duration::minutes(15));
         let claims = Claims::new(resource, expirable, Endpoints::Wildcard);
 
-        let encoded = context.cipher().jwt.encode(&claims).unwrap();
+        let encoded = ctx.auth.cipher.jwt.encode(&claims).unwrap();
         let token = match encoded.parse().unwrap() {
             RequestToken::Bearer(token) => token,
             _ => panic!("Unexpected RequestToken type"),
         };
 
-        let decoded = context.cipher().jwt.decode(&token).unwrap();
+        let decoded = ctx.auth.cipher.jwt.decode(&token).unwrap();
         assert_eq!(claims, decoded);
     }
 }

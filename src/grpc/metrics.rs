@@ -26,10 +26,7 @@ impl metrics_service_server::MetricsService for super::Grpc {
         &self,
         req: tonic::Request<api::MetricsServiceNodeRequest>,
     ) -> super::Resp<api::MetricsServiceNodeResponse> {
-        self.context
-            .write(|conn, ctx| node(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| node(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -37,10 +34,7 @@ impl metrics_service_server::MetricsService for super::Grpc {
         &self,
         req: tonic::Request<api::MetricsServiceHostRequest>,
     ) -> super::Resp<api::MetricsServiceHostResponse> {
-        self.context
-            .write(|conn, ctx| host(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| host(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -49,15 +43,16 @@ async fn node(
     req: tonic::Request<api::MetricsServiceNodeRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::MetricsServiceNodeResponse>> {
-    let claims = ctx.claims(&req, Endpoint::MetricsNode).await?;
+) -> super::Result<api::MetricsServiceNodeResponse> {
+    let claims = ctx.claims(&req, Endpoint::MetricsNode, conn).await?;
     let req = req.into_inner();
     let updates: Vec<UpdateNodeMetrics> = req
         .metrics
         .into_iter()
         .map(|(k, v)| v.as_metrics_update(&k))
         .collect::<crate::Result<_>>()?;
-    let nodes = Node::find_by_ids(updates.iter().map(|u| u.id), conn).await?;
+    let node_ids = updates.iter().map(|u| u.id).collect();
+    let nodes = Node::find_by_ids(node_ids, conn).await?;
     let is_allowed = match claims.resource() {
         Resource::User(user_id) => {
             let memberships = Org::memberships(user_id, conn).await?;
@@ -74,22 +69,26 @@ async fn node(
     let nodes = UpdateNodeMetrics::update_metrics(updates, conn).await?;
     let msgs = api::NodeMessage::updated_many(nodes, conn).await?;
     let resp = api::MetricsServiceNodeResponse {};
-    Ok(super::Outcome::new(resp).with_msgs(msgs))
+
+    ctx.notifier.send(msgs).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn host(
     req: tonic::Request<api::MetricsServiceHostRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::MetricsServiceHostResponse>> {
-    let claims = ctx.claims(&req, Endpoint::MetricsNode).await?;
+) -> super::Result<api::MetricsServiceHostResponse> {
+    let claims = ctx.claims(&req, Endpoint::MetricsNode, conn).await?;
     let req = req.into_inner();
     let updates: Vec<UpdateHostMetrics> = req
         .metrics
         .into_iter()
         .map(|(k, v)| v.as_metrics_update(&k))
         .collect::<crate::Result<_>>()?;
-    let hosts = Host::find_by_ids(updates.iter().map(|u| u.id), conn).await?;
+    let host_ids = updates.iter().map(|u| u.id).collect();
+    let hosts = Host::find_by_ids(host_ids, conn).await?;
     let is_allowed = match claims.resource() {
         Resource::User(user_id) => {
             let memberships = Org::memberships(user_id, conn).await?;
@@ -106,7 +105,10 @@ async fn host(
     let hosts = UpdateHostMetrics::update_metrics(updates, conn).await?;
     let msgs = api::HostMessage::updated_many(hosts, conn).await?;
     let resp = api::MetricsServiceHostResponse {};
-    Ok(super::Outcome::new(resp).with_msgs(msgs))
+
+    ctx.notifier.send(msgs).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 impl api::NodeMetrics {

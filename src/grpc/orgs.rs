@@ -19,10 +19,7 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceCreateRequest>,
     ) -> super::Resp<api::OrgServiceCreateResponse> {
-        self.context
-            .write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -30,8 +27,7 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceGetRequest>,
     ) -> super::Resp<api::OrgServiceGetResponse> {
-        self.context
-            .read(|conn, ctx| get(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| get(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -39,8 +35,7 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceListRequest>,
     ) -> super::Resp<api::OrgServiceListResponse> {
-        self.context
-            .read(|conn, ctx| list(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -48,10 +43,7 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceUpdateRequest>,
     ) -> super::Resp<api::OrgServiceUpdateResponse> {
-        self.context
-            .write(|conn, ctx| update(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| update(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -59,10 +51,7 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceDeleteRequest>,
     ) -> super::Resp<api::OrgServiceDeleteResponse> {
-        self.context
-            .write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -70,10 +59,7 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceRemoveMemberRequest>,
     ) -> super::Resp<api::OrgServiceRemoveMemberResponse> {
-        self.context
-            .write(|conn, ctx| remove_member(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| remove_member(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -81,8 +67,7 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceGetProvisionTokenRequest>,
     ) -> super::Resp<api::OrgServiceGetProvisionTokenResponse> {
-        self.context
-            .read(|conn, ctx| get_provision_token(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| get_provision_token(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -90,8 +75,7 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceResetProvisionTokenRequest>,
     ) -> super::Resp<api::OrgServiceResetProvisionTokenResponse> {
-        self.context
-            .read(|conn, ctx| reset_provision_token(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| reset_provision_token(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -100,8 +84,8 @@ async fn create(
     req: tonic::Request<api::OrgServiceCreateRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::OrgServiceCreateResponse>> {
-    let claims = ctx.claims(&req, Endpoint::OrgCreate).await?;
+) -> super::Result<api::OrgServiceCreateResponse> {
+    let claims = ctx.claims(&req, Endpoint::OrgCreate, conn).await?;
     let req = req.into_inner();
     let Resource::User(user_id) = claims.resource() else {
         super::forbidden!("Access denied for orgs create");
@@ -115,7 +99,10 @@ async fn create(
     let org = api::Org::from_model(org.clone(), conn).await?;
     let msg = api::OrgMessage::created(org.clone(), user);
     let resp = api::OrgServiceCreateResponse { org: Some(org) };
-    Ok(super::Outcome::new(resp).with_msg(msg))
+
+    ctx.notifier.send([msg]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn get(
@@ -123,7 +110,7 @@ async fn get(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::OrgServiceGetResponse> {
-    let claims = ctx.claims(&req, Endpoint::OrgGet).await?;
+    let claims = ctx.claims(&req, Endpoint::OrgGet, conn).await?;
     let req = req.into_inner();
     let org_id = req.id.parse()?;
     let is_allowed = match claims.resource() {
@@ -147,7 +134,7 @@ async fn list(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::OrgServiceListResponse> {
-    let claims = ctx.claims(&req, Endpoint::OrgList).await?;
+    let claims = ctx.claims(&req, Endpoint::OrgList, conn).await?;
     let req = req.into_inner();
     let member_id = req.member_id.map(|id| id.parse()).transpose()?;
     let is_allowed = match claims.resource() {
@@ -175,8 +162,8 @@ async fn update(
     req: tonic::Request<api::OrgServiceUpdateRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::OrgServiceUpdateResponse>> {
-    let claims = ctx.claims(&req, Endpoint::OrgUpdate).await?;
+) -> super::Result<api::OrgServiceUpdateResponse> {
+    let claims = ctx.claims(&req, Endpoint::OrgUpdate, conn).await?;
     let req = req.into_inner();
     let Resource::User(user_id) = claims.resource() else {
         super::forbidden!("Access denied for orgs update of {}", req.id);
@@ -194,15 +181,18 @@ async fn update(
     let org = api::Org::from_model(org_model, conn).await?;
     let msg = api::OrgMessage::updated(org, user);
     let resp = api::OrgServiceUpdateResponse {};
-    Ok(super::Outcome::new(resp).with_msg(msg))
+
+    ctx.notifier.send([msg]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn delete(
     req: tonic::Request<api::OrgServiceDeleteRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::OrgServiceDeleteResponse>> {
-    let claims = ctx.claims(&req, Endpoint::OrgDelete).await?;
+) -> super::Result<api::OrgServiceDeleteResponse> {
+    let claims = ctx.claims(&req, Endpoint::OrgDelete, conn).await?;
     let req = req.into_inner();
     let Resource::User(user_id) = claims.resource() else {
         super::forbidden!("Access denied for orgs delete of {}", req.id);
@@ -221,15 +211,18 @@ async fn delete(
     let user = User::find_by_id(user_id, conn).await?;
     let msg = api::OrgMessage::deleted(org, user);
     let resp = api::OrgServiceDeleteResponse {};
-    Ok(super::Outcome::new(resp).with_msg(msg))
+
+    ctx.notifier.send([msg]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn remove_member(
     req: tonic::Request<api::OrgServiceRemoveMemberRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::OrgServiceRemoveMemberResponse>> {
-    let claims = ctx.claims(&req, Endpoint::OrgRemoveMember).await?;
+) -> super::Result<api::OrgServiceRemoveMemberResponse> {
+    let claims = ctx.claims(&req, Endpoint::OrgRemoveMember, conn).await?;
     let req = req.into_inner();
     let Resource::User(caller_id) = claims.resource() else {
         super::forbidden!("Access denied for orgs remove member");
@@ -253,7 +246,10 @@ async fn remove_member(
     let org = api::Org::from_model(org_model, conn).await?;
     let msg = api::OrgMessage::updated(org, user);
     let resp = api::OrgServiceRemoveMemberResponse {};
-    Ok(super::Outcome::new(resp).with_msg(msg))
+
+    ctx.notifier.send([msg]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn get_provision_token(
@@ -261,7 +257,9 @@ async fn get_provision_token(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::OrgServiceGetProvisionTokenResponse> {
-    let claims = ctx.claims(&req, Endpoint::OrgGetProvisionToken).await?;
+    let claims = ctx
+        .claims(&req, Endpoint::OrgGetProvisionToken, conn)
+        .await?;
     let req = req.into_inner();
     let user_id = req.user_id.parse()?;
     let org_id = req.org_id.parse()?;
@@ -288,7 +286,9 @@ async fn reset_provision_token(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::OrgServiceResetProvisionTokenResponse> {
-    let claims = ctx.claims(&req, Endpoint::OrgResetProvisionToken).await?;
+    let claims = ctx
+        .claims(&req, Endpoint::OrgResetProvisionToken, conn)
+        .await?;
     let req = req.into_inner();
     let user_id = req.user_id.parse()?;
     let org_id = req.org_id.parse()?;

@@ -14,11 +14,11 @@ pub mod provider;
 pub use provider::Provider;
 
 use std::any::type_name;
-use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use std::{env, fmt};
 
 use derive_more::{Deref, From};
 use displaydoc::Display;
@@ -26,7 +26,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
 
-pub const CONFIG_FILE: &str = "config.toml";
+const CONFIG_FILE_ENV: &str = "CONFIG_FILE";
+const CONFIG_FILE_DEFAULT: &str = "config.toml";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -48,6 +49,8 @@ pub enum Error {
     Mail(mail::Error),
     /// Failed to parse MQTT Config: {0}
     Mqtt(mqtt::Error),
+    /// No config file at path: {0}
+    NoConfigFile(String),
     /// Failed to create Provider: {0}
     Provider(provider::Error),
     /// Failed to parse Redacted<{0}>: {1}
@@ -74,10 +77,19 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Result<Self, Error> {
-        let config = Path::new(CONFIG_FILE);
-        let toml = if config.exists() { Some(config) } else { None };
+        let provider = if let Ok(file) = env::var(CONFIG_FILE_ENV) {
+            let path = Path::new(&file);
+            if path.exists() {
+                Provider::new(Some(path)).map_err(Error::Provider)
+            } else {
+                Err(Error::NoConfigFile(file))
+            }
+        } else {
+            let path = Path::new(CONFIG_FILE_DEFAULT);
+            let toml = if path.exists() { Some(path) } else { None };
+            Provider::new(toml).map_err(Error::Provider)
+        }?;
 
-        let provider = Provider::new(toml).map_err(Error::Provider)?;
         TryInto::try_into(&provider)
     }
 
@@ -87,7 +99,11 @@ impl Config {
     }
 
     pub fn from_default_toml() -> Result<Self, Error> {
-        Self::from_toml(CONFIG_FILE)
+        if let Ok(file) = env::var(CONFIG_FILE_ENV) {
+            Self::from_toml(file)
+        } else {
+            Self::from_toml(CONFIG_FILE_DEFAULT)
+        }
     }
 }
 

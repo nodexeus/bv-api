@@ -17,8 +17,7 @@ impl key_file_service_server::KeyFileService for super::Grpc {
         &self,
         req: Request<api::KeyFileServiceCreateRequest>,
     ) -> super::Resp<api::KeyFileServiceCreateResponse> {
-        self.context
-            .write(|conn, ctx| create(req, conn, ctx).scope_boxed())
+        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -26,8 +25,7 @@ impl key_file_service_server::KeyFileService for super::Grpc {
         &self,
         req: Request<api::KeyFileServiceListRequest>,
     ) -> super::Resp<api::KeyFileServiceListResponse> {
-        self.context
-            .read(|conn, ctx| list(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -37,7 +35,7 @@ async fn create(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::KeyFileServiceCreateResponse> {
-    let claims = ctx.claims(&req, Endpoint::KeyFileCreate).await?;
+    let claims = ctx.claims(&req, Endpoint::KeyFileCreate, conn).await?;
     let req = req.into_inner();
     let node = Node::find_by_id(req.node_id.parse()?, conn).await?;
     let is_allowed = match claims.resource() {
@@ -71,7 +69,7 @@ async fn list(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::KeyFileServiceListResponse> {
-    let claims = ctx.claims(&req, Endpoint::KeyFileList).await?;
+    let claims = ctx.claims(&req, Endpoint::KeyFileList, conn).await?;
     let req = req.into_inner();
     let node = Node::find_by_id(req.node_id.parse()?, conn).await?;
     let is_allowed = match claims.resource() {

@@ -10,14 +10,10 @@ type Service = node_service_client::NodeServiceClient<transport::Channel>;
 
 #[tokio::test]
 async fn can_create_node_dns() -> anyhow::Result<()> {
-    let (context, _db) = Context::with_mocked().await.unwrap();
+    let (ctx, _db) = Context::with_mocked().await.unwrap();
 
     let name = format!("test_{}", petname::petname(3, "_"));
-    let id = context
-        .dns
-        .get_node_dns(&name, "127.0.0.1".to_string())
-        .await?;
-
+    let id = ctx.dns.get_node_dns(&name, "127.0.0.1".to_string()).await?;
     assert!(!id.is_empty());
 
     Ok(())

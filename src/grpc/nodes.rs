@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::Context;
+use anyhow::Context as _;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use futures_util::future::OptionFuture;
 
@@ -15,7 +15,7 @@ use crate::models::command::NewCommand;
 use crate::models::node::{FilteredIpAddr, NewNode, NodeFilter, UpdateNode};
 use crate::models::{
     Blockchain, Command, CommandType, ContainerStatus, Host, IpAddress, Node, NodeChainStatus,
-    NodeProperty, NodeScheduler, NodeStakingStatus, NodeSyncStatus, NodeType, Org,
+    NodeProperty, NodeScheduler, NodeStakingStatus, NodeSyncStatus, NodeType, Org, Region,
     ResourceAffinity, SimilarNodeAffinity, User,
 };
 use crate::timestamp::NanosUtc;
@@ -29,10 +29,7 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceCreateRequest>,
     ) -> super::Resp<api::NodeServiceCreateResponse> {
-        self.context
-            .write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -40,8 +37,7 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceGetRequest>,
     ) -> super::Resp<api::NodeServiceGetResponse> {
-        self.context
-            .read(|conn, ctx| get(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| get(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -49,8 +45,7 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceListRequest>,
     ) -> super::Resp<api::NodeServiceListResponse> {
-        self.context
-            .read(|conn, ctx| list(req, conn, ctx).scope_boxed())
+        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -58,10 +53,7 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceUpdateConfigRequest>,
     ) -> super::Resp<api::NodeServiceUpdateConfigResponse> {
-        self.context
-            .write(|conn, ctx| update_config(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| update_config(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -69,10 +61,7 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceUpdateStatusRequest>,
     ) -> super::Resp<api::NodeServiceUpdateStatusResponse> {
-        self.context
-            .write(|conn, ctx| update_status(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| update_status(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -80,10 +69,7 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceDeleteRequest>,
     ) -> super::Resp<api::NodeServiceDeleteResponse> {
-        self.context
-            .write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -91,10 +77,7 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceStartRequest>,
     ) -> super::Resp<api::NodeServiceStartResponse> {
-        self.context
-            .write(|conn, ctx| start(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| start(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -102,10 +85,7 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceStopRequest>,
     ) -> super::Resp<api::NodeServiceStopResponse> {
-        self.context
-            .write(|conn, ctx| stop(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| stop(req, conn, ctx).scope_boxed())
             .await
     }
 
@@ -113,10 +93,7 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceRestartRequest>,
     ) -> super::Resp<api::NodeServiceRestartResponse> {
-        self.context
-            .write(|conn, ctx| restart(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| restart(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -126,7 +103,7 @@ async fn get(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::NodeServiceGetResponse> {
-    let claims = ctx.claims(&req, Endpoint::NodeGet).await?;
+    let claims = ctx.claims(&req, Endpoint::NodeGet, conn).await?;
     let req = req.into_inner();
     let node = Node::find_by_id(req.id.parse()?, conn).await?;
     let is_allowed = match claims.resource() {
@@ -149,7 +126,7 @@ async fn list(
     conn: &mut Conn<'_>,
     ctx: &Context,
 ) -> super::Result<api::NodeServiceListResponse> {
-    let claims = ctx.claims(&req, Endpoint::NodeList).await?;
+    let claims = ctx.claims(&req, Endpoint::NodeList, conn).await?;
     let filter = req.into_inner().as_filter()?;
     let is_allowed = match claims.resource() {
         Resource::User(user_id) => Org::is_member(user_id, filter.org_id, conn).await?,
@@ -170,8 +147,8 @@ async fn create(
     req: tonic::Request<api::NodeServiceCreateRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::NodeServiceCreateResponse>> {
-    let claims = ctx.claims(&req, Endpoint::NodeCreate).await?;
+) -> super::Result<api::NodeServiceCreateResponse> {
+    let claims = ctx.claims(&req, Endpoint::NodeCreate, conn).await?;
     let Resource::User(user_id) = claims.resource() else { super::forbidden!("Need user_id!") };
 
     let user = User::find_by_id(user_id, conn).await?;
@@ -220,18 +197,20 @@ async fn create(
     let resp = api::NodeServiceCreateResponse {
         node: Some(node_api),
     };
-    Ok(super::Outcome::new(resp)
-        .with_msg(create_cmd)
-        .with_msg(created)
-        .with_msg(start_cmd))
+
+    ctx.notifier.send([create_cmd]).await?;
+    ctx.notifier.send([created]).await?;
+    ctx.notifier.send([start_cmd]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn update_config(
     req: tonic::Request<api::NodeServiceUpdateConfigRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::NodeServiceUpdateConfigResponse>> {
-    let claims = ctx.claims(&req, Endpoint::NodeUpdateConfig).await?;
+) -> super::Result<api::NodeServiceUpdateConfigResponse> {
+    let claims = ctx.claims(&req, Endpoint::NodeUpdateConfig, conn).await?;
     let req = req.into_inner();
     let node = Node::find_by_id(req.id.parse()?, conn).await?;
     let is_allowed = match claims.resource() {
@@ -254,15 +233,19 @@ async fn update_config(
     let cmd = api::Command::from_model(&create_notif, conn).await?;
     let msg = api::NodeMessage::updated(node, user, conn).await?;
     let resp = api::NodeServiceUpdateConfigResponse {};
-    Ok(super::Outcome::new(resp).with_msg(cmd).with_msg(msg))
+
+    ctx.notifier.send([cmd]).await?;
+    ctx.notifier.send([msg]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn update_status(
     req: tonic::Request<api::NodeServiceUpdateStatusRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::NodeServiceUpdateStatusResponse>> {
-    let claims = ctx.claims(&req, Endpoint::NodeUpdateStatus).await?;
+) -> super::Result<api::NodeServiceUpdateStatusResponse> {
+    let claims = ctx.claims(&req, Endpoint::NodeUpdateStatus, conn).await?;
     let req = req.into_inner();
     let node = Node::find_by_id(req.id.parse()?, conn).await?;
     if !matches!(claims.resource(), Resource::Host(host_id) if node.host_id == host_id) {
@@ -277,15 +260,18 @@ async fn update_status(
     let node = update_node.update(conn).await?;
     let node_message = api::NodeMessage::updated(node, user, conn).await?;
     let resp = api::NodeServiceUpdateStatusResponse {};
-    Ok(super::Outcome::new(resp).with_msg(node_message))
+
+    ctx.notifier.send([node_message]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn delete(
     req: tonic::Request<api::NodeServiceDeleteRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::NodeServiceDeleteResponse>> {
-    let claims = ctx.claims(&req, Endpoint::NodeDelete).await?;
+) -> super::Result<api::NodeServiceDeleteResponse> {
+    let claims = ctx.claims(&req, Endpoint::NodeDelete, conn).await?;
     let Resource::User(user_id) = claims.resource() else { super::forbidden!("Need user_id!") };
     let req = req.into_inner();
     let node = Node::find_by_id(req.id.parse()?, conn).await?;
@@ -327,37 +313,40 @@ async fn delete(
     let deleted = api::NodeMessage::deleted(node, user);
     let resp = api::NodeServiceDeleteResponse {};
 
-    Ok(super::Outcome::new(resp).with_msg(cmd).with_msg(deleted))
+    ctx.notifier.send([cmd]).await?;
+    ctx.notifier.send([deleted]).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 async fn start(
     req: tonic::Request<api::NodeServiceStartRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::NodeServiceStartResponse>> {
-    let claims = ctx.claims(&req, Endpoint::NodeStart).await?;
+) -> super::Result<api::NodeServiceStartResponse> {
+    let claims = ctx.claims(&req, Endpoint::NodeStart, conn).await?;
     let req = req.into_inner();
-    change_node_state(&req.id, CommandType::RestartNode, claims, conn).await
+    change_node_state(&req.id, CommandType::RestartNode, claims, conn, ctx).await
 }
 
 async fn stop(
     req: tonic::Request<api::NodeServiceStopRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::NodeServiceStopResponse>> {
-    let claims = ctx.claims(&req, Endpoint::NodeStop).await?;
+) -> super::Result<api::NodeServiceStopResponse> {
+    let claims = ctx.claims(&req, Endpoint::NodeStop, conn).await?;
     let req = req.into_inner();
-    change_node_state(&req.id, CommandType::KillNode, claims, conn).await
+    change_node_state(&req.id, CommandType::KillNode, claims, conn, ctx).await
 }
 
 async fn restart(
     req: tonic::Request<api::NodeServiceRestartRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::NodeServiceRestartResponse>> {
-    let claims = ctx.claims(&req, Endpoint::NodeRestart).await?;
+) -> super::Result<api::NodeServiceRestartResponse> {
+    let claims = ctx.claims(&req, Endpoint::NodeRestart, conn).await?;
     let req = req.into_inner();
-    change_node_state(&req.id, CommandType::RestartNode, claims, conn).await
+    change_node_state(&req.id, CommandType::RestartNode, claims, conn, ctx).await
 }
 
 async fn change_node_state<Res: Default>(
@@ -365,7 +354,8 @@ async fn change_node_state<Res: Default>(
     cmd_type: CommandType,
     claims: Claims,
     conn: &mut Conn<'_>,
-) -> crate::Result<super::Outcome<Res>> {
+    ctx: &Context,
+) -> super::Result<Res> {
     let node = Node::find_by_id(id.parse()?, conn).await?;
     let is_allowed = match claims.resource() {
         Resource::User(user_id) => Org::is_member(user_id, node.org_id, conn).await?,
@@ -379,7 +369,9 @@ async fn change_node_state<Res: Default>(
     let create_notif = create_node_command(&node, cmd_type, conn).await?;
     let cmd = api::Command::from_model(&create_notif, conn).await?;
 
-    Ok(super::Outcome::new(Default::default()).with_msg(cmd))
+    ctx.notifier.send([cmd]).await?;
+
+    Ok(tonic::Response::new(Default::default()))
 }
 
 impl api::Node {
@@ -420,10 +412,7 @@ impl api::Node {
     /// This function is used to create many ui nodes from many database nodes. The same
     /// justification as above applies. Note that this function does not simply defer to the
     /// function above, but rather it performs 1 query for n nodes. We like it this way :)
-    pub async fn from_models(
-        nodes: Vec<models::Node>,
-        conn: &mut models::Conn,
-    ) -> crate::Result<Vec<Self>> {
+    pub async fn from_models(nodes: Vec<Node>, conn: &mut Conn<'_>) -> crate::Result<Vec<Self>> {
         let blockchain_ids = nodes.iter().map(|n| n.blockchain_id).collect();
         let blockchains: HashMap<_, _> = Blockchain::find_by_ids(blockchain_ids, conn)
             .await?
@@ -583,7 +572,7 @@ impl api::NodeServiceCreateRequest {
         user_id: UserId,
         req: HardwareRequirements,
         conn: &mut Conn<'_>,
-    ) -> crate::Result<models::NewNode<'_>> {
+    ) -> crate::Result<NewNode<'_>> {
         let placement = self
             .placement
             .as_ref()

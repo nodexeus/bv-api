@@ -18,10 +18,7 @@ impl babel_service_server::BabelService for super::Grpc {
         &self,
         req: tonic::Request<api::BabelServiceNotifyRequest>,
     ) -> super::Resp<api::BabelServiceNotifyResponse> {
-        self.context
-            .write(|conn, ctx| notify(req, conn, ctx).scope_boxed())
-            .await?
-            .into_resp(&self.notifier)
+        self.write(|conn, ctx| notify(req, conn, ctx).scope_boxed())
             .await
     }
 }
@@ -30,9 +27,9 @@ async fn notify(
     req: tonic::Request<api::BabelServiceNotifyRequest>,
     conn: &mut Conn<'_>,
     ctx: &Context,
-) -> crate::Result<super::Outcome<api::BabelServiceNotifyResponse>> {
+) -> super::Result<api::BabelServiceNotifyResponse> {
     // TODO: decide who is allowed to call this endpoint
-    let _claims = ctx.claims(&req, Endpoint::BabelNotify).await?;
+    let _claims = ctx.claims(&req, Endpoint::BabelNotify, conn).await?;
     let req = req.into_inner();
     debug!("New Request Version: {:?}", req);
     let filter = req.info_filter(conn).await?;
@@ -64,7 +61,10 @@ async fn notify(
 
     info!("Nodes to be upgraded has been processed: {node_ids:?}");
     let resp = api::BabelServiceNotifyResponse { node_ids };
-    Ok(super::Outcome::new(resp).with_msgs(commands))
+
+    ctx.notifier.send(commands).await?;
+
+    Ok(tonic::Response::new(resp))
 }
 
 impl api::BabelServiceNotifyRequest {
