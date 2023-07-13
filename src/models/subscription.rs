@@ -51,12 +51,17 @@ impl Subscription {
             .map_err(Error::FindById)
     }
 
-    pub async fn find_by_org(org_id: OrgId, conn: &mut Conn) -> Result<Self, Error> {
-        subscriptions::table
+    pub async fn find_by_org(org_id: OrgId, conn: &mut Conn) -> Result<Option<Self>, Error> {
+        let result = subscriptions::table
             .filter(subscriptions::org_id.eq(org_id))
             .get_result(conn)
-            .await
-            .map_err(Error::FindByOrg)
+            .await;
+
+        match result {
+            Ok(sub) => Ok(Some(sub)),
+            Err(diesel::result::Error::NotFound) => Ok(None),
+            Err(err) => Err(Error::FindByOrg(err)),
+        }
     }
 
     pub async fn find_by_user(user_id: UserId, conn: &mut Conn) -> Result<Vec<Self>, Error> {
