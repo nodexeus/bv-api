@@ -32,6 +32,6 @@ metadata:
   annotations: {}
   labels: {}
 description: testing
-requireApproval: true
+requireApproval: false
 gke:
   cluster: projects/blockjoy-testing/locations/us-east1-b/clusters/blockjoy-testing
