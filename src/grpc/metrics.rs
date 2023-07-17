@@ -104,7 +104,7 @@ async fn host(
     }
 
     let hosts = UpdateHostMetrics::update_metrics(updates, conn).await?;
-    api::HostMessage::updated_many(hosts, conn)
+    api::HostMessage::updated_many(hosts, &claims, conn)
         .await?
         .into_iter()
         .for_each(|msg| mqtt_tx.send(msg.into()).expect("mqtt_rx"));

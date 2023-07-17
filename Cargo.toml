@@ -13,7 +13,7 @@ opt-level = 'z'
 overflow-checks = true
 
 [dependencies]
-anyhow = "1.0.40"
+anyhow = "1.0.72"
 argon2 = "0.5.0"
 axum = { version = "0.6.18", features = ["macros"] }
 aws-sdk-s3 = "0.28.0"
@@ -77,6 +77,7 @@ temp-env = "0.3.4"
 tempfile = "3.6.0"
 
 [build-dependencies]
+anyhow = "1.0.72"
 tonic-build = "0.9.2"
 
 [features]

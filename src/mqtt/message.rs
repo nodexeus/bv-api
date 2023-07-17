@@ -2,8 +2,9 @@ use derive_more::From;
 use displaydoc::Display;
 use prost::Message as _;
 use thiserror::Error;
-use uuid::Uuid;
 
+use crate::auth::claims::Claims;
+use crate::auth::resource::{HostId, NodeId, OrgId};
 use crate::database::Conn;
 use crate::grpc::api;
 use crate::models::{Host, Invitation, Node, Org, User};
@@ -95,7 +96,7 @@ impl api::OrgMessage {
         Ok(vec![format!("/orgs/{org_id}")])
     }
 
-    fn org_id(&self) -> Option<Uuid> {
+    fn org_id(&self) -> Option<OrgId> {
         use api::org_message::Message::*;
         match self.message.as_ref()? {
             Created(api::OrgCreated { org, .. }) => org.as_ref()?.id.parse().ok(),
@@ -208,7 +209,7 @@ impl api::HostMessage {
         Ok(vec![format!("/hosts/{host_id}")])
     }
 
-    fn host_id(&self) -> Option<Uuid> {
+    fn host_id(&self) -> Option<HostId> {
         use api::host_message::Message::*;
         match self.message.as_ref()? {
             Created(api::HostCreated { host, .. }) => host.as_ref()?.id.parse().ok(),
@@ -217,8 +218,13 @@ impl api::HostMessage {
         }
     }
 
-    pub async fn created(host: Host, user: User, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        let host = api::Host::from_model(host, conn)
+    pub async fn created(
+        host: Host,
+        user: User,
+        claims: &Claims,
+        conn: &mut Conn<'_>,
+    ) -> Result<Self, Error> {
+        let host = api::Host::from_host(host, claims, conn)
             .await
             .map_err(|err| Error::Host(Box::new(err)))?;
 
@@ -232,8 +238,13 @@ impl api::HostMessage {
         })
     }
 
-    pub async fn updated(host: Host, user: User, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        let host = api::Host::from_model(host, conn)
+    pub async fn updated(
+        host: Host,
+        user: User,
+        claims: &Claims,
+        conn: &mut Conn<'_>,
+    ) -> Result<Self, Error> {
+        let host = api::Host::from_host(host, claims, conn)
             .await
             .map_err(|err| Error::Host(Box::new(err)))?;
 
@@ -247,8 +258,12 @@ impl api::HostMessage {
         })
     }
 
-    pub async fn updated_many(models: Vec<Host>, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
-        api::Host::from_models(models, conn)
+    pub async fn updated_many(
+        hosts: Vec<Host>,
+        claims: &Claims,
+        conn: &mut Conn<'_>,
+    ) -> Result<Vec<Self>, Error> {
+        api::Host::from_hosts(hosts, claims, conn)
             .await
             .map_err(|err| Error::Host(Box::new(err)))?
             .into_iter()
@@ -290,7 +305,7 @@ impl api::NodeMessage {
         ])
     }
 
-    fn node_id(&self) -> Option<Uuid> {
+    fn node_id(&self) -> Option<NodeId> {
         use api::node_message::Message::*;
         match self.message.as_ref()? {
             Created(api::NodeCreated { node, .. }) => node.as_ref()?.id.parse().ok(),
@@ -299,7 +314,7 @@ impl api::NodeMessage {
         }
     }
 
-    fn host_id(&self) -> Option<Uuid> {
+    fn host_id(&self) -> Option<HostId> {
         use api::node_message::Message::*;
         match self.message.as_ref()? {
             Created(api::NodeCreated { node, .. }) => node.as_ref()?.host_id.parse().ok(),
@@ -308,7 +323,7 @@ impl api::NodeMessage {
         }
     }
 
-    fn org_id(&self) -> Option<Uuid> {
+    fn org_id(&self) -> Option<OrgId> {
         use api::node_message::Message::*;
         match self.message.as_ref()? {
             Created(api::NodeCreated { node, .. }) => node.as_ref()?.org_id.parse().ok(),
@@ -381,7 +396,11 @@ impl api::NodeMessage {
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+
+    use crate::auth::claims::tests::{claims_all, claims_none};
     use crate::config::Context;
+    use crate::models::{Command, CommandType};
 
     use super::*;
 
@@ -389,7 +408,19 @@ mod tests {
     async fn test_send_command() {
         let (ctx, db) = Context::with_mocked().await.unwrap();
 
-        let command = db.command().await;
+        let node = db.node().await;
+        let command = Command {
+            id: Uuid::new_v4(),
+            host_id: db.host().await.id,
+            cmd: CommandType::CreateNode,
+            sub_cmd: None,
+            response: None,
+            exit_status: None,
+            created_at: chrono::Utc::now(),
+            completed_at: None,
+            node_id: Some(node.id),
+            acked_at: None,
+        };
         let mut conn = db.conn().await;
 
         let command = api::Command::from_model(&command, &mut conn).await.unwrap();
@@ -404,12 +435,14 @@ mod tests {
         let host = db.host().await;
         let user = db.user().await;
 
-        let msg = api::HostMessage::created(host.clone(), user.clone(), &mut conn)
+        let claims = claims_none(user.id);
+        let msg = api::HostMessage::created(host.clone(), user.clone(), &claims, &mut conn)
             .await
             .unwrap();
         ctx.notifier.send(msg).await.unwrap();
 
-        let msg = api::HostMessage::updated(host.clone(), user.clone(), &mut conn)
+        let claims = claims_all(user.id);
+        let msg = api::HostMessage::updated(host.clone(), user.clone(), &claims, &mut conn)
             .await
             .unwrap();
         ctx.notifier.send(msg).await.unwrap();

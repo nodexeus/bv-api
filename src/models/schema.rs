@@ -161,6 +161,7 @@ diesel::table! {
         org_id -> Uuid,
         created_by -> Nullable<Uuid>,
         region_id -> Nullable<Uuid>,
+        monthly_cost_in_usd -> Nullable<Int8>,
     }
 }
 

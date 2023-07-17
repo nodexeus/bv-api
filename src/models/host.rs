@@ -4,11 +4,14 @@ use chrono::{DateTime, Utc};
 use diesel::dsl;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use uuid::Uuid;
+use diesel_derive_newtype::DieselNewType;
 
+use crate::auth::claims::HostClaims;
+use crate::auth::resource::Resource;
 use crate::auth::resource::{HostId, OrgId, UserId};
 use crate::cookbook::script::HardwareRequirements;
 use crate::database::Conn;
+use crate::grpc::common;
 use crate::models::ip_address::NewIpAddressRange;
 use crate::models::Paginate;
 use crate::Result;
@@ -68,6 +71,14 @@ pub struct Host {
     pub created_by: Option<UserId>,
     // The id of the region where this host is located.
     pub region_id: Option<uuid::Uuid>,
+    // The monthly billing amount for this host (only visible to host owners).
+    pub monthly_cost_in_usd: Option<MonthlyCostUsd>,
+}
+
+impl AsRef<Host> for Host {
+    fn as_ref(&self) -> &Host {
+        self
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -229,22 +240,26 @@ impl Host {
         Self::by_ids(&host_ids, conn).await
     }
 
-    pub async fn node_counts(
-        hosts: &[Self],
+    pub async fn node_counts<H>(
+        hosts: &[H],
         conn: &mut Conn<'_>,
-    ) -> crate::Result<HashMap<Uuid, u64>> {
+    ) -> crate::Result<HashMap<HostId, u64>>
+    where
+        H: AsRef<Host>,
+    {
         use super::schema::nodes;
 
-        let mut host_ids: Vec<_> = hosts.iter().map(|h| h.id).collect();
+        let mut host_ids: Vec<_> = hosts.iter().map(|h| h.as_ref().id).collect();
         host_ids.sort();
         host_ids.dedup();
 
-        let counts: Vec<(Uuid, i64)> = nodes::table
+        let counts: Vec<(HostId, i64)> = nodes::table
             .filter(nodes::host_id.eq_any(host_ids))
             .group_by(nodes::host_id)
             .select((nodes::host_id, dsl::count(nodes::id)))
             .get_results(conn)
             .await?;
+
         counts
             .into_iter()
             .map(|(host, count)| Ok((host, count.try_into()?)))
@@ -281,6 +296,14 @@ impl Host {
             .collect();
         super::Region::by_ids(regions, conn).await
     }
+
+    /// Host cost is only extractable with a valid `HostClaims` and resource type.
+    pub fn monthly_cost_in_usd(&self, claims: &HostClaims<'_>) -> Option<i64> {
+        self.monthly_cost_in_usd
+            .filter(|_| claims.host_id() == self.id)
+            .filter(|_| matches!(claims.resource(), Resource::User(_) | Resource::Org(_)))
+            .map(|cost| cost.0)
+    }
 }
 
 #[derive(Debug, Clone, Insertable)]
@@ -307,6 +330,7 @@ pub struct NewHost<'a> {
     // The id of the region where this host is located.
     pub region_id: Option<uuid::Uuid>,
     pub host_type: HostType,
+    pub monthly_cost_in_usd: Option<MonthlyCostUsd>,
 }
 
 impl NewHost<'_> {
@@ -394,4 +418,31 @@ impl UpdateHostMetrics {
 pub struct HostStatusRequest {
     pub version: Option<String>,
     pub status: ConnectionStatus,
+}
+
+/// The billing cost per month in USD for this host.
+///
+/// The inner cost is extracted via `Host::monthly_cost_in_usd`.
+#[derive(Clone, Copy, Debug, DieselNewType)]
+pub struct MonthlyCostUsd(i64);
+
+impl MonthlyCostUsd {
+    pub fn from_proto(billing: &common::BillingAmount) -> crate::Result<Self> {
+        let amount = match billing.amount {
+            Some(ref amount) => Ok(amount),
+            None => Err(crate::Error::BillingAmountMissingAmount),
+        }?;
+
+        match common::Currency::from_i32(amount.currency) {
+            Some(common::Currency::Usd) => Ok(()),
+            _ => Err(crate::Error::BillingAmountCurrency(amount.currency)),
+        }?;
+
+        match common::Period::from_i32(billing.period) {
+            Some(common::Period::Monthly) => Ok(()),
+            _ => Err(crate::Error::BillingAmountPeriod(billing.period)),
+        }?;
+
+        Ok(MonthlyCostUsd(amount.value))
+    }
 }

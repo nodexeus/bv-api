@@ -18,6 +18,7 @@ async fn responds_unauthenticated_without_token_for_update() {
         os: None,
         os_version: None,
         region: None,
+        billing_amount: None,
     };
     let status = tester.send(Service::update, req).await.unwrap_err();
     assert_eq!(status.code(), tonic::Code::Unauthenticated);
@@ -39,6 +40,7 @@ async fn responds_permission_denied_with_token_ownership_for_update() {
         os: Some("LuukOS".to_string()),
         os_version: Some("5".to_string()),
         region: None,
+        billing_amount: None,
     };
 
     let status = tester
@@ -64,6 +66,7 @@ async fn responds_permission_denied_with_user_token_for_update() {
         os: Some("LuukOS".to_string()),
         os_version: Some("5".to_string()),
         region: None,
+        billing_amount: None,
     };
 
     let status = tester
@@ -103,6 +106,7 @@ async fn responds_ok_for_create() {
         ip_gateway: "72.168.0.100".to_string(),
         org_id: Some(org_id),
         region: Some("europe-2-birmingham".to_string()),
+        billing_amount: None,
     };
     tester.send(Service::create, req).await.unwrap();
 }
@@ -122,6 +126,7 @@ async fn responds_ok_for_update() {
         os: Some("LuukOS".to_string()),
         os_version: Some("5".to_string()),
         region: None,
+        billing_amount: None,
     };
 
     tester.send_with(Service::update, req, &jwt).await.unwrap();
@@ -251,4 +256,36 @@ async fn can_update_host_info() {
 
     assert_eq!(updated_host.name, "tester".to_string());
     assert!(!updated_host.ip_addr.is_empty())
+}
+
+#[tokio::test]
+async fn user_token_can_view_billing_cost() {
+    let tester = super::Tester::new().await;
+
+    let user = tester.user().await;
+    let host = tester.host().await;
+    let claims = tester.user_token(&user).await;
+    let jwt = tester.cipher().jwt.encode(&claims).unwrap();
+
+    let req = api::HostServiceGetRequest {
+        id: host.id.to_string(),
+    };
+    let resp = tester.send_with(Service::get, req, &jwt).await.unwrap();
+    let billing_amount = resp.host.unwrap().billing_amount.unwrap();
+    assert_eq!(billing_amount.amount.unwrap().value, 123)
+}
+
+#[tokio::test]
+async fn host_token_cannot_view_billing_cost() {
+    let tester = super::Tester::new().await;
+
+    let host = tester.host().await;
+    let claims = tester.host_token(&host);
+    let jwt = tester.cipher().jwt.encode(&claims).unwrap();
+
+    let req = api::HostServiceGetRequest {
+        id: host.id.to_string(),
+    };
+    let resp = tester.send_with(Service::get, req, &jwt).await.unwrap();
+    assert!(resp.host.unwrap().billing_amount.is_none())
 }

@@ -1,33 +1,41 @@
-//! Build file generating gRPC stubs
+use std::fs;
+use std::path::{Path, PathBuf};
 
-fn main() {
-    if let Err(e) = tonic_build::configure()
-        .build_server(true)
-        // needed for integration tests
-        .build_client(true)
-        .compile(
-            &[
-                "blockjoy/v1/api_key.proto",
-                "blockjoy/v1/auth.proto",
-                "blockjoy/v1/babel.proto",
-                "blockjoy/v1/blockchain.proto",
-                "blockjoy/v1/command.proto",
-                "blockjoy/v1/cookbook.proto",
-                "blockjoy/v1/discovery.proto",
-                "blockjoy/v1/host.proto",
-                "blockjoy/v1/invitation.proto",
-                "blockjoy/v1/key_file.proto",
-                "blockjoy/v1/metrics.proto",
-                "blockjoy/v1/mqtt.proto",
-                "blockjoy/v1/node.proto",
-                "blockjoy/v1/org.proto",
-                "blockjoy/v1/subscription.proto",
-                "blockjoy/v1/user.proto",
-            ],
-            &["proto"],
-        )
+use anyhow::{Context, Result};
+
+const PROTO_DIR: &str = "proto";
+
+fn main() -> Result<()> {
+    let mut builder = tonic_build::configure();
+
+    #[cfg(any(test, feature = "integration-test"))]
     {
-        eprintln!("Building protos failed with:\n{e}");
-        std::process::exit(1);
+        builder = builder.build_client(true);
     }
+
+    builder
+        .build_server(true)
+        .enum_attribute("command", "#[allow(clippy::large_enum_variant)]")
+        .compile(&proto_files()?, &[PROTO_DIR])
+        .context("Failed to compile protos")
+}
+
+fn proto_files() -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    find_recursive(Path::new(PROTO_DIR), &mut files)?;
+    Ok(files)
+}
+
+fn find_recursive(path: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    if path.is_dir() {
+        for entry in fs::read_dir(path)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                find_recursive(&path, files)?;
+            } else if path.extension().map_or(false, |ext| ext == "proto") {
+                files.push(path.strip_prefix(PROTO_DIR)?.to_path_buf());
+            }
+        }
+    }
+    Ok(())
 }

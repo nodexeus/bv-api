@@ -15,9 +15,16 @@ pub mod orgs;
 pub mod subscription;
 pub mod users;
 
-#[allow(clippy::large_enum_variant)]
 pub mod api {
     tonic::include_proto!("blockjoy.v1");
+}
+
+pub mod common {
+    tonic::include_proto!("blockjoy.common.v1");
+
+    pub mod v1 {
+        pub use super::*;
+    }
 }
 
 use std::sync::Arc;

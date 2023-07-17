@@ -62,45 +62,45 @@ impl From<Error> for Status {
 impl ApiKeyService for Grpc {
     async fn create(
         &self,
-        req: Request<api::CreateApiKeyRequest>,
-    ) -> super::Resp<api::CreateApiKeyResponse> {
+        req: Request<api::ApiKeyServiceCreateRequest>,
+    ) -> super::Resp<api::ApiKeyServiceCreateResponse> {
         self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn list(
         &self,
-        req: Request<api::ListApiKeyRequest>,
-    ) -> super::Resp<api::ListApiKeyResponse> {
+        req: Request<api::ApiKeyServiceListRequest>,
+    ) -> super::Resp<api::ApiKeyServiceListResponse> {
         self.read(|read| list(req, read).scope_boxed()).await
     }
 
     async fn update(
         &self,
-        req: Request<api::UpdateApiKeyRequest>,
-    ) -> super::Resp<api::UpdateApiKeyResponse> {
+        req: Request<api::ApiKeyServiceUpdateRequest>,
+    ) -> super::Resp<api::ApiKeyServiceUpdateResponse> {
         self.write(|write| update(req, write).scope_boxed()).await
     }
 
     async fn regenerate(
         &self,
-        req: Request<api::RegenerateApiKeyRequest>,
-    ) -> super::Resp<api::RegenerateApiKeyResponse> {
+        req: Request<api::ApiKeyServiceRegenerateRequest>,
+    ) -> super::Resp<api::ApiKeyServiceRegenerateResponse> {
         self.write(|write| regenerate(req, write).scope_boxed())
             .await
     }
 
     async fn delete(
         &self,
-        req: Request<api::DeleteApiKeyRequest>,
-    ) -> super::Resp<api::DeleteApiKeyResponse> {
+        req: Request<api::ApiKeyServiceDeleteRequest>,
+    ) -> super::Resp<api::ApiKeyServiceDeleteResponse> {
         self.write(|write| delete(req, write).scope_boxed()).await
     }
 }
 
 async fn create(
-    req: Request<api::CreateApiKeyRequest>,
+    req: Request<api::ApiKeyServiceCreateRequest>,
     write: WriteConn<'_, '_>,
-) -> super::Resp<api::CreateApiKeyResponse, Error> {
+) -> super::Resp<api::ApiKeyServiceCreateResponse, Error> {
     let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::ApiKeyCreate, conn).await?;
 
@@ -113,7 +113,7 @@ async fn create(
 
     let created = NewApiKey::create(user_id, req.label, entry, conn, ctx).await?;
 
-    let resp = api::CreateApiKeyResponse {
+    let resp = api::ApiKeyServiceCreateResponse {
         api_key: Some(created.secret.into()),
         created_at: Some(NanosUtc::from(created.api_key.created_at).into()),
     };
@@ -121,9 +121,9 @@ async fn create(
 }
 
 async fn list(
-    req: Request<api::ListApiKeyRequest>,
+    req: Request<api::ApiKeyServiceListRequest>,
     read: ReadConn<'_, '_>,
-) -> super::Resp<api::ListApiKeyResponse, Error> {
+) -> super::Resp<api::ApiKeyServiceListResponse, Error> {
     let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::ApiKeyList, conn).await?;
     let user_id = claims.resource().user().ok_or(Error::ClaimsNotUser)?;
@@ -131,14 +131,14 @@ async fn list(
     let keys = ApiKey::find_by_user(user_id, conn).await?;
     let api_keys = keys.into_iter().map(api::ListApiKey::from_model).collect();
 
-    let resp = api::ListApiKeyResponse { api_keys };
+    let resp = api::ApiKeyServiceListResponse { api_keys };
     Ok(Response::new(resp))
 }
 
 async fn update(
-    req: Request<api::UpdateApiKeyRequest>,
+    req: Request<api::ApiKeyServiceUpdateRequest>,
     write: WriteConn<'_, '_>,
-) -> super::Resp<api::UpdateApiKeyResponse, Error> {
+) -> super::Resp<api::ApiKeyServiceUpdateResponse, Error> {
     let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::ApiKeyUpdate, conn).await?;
 
@@ -171,16 +171,16 @@ async fn update(
         .map(NanosUtc::from)
         .map(Into::into)?;
 
-    let resp = api::UpdateApiKeyResponse {
+    let resp = api::ApiKeyServiceUpdateResponse {
         updated_at: Some(updated_at),
     };
     Ok(Response::new(resp))
 }
 
 async fn regenerate(
-    req: Request<api::RegenerateApiKeyRequest>,
+    req: Request<api::ApiKeyServiceRegenerateRequest>,
     write: WriteConn<'_, '_>,
-) -> super::Resp<api::RegenerateApiKeyResponse, Error> {
+) -> super::Resp<api::ApiKeyServiceRegenerateResponse, Error> {
     let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::ApiKeyRegenerate, conn).await?;
 
@@ -194,7 +194,7 @@ async fn regenerate(
     let new_key = NewApiKey::regenerate(key_id, conn, ctx).await?;
     let updated_at = new_key.api_key.updated_at.ok_or(Error::MissingUpdatedAt)?;
 
-    let resp = api::RegenerateApiKeyResponse {
+    let resp = api::ApiKeyServiceRegenerateResponse {
         api_key: Some(new_key.secret.into()),
         updated_at: Some(NanosUtc::from(updated_at).into()),
     };
@@ -202,9 +202,9 @@ async fn regenerate(
 }
 
 async fn delete(
-    req: Request<api::DeleteApiKeyRequest>,
+    req: Request<api::ApiKeyServiceDeleteRequest>,
     write: WriteConn<'_, '_>,
-) -> super::Resp<api::DeleteApiKeyResponse, Error> {
+) -> super::Resp<api::ApiKeyServiceDeleteResponse, Error> {
     let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::ApiKeyDelete, conn).await?;
 
@@ -217,7 +217,7 @@ async fn delete(
 
     ApiKey::delete(key_id, conn).await?;
 
-    let resp = api::DeleteApiKeyResponse {};
+    let resp = api::ApiKeyServiceDeleteResponse {};
     Ok(Response::new(resp))
 }
 

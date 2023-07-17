@@ -222,13 +222,13 @@ async fn create_api_key<U: Into<Uuid>>(
     label: &str,
     resource: ApiResource,
     resource_id: U,
-) -> Result<api::CreateApiKeyResponse, tonic::Status> {
+) -> Result<api::ApiKeyServiceCreateResponse, tonic::Status> {
     let scope = api::ApiKeyScope {
         resource: resource as i32,
         resource_id: Some(resource_id.into().to_string()),
     };
 
-    let req = api::CreateApiKeyRequest {
+    let req = api::ApiKeyServiceCreateRequest {
         label: label.to_string(),
         scope: Some(scope),
     };
@@ -239,8 +239,8 @@ async fn create_api_key<U: Into<Uuid>>(
 async fn list_api_keys(
     test: &Tester,
     token: &str,
-) -> Result<api::ListApiKeyResponse, tonic::Status> {
-    let req = api::ListApiKeyRequest {};
+) -> Result<api::ApiKeyServiceListResponse, tonic::Status> {
+    let req = api::ApiKeyServiceListRequest {};
     test.send_with(ApiKeyService::list, req, token).await
 }
 
@@ -250,8 +250,8 @@ async fn update(
     key_id: &str,
     new_label: Option<&str>,
     new_resource_entry: Option<ResourceEntry>,
-) -> Result<api::UpdateApiKeyResponse, tonic::Status> {
-    let req = api::UpdateApiKeyRequest {
+) -> Result<api::ApiKeyServiceUpdateResponse, tonic::Status> {
+    let req = api::ApiKeyServiceUpdateRequest {
         id: key_id.into(),
         label: new_label.map(Into::into),
         scope: new_resource_entry.map(api::ApiKeyScope::from_entry),
@@ -264,8 +264,8 @@ async fn regenerate(
     test: &Tester,
     token: &str,
     key_id: &str,
-) -> Result<api::RegenerateApiKeyResponse, tonic::Status> {
-    let req = api::RegenerateApiKeyRequest { id: key_id.into() };
+) -> Result<api::ApiKeyServiceRegenerateResponse, tonic::Status> {
+    let req = api::ApiKeyServiceRegenerateRequest { id: key_id.into() };
     test.send_with(ApiKeyService::regenerate, req, token).await
 }
 
@@ -273,8 +273,8 @@ async fn delete(
     test: &Tester,
     token: &str,
     key_id: &str,
-) -> Result<api::DeleteApiKeyResponse, tonic::Status> {
-    let req = api::DeleteApiKeyRequest { id: key_id.into() };
+) -> Result<api::ApiKeyServiceDeleteResponse, tonic::Status> {
+    let req = api::ApiKeyServiceDeleteRequest { id: key_id.into() };
     test.send_with(ApiKeyService::delete, req, token).await
 }
 

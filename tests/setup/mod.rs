@@ -3,6 +3,7 @@
 mod dummy_token;
 mod helper_traits;
 
+use blockvisor_api::models::node::NewNode;
 pub use dummy_token::*;
 
 use std::convert::TryFrom;
@@ -12,14 +13,13 @@ use std::sync::Arc;
 
 use blockvisor_api::auth::claims::{Claims, Expirable};
 use blockvisor_api::auth::endpoint::Endpoints;
-use blockvisor_api::auth::resource::ResourceEntry;
+use blockvisor_api::auth::resource::{HostId, ResourceEntry};
 use blockvisor_api::auth::token::refresh::Refresh;
 use blockvisor_api::auth::token::{Cipher, RequestToken};
 use blockvisor_api::config::Context;
 use blockvisor_api::database::tests::TestDb;
-use blockvisor_api::database::Conn;
 use blockvisor_api::grpc::api::auth_service_client::AuthServiceClient;
-use blockvisor_api::models::{Blockchain, Host, Node, Org, User};
+use blockvisor_api::models::{Host, Org, User};
 use derive_more::{Deref, DerefMut};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -81,10 +81,6 @@ impl Tester {
         }
     }
 
-    pub async fn conn(&self) -> Conn<'_> {
-        self.db.conn().await
-    }
-
     pub fn context(&self) -> &Context {
         &self.context
     }
@@ -93,60 +89,16 @@ impl Tester {
         &self.context.auth.cipher
     }
 
-    /// Returns an admin user, so a user that has maximal permissions.
-    pub async fn user(&self) -> User {
-        self.db.user().await
-    }
-
-    /// Returns a pleb user, that has the same permissions but it is not confirmed.
-    pub async fn unconfirmed_user(&self) -> User {
-        self.db.unconfirmed_user().await
-    }
-
     /// Returns a auth token for the admin user in the database.
     pub async fn admin_token(&self) -> Claims {
-        let admin = self.user().await;
+        let admin = self.db.user().await;
         self.user_token(&admin).await
     }
 
     pub async fn admin_refresh(&self) -> Refresh {
-        let admin = self.user().await;
+        let admin = self.db.user().await;
         let expires = chrono::Duration::minutes(15);
         Refresh::from_now(expires, admin.id)
-    }
-
-    pub async fn hosts(&self) -> Vec<Host> {
-        use blockvisor_api::models::schema::hosts;
-        let mut conn = self.conn().await;
-        hosts::table.get_results(&mut conn).await.unwrap()
-    }
-
-    pub async fn host(&self) -> Host {
-        self.hosts().await.pop().unwrap()
-    }
-
-    pub async fn host2(&self) -> Host {
-        let mut hosts = self.hosts().await;
-        hosts.pop().unwrap();
-        hosts.pop().unwrap()
-    }
-
-    pub async fn org(&self) -> Org {
-        self.db.org().await
-    }
-
-    pub async fn org_for(&self, user: &User) -> Org {
-        use blockvisor_api::models::schema::{orgs, orgs_users};
-
-        let mut conn = self.conn().await;
-        orgs::table
-            .filter(orgs::is_personal.eq(false))
-            .filter(orgs_users::user_id.eq(user.id))
-            .inner_join(orgs_users::table)
-            .select(Org::as_select())
-            .get_result(&mut conn)
-            .await
-            .unwrap()
     }
 
     pub async fn user_token(&self, user: &User) -> Claims {
@@ -171,14 +123,47 @@ impl Tester {
         Claims::new(resource, expirable, Endpoints::Wildcard)
     }
 
-    pub async fn node(&self) -> Node {
+    pub async fn hosts(&self) -> Vec<Host> {
+        use blockvisor_api::models::schema::hosts;
+
         let mut conn = self.conn().await;
-        let node_id = "cdbbc736-f399-42ab-86cf-617ce983011d".parse().unwrap();
-        Node::find_by_id(node_id, &mut conn).await.unwrap()
+        hosts::table.get_results(&mut conn).await.unwrap()
     }
 
-    pub async fn blockchain(&self) -> Blockchain {
-        self.db.blockchain().await
+    pub async fn org_for(&self, user: &User) -> Org {
+        use blockvisor_api::models::schema::{orgs, orgs_users};
+
+        let mut conn = self.conn().await;
+        orgs::table
+            .filter(orgs::is_personal.eq(false))
+            .filter(orgs_users::user_id.eq(user.id))
+            .inner_join(orgs_users::table)
+            .select(Org::as_select())
+            .get_result(&mut conn)
+            .await
+            .unwrap()
+    }
+
+    pub async fn create_node(
+        &self,
+        node: &NewNode<'_>,
+        host_id_param: &HostId,
+        ip_add_param: &str,
+        dns_id: &str,
+    ) {
+        use blockvisor_api::models::schema::nodes;
+
+        let mut conn = self.conn().await;
+        diesel::insert_into(nodes::table)
+            .values((
+                node,
+                nodes::host_id.eq(host_id_param),
+                nodes::ip_addr.eq(ip_add_param),
+                nodes::dns_record_id.eq(dns_id),
+            ))
+            .execute(&mut conn)
+            .await
+            .unwrap();
     }
 
     /// Send a request without any authentication to the test server.  All the functions that we

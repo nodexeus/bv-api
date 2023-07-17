@@ -89,6 +89,23 @@ impl Org {
         Ok(is_member)
     }
 
+    pub async fn is_member_all(
+        user_id: UserId,
+        mut org_ids: Vec<OrgId>,
+        conn: &mut Conn<'_>,
+    ) -> Result<bool> {
+        org_ids.sort();
+        org_ids.dedup();
+        let len = org_ids.len() as i64;
+        let count: i64 = orgs_users::table
+            .filter(orgs_users::user_id.eq(user_id))
+            .filter(orgs_users::org_id.eq_any(org_ids))
+            .count()
+            .get_result(conn)
+            .await?;
+        Ok(count == len)
+    }
+
     /// Checks if the user is a member with the role `Admin` or above (the other option being
     /// `Owner`).
     pub async fn is_admin(user_id: UserId, org_id: OrgId, conn: &mut Conn<'_>) -> Result<bool> {
@@ -100,6 +117,24 @@ impl Org {
             .get_result(conn)
             .await?;
         Ok(is_member)
+    }
+
+    pub async fn is_admin_all(
+        user_id: UserId,
+        mut org_ids: Vec<OrgId>,
+        conn: &mut Conn<'_>,
+    ) -> Result<bool> {
+        org_ids.sort();
+        org_ids.dedup();
+        let len = org_ids.len() as i64;
+        let count: i64 = orgs_users::table
+            .filter(orgs_users::user_id.eq(user_id))
+            .filter(orgs_users::org_id.eq_any(org_ids))
+            .filter(orgs_users::role.eq_any([OrgRole::Admin, OrgRole::Owner]))
+            .count()
+            .get_result(conn)
+            .await?;
+        Ok(count == len)
     }
 
     pub async fn add_member(
