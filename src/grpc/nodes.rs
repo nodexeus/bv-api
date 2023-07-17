@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anyhow::Context;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use futures_util::future::OptionFuture;
 
@@ -582,12 +583,12 @@ impl api::NodeServiceCreateRequest {
             .iter()
             .map(api::FilteredIpAddr::as_model)
             .collect();
-        let region_id = scheduler
-            .map(|s| &s.region)
-            .map(|r| r.parse())
-            .transpose()?;
-        let region = region_id.map(|id| models::Region::by_id(id, conn));
-        let region = OptionFuture::from(region).await.transpose()?;
+        let region = scheduler.map(|s| &s.region);
+        let region = region.map(|id| models::Region::by_name(id, conn));
+        let region = OptionFuture::from(region)
+            .await
+            .transpose()
+            .context("No such region")?;
         Ok(models::NewNode {
             id: uuid::Uuid::new_v4().into(),
             org_id: self.org_id.parse()?,

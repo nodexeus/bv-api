@@ -30,6 +30,14 @@ impl Region {
         Ok(ip)
     }
 
+    pub async fn by_name(name: &str, conn: &mut super::Conn) -> crate::Result<Self> {
+        let ip = regions::table
+            .filter(regions::name.eq(name))
+            .get_result(conn)
+            .await?;
+        Ok(ip)
+    }
+
     pub async fn get_or_create(name: &str, conn: &mut super::Conn) -> crate::Result<Self> {
         let region = diesel::insert_into(regions::table)
             .values(regions::name.eq(name.to_lowercase()))
