@@ -1,4 +1,5 @@
 mod property;
+use futures_util::future::OptionFuture;
 pub use property::NodeProperty;
 
 use anyhow::anyhow;
@@ -112,6 +113,7 @@ pub struct Node {
     pub node_type: NodeType,
     pub scheduler_similarity: Option<super::SimilarNodeAffinity>,
     pub scheduler_resource: Option<super::ResourceAffinity>,
+    pub scheduler_region: Option<uuid::Uuid>,
 }
 
 #[derive(Clone, Debug)]
@@ -140,10 +142,9 @@ impl Node {
     }
 
     pub async fn find_by_ids(
-        ids: impl IntoIterator<Item = NodeId>,
+        mut ids: Vec<NodeId>,
         conn: &mut super::Conn,
     ) -> crate::Result<Vec<Self>> {
-        let mut ids: Vec<NodeId> = ids.into_iter().collect();
         ids.sort();
         ids.dedup();
         let node = nodes::table
@@ -229,16 +230,17 @@ impl Node {
             .await?
             .requirements;
 
-        let candidates = match self.scheduler() {
+        let candidates = match self.scheduler(conn).await? {
             Some(scheduler) => {
-                super::Host::host_candidates(
+                let reqs = super::HostRequirements {
                     requirements,
-                    self.blockchain_id,
-                    self.node_type,
+                    blockchain_id: self.blockchain_id,
+                    node_type: self.node_type,
+                    host_type: Some(super::HostType::Cloud),
                     scheduler,
-                    conn,
-                )
-                .await?
+                    org_id: None,
+                };
+                super::Host::host_candidates(reqs, Some(2), conn).await?
             }
             None => vec![super::Host::find_by_id(self.host_id, conn).await?],
         };
@@ -267,12 +269,21 @@ impl Node {
         Ok(best)
     }
 
-    pub fn scheduler(&self) -> Option<super::NodeScheduler> {
-        let Some(resource) = self.scheduler_resource else { return None; };
-        Some(super::NodeScheduler {
+    pub async fn scheduler(
+        &self,
+        conn: &mut super::Conn,
+    ) -> crate::Result<Option<super::NodeScheduler>> {
+        let Some(resource) = self.scheduler_resource else { return Ok(None); };
+        Ok(Some(super::NodeScheduler {
+            region: self.region(conn).await?,
             similarity: self.scheduler_similarity,
             resource,
-        })
+        }))
+    }
+
+    pub async fn region(&self, conn: &mut super::Conn) -> crate::Result<Option<super::Region>> {
+        let region = self.scheduler_region.map(|r| super::Region::by_id(r, conn));
+        OptionFuture::from(region).await.transpose()
     }
 
     pub fn allow_ips(&self) -> crate::Result<Vec<FilteredIpAddr>> {
@@ -346,6 +357,8 @@ pub struct NewNode<'a> {
     pub scheduler_similarity: Option<super::SimilarNodeAffinity>,
     /// Controls whether to run the node on hosts that are full or empty.
     pub scheduler_resource: Option<super::ResourceAffinity>,
+    /// The region where this node should be deployed.
+    pub scheduler_region: Option<uuid::Uuid>,
 }
 
 impl NewNode<'_> {
@@ -358,7 +371,7 @@ impl NewNode<'_> {
         let host = match host {
             Some(host) => host,
             None => {
-                self.find_host(self.scheduler().ok_or_else(no_sched)?, conn)
+                self.find_host(self.scheduler(conn).await?.ok_or_else(no_sched)?, conn)
                     .await?
             }
         };
@@ -410,14 +423,15 @@ impl NewNode<'_> {
             .rhai_metadata(&chain.name, &self.node_type.to_string(), self.version)
             .await?
             .requirements;
-        let candidates = super::Host::host_candidates(
+        let requirements = super::HostRequirements {
             requirements,
-            self.blockchain_id,
-            self.node_type,
+            blockchain_id: self.blockchain_id,
+            node_type: self.node_type,
+            host_type: Some(super::HostType::Cloud),
             scheduler,
-            conn,
-        )
-        .await?;
+            org_id: None,
+        };
+        let candidates = super::Host::host_candidates(requirements, Some(1), conn).await?;
         // Just take the first one if there is one.
         let best = candidates
             .into_iter()
@@ -426,12 +440,20 @@ impl NewNode<'_> {
         Ok(best)
     }
 
-    fn scheduler(&self) -> Option<super::NodeScheduler> {
-        let Some(resource) = self.scheduler_resource else { return None; };
-        Some(super::NodeScheduler {
+    async fn scheduler(
+        &self,
+        conn: &mut super::Conn,
+    ) -> crate::Result<Option<super::NodeScheduler>> {
+        let Some(resource) = self.scheduler_resource else { return Ok(None); };
+        let region = self
+            .scheduler_region
+            .map(|id| super::Region::by_id(id, conn));
+        let region = OptionFuture::from(region).await.transpose()?;
+        Ok(Some(super::NodeScheduler {
+            region,
             similarity: self.scheduler_similarity,
             resource,
-        })
+        }))
     }
 }
 
@@ -534,6 +556,7 @@ mod tests {
             created_by: user.id,
             scheduler_similarity: None,
             scheduler_resource: Some(models::ResourceAffinity::MostResources),
+            scheduler_region: None,
             allow_ips: serde_json::json!([]),
             deny_ips: serde_json::json!([]),
         };

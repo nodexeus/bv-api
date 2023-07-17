@@ -160,6 +160,7 @@ diesel::table! {
         host_type -> Nullable<EnumHostType>,
         org_id -> Uuid,
         created_by -> Nullable<Uuid>,
+        region_id -> Nullable<Uuid>,
     }
 }
 
@@ -265,6 +266,7 @@ diesel::table! {
         node_type -> EnumNodeType,
         scheduler_similarity -> Nullable<EnumNodeSimilarityAffinity>,
         scheduler_resource -> Nullable<EnumNodeResourceAffinity>,
+        scheduler_region -> Nullable<Uuid>,
     }
 }
 
@@ -291,6 +293,13 @@ diesel::table! {
         updated_at -> Timestamptz,
         #[max_length = 32]
         host_provision_token -> Varchar,
+    }
+}
+
+diesel::table! {
+    regions (id) {
+        id -> Uuid,
+        name -> Text,
     }
 }
 
@@ -334,6 +343,7 @@ diesel::joinable!(blockchain_properties -> blockchains (blockchain_id));
 diesel::joinable!(commands -> hosts (host_id));
 diesel::joinable!(commands -> nodes (node_id));
 diesel::joinable!(hosts -> orgs (org_id));
+diesel::joinable!(hosts -> regions (region_id));
 diesel::joinable!(hosts -> users (created_by));
 diesel::joinable!(invitations -> orgs (org_id));
 diesel::joinable!(invitations -> users (created_by));
@@ -344,6 +354,7 @@ diesel::joinable!(node_properties -> nodes (node_id));
 diesel::joinable!(nodes -> blockchains (blockchain_id));
 diesel::joinable!(nodes -> hosts (host_id));
 diesel::joinable!(nodes -> orgs (org_id));
+diesel::joinable!(nodes -> regions (scheduler_region));
 diesel::joinable!(nodes -> users (created_by));
 diesel::joinable!(orgs_users -> orgs (org_id));
 diesel::joinable!(orgs_users -> users (user_id));
@@ -363,6 +374,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     nodes,
     orgs,
     orgs_users,
+    regions,
     subscriptions,
     token_blacklist,
     users,

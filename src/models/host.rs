@@ -20,8 +20,10 @@ pub enum ConnectionStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
 #[ExistingTypePath = "crate::models::schema::sql_types::EnumHostType"]
 pub enum HostType {
+    /// Anyone can run nodes on these servers.
     Cloud,
-    Enterprise,
+    /// Only people in the org can run nodes on these servers. They are for private use.
+    Private,
 }
 
 #[derive(Debug, Clone, Queryable)]
@@ -59,6 +61,8 @@ pub struct Host {
     /// This is the id of the user that created this host. For older hosts, this value might not be
     /// set.
     pub created_by: Option<UserId>,
+    // The id of the region where this host is located.
+    pub region_id: Option<uuid::Uuid>,
 }
 
 #[derive(Clone, Debug)]
@@ -68,16 +72,24 @@ pub struct HostFilter {
     pub limit: u64,
 }
 
+pub struct HostRequirements {
+    pub requirements: HardwareRequirements,
+    pub blockchain_id: uuid::Uuid,
+    pub node_type: super::NodeType,
+    pub host_type: Option<super::HostType>,
+    pub scheduler: super::NodeScheduler,
+    pub org_id: Option<OrgId>,
+}
+
 impl Host {
     pub async fn find_by_id(id: HostId, conn: &mut super::Conn) -> Result<Self> {
         let host = hosts::table.find(id).get_result(conn).await?;
         Ok(host)
     }
 
-    pub async fn find_by_ids(
-        ids: impl IntoIterator<Item = HostId>,
-        conn: &mut super::Conn,
-    ) -> Result<Vec<Self>> {
+    pub async fn find_by_ids(mut ids: Vec<HostId>, conn: &mut super::Conn) -> Result<Vec<Self>> {
+        ids.sort();
+        ids.dedup();
         let hosts = hosts::table
             .filter(hosts::id.eq_any(ids))
             .get_results(conn)
@@ -128,20 +140,37 @@ impl Host {
     /// hosts may be returned when our system is out of resources, and this case should be handled
     /// gracefully.
     pub async fn host_candidates(
-        requirements: HardwareRequirements,
-        blockchain_id: uuid::Uuid,
-        node_type: super::NodeType,
-        scheduler: super::NodeScheduler,
+        reqs: HostRequirements,
+        limit: Option<i64>,
         conn: &mut super::Conn,
     ) -> crate::Result<Vec<Host>> {
         use super::schema::sql_types::EnumNodeType;
-        use diesel::sql_types::{BigInt, Uuid};
+        use diesel::sql_types::{BigInt, Nullable, Uuid};
 
         #[derive(Debug, QueryableByName)]
         struct HostCandidate {
             #[diesel(sql_type = Uuid)]
             host_id: HostId,
         }
+
+        let HostRequirements {
+            requirements,
+            blockchain_id,
+            node_type,
+            host_type,
+            scheduler,
+            org_id,
+        } = reqs;
+
+        let order_by = scheduler.order_clause();
+        let limit_clause = limit.map(|_| "LIMIT $6").unwrap_or_default();
+        let region_clause = scheduler
+            .region
+            .as_ref()
+            .map(|_| "AND region_id = $7")
+            .unwrap_or_default();
+        let org_clause = org_id.map(|_| "AND org_id = $8").unwrap_or_default();
+        let host_type_clause = host_type.map(|_| "AND host_type = $9").unwrap_or_default();
 
         // SAFETY: We are using `format!` to place a custom generated ORDER BY clause into a sql
         // query. This is injection-safe because the clause is entirely generated from static
@@ -153,27 +182,29 @@ impl Host {
         (
             SELECT
                 id as host_id,
-                hosts.cpu_count - (SELECT COALESCE(SUM(vcpu_count), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) as av_cpus,
-                hosts.mem_size_bytes - (SELECT COALESCE(SUM(mem_size_bytes), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) as av_mem,
-                hosts.disk_size_bytes - (SELECT COALESCE(SUM(disk_size_bytes), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) as av_disk,
-                (SELECT COUNT(*) FROM ip_addresses WHERE ip_addresses.host_id = hosts.id AND NOT ip_addresses.is_assigned) as ips,
-                (SELECT COUNT(*) FROM nodes WHERE host_id = hosts.id AND blockchain_id = $4 AND node_type = $5 AND host_type = 'cloud') as n_similar
+                hosts.cpu_count - (SELECT COALESCE(SUM(vcpu_count), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) AS av_cpus,
+                hosts.mem_size_bytes - (SELECT COALESCE(SUM(mem_size_bytes), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) AS av_mem,
+                hosts.disk_size_bytes - (SELECT COALESCE(SUM(disk_size_bytes), 0)::BIGINT FROM nodes WHERE host_id = hosts.id) AS av_disk,
+                (SELECT COUNT(*) FROM ip_addresses WHERE ip_addresses.host_id = hosts.id AND NOT ip_addresses.is_assigned) AS ips,
+                (SELECT COUNT(*) FROM nodes WHERE host_id = hosts.id AND blockchain_id = $4 AND node_type = $5 AND host_type = 'cloud') AS n_similar,
+                hosts.region_id AS region_id,
+                hosts.org_id AS org_id,
+                hosts.host_type AS host_type
             FROM
                 hosts
         ) AS resouces
         WHERE
             -- These are our hard filters, we do not want any nodes that cannot satisfy the
-            -- requirements
+            -- requirements or are in the wrong region
             av_cpus > $1 AND
             av_mem > $2 AND
             av_disk > $3 AND
             ips > 0
+        {region_clause}
+        {org_clause}
+        {host_type_clause}
         {order_by}
-        LIMIT
-            -- We only ever retry 2 times, so not querying all possible results saves postgres a lot
-            -- of work, especially with the number of subqueries that we have going on here.
-            2;
-        ", order_by = scheduler.order_clause());
+        {limit_clause};");
 
         let hosts: Vec<HostCandidate> = diesel::sql_query(query)
             .bind::<BigInt, _>(requirements.vcpu_count as i64)
@@ -181,6 +212,10 @@ impl Host {
             .bind::<BigInt, _>(requirements.disk_size_gb as i64 * 1000 * 1000 * 1000)
             .bind::<Uuid, _>(blockchain_id)
             .bind::<EnumNodeType, _>(node_type)
+            .bind::<Nullable<BigInt>, _>(limit)
+            .bind::<Nullable<Uuid>, _>(scheduler.region.map(|r| r.id))
+            .bind::<Nullable<Uuid>, _>(org_id)
+            .bind::<Nullable<crate::models::schema::sql_types::EnumHostType>, _>(host_type)
             .get_results(conn)
             .await?;
         let host_ids: Vec<_> = hosts.into_iter().map(|h| h.host_id).collect();
@@ -209,6 +244,36 @@ impl Host {
             .map(|(host, count)| Ok((host, count.try_into()?)))
             .collect()
     }
+
+    /// Returns the possible list of regions for the
+    pub async fn regions_for(
+        org_id: OrgId,
+        blockchain: super::Blockchain,
+        node_type: super::NodeType,
+        requirements: HardwareRequirements,
+        host_type: Option<HostType>,
+        conn: &mut super::Conn,
+    ) -> crate::Result<Vec<super::Region>> {
+        let scheduler = super::NodeScheduler {
+            region: None,
+            similarity: None,
+            resource: super::ResourceAffinity::LeastResources,
+        };
+        let requirements = super::HostRequirements {
+            requirements,
+            blockchain_id: blockchain.id,
+            node_type,
+            host_type,
+            scheduler,
+            org_id: Some(org_id),
+        };
+        let regions = Self::host_candidates(requirements, None, conn)
+            .await?
+            .into_iter()
+            .flat_map(|host| host.region_id)
+            .collect();
+        super::Region::by_ids(regions, conn).await
+    }
 }
 
 #[derive(Debug, Clone, Insertable)]
@@ -232,6 +297,8 @@ pub struct NewHost<'a> {
     pub org_id: OrgId,
     /// This is the id of the user that created this host.
     pub created_by: UserId,
+    // The id of the region where this host is located.
+    pub region_id: Option<uuid::Uuid>,
 }
 
 impl NewHost<'_> {

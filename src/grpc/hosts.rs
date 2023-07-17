@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use diesel_async::scoped_futures::ScopedFutureExt;
+use futures_util::future::OptionFuture;
 
 use crate::auth::claims::Claims;
 use crate::auth::endpoint::Endpoint;
@@ -61,6 +62,13 @@ impl host_service_server::HostService for super::Grpc {
         self.trx(|c| update(req, c).scope_boxed()).await
     }
 
+    async fn delete(
+        &self,
+        req: tonic::Request<api::HostServiceDeleteRequest>,
+    ) -> super::Resp<api::HostServiceDeleteResponse> {
+        self.trx(|c| delete(req, c).scope_boxed()).await
+    }
+
     async fn start(
         &self,
         req: tonic::Request<api::HostServiceStartRequest>,
@@ -91,11 +99,12 @@ impl host_service_server::HostService for super::Grpc {
             .await
     }
 
-    async fn delete(
+    async fn regions(
         &self,
-        req: tonic::Request<api::HostServiceDeleteRequest>,
-    ) -> super::Resp<api::HostServiceDeleteResponse> {
-        self.trx(|c| delete(req, c).scope_boxed()).await
+        req: tonic::Request<api::HostServiceRegionsRequest>,
+    ) -> super::Resp<api::HostServiceRegionsResponse> {
+        let resp = regions(req, &mut self.conn().await?).await?;
+        Ok(resp)
     }
 }
 
@@ -125,7 +134,12 @@ async fn create(
             .map_err(|_| tonic::Status::permission_denied("Invalid token"))?;
         (org_user.user_id, org_user.org_id)
     };
-    let new_host = req.as_new(caller_id, org_id)?;
+    let region = req
+        .region
+        .as_deref()
+        .map(|r| models::Region::get_or_create(r, conn));
+    let region = OptionFuture::from(region).await.transpose()?;
+    let new_host = req.as_new(caller_id, org_id, region.as_ref())?;
     let host = new_host.create(conn).await?;
 
     let resource = Resource::Host(host.id);
@@ -293,6 +307,43 @@ async fn host_cmd(
     api::Command::from_model(&command, conn).await
 }
 
+async fn regions(
+    req: tonic::Request<api::HostServiceRegionsRequest>,
+    conn: &mut models::Conn,
+) -> super::Result<api::HostServiceRegionsResponse> {
+    let claims = conn.claims(&req, Endpoint::HostRegions).await?;
+    let req = req.into_inner();
+    let org_id = req.org_id.parse()?;
+    let org = models::Org::find_by_id(org_id, conn).await?;
+    let is_allowed = match claims.resource() {
+        Resource::User(user_id) => models::Org::is_member(user_id, org_id, conn).await?,
+        Resource::Org(org_id) => org_id == org.id,
+        Resource::Host(_) => false,
+        Resource::Node(_) => false,
+    };
+    if !is_allowed {
+        super::forbidden!("Access not allowed")
+    }
+    let host_type = req.host_type().into_model();
+    let blockchain = models::Blockchain::find_by_id(req.blockchain_id.parse()?, conn).await?;
+    let node_type = req.node_type().into_model();
+    let requirements = conn
+        .context
+        .cookbook
+        .rhai_metadata(&blockchain.name, &node_type.to_string(), &req.version)
+        .await?
+        .requirements;
+    let regions =
+        models::Host::regions_for(org_id, blockchain, node_type, requirements, host_type, conn)
+            .await?
+            .into_iter()
+            .map(|r| r.name)
+            .collect();
+    let mut resp = api::HostServiceRegionsResponse { regions };
+    resp.regions.sort();
+    Ok(tonic::Response::new(resp))
+}
+
 impl api::Host {
     pub async fn from_models(
         models: Vec<models::Host>,
@@ -300,11 +351,18 @@ impl api::Host {
     ) -> crate::Result<Vec<Self>> {
         let node_counts = models::Host::node_counts(&models, conn).await?;
 
-        let org_ids: Vec<_> = models.iter().map(|h| h.org_id).collect();
+        let org_ids = models.iter().map(|h| h.org_id).collect();
         let orgs: HashMap<_, _> = models::Org::find_by_ids(org_ids, conn)
             .await?
             .into_iter()
             .map(|org| (org.id, org))
+            .collect();
+
+        let region_ids = models.iter().flat_map(|h| h.region_id).collect();
+        let regions: HashMap<_, _> = models::Region::by_ids(region_ids, conn)
+            .await?
+            .into_iter()
+            .map(|region| (region.id, region))
             .collect();
 
         models
@@ -327,6 +385,7 @@ impl api::Host {
                     org_id: model.org_id.to_string(),
                     node_count: node_counts.get(&model.id).copied().unwrap_or(0),
                     org_name: orgs[&model.org_id].name.clone(),
+                    region: model.region_id.map(|id| regions[&id].name.clone()),
                 })
             })
             .collect()
@@ -338,7 +397,12 @@ impl api::Host {
 }
 
 impl api::HostServiceCreateRequest {
-    pub fn as_new(&self, user_id: UserId, org_id: OrgId) -> crate::Result<models::NewHost<'_>> {
+    pub fn as_new(
+        &self,
+        user_id: UserId,
+        org_id: OrgId,
+        region: Option<&models::Region>,
+    ) -> crate::Result<models::NewHost<'_>> {
         Ok(models::NewHost {
             name: &self.name,
             version: &self.version,
@@ -354,6 +418,7 @@ impl api::HostServiceCreateRequest {
             ip_gateway: self.ip_gateway.parse()?,
             org_id,
             created_by: user_id,
+            region_id: region.map(|r| r.id),
         })
     }
 }
@@ -385,5 +450,15 @@ impl api::HostServiceUpdateRequest {
             ip_range_to: None,
             ip_gateway: None,
         })
+    }
+}
+
+impl api::HostType {
+    fn into_model(self) -> Option<models::HostType> {
+        match self {
+            api::HostType::Unspecified => None,
+            api::HostType::Cloud => Some(models::HostType::Cloud),
+            api::HostType::Private => Some(models::HostType::Private),
+        }
     }
 }
