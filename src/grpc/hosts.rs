@@ -219,7 +219,12 @@ async fn update(
     if !matches!(claims.resource(), Resource::Host(host_id) if host.id == host_id) {
         super::forbidden!("Access denied for hosts update");
     }
-    let updater = req.as_update()?;
+    let region = req
+        .region
+        .as_ref()
+        .map(|r| models::Region::get_or_create(r, conn));
+    let region = OptionFuture::from(region).await.transpose()?;
+    let updater = req.as_update(region.as_ref())?;
     updater.update(conn).await?;
     let resp = api::HostServiceUpdateResponse {};
     Ok(tonic::Response::new(resp))
@@ -435,7 +440,10 @@ impl api::HostServiceListRequest {
 }
 
 impl api::HostServiceUpdateRequest {
-    pub fn as_update(&self) -> crate::Result<models::UpdateHost<'_>> {
+    pub fn as_update(
+        &self,
+        region: Option<&models::Region>,
+    ) -> crate::Result<models::UpdateHost<'_>> {
         Ok(models::UpdateHost {
             id: self.id.parse()?,
             name: self.name.as_deref(),
@@ -450,6 +458,7 @@ impl api::HostServiceUpdateRequest {
             ip_range_from: None,
             ip_range_to: None,
             ip_gateway: None,
+            region_id: region.map(|r| r.id),
         })
     }
 }

@@ -342,6 +342,7 @@ pub struct UpdateHost<'a> {
     pub ip_range_from: Option<ipnetwork::IpNetwork>,
     pub ip_range_to: Option<ipnetwork::IpNetwork>,
     pub ip_gateway: Option<ipnetwork::IpNetwork>,
+    pub region_id: Option<uuid::Uuid>,
 }
 
 impl UpdateHost<'_> {
