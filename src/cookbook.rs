@@ -229,8 +229,8 @@ impl Cookbook {
         network: String,
     ) -> crate::Result<api::DownloadManifest> {
         let path = format!(
-            "{}/{}/{}/{}/manifest.json",
-            id.protocol, id.node_type, id.node_version, network
+            "{}/{}/{}/{}/{}/manifest.json",
+            self.prefix, id.protocol, id.node_type, id.node_version, network
         );
         let mut manifest: manifest::DownloadManifest =
             serde_json::from_str(&self.client.read_string(&self.bucket, &path).await?)?;
