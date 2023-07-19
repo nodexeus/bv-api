@@ -333,12 +333,13 @@ async fn regions(
     let host_type = req.host_type().into_model();
     let blockchain = models::Blockchain::find_by_id(req.blockchain_id.parse()?, conn).await?;
     let node_type = req.node_type().into_model();
-    let requirements = conn
-        .context
-        .cookbook
-        .rhai_metadata(&blockchain.name, &node_type.to_string(), &req.version)
-        .await?
-        .requirements;
+    let requirements = dbg!(
+        conn.context
+            .cookbook
+            .rhai_metadata(&blockchain.name, &node_type.to_string(), &req.version)
+            .await?
+            .requirements
+    );
     let regions =
         models::Host::regions_for(org_id, blockchain, node_type, requirements, host_type, conn)
             .await?

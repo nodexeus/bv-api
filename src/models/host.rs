@@ -219,7 +219,7 @@ impl Host {
             .bind::<Nullable<crate::models::schema::sql_types::EnumHostType>, _>(host_type)
             .get_results(conn)
             .await?;
-        let host_ids: Vec<_> = hosts.into_iter().map(|h| h.host_id).collect();
+        let host_ids: Vec<_> = dbg!(hosts.into_iter().map(|h| h.host_id).collect());
 
         Self::by_ids(&host_ids, conn).await
     }
@@ -269,11 +269,11 @@ impl Host {
             scheduler,
             org_id,
         };
-        let regions = Self::host_candidates(requirements, None, conn)
+        let regions = dbg!(Self::host_candidates(requirements, None, conn)
             .await?
             .into_iter()
             .flat_map(|host| host.region_id)
-            .collect();
+            .collect());
         super::Region::by_ids(regions, conn).await
     }
 }
