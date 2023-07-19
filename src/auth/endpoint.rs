@@ -114,8 +114,8 @@ pub enum Endpoint {
     BundleListBundleVersions = 1402,
     BundleDelete = 1403,
 
-    ManifestAll = 1501,
-    ManifestRetrieveDownload = 1502,
+    ManifestAll = 1500,
+    ManifestRetrieveDownload = 1501,
 
     ApiKeyAll = 1600,
     ApiKeyCreate = 1601,
