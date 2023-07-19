@@ -153,7 +153,7 @@ impl Host {
             #[diesel(sql_type = Uuid)]
             host_id: HostId,
         }
-        println!("its candidate time. and he candidated all over them");
+
         let HostRequirements {
             requirements,
             blockchain_id,
@@ -161,9 +161,7 @@ impl Host {
             host_type,
             scheduler,
             org_id,
-        } = dbg!(reqs);
-        let hosts: Vec<Host> = hosts::table.get_results(conn).await?;
-        dbg!(hosts);
+        } = reqs;
 
         let order_by = scheduler.order_clause();
         let limit_clause = limit.map(|_| "LIMIT $6").unwrap_or_default();
@@ -262,13 +260,14 @@ impl Host {
             similarity: None,
             resource: super::ResourceAffinity::LeastResources,
         };
+        let org_id = (host_type == Some(HostType::Private)).then_some(org_id);
         let requirements = super::HostRequirements {
             requirements,
             blockchain_id: blockchain.id,
             node_type,
             host_type,
             scheduler,
-            org_id: Some(org_id),
+            org_id,
         };
         let regions = Self::host_candidates(requirements, None, conn)
             .await?
