@@ -95,7 +95,7 @@ async fn list(
         // blockchain version, but it is instead represented per blockchain. Luuk: fix this.
         networks.sort_by(|n1, n2| n1.name.cmp(&n2.name));
         networks.dedup_by(|n1, n2| n1.name == n2.name);
-        dto.networks = networks_map.get(&model.id).cloned().unwrap_or_default();
+        dto.networks = networks;
     }
 
     let resp = api::BlockchainServiceListResponse {
