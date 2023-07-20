@@ -89,6 +89,12 @@ async fn list(
     // Now that we have our map, we can simply index it with each blockchain id to get the
     // networks belonging to blockchain.
     for (model, dto) in blockchains.into_iter().zip(grpc_blockchains.iter_mut()) {
+        let mut networks = networks_map.get(&model.id).cloned().unwrap_or_default();
+        // We deduplicate by name. This is hacky, but only because our representation of the
+        // blockchain resource is somewhat false. The list of networks should be represented per
+        // blockchain version, but it is instead represented per blockchain. Luuk: fix this.
+        networks.sort_by(|n1, n2| n1.name.cmp(&n2.name));
+        networks.dedup_by(|n1, n2| n1.name == n2.name);
         dto.networks = networks_map.get(&model.id).cloned().unwrap_or_default();
     }
 
