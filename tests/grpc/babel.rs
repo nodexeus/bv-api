@@ -1,7 +1,11 @@
 use blockvisor_api::auth::resource::{OrgId, UserId};
+use blockvisor_api::database::tests::TestDb;
+use blockvisor_api::database::Database;
 use blockvisor_api::grpc::api;
-use blockvisor_api::models;
-use blockvisor_api::tests::TestDb;
+use blockvisor_api::models::node::NewNode;
+use blockvisor_api::models::{
+    ContainerStatus, NodeChainStatus, NodeStakingStatus, NodeSyncStatus, NodeType, ResourceAffinity,
+};
 use futures_util::{stream, StreamExt};
 use uuid::Uuid;
 
@@ -13,22 +17,22 @@ fn create_new_node<'a>(
     blockchain_id: &'a Uuid,
     user_id: UserId,
     version: &'a str,
-    node_type: models::NodeType,
-) -> models::NewNode<'a> {
+    node_type: NodeType,
+) -> NewNode<'a> {
     let id = Uuid::new_v4();
     let name = format!("node-{index}-{id}");
-    models::NewNode {
+    NewNode {
         id: id.into(),
         org_id,
         blockchain_id: blockchain_id.to_owned(),
-        chain_status: models::NodeChainStatus::Unknown,
-        sync_status: models::NodeSyncStatus::Syncing,
-        container_status: models::ContainerStatus::Installing,
+        chain_status: NodeChainStatus::Unknown,
+        sync_status: NodeSyncStatus::Syncing,
+        container_status: ContainerStatus::Installing,
         block_height: None,
         node_data: None,
         name,
         version,
-        staking_status: models::NodeStakingStatus::Staked,
+        staking_status: NodeStakingStatus::Staked,
         self_update: true,
         vcpu_count: 0,
         mem_size_bytes: 0,
@@ -37,7 +41,7 @@ fn create_new_node<'a>(
         node_type,
         created_by: user_id,
         scheduler_similarity: None,
-        scheduler_resource: Some(models::ResourceAffinity::MostResources),
+        scheduler_resource: Some(ResourceAffinity::MostResources),
         scheduler_region: None,
         allow_ips: serde_json::json!([]),
         deny_ips: serde_json::json!([]),
@@ -56,7 +60,7 @@ async fn test_notify_success() {
     // Create a loop of 20 nodes and store it in db. Only even number of them are upgradable.
     let mut ids = stream::iter(0..20)
         .filter_map(|i| {
-            let t = tester.pool.clone();
+            let t = tester.pool();
             let h = host_id;
             let ip = ip_address.clone();
             async move {
@@ -68,7 +72,7 @@ async fn test_notify_success() {
                     &blockchain_id,
                     user.id,
                     version,
-                    models::NodeType::Validator,
+                    NodeType::Validator,
                 );
                 let mut conn = t.conn().await.unwrap();
                 TestDb::create_node(&req, &h, &ip, &format!("dns-id-{i}"), &mut conn).await;
@@ -89,7 +93,7 @@ async fn test_notify_success() {
         uuid: Uuid::new_v4().to_string(),
         config: Some(api::BabelConfig {
             node_version: target_version.to_string(),
-            node_type: models::NodeType::Validator.to_string(),
+            node_type: NodeType::Validator.to_string(),
             protocol: blockchain.name.to_string(),
         }),
     };
@@ -122,7 +126,7 @@ async fn test_nothing_to_notify_no_nodes_to_update_all_up_to_date() {
     // Create a loop of 20 nodes and store it in db. Only even number of them are upgradable.
     let _ = stream::iter(0..20)
         .filter_map(|i| {
-            let t = tester.pool.clone();
+            let t = tester.pool();
             let h = host_id;
             let ip = ip_address.clone();
             async move {
@@ -133,7 +137,7 @@ async fn test_nothing_to_notify_no_nodes_to_update_all_up_to_date() {
                     &blockchain_id,
                     user.id,
                     "2.0.0",
-                    models::NodeType::Validator,
+                    NodeType::Validator,
                 );
                 let mut conn = t.conn().await.unwrap();
                 TestDb::create_node(&req, &h, &ip, format!("dns-id-{}", i).as_str(), &mut conn)
@@ -149,7 +153,7 @@ async fn test_nothing_to_notify_no_nodes_to_update_all_up_to_date() {
         uuid: Uuid::new_v4().to_string(),
         config: Some(api::BabelConfig {
             node_version: "2.0.0".to_string(),
-            node_type: models::NodeType::Validator.to_string(),
+            node_type: NodeType::Validator.to_string(),
             protocol: blockchain.name.to_string(),
         }),
     };
@@ -169,19 +173,13 @@ async fn test_nothing_to_notify_no_nodes_to_update_diff_node_type() {
     // Create a loop of 20 nodes and store it in db. Only even number of them are upgradable.
     let _ = stream::iter(0..20)
         .filter_map(|i| {
-            let t = tester.pool.clone();
+            let t = tester.pool();
             let h = host_id;
             let ip = ip_address.clone();
             async move {
                 let blockchain_id = blockchain.id.to_owned();
-                let req = create_new_node(
-                    i,
-                    org.id,
-                    &blockchain_id,
-                    user.id,
-                    "1.0.0",
-                    models::NodeType::Miner,
-                );
+                let req =
+                    create_new_node(i, org.id, &blockchain_id, user.id, "1.0.0", NodeType::Miner);
                 let mut conn = t.conn().await.unwrap();
                 TestDb::create_node(&req, &h, &ip, format!("dns-id-{}", i).as_str(), &mut conn)
                     .await;
@@ -196,7 +194,7 @@ async fn test_nothing_to_notify_no_nodes_to_update_diff_node_type() {
         uuid: Uuid::new_v4().to_string(),
         config: Some(api::BabelConfig {
             node_version: "2.0.0".to_string(),
-            node_type: models::NodeType::Validator.to_string(),
+            node_type: NodeType::Validator.to_string(),
             protocol: blockchain.name.to_string(),
         }),
     };

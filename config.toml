@@ -9,7 +9,6 @@ ttl = 300
 
 [cookbook]
 prefix = "chains"
-# This is the name of the bucket in R2
 r2_bucket = "backet"
 url = "https://r2.dev"
 expiration = "1h"
@@ -40,10 +39,10 @@ sendgrid_api_key = "123"
 ui_base_url = "https://app.alpha.blockvisor.dev"
 
 [mqtt]
-server_address = "35.237.162.218"
-server_port = 1883
-username = "blockvisor-api"
-password = 'PH*rE:\ZQlecB9/I?[#R$q3M;5yCb]Y+'
+server_address = "127.0.0.1"
+server_port = 21883
+username = "blockvisor"
+password = "password"
 
 [token.secret]
 jwt = "1245456"

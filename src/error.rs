@@ -82,8 +82,14 @@ pub enum Error {
     #[error("{0}")]
     InvalidArgument(tonic::Status),
 
-    #[error("Mqtt error: {0}")]
-    MqttError(#[from] rumqttc::ClientError),
+    #[error("Mqtt client error: {0}")]
+    MqttClient(#[from] rumqttc::ClientError),
+
+    #[error("Mqtt message error: {0}")]
+    MqttMessage(#[from] crate::mqtt::message::Error),
+
+    #[error("Mqtt notifier error: {0}")]
+    MqttNotifier(#[from] crate::mqtt::notifier::Error),
 
     #[error("Cloudflare integration error: {0}")]
     Dns(#[from] crate::dns::Error),

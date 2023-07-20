@@ -1,17 +1,19 @@
 version: '3'
 
 services:
-    database:
-        image: 'postgres:latest'
-        ports:
-            - 25432:5432
+  postgres:
+    image: postgres:13-bookworm
+    command: ["postgres", "-c", "log_statement=all"]
+    environment:
+      POSTGRES_DB: blockvisor_db
+      POSTGRES_USER: blockvisor
+      POSTGRES_PASSWORD: password
+    ports:
+      - 25432:5432
 
-        environment:
-            POSTGRES_USER: blockvisor
-            POSTGRES_PASSWORD: password
-            POSTGRES_DB: blockvisor_db
-        command:
-            - "postgres"
-            - "-c"
-            - "log_statement=all"
-
+  mqtt:
+    image: emqx/emqx-enterprise:5.1.0
+    ports:
+      - 21883:1883
+    volumes:
+      - ./docker/emqx:/opt/emqx/etc

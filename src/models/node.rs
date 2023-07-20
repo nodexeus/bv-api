@@ -8,10 +8,13 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 use crate::auth::resource::{HostId, NodeId, OrgId, UserId};
-
-use super::node_type::*;
-use super::schema::nodes;
-use super::{string_to_array, Paginate};
+use crate::config::Context;
+use crate::database::Conn;
+use crate::models::schema::nodes;
+use crate::models::{
+    string_to_array, Blockchain, Host, HostRequirements, HostType, IpAddress, NodeLog,
+    NodeScheduler, NodeType, Paginate, Region, ResourceAffinity, SimilarNodeAffinity,
+};
 
 /// ContainerStatus reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
 #[derive(Debug, Clone, Copy, PartialEq, Eq, diesel_derive_enum::DbEnum)]
@@ -111,8 +114,8 @@ pub struct Node {
     allow_ips: serde_json::Value,
     deny_ips: serde_json::Value,
     pub node_type: NodeType,
-    pub scheduler_similarity: Option<super::SimilarNodeAffinity>,
-    pub scheduler_resource: Option<super::ResourceAffinity>,
+    pub scheduler_similarity: Option<SimilarNodeAffinity>,
+    pub scheduler_resource: Option<ResourceAffinity>,
     pub scheduler_region: Option<uuid::Uuid>,
 }
 
@@ -136,14 +139,14 @@ pub struct NodeSelfUpgradeFilter {
 }
 
 impl Node {
-    pub async fn find_by_id(id: NodeId, conn: &mut super::Conn) -> crate::Result<Self> {
+    pub async fn find_by_id(id: NodeId, conn: &mut Conn<'_>) -> crate::Result<Self> {
         let node = nodes::table.find(id).get_result(conn).await?;
         Ok(node)
     }
 
     pub async fn find_by_ids(
         mut ids: Vec<NodeId>,
-        conn: &mut super::Conn,
+        conn: &mut Conn<'_>,
     ) -> crate::Result<Vec<Self>> {
         ids.sort();
         ids.dedup();
@@ -154,13 +157,13 @@ impl Node {
         Ok(node)
     }
 
-    pub async fn properties(&self, conn: &mut super::Conn) -> crate::Result<Vec<NodeProperty>> {
+    pub async fn properties(&self, conn: &mut Conn<'_>) -> crate::Result<Vec<NodeProperty>> {
         NodeProperty::by_node(self, conn).await
     }
 
     pub async fn filter(
         filter: NodeFilter,
-        conn: &mut super::Conn,
+        conn: &mut Conn<'_>,
     ) -> crate::Result<(u64, Vec<Self>)> {
         let NodeFilter {
             org_id,
@@ -198,7 +201,7 @@ impl Node {
         Ok((total.try_into()?, nodes))
     }
 
-    pub async fn update(self, conn: &mut super::Conn) -> crate::Result<Self> {
+    pub async fn update(self, conn: &mut Conn<'_>) -> crate::Result<Self> {
         let mut node_to_update = self.clone();
         node_to_update.updated_at = chrono::Utc::now();
         let node = diesel::update(nodes::table.find(node_to_update.id))
@@ -208,23 +211,22 @@ impl Node {
         Ok(node)
     }
 
-    pub async fn delete(node_id: NodeId, conn: &mut super::Conn) -> crate::Result<()> {
+    pub async fn delete(node_id: NodeId, conn: &mut Conn<'_>, ctx: &Context) -> crate::Result<()> {
         let node = Node::find_by_id(node_id, conn).await?;
 
         diesel::delete(nodes::table.find(node_id))
             .execute(conn)
             .await?;
 
-        let _res = conn.context.dns.remove_node_dns(&node.dns_record_id).await;
+        let _res = ctx.dns.remove_node_dns(&node.dns_record_id).await;
 
         Ok(())
     }
 
     /// Finds the next possible host for this node to be tried on.
-    pub async fn find_host(&self, conn: &mut super::Conn) -> crate::Result<super::Host> {
-        let chain = super::Blockchain::find_by_id(self.blockchain_id, conn).await?;
-        let requirements = conn
-            .context
+    pub async fn find_host(&self, conn: &mut Conn<'_>, ctx: &Context) -> crate::Result<Host> {
+        let chain = Blockchain::find_by_id(self.blockchain_id, conn).await?;
+        let requirements = ctx
             .cookbook
             .rhai_metadata(&chain.name, &self.node_type.to_string(), &self.version)
             .await?
@@ -232,23 +234,23 @@ impl Node {
 
         let candidates = match self.scheduler(conn).await? {
             Some(scheduler) => {
-                let reqs = super::HostRequirements {
+                let reqs = HostRequirements {
                     requirements,
                     blockchain_id: self.blockchain_id,
                     node_type: self.node_type,
-                    host_type: Some(super::HostType::Cloud),
+                    host_type: Some(HostType::Cloud),
                     scheduler,
                     org_id: None,
                 };
-                super::Host::host_candidates(reqs, Some(2), conn).await?
+                Host::host_candidates(reqs, Some(2), conn).await?
             }
-            None => vec![super::Host::find_by_id(self.host_id, conn).await?],
+            None => vec![Host::find_by_id(self.host_id, conn).await?],
         };
 
         // We now have a list of host candidates for our nodes. Now the only thing left to do is to
         // make a decision about where to place the node.
-        let deployments = super::NodeLog::by_node(self, conn).await?;
-        let hosts_tried = super::NodeLog::hosts_tried(&deployments, conn).await?;
+        let deployments = NodeLog::by_node(self, conn).await?;
+        let hosts_tried = NodeLog::hosts_tried(&deployments, conn).await?;
         let best = match (hosts_tried.as_slice(), candidates.len()) {
             // If there are 0 hosts to try, we return an error.
             (_, 0) => return Err(anyhow!("No available host candidates").into()),
@@ -269,20 +271,17 @@ impl Node {
         Ok(best)
     }
 
-    pub async fn scheduler(
-        &self,
-        conn: &mut super::Conn,
-    ) -> crate::Result<Option<super::NodeScheduler>> {
+    pub async fn scheduler(&self, conn: &mut Conn<'_>) -> crate::Result<Option<NodeScheduler>> {
         let Some(resource) = self.scheduler_resource else { return Ok(None); };
-        Ok(Some(super::NodeScheduler {
+        Ok(Some(NodeScheduler {
             region: self.region(conn).await?,
             similarity: self.scheduler_similarity,
             resource,
         }))
     }
 
-    pub async fn region(&self, conn: &mut super::Conn) -> crate::Result<Option<super::Region>> {
-        let region = self.scheduler_region.map(|r| super::Region::by_id(r, conn));
+    pub async fn region(&self, conn: &mut Conn<'_>) -> crate::Result<Option<Region>> {
+        let region = self.scheduler_region.map(|r| Region::by_id(r, conn));
         OptionFuture::from(region).await.transpose()
     }
 
@@ -296,7 +295,7 @@ impl Node {
 
     pub async fn find_all_to_upgrade(
         filter: &NodeSelfUpgradeFilter,
-        conn: &mut super::Conn,
+        conn: &mut Conn<'_>,
     ) -> crate::Result<Vec<Self>> {
         use super::schema::blockchains;
 
@@ -354,9 +353,9 @@ pub struct NewNode<'a> {
     pub node_type: NodeType,
     pub created_by: UserId,
     /// Controls whether to run the node on hosts that contain nodes similar to this one.
-    pub scheduler_similarity: Option<super::SimilarNodeAffinity>,
+    pub scheduler_similarity: Option<SimilarNodeAffinity>,
     /// Controls whether to run the node on hosts that are full or empty.
-    pub scheduler_resource: Option<super::ResourceAffinity>,
+    pub scheduler_resource: Option<ResourceAffinity>,
     /// The region where this node should be deployed.
     pub scheduler_region: Option<uuid::Uuid>,
 }
@@ -364,29 +363,26 @@ pub struct NewNode<'a> {
 impl NewNode<'_> {
     pub async fn create(
         self,
-        host: Option<super::Host>,
-        conn: &mut super::Conn,
+        host: Option<Host>,
+        conn: &mut Conn<'_>,
+        ctx: &Context,
     ) -> crate::Result<Node> {
         let no_sched = || anyhow!("If there is no host_id, the scheduler is required");
         let host = match host {
             Some(host) => host,
             None => {
-                self.find_host(self.scheduler(conn).await?.ok_or_else(no_sched)?, conn)
-                    .await?
+                let scheduler = self.scheduler(conn).await?.ok_or_else(no_sched)?;
+                self.find_host(scheduler, conn, ctx).await?
             }
         };
-        let ip_addr = super::IpAddress::next_for_host(host.id, conn)
+        let ip_addr = IpAddress::next_for_host(host.id, conn)
             .await?
             .ip
             .ip()
             .to_string();
 
         let ip_gateway = host.ip_gateway.ip().to_string();
-        let dns_record_id = conn
-            .context
-            .dns
-            .get_node_dns(&self.name, ip_addr.clone())
-            .await?;
+        let dns_record_id = ctx.dns.get_node_dns(&self.name, ip_addr.clone()).await?;
 
         diesel::insert_into(nodes::table)
             .values((
@@ -410,28 +406,28 @@ impl NewNode<'_> {
     /// simply ask for an ordered list of the most suitable hosts, and pick the first one.
     pub async fn find_host(
         &self,
-        scheduler: super::NodeScheduler,
-        conn: &mut super::Conn,
-    ) -> crate::Result<super::Host> {
+        scheduler: NodeScheduler,
+        conn: &mut Conn<'_>,
+        ctx: &Context,
+    ) -> crate::Result<Host> {
         use crate::Error::NoMatchingHostError;
 
-        let chain = super::Blockchain::find_by_id(self.blockchain_id, conn).await?;
+        let chain = Blockchain::find_by_id(self.blockchain_id, conn).await?;
 
-        let requirements = conn
-            .context
+        let requirements = ctx
             .cookbook
             .rhai_metadata(&chain.name, &self.node_type.to_string(), self.version)
             .await?
             .requirements;
-        let requirements = super::HostRequirements {
+        let requirements = HostRequirements {
             requirements,
             blockchain_id: self.blockchain_id,
             node_type: self.node_type,
-            host_type: Some(super::HostType::Cloud),
+            host_type: Some(HostType::Cloud),
             scheduler,
             org_id: None,
         };
-        let candidates = super::Host::host_candidates(requirements, Some(1), conn).await?;
+        let candidates = Host::host_candidates(requirements, Some(1), conn).await?;
         // Just take the first one if there is one.
         let best = candidates
             .into_iter()
@@ -440,16 +436,11 @@ impl NewNode<'_> {
         Ok(best)
     }
 
-    async fn scheduler(
-        &self,
-        conn: &mut super::Conn,
-    ) -> crate::Result<Option<super::NodeScheduler>> {
+    async fn scheduler(&self, conn: &mut Conn<'_>) -> crate::Result<Option<NodeScheduler>> {
         let Some(resource) = self.scheduler_resource else { return Ok(None); };
-        let region = self
-            .scheduler_region
-            .map(|id| super::Region::by_id(id, conn));
+        let region = self.scheduler_region.map(|id| Region::by_id(id, conn));
         let region = OptionFuture::from(region).await.transpose()?;
-        Ok(Some(super::NodeScheduler {
+        Ok(Some(NodeScheduler {
             region,
             similarity: self.scheduler_similarity,
             resource,
@@ -477,7 +468,7 @@ pub struct UpdateNode<'a> {
 }
 
 impl UpdateNode<'_> {
-    pub async fn update(&self, conn: &mut super::Conn) -> crate::Result<Node> {
+    pub async fn update(&self, conn: &mut Conn<'_>) -> crate::Result<Node> {
         let node = diesel::update(nodes::table.find(self.id))
             .set((self, nodes::updated_at.eq(chrono::Utc::now())))
             .get_result(conn)
@@ -503,7 +494,7 @@ impl UpdateNodeMetrics {
     /// Performs a selective update of only the columns related to metrics of the provided nodes.
     pub async fn update_metrics(
         updates: Vec<Self>,
-        conn: &mut super::Conn,
+        conn: &mut Conn<'_>,
     ) -> crate::Result<Vec<Node>> {
         let mut results = Vec::with_capacity(updates.len());
         for update in updates {
@@ -521,15 +512,13 @@ impl UpdateNodeMetrics {
 mod tests {
     use uuid::Uuid;
 
-    use super::*;
     use crate::config::Context;
-    use crate::models;
-    use crate::tests::TestDb;
+
+    use super::*;
 
     #[tokio::test]
     async fn can_filter_nodes() -> anyhow::Result<()> {
-        let context = Context::with_mocked().await.unwrap();
-        let db = TestDb::setup(context).await;
+        let (ctx, db) = Context::with_mocked().await.unwrap();
         let name = format!("test_{}", petname::petname(3, "_"));
 
         let blockchain = db.blockchain().await;
@@ -555,7 +544,7 @@ mod tests {
             node_type: NodeType::Validator,
             created_by: user.id,
             scheduler_similarity: None,
-            scheduler_resource: Some(models::ResourceAffinity::MostResources),
+            scheduler_resource: Some(ResourceAffinity::MostResources),
             scheduler_region: None,
             allow_ips: serde_json::json!([]),
             deny_ips: serde_json::json!([]),
@@ -564,10 +553,10 @@ mod tests {
         let mut conn = db.conn().await;
         let host = db.host().await;
         let host_id = host.id;
-        req.create(Some(host), &mut conn).await.unwrap();
+        req.create(Some(host), &mut conn, &ctx).await.unwrap();
 
-        let filter = models::NodeFilter {
-            status: vec![models::NodeChainStatus::Unknown],
+        let filter = NodeFilter {
+            status: vec![NodeChainStatus::Unknown],
             node_types: vec![],
             blockchains: vec![blockchain.id],
             limit: 10,
@@ -576,7 +565,7 @@ mod tests {
             host_id: Some(host_id),
         };
 
-        let (_, nodes) = models::Node::filter(filter, &mut conn).await?;
+        let (_, nodes) = Node::filter(filter, &mut conn).await?;
 
         assert_eq!(nodes.len(), 1);
 

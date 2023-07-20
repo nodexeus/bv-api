@@ -209,7 +209,6 @@ mod tests {
     use uuid::Uuid;
 
     use crate::config::Context;
-    use crate::tests::TestDb;
     use crate::timestamp::SecondsUtc;
 
     use super::*;
@@ -220,51 +219,50 @@ mod tests {
 
     #[tokio::test]
     async fn test_refresh_encode_decode() {
-        let context = Context::from_default_toml().await.unwrap();
+        let ctx = Context::from_default_toml().await.unwrap();
         let refresh = Refresh::from_now(seconds(60), Uuid::new_v4());
 
-        let encoded = context.cipher().refresh.encode(&refresh).unwrap();
-        let decoded = context.cipher().refresh.decode(&encoded).unwrap();
+        let encoded = ctx.auth.cipher.refresh.encode(&refresh).unwrap();
+        let decoded = ctx.auth.cipher.refresh.decode(&encoded).unwrap();
         assert_eq!(decoded, refresh);
     }
 
     #[tokio::test]
     async fn test_empty_refresh() {
-        let context = Context::from_default_toml().await.unwrap();
+        let ctx = Context::from_default_toml().await.unwrap();
 
         let mut req = tonic::Request::new(());
         req.metadata_mut()
             .insert(COOKIE_HEADER, ";refresh=".parse().unwrap());
-        assert!(context.auth.refresh(&req).is_err());
+        assert!(ctx.auth.refresh(&req).is_err());
 
         let mut req = tonic::Request::new(());
         req.metadata_mut()
             .insert(COOKIE_HEADER, "refresh=;".parse().unwrap());
-        assert!(context.auth.refresh(&req).is_err());
+        assert!(ctx.auth.refresh(&req).is_err());
     }
 
     #[tokio::test]
     async fn test_refresh_cookie() {
-        let context = Context::from_default_toml().await.unwrap();
+        let ctx = Context::from_default_toml().await.unwrap();
         let refresh = Refresh::from_now(seconds(60), Uuid::new_v4());
 
         let mut req = tonic::Request::new(());
-        let cookie = context.cipher().refresh.cookie(&refresh).unwrap();
+        let cookie = ctx.auth.cipher.refresh.cookie(&refresh).unwrap();
         req.metadata_mut()
             .insert(COOKIE_HEADER, cookie.header().unwrap());
 
-        let res = context.auth.refresh(&req).unwrap();
+        let res = ctx.auth.refresh(&req).unwrap();
         assert_eq!(res.resource_id, refresh.resource_id);
     }
 
     #[tokio::test]
     async fn test_extra_cookies() {
-        let context = Context::from_default_toml().await.unwrap();
-        let db = TestDb::setup(context.clone()).await;
+        let (ctx, db) = Context::with_mocked().await.unwrap();
 
         let resource_id = db.user().await.id;
         let refresh = Refresh::from_now(seconds(60), resource_id);
-        let encoded = context.cipher().refresh.encode(&refresh).unwrap();
+        let encoded = ctx.auth.cipher.refresh.encode(&refresh).unwrap();
 
         let mut req = tonic::Request::new(());
         req.metadata_mut().insert(
@@ -273,7 +271,7 @@ mod tests {
                 .parse()
                 .unwrap(),
         );
-        context.auth.refresh(&req).unwrap();
+        ctx.auth.refresh(&req).unwrap();
     }
 
     #[tokio::test]
