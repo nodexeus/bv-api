@@ -2,8 +2,7 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::Resource;
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::models::user::{NewUser, UpdateUser, User};
 use crate::timestamp::NanosUtc;
 
@@ -15,47 +14,42 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceCreateRequest>,
     ) -> super::Resp<api::UserServiceCreateResponse> {
-        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn get(
         &self,
         req: tonic::Request<api::UserServiceGetRequest>,
     ) -> super::Resp<api::UserServiceGetResponse> {
-        self.write(|conn, ctx| get(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| get(req, read).scope_boxed()).await
     }
 
     async fn update(
         &self,
         req: tonic::Request<api::UserServiceUpdateRequest>,
     ) -> super::Resp<api::UserServiceUpdateResponse> {
-        self.write(|conn, ctx| update(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| update(req, write).scope_boxed()).await
     }
 
     async fn delete(
         &self,
         req: tonic::Request<api::UserServiceDeleteRequest>,
     ) -> super::Resp<api::UserServiceDeleteResponse> {
-        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| delete(req, write).scope_boxed()).await
     }
 
     async fn get_billing(
         &self,
         req: tonic::Request<api::UserServiceGetBillingRequest>,
     ) -> super::Resp<api::UserServiceGetBillingResponse> {
-        self.read(|conn, ctx| get_billing(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| get_billing(req, read).scope_boxed()).await
     }
 
     async fn update_billing(
         &self,
         req: tonic::Request<api::UserServiceUpdateBillingRequest>,
     ) -> super::Resp<api::UserServiceUpdateBillingResponse> {
-        self.write(|conn, ctx| update_billing(req, conn, ctx).scope_boxed())
+        self.write(|write| update_billing(req, write).scope_boxed())
             .await
     }
 
@@ -63,16 +57,16 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceDeleteBillingRequest>,
     ) -> super::Resp<api::UserServiceDeleteBillingResponse> {
-        self.write(|conn, ctx| delete_billing(req, conn, ctx).scope_boxed())
+        self.write(|write| delete_billing(req, write).scope_boxed())
             .await
     }
 }
 
 async fn create(
     req: tonic::Request<api::UserServiceCreateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::UserServiceCreateResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     // Temporary: we require authentication to create a new user. This means that somebody needs to
     // either be logged in, or have an email with an invitation token in there.
     let _claims = ctx.claims(&req, Endpoint::UserCreate, conn).await?;
@@ -91,9 +85,9 @@ async fn create(
 
 async fn get(
     req: tonic::Request<api::UserServiceGetRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::UserServiceGetResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::UserGet, conn).await?;
     let req = req.into_inner();
     let user = User::find_by_id(req.id.parse()?, conn).await?;
@@ -114,9 +108,9 @@ async fn get(
 
 async fn update(
     req: tonic::Request<api::UserServiceUpdateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::UserServiceUpdateResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::UserUpdate, conn).await?;
     let req = req.into_inner();
     let user = User::find_by_id(req.id.parse()?, conn).await?;
@@ -138,9 +132,9 @@ async fn update(
 
 async fn delete(
     req: tonic::Request<api::UserServiceDeleteRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::UserServiceDeleteResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::UserDelete, conn).await?;
     let req = req.into_inner();
     let user = User::find_by_id(req.id.parse()?, conn).await?;
@@ -160,9 +154,9 @@ async fn delete(
 
 async fn get_billing(
     req: tonic::Request<api::UserServiceGetBillingRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::UserServiceGetBillingResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::UserGetBilling, conn).await?;
     let req = req.into_inner();
     let user_id = req.user_id.parse()?;
@@ -184,9 +178,9 @@ async fn get_billing(
 
 async fn update_billing(
     req: tonic::Request<api::UserServiceUpdateBillingRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::UserServiceUpdateBillingResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::UserUpdateBilling, conn).await?;
     let req = req.into_inner();
     let user_id = req.user_id.parse()?;
@@ -210,9 +204,9 @@ async fn update_billing(
 
 async fn delete_billing(
     req: tonic::Request<api::UserServiceDeleteBillingRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::UserServiceDeleteBillingResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::UserDeleteBilling, conn).await?;
     let req = req.into_inner();
     let user_id = req.user_id.parse()?;

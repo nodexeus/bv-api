@@ -3,9 +3,8 @@ use std::collections::{HashMap, HashSet};
 use diesel_async::scoped_futures::ScopedFutureExt;
 use futures_util::future::join_all;
 
-use crate::config::Context;
 use crate::cookbook;
-use crate::database::{Conn, Transaction};
+use crate::database::{Conn, ReadConn, Transaction};
 use crate::models::blockchain::{Blockchain, BlockchainProperty};
 use crate::models::NodeType;
 use crate::timestamp::NanosUtc;
@@ -18,24 +17,23 @@ impl blockchain_service_server::BlockchainService for super::Grpc {
         &self,
         req: tonic::Request<api::BlockchainServiceGetRequest>,
     ) -> super::Resp<api::BlockchainServiceGetResponse> {
-        self.read(|conn, ctx| get(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| get(req, read).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::BlockchainServiceListRequest>,
     ) -> super::Resp<api::BlockchainServiceListResponse> {
-        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 }
 
 async fn get(
     req: tonic::Request<api::BlockchainServiceGetRequest>,
-    conn: &mut Conn<'_>,
-    _ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::BlockchainServiceGetResponse> {
+    let ReadConn { conn, .. } = read;
+
     let req: api::BlockchainServiceGetRequest = req.into_inner();
     let id = req.id.parse()?;
     let blockchain = Blockchain::find_by_id(id, conn).await?;
@@ -47,9 +45,10 @@ async fn get(
 
 async fn list(
     _req: tonic::Request<api::BlockchainServiceListRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::BlockchainServiceListResponse> {
+    let ReadConn { conn, ctx } = read;
+
     // We need to combine info from two seperate sources: the database and cookbook. Since
     // cookbook is slow, the step where we call it is parallelized.
 

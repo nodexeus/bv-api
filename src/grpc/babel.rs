@@ -2,8 +2,7 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use tracing::log::{debug, info};
 
 use crate::auth::endpoint::Endpoint;
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{Conn, Transaction, WriteConn};
 use crate::models::command::NewCommand;
 use crate::models::{Blockchain, CommandType, Node, NodeSelfUpgradeFilter, NodeType};
 
@@ -18,16 +17,16 @@ impl babel_service_server::BabelService for super::Grpc {
         &self,
         req: tonic::Request<api::BabelServiceNotifyRequest>,
     ) -> super::Resp<api::BabelServiceNotifyResponse> {
-        self.write(|conn, ctx| notify(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| notify(req, write).scope_boxed()).await
     }
 }
 
 async fn notify(
     req: tonic::Request<api::BabelServiceNotifyRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::BabelServiceNotifyResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
+
     // TODO: decide who is allowed to call this endpoint
     let _claims = ctx.claims(&req, Endpoint::BabelNotify, conn).await?;
     let req = req.into_inner();
@@ -39,7 +38,6 @@ async fn notify(
     let blockchain = Blockchain::find_by_id(filter.blockchain_id, conn).await?;
     blockchain.add_version(&filter, conn).await?;
     let mut node_ids = vec![];
-    let mut commands = vec![];
     for mut node in nodes_to_upgrade {
         let node_id = node.id.to_string();
         node.version = filter.version.clone();
@@ -55,14 +53,12 @@ async fn notify(
         let cmd = new_command.create(conn).await?;
         let command = api::Command::from_model(&cmd, conn).await?;
         debug!("Command sent: {:?}", command);
-        commands.push(command);
+        mqtt_tx.send(command.into()).expect("mqtt_rx");
         node_ids.push(node_id);
     }
 
     info!("Nodes to be upgraded has been processed: {node_ids:?}");
     let resp = api::BabelServiceNotifyResponse { node_ids };
-
-    ctx.notifier.send(commands).await?;
 
     Ok(tonic::Response::new(resp))
 }

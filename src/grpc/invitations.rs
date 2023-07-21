@@ -5,8 +5,7 @@ use tonic::{Request, Status};
 
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::{Resource, ResourceEntry, UserId};
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::mail;
 use crate::models::invitation::{Invitation, InvitationFilter, NewInvitation};
 use crate::models::org::{Org, OrgRole};
@@ -22,48 +21,43 @@ impl invitation_service_server::InvitationService for super::Grpc {
         &self,
         req: Request<api::InvitationServiceCreateRequest>,
     ) -> super::Resp<api::InvitationServiceCreateResponse> {
-        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: Request<api::InvitationServiceListRequest>,
     ) -> super::Resp<api::InvitationServiceListResponse> {
-        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 
     async fn accept(
         &self,
         req: Request<api::InvitationServiceAcceptRequest>,
     ) -> super::Resp<api::InvitationServiceAcceptResponse> {
-        self.write(|conn, ctx| accept(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| accept(req, write).scope_boxed()).await
     }
 
     async fn decline(
         &self,
         req: Request<api::InvitationServiceDeclineRequest>,
     ) -> super::Resp<api::InvitationServiceDeclineResponse> {
-        self.write(|conn, ctx| decline(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| decline(req, write).scope_boxed()).await
     }
 
     async fn revoke(
         &self,
         req: Request<api::InvitationServiceRevokeRequest>,
     ) -> super::Resp<api::InvitationServiceRevokeResponse> {
-        self.write(|conn, ctx| revoke(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| revoke(req, write).scope_boxed()).await
     }
 }
 
 async fn create(
     req: Request<api::InvitationServiceCreateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::InvitationServiceCreateResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::InvitationCreate, conn).await?;
     let req = req.into_inner();
     // In principle, it is allowed for resources other than a user to create an invite, but we
@@ -124,16 +118,16 @@ async fn create(
     let msg = api::OrgMessage::invitation_created(org, invitation, conn).await?;
     let resp = api::InvitationServiceCreateResponse {};
 
-    ctx.notifier.send([msg]).await?;
+    mqtt_tx.send(msg.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn list(
     req: Request<api::InvitationServiceListRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::InvitationServiceListResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::InvitationList, conn).await?;
     let req = req.into_inner();
 
@@ -159,9 +153,9 @@ async fn list(
 
 async fn accept(
     req: Request<api::InvitationServiceAcceptRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::InvitationServiceAcceptResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::InvitationAccept, conn).await?;
     let req = req.into_inner();
     let invitation_id = req.invitation_id.parse()?;
@@ -199,16 +193,16 @@ async fn accept(
     let msg = api::OrgMessage::invitation_accepted(org, invitation, user, conn).await?;
     let resp = api::InvitationServiceAcceptResponse {};
 
-    ctx.notifier.send([msg]).await?;
+    mqtt_tx.send(msg.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn decline(
     req: Request<api::InvitationServiceDeclineRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::InvitationServiceDeclineResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::InvitationDecline, conn).await?;
     let req = req.into_inner();
     let invitation_id = req.invitation_id.parse()?;
@@ -240,16 +234,16 @@ async fn decline(
     let msg = api::OrgMessage::invitation_declined(org, invitation, conn).await?;
     let resp = api::InvitationServiceDeclineResponse {};
 
-    ctx.notifier.send([msg]).await?;
+    mqtt_tx.send(msg.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn revoke(
     req: Request<api::InvitationServiceRevokeRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::InvitationServiceRevokeResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::InvitationRevoke, conn).await?;
     let req = req.into_inner();
     let invitation_id = req.invitation_id.parse()?;
@@ -274,7 +268,7 @@ async fn revoke(
     let msg = api::OrgMessage::invitation_declined(org, invitation, conn).await?;
     let resp = api::InvitationServiceRevokeResponse {};
 
-    ctx.notifier.send([msg]).await?;
+    mqtt_tx.send(msg.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }

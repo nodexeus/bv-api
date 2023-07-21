@@ -1,8 +1,7 @@
 use diesel_async::scoped_futures::ScopedFutureExt;
 
 use crate::auth::endpoint::Endpoint;
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{ReadConn, Transaction};
 
 use super::api::{self, discovery_service_server};
 
@@ -12,16 +11,15 @@ impl discovery_service_server::DiscoveryService for super::Grpc {
         &self,
         req: tonic::Request<api::DiscoveryServiceServicesRequest>,
     ) -> super::Resp<api::DiscoveryServiceServicesResponse> {
-        self.read(|conn, ctx| services(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| services(req, read).scope_boxed()).await
     }
 }
 
 async fn services(
     req: tonic::Request<api::DiscoveryServiceServicesRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::DiscoveryServiceServicesResponse> {
+    let ReadConn { conn, ctx } = read;
     let _claims = ctx.claims(&req, Endpoint::DiscoveryServices, conn).await?;
 
     let response = api::DiscoveryServiceServicesResponse {

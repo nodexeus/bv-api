@@ -13,11 +13,13 @@ use futures_util::FutureExt;
 use rustls::client::{ServerCertVerified, ServerCertVerifier, WebPkiVerifier};
 use rustls::{Certificate, ClientConfig, RootCertStore, ServerName};
 use thiserror::Error;
+use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio_postgres_rustls::MakeRustlsConnect;
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::config::database::Config;
 use crate::config::Context;
+use crate::mqtt::Message;
 
 pub const MIGRATIONS: EmbeddedMigrations = diesel_migrations::embed_migrations!();
 
@@ -33,20 +35,16 @@ pub trait Transaction {
     ///
     /// Note that the function parameter constraints are not strictly necessary
     /// but mimic `Transaction::write` to make it easy to switch between each.
-    async fn read<'a, F, T, E>(&self, f: F) -> Result<T, tonic::Status>
+    async fn read<'a, F, T, E>(&'a self, f: F) -> Result<T, tonic::Status>
     where
-        F: for<'r> FnOnce(&'r mut Conn<'_>, &'r Context) -> ScopedBoxFuture<'a, 'r, Result<T, E>>
-            + Send
-            + 'a,
+        F: for<'c> FnOnce(ReadConn<'c, 'a>) -> ScopedBoxFuture<'a, 'c, Result<T, E>> + Send + 'a,
         T: Send + 'a,
         E: From<diesel::result::Error> + Into<tonic::Status> + Send + 'a;
 
     /// Run a transactional closure to write to the database.
-    async fn write<'a, F, T, E>(&self, f: F) -> Result<T, tonic::Status>
+    async fn write<'a, F, T, E>(&'a self, f: F) -> Result<T, tonic::Status>
     where
-        F: for<'r> FnOnce(&'r mut Conn<'_>, &'r Context) -> ScopedBoxFuture<'a, 'r, Result<T, E>>
-            + Send
-            + 'a,
+        F: for<'c> FnOnce(WriteConn<'c, 'a>) -> ScopedBoxFuture<'a, 'c, Result<T, E>> + Send + 'a,
         T: Send + 'a,
         E: From<diesel::result::Error> + Into<tonic::Status> + Send + 'a;
 }
@@ -70,8 +68,25 @@ impl From<Error> for tonic::Status {
     }
 }
 
+/// A `Conn` is an open connection to the database from the `Pool`.
 #[derive(Deref, DerefMut)]
 pub struct Conn<'c>(PooledConnection<'c, AsyncPgConnection>);
+
+/// A `ReadConn` is an open, non-transaction connection to the database.
+pub struct ReadConn<'c, 't> {
+    pub conn: &'c mut Conn<'t>,
+    pub ctx: &'t Context,
+}
+
+/// A `WriteConn` is an open transactional connection to the database.
+///
+/// Any messages sent over `mqtt_tx` will be forwared to MQTT only after the
+/// database transaction has been committed.
+pub struct WriteConn<'c, 't> {
+    pub conn: &'c mut Conn<'t>,
+    pub ctx: &'t Context,
+    pub mqtt_tx: UnboundedSender<Message>,
+}
 
 #[derive(Clone, Deref, DerefMut)]
 pub struct Pool(bb8::Pool<AsyncPgConnection>);
@@ -118,32 +133,49 @@ impl<C> Transaction for C
 where
     C: AsRef<Context> + Send + Sync,
 {
-    async fn read<'a, F, T, E>(&self, f: F) -> Result<T, tonic::Status>
+    async fn read<'a, F, T, E>(&'a self, f: F) -> Result<T, tonic::Status>
     where
-        F: for<'r> FnOnce(&'r mut Conn<'_>, &'r Context) -> ScopedBoxFuture<'a, 'r, Result<T, E>>
-            + Send
-            + 'a,
+        F: for<'c> FnOnce(ReadConn<'c, 'a>) -> ScopedBoxFuture<'a, 'c, Result<T, E>> + Send + 'a,
         T: Send + 'a,
         E: From<diesel::result::Error> + Into<tonic::Status> + Send + 'a,
     {
         let ctx = self.as_ref();
         let mut conn = ctx.conn().await?;
-        f(&mut conn, ctx).await.map_err(Into::into)
+        let read = ReadConn {
+            conn: &mut conn,
+            ctx,
+        };
+
+        f(read).await.map_err(Into::into)
     }
 
-    async fn write<'a, F, T, E>(&self, f: F) -> Result<T, tonic::Status>
+    async fn write<'a, F, T, E>(&'a self, f: F) -> Result<T, tonic::Status>
     where
-        F: for<'r> FnOnce(&'r mut Conn<'_>, &'r Context) -> ScopedBoxFuture<'a, 'r, Result<T, E>>
-            + Send
-            + 'a,
+        F: for<'c> FnOnce(WriteConn<'c, 'a>) -> ScopedBoxFuture<'a, 'c, Result<T, E>> + Send + 'a,
         T: Send + 'a,
         E: From<diesel::result::Error> + Into<tonic::Status> + Send + 'a,
     {
         let ctx = self.as_ref();
-        let mut conn = ctx.conn().await?;
-        conn.transaction(|conn| f(conn, ctx).scope_boxed())
+        let (mqtt_tx, mut mqtt_rx) = mpsc::unbounded_channel();
+
+        let response = ctx
+            .conn()
+            .await?
+            .transaction(|conn| {
+                let write = WriteConn { conn, ctx, mqtt_tx };
+
+                f(write).scope_boxed()
+            })
             .await
-            .map_err(Into::into)
+            .map_err(Into::into)?;
+
+        while let Some(msg) = mqtt_rx.recv().await {
+            if let Err(err) = ctx.notifier.send(msg).await {
+                warn!("Failed to send MQTT message: {err}");
+            }
+        }
+
+        Ok(response)
     }
 }
 

@@ -6,8 +6,7 @@ use tracing::error;
 
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::ResourceEntry;
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::models::api_key::{ApiKey, ApiResource, NewApiKey, UpdateLabel, UpdateScope};
 use crate::timestamp::NanosUtc;
 
@@ -65,31 +64,28 @@ impl ApiKeyService for Grpc {
         &self,
         req: Request<api::CreateApiKeyRequest>,
     ) -> super::Resp<api::CreateApiKeyResponse> {
-        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: Request<api::ListApiKeyRequest>,
     ) -> super::Resp<api::ListApiKeyResponse> {
-        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 
     async fn update(
         &self,
         req: Request<api::UpdateApiKeyRequest>,
     ) -> super::Resp<api::UpdateApiKeyResponse> {
-        self.write(|conn, ctx| update(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| update(req, write).scope_boxed()).await
     }
 
     async fn regenerate(
         &self,
         req: Request<api::RegenerateApiKeyRequest>,
     ) -> super::Resp<api::RegenerateApiKeyResponse> {
-        self.write(|conn, ctx| regenerate(req, conn, ctx).scope_boxed())
+        self.write(|write| regenerate(req, write).scope_boxed())
             .await
     }
 
@@ -97,16 +93,15 @@ impl ApiKeyService for Grpc {
         &self,
         req: Request<api::DeleteApiKeyRequest>,
     ) -> super::Resp<api::DeleteApiKeyResponse> {
-        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| delete(req, write).scope_boxed()).await
     }
 }
 
 async fn create(
     req: Request<api::CreateApiKeyRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Resp<api::CreateApiKeyResponse, Error> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::ApiKeyCreate, conn).await?;
 
     let req = req.into_inner();
@@ -127,9 +122,9 @@ async fn create(
 
 async fn list(
     req: Request<api::ListApiKeyRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Resp<api::ListApiKeyResponse, Error> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::ApiKeyList, conn).await?;
     let user_id = claims.resource().user().ok_or(Error::ClaimsNotUser)?;
 
@@ -142,9 +137,9 @@ async fn list(
 
 async fn update(
     req: Request<api::UpdateApiKeyRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Resp<api::UpdateApiKeyResponse, Error> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::ApiKeyUpdate, conn).await?;
 
     let req = req.into_inner();
@@ -184,9 +179,9 @@ async fn update(
 
 async fn regenerate(
     req: Request<api::RegenerateApiKeyRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Resp<api::RegenerateApiKeyResponse, Error> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::ApiKeyRegenerate, conn).await?;
 
     let req = req.into_inner();
@@ -208,9 +203,9 @@ async fn regenerate(
 
 async fn delete(
     req: Request<api::DeleteApiKeyRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Resp<api::DeleteApiKeyResponse, Error> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::ApiKeyDelete, conn).await?;
 
     let req = req.into_inner();
