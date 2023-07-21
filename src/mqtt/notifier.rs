@@ -66,7 +66,14 @@ impl Notifier {
         Ok(Self { client })
     }
 
-    pub async fn send<I, M>(&self, messages: I) -> Result<(), Error>
+    pub async fn send<M>(&self, message: M) -> Result<(), Error>
+    where
+        M: Into<Message>,
+    {
+        self.client.clone().send(message.into()).await
+    }
+
+    pub async fn send_all<I, M>(&self, messages: I) -> Result<(), Error>
     where
         I: IntoIterator<Item = M>,
         M: Into<Message>,

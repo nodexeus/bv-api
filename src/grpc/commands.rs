@@ -7,8 +7,7 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use crate::auth::claims::Claims;
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::Resource;
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::blockchain::{Blockchain, BlockchainProperty};
 use crate::models::command::UpdateCommand;
 use crate::models::node::FilteredIpAddr;
@@ -24,32 +23,30 @@ impl command_service_server::CommandService for super::Grpc {
         &self,
         req: tonic::Request<api::CommandServiceUpdateRequest>,
     ) -> super::Resp<api::CommandServiceUpdateResponse> {
-        self.write(|conn, ctx| update(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| update(req, write).scope_boxed()).await
     }
 
     async fn ack(
         &self,
         req: tonic::Request<api::CommandServiceAckRequest>,
     ) -> super::Resp<api::CommandServiceAckResponse> {
-        self.write(|conn, ctx| ack(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| ack(req, write).scope_boxed()).await
     }
 
     async fn pending(
         &self,
         req: tonic::Request<api::CommandServicePendingRequest>,
     ) -> super::Resp<api::CommandServicePendingResponse> {
-        self.read(|conn, ctx| pending(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| pending(req, read).scope_boxed()).await
     }
 }
 
 async fn update(
     req: tonic::Request<api::CommandServiceUpdateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::CommandServiceUpdateResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
+
     let claims = ctx.claims(&req, Endpoint::CommandUpdate, conn).await?;
     let req = req.into_inner();
     let command = Command::find_by_id(req.id.parse()?, conn).await?;
@@ -59,40 +56,45 @@ async fn update(
     if !is_allowed {
         super::forbidden!("Access denied for command update of {}", req.id);
     }
+
     let update_cmd = req.as_update()?;
     let cmd = update_cmd.update(conn).await?;
-    let commands = match cmd.exit_status {
+
+    let command = api::Command::from_model(&cmd, conn).await?;
+    mqtt_tx.send(command.clone().into()).expect("mqtt_rx");
+
+    match cmd.exit_status {
         Some(0) => {
             // Some responses require us to register success.
             success::register(&cmd, conn).await;
-            vec![]
         }
         // Will match any integer other than 0.
         Some(_) => {
             // We got back an error status code. In practice, blockvisord sends 0 for
             // success and 1 for failure, but we treat every non-zero exit code as an
             // error, not just 1.
-            recover::recover(&cmd, conn, ctx).await.unwrap_or_default()
+            recover::recover(&cmd, conn, ctx)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .for_each(|cmd| mqtt_tx.send(cmd.into()).expect("mqtt_rx"))
         }
-        None => vec![],
+        None => (),
     };
 
-    let command = api::Command::from_model(&cmd, conn).await?;
     let resp = api::CommandServiceUpdateResponse {
-        command: Some(command.clone()),
+        command: Some(command),
     };
-
-    ctx.notifier.send([command]).await?;
-    ctx.notifier.send(commands).await?;
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn ack(
     req: tonic::Request<api::CommandServiceAckRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::CommandServiceAckResponse> {
+    let WriteConn { conn, ctx, .. } = write;
+
     let claims = ctx.claims(&req, Endpoint::CommandAck, conn).await?;
     let req = req.into_inner();
     let command = Command::find_by_id(req.id.parse()?, conn).await?;
@@ -111,9 +113,10 @@ async fn ack(
 
 async fn pending(
     req: tonic::Request<api::CommandServicePendingRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::CommandServicePendingResponse> {
+    let ReadConn { conn, ctx } = read;
+
     let claims = ctx.claims(&req, Endpoint::CommandPending, conn).await?;
     let req = req.into_inner();
     let host_id = req.host_id.parse()?;

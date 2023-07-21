@@ -393,7 +393,7 @@ mod tests {
         let mut conn = db.conn().await;
 
         let command = api::Command::from_model(&command, &mut conn).await.unwrap();
-        ctx.notifier.send([command]).await.unwrap();
+        ctx.notifier.send(command).await.unwrap();
     }
 
     #[tokio::test]
@@ -407,15 +407,15 @@ mod tests {
         let msg = api::HostMessage::created(host.clone(), user.clone(), &mut conn)
             .await
             .unwrap();
-        ctx.notifier.send([msg]).await.unwrap();
+        ctx.notifier.send(msg).await.unwrap();
 
         let msg = api::HostMessage::updated(host.clone(), user.clone(), &mut conn)
             .await
             .unwrap();
-        ctx.notifier.send([msg]).await.unwrap();
+        ctx.notifier.send(msg).await.unwrap();
 
         let msg = api::HostMessage::deleted(host, user);
-        ctx.notifier.send([msg]).await.unwrap();
+        ctx.notifier.send(msg).await.unwrap();
     }
 
     #[tokio::test]
@@ -430,14 +430,14 @@ mod tests {
             .await
             .unwrap();
         let msg = api::NodeMessage::created(node_model.clone(), user.clone());
-        ctx.notifier.send([msg]).await.unwrap();
+        ctx.notifier.send(msg).await.unwrap();
 
         let msg = api::NodeMessage::updated(node.clone(), Some(user.clone()), &mut conn)
             .await
             .unwrap();
-        ctx.notifier.send([msg]).await.unwrap();
+        ctx.notifier.send(msg).await.unwrap();
 
         let msg = api::NodeMessage::deleted(node, user);
-        ctx.notifier.send([msg]).await.unwrap();
+        ctx.notifier.send(msg).await.unwrap();
     }
 }

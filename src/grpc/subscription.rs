@@ -6,8 +6,7 @@ use tracing::error;
 
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::Resource;
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::models::org::Org;
 use crate::models::subscription::{NewSubscription, Subscription};
 
@@ -67,40 +66,36 @@ impl subscription_service_server::SubscriptionService for Grpc {
         &self,
         req: Request<api::SubscriptionServiceCreateRequest>,
     ) -> super::Resp<api::SubscriptionServiceCreateResponse> {
-        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn get(
         &self,
         req: Request<api::SubscriptionServiceGetRequest>,
     ) -> super::Resp<api::SubscriptionServiceGetResponse> {
-        self.read(|conn, ctx| get(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| get(req, read).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: Request<api::SubscriptionServiceListRequest>,
     ) -> super::Resp<api::SubscriptionServiceListResponse> {
-        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 
     async fn delete(
         &self,
         req: Request<api::SubscriptionServiceDeleteRequest>,
     ) -> super::Resp<api::SubscriptionServiceDeleteResponse> {
-        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| delete(req, write).scope_boxed()).await
     }
 }
 
 async fn create(
     req: Request<api::SubscriptionServiceCreateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Resp<api::SubscriptionServiceCreateResponse, Error> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::SubscriptionCreate, conn).await?;
 
     let req = req.into_inner();
@@ -127,9 +122,9 @@ async fn create(
 
 async fn get(
     req: Request<api::SubscriptionServiceGetRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Resp<api::SubscriptionServiceGetResponse, Error> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::SubscriptionGet, conn).await?;
 
     let req = req.into_inner();
@@ -148,9 +143,9 @@ async fn get(
 
 async fn list(
     req: Request<api::SubscriptionServiceListRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Resp<api::SubscriptionServiceListResponse, Error> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::SubscriptionList, conn).await?;
 
     let req = req.into_inner();
@@ -171,9 +166,9 @@ async fn list(
 
 async fn delete(
     req: Request<api::SubscriptionServiceDeleteRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Resp<api::SubscriptionServiceDeleteResponse, Error> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::SubscriptionDelete, conn).await?;
 
     let req = req.into_inner();

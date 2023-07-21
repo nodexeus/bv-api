@@ -5,8 +5,7 @@ use crate::auth::endpoint::{Endpoint, Endpoints};
 use crate::auth::resource::Resource;
 use crate::auth::token::refresh::Refresh;
 use crate::auth::token::RequestToken;
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{Transaction, WriteConn};
 use crate::models::{Host, Node, Org, User};
 
 use super::api::{self, auth_service_server};
@@ -39,24 +38,21 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceLoginRequest>,
     ) -> super::Resp<api::AuthServiceLoginResponse> {
-        self.write(|conn, ctx| login(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| login(req, write).scope_boxed()).await
     }
 
     async fn confirm(
         &self,
         req: tonic::Request<api::AuthServiceConfirmRequest>,
     ) -> super::Resp<api::AuthServiceConfirmResponse> {
-        self.write(|conn, ctx| confirm(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| confirm(req, write).scope_boxed()).await
     }
 
     async fn refresh(
         &self,
         req: tonic::Request<api::AuthServiceRefreshRequest>,
     ) -> super::Resp<api::AuthServiceRefreshResponse> {
-        self.write(|conn, ctx| refresh(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| refresh(req, write).scope_boxed()).await
     }
 
     /// This endpoint triggers the sending of the reset-password email. The actual resetting is
@@ -65,7 +61,7 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceResetPasswordRequest>,
     ) -> super::Resp<api::AuthServiceResetPasswordResponse> {
-        self.write(|conn, ctx| reset_password(req, conn, ctx).scope_boxed())
+        self.write(|write| reset_password(req, write).scope_boxed())
             .await
     }
 
@@ -73,7 +69,7 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceUpdatePasswordRequest>,
     ) -> super::Resp<api::AuthServiceUpdatePasswordResponse> {
-        self.write(|conn, ctx| update_password(req, conn, ctx).scope_boxed())
+        self.write(|write| update_password(req, write).scope_boxed())
             .await
     }
 
@@ -81,16 +77,17 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceUpdateUiPasswordRequest>,
     ) -> super::Resp<api::AuthServiceUpdateUiPasswordResponse> {
-        self.write(|conn, ctx| update_ui_password(req, conn, ctx).scope_boxed())
+        self.write(|write| update_ui_password(req, write).scope_boxed())
             .await
     }
 }
 
 async fn login(
     req: tonic::Request<api::AuthServiceLoginRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::AuthServiceLoginResponse> {
+    let WriteConn { conn, ctx, .. } = write;
+
     // This endpoint requires no auth, it is where you get your token from.
     let inner = req.into_inner();
     let user = User::login(&inner.email, &inner.password, conn).await?;
@@ -115,9 +112,9 @@ async fn login(
 
 async fn confirm(
     req: tonic::Request<api::AuthServiceConfirmRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::AuthServiceConfirmResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::AuthConfirm, conn).await?;
     let user_id = match claims.resource().user() {
         Some(id) => id,
@@ -146,9 +143,9 @@ async fn confirm(
 
 async fn refresh(
     req: tonic::Request<api::AuthServiceRefreshRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::AuthServiceRefreshResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let fallback = ctx.auth.maybe_refresh(&req)?;
 
     let req = req.into_inner();
@@ -250,9 +247,9 @@ async fn refresh(
 /// then done through the `update` function.
 async fn reset_password(
     req: tonic::Request<api::AuthServiceResetPasswordRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::AuthServiceResetPasswordResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let req = req.into_inner();
     // We are going to query the user and send them an email, but when something goes wrong we
     // are not going to return an error. This hides whether or not a user is registered with
@@ -269,9 +266,9 @@ async fn reset_password(
 
 async fn update_password(
     req: tonic::Request<api::AuthServiceUpdatePasswordRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::AuthServiceUpdatePasswordResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::AuthUpdatePassword, conn).await?;
     let req = req.into_inner();
 
@@ -295,9 +292,9 @@ async fn update_password(
 
 async fn update_ui_password(
     req: tonic::Request<api::AuthServiceUpdateUiPasswordRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::AuthServiceUpdateUiPasswordResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx
         .claims(&req, Endpoint::AuthUpdateUiPassword, conn)
         .await?;

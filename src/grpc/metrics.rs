@@ -9,8 +9,7 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::Resource;
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{Transaction, WriteConn};
 use crate::models::host::{Host, UpdateHostMetrics};
 use crate::models::node::{Node, UpdateNodeMetrics};
 use crate::models::org::Org;
@@ -26,24 +25,22 @@ impl metrics_service_server::MetricsService for super::Grpc {
         &self,
         req: tonic::Request<api::MetricsServiceNodeRequest>,
     ) -> super::Resp<api::MetricsServiceNodeResponse> {
-        self.write(|conn, ctx| node(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| node(req, write).scope_boxed()).await
     }
 
     async fn host(
         &self,
         req: tonic::Request<api::MetricsServiceHostRequest>,
     ) -> super::Resp<api::MetricsServiceHostResponse> {
-        self.write(|conn, ctx| host(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| host(req, write).scope_boxed()).await
     }
 }
 
 async fn node(
     req: tonic::Request<api::MetricsServiceNodeRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::MetricsServiceNodeResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::MetricsNode, conn).await?;
     let req = req.into_inner();
     let updates: Vec<UpdateNodeMetrics> = req
@@ -66,20 +63,23 @@ async fn node(
     if !is_allowed {
         super::forbidden!("Access denied for metrics node");
     }
-    let nodes = UpdateNodeMetrics::update_metrics(updates, conn).await?;
-    let msgs = api::NodeMessage::updated_many(nodes, conn).await?;
-    let resp = api::MetricsServiceNodeResponse {};
 
-    ctx.notifier.send(msgs).await?;
+    let nodes = UpdateNodeMetrics::update_metrics(updates, conn).await?;
+    api::NodeMessage::updated_many(nodes, conn)
+        .await?
+        .into_iter()
+        .for_each(|msg| mqtt_tx.send(msg.into()).expect("mqtt_rx"));
+
+    let resp = api::MetricsServiceNodeResponse {};
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn host(
     req: tonic::Request<api::MetricsServiceHostRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::MetricsServiceHostResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::MetricsNode, conn).await?;
     let req = req.into_inner();
     let updates: Vec<UpdateHostMetrics> = req
@@ -102,11 +102,14 @@ async fn host(
     if !is_allowed {
         super::forbidden!("Access denied for metrics host");
     }
-    let hosts = UpdateHostMetrics::update_metrics(updates, conn).await?;
-    let msgs = api::HostMessage::updated_many(hosts, conn).await?;
-    let resp = api::MetricsServiceHostResponse {};
 
-    ctx.notifier.send(msgs).await?;
+    let hosts = UpdateHostMetrics::update_metrics(updates, conn).await?;
+    api::HostMessage::updated_many(hosts, conn)
+        .await?
+        .into_iter()
+        .for_each(|msg| mqtt_tx.send(msg.into()).expect("mqtt_rx"));
+
+    let resp = api::MetricsServiceHostResponse {};
 
     Ok(tonic::Response::new(resp))
 }

@@ -2,18 +2,19 @@ use std::collections::HashMap;
 
 use diesel_async::scoped_futures::ScopedFutureExt;
 use futures_util::future::OptionFuture;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::auth::claims::Claims;
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::{HostId, OrgId, Resource, UserId};
 use crate::auth::token::refresh::Refresh;
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::command::NewCommand;
 use crate::models::host::{HostFilter, NewHost, UpdateHost};
 use crate::models::{
     Blockchain, CommandType, ConnectionStatus, Host, HostType, Node, Org, OrgUser, Region,
 };
+use crate::mqtt::Message;
 use crate::timestamp::NanosUtc;
 
 use super::api::{self, host_service_server};
@@ -44,8 +45,7 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceCreateRequest>,
     ) -> super::Resp<api::HostServiceCreateResponse> {
-        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     /// Get a host by id.
@@ -53,72 +53,64 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceGetRequest>,
     ) -> super::Resp<api::HostServiceGetResponse> {
-        self.read(|conn, ctx| get(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| get(req, read).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::HostServiceListRequest>,
     ) -> super::Resp<api::HostServiceListResponse> {
-        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 
     async fn update(
         &self,
         req: tonic::Request<api::HostServiceUpdateRequest>,
     ) -> super::Resp<api::HostServiceUpdateResponse> {
-        self.write(|conn, ctx| update(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| update(req, write).scope_boxed()).await
     }
 
     async fn delete(
         &self,
         req: tonic::Request<api::HostServiceDeleteRequest>,
     ) -> super::Resp<api::HostServiceDeleteResponse> {
-        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| delete(req, write).scope_boxed()).await
     }
 
     async fn start(
         &self,
         req: tonic::Request<api::HostServiceStartRequest>,
     ) -> super::Resp<api::HostServiceStartResponse> {
-        self.write(|conn, ctx| start(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| start(req, write).scope_boxed()).await
     }
 
     async fn stop(
         &self,
         req: tonic::Request<api::HostServiceStopRequest>,
     ) -> super::Resp<api::HostServiceStopResponse> {
-        self.write(|conn, ctx| stop(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| stop(req, write).scope_boxed()).await
     }
 
     async fn restart(
         &self,
         req: tonic::Request<api::HostServiceRestartRequest>,
     ) -> super::Resp<api::HostServiceRestartResponse> {
-        self.write(|conn, ctx| restart(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| restart(req, write).scope_boxed()).await
     }
 
     async fn regions(
         &self,
         req: tonic::Request<api::HostServiceRegionsRequest>,
     ) -> super::Resp<api::HostServiceRegionsResponse> {
-        self.read(|conn, ctx| regions(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| regions(req, read).scope_boxed()).await
     }
 }
 
 async fn create(
     req: tonic::Request<api::HostServiceCreateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::HostServiceCreateResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let req = req.into_inner();
     let org_id = req.org_id.as_ref().map(|id| id.parse()).transpose()?;
     // We retrieve the id of the caller from the token that was used.
@@ -171,9 +163,9 @@ async fn create(
 /// Get a host by id.
 async fn get(
     req: tonic::Request<api::HostServiceGetRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::HostServiceGetResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::HostGet, conn).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
@@ -194,9 +186,9 @@ async fn get(
 
 async fn list(
     req: tonic::Request<api::HostServiceListRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::HostServiceListResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::HostList, conn).await?;
     let req = req.into_inner();
     let org_id = req.org_id.parse()?;
@@ -217,9 +209,9 @@ async fn list(
 
 async fn update(
     req: tonic::Request<api::HostServiceUpdateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::HostServiceUpdateResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::HostUpdate, conn).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
@@ -237,9 +229,9 @@ async fn update(
 
 async fn delete(
     req: tonic::Request<api::HostServiceDeleteRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::HostServiceDeleteResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::HostDelete, conn).await?;
     let req = req.into_inner();
     let host_id = req.id.parse()?;
@@ -261,48 +253,48 @@ async fn delete(
 
 async fn start(
     req: tonic::Request<api::HostServiceStartRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::HostServiceStartResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::HostStart, conn).await?;
     change_host_state(
         &req.into_inner().id,
         CommandType::RestartBVS,
         claims,
         conn,
-        ctx,
+        mqtt_tx,
     )
     .await
 }
 
 async fn stop(
     req: tonic::Request<api::HostServiceStopRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::HostServiceStopResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::HostStop, conn).await?;
     change_host_state(
         &req.into_inner().id,
         CommandType::StopBVS,
         claims,
         conn,
-        ctx,
+        mqtt_tx,
     )
     .await
 }
 
 async fn restart(
     req: tonic::Request<api::HostServiceRestartRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::HostServiceRestartResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::HostRestart, conn).await?;
     change_host_state(
         &req.into_inner().id,
         CommandType::RestartBVS,
         claims,
         conn,
-        ctx,
+        mqtt_tx,
     )
     .await
 }
@@ -312,7 +304,7 @@ async fn change_host_state<Res: Default>(
     cmd_type: CommandType,
     claims: Claims,
     conn: &mut Conn<'_>,
-    ctx: &Context,
+    mqtt_tx: UnboundedSender<Message>,
 ) -> super::Result<Res> {
     let host_id = id.parse()?;
     let host = Host::find_by_id(host_id, conn).await?;
@@ -327,7 +319,7 @@ async fn change_host_state<Res: Default>(
     }
 
     let msg = host_cmd(host_id, cmd_type, conn).await?;
-    ctx.notifier.send([msg]).await?;
+    mqtt_tx.send(msg.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(Default::default()))
 }
@@ -349,9 +341,9 @@ async fn host_cmd(
 
 async fn regions(
     req: tonic::Request<api::HostServiceRegionsRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::HostServiceRegionsResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::HostRegions, conn).await?;
     let req = req.into_inner();
     let org_id = req.org_id.parse()?;

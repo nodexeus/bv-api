@@ -5,8 +5,7 @@ use tracing::debug;
 
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::{Resource, UserId};
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::org::{NewOrg, UpdateOrg};
 use crate::models::{Host, Invitation, Node, Org, OrgRole, OrgUser, User};
 use crate::timestamp::NanosUtc;
@@ -19,47 +18,42 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceCreateRequest>,
     ) -> super::Resp<api::OrgServiceCreateResponse> {
-        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn get(
         &self,
         req: tonic::Request<api::OrgServiceGetRequest>,
     ) -> super::Resp<api::OrgServiceGetResponse> {
-        self.read(|conn, ctx| get(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| get(req, read).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::OrgServiceListRequest>,
     ) -> super::Resp<api::OrgServiceListResponse> {
-        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 
     async fn update(
         &self,
         req: tonic::Request<api::OrgServiceUpdateRequest>,
     ) -> super::Resp<api::OrgServiceUpdateResponse> {
-        self.write(|conn, ctx| update(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| update(req, write).scope_boxed()).await
     }
 
     async fn delete(
         &self,
         req: tonic::Request<api::OrgServiceDeleteRequest>,
     ) -> super::Resp<api::OrgServiceDeleteResponse> {
-        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| delete(req, write).scope_boxed()).await
     }
 
     async fn remove_member(
         &self,
         req: tonic::Request<api::OrgServiceRemoveMemberRequest>,
     ) -> super::Resp<api::OrgServiceRemoveMemberResponse> {
-        self.write(|conn, ctx| remove_member(req, conn, ctx).scope_boxed())
+        self.write(|write| remove_member(req, write).scope_boxed())
             .await
     }
 
@@ -67,7 +61,7 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceGetProvisionTokenRequest>,
     ) -> super::Resp<api::OrgServiceGetProvisionTokenResponse> {
-        self.read(|conn, ctx| get_provision_token(req, conn, ctx).scope_boxed())
+        self.read(|read| get_provision_token(req, read).scope_boxed())
             .await
     }
 
@@ -75,16 +69,16 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceResetProvisionTokenRequest>,
     ) -> super::Resp<api::OrgServiceResetProvisionTokenResponse> {
-        self.read(|conn, ctx| reset_provision_token(req, conn, ctx).scope_boxed())
+        self.write(|write| reset_provision_token(req, write).scope_boxed())
             .await
     }
 }
 
 async fn create(
     req: tonic::Request<api::OrgServiceCreateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::OrgServiceCreateResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::OrgCreate, conn).await?;
     let req = req.into_inner();
     let Resource::User(user_id) = claims.resource() else {
@@ -100,16 +94,16 @@ async fn create(
     let msg = api::OrgMessage::created(org.clone(), user);
     let resp = api::OrgServiceCreateResponse { org: Some(org) };
 
-    ctx.notifier.send([msg]).await?;
+    mqtt_tx.send(msg.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn get(
     req: tonic::Request<api::OrgServiceGetRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::OrgServiceGetResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::OrgGet, conn).await?;
     let req = req.into_inner();
     let org_id = req.id.parse()?;
@@ -131,9 +125,9 @@ async fn get(
 
 async fn list(
     req: tonic::Request<api::OrgServiceListRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::OrgServiceListResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::OrgList, conn).await?;
     let req = req.into_inner();
     let member_id = req.member_id.map(|id| id.parse()).transpose()?;
@@ -160,9 +154,9 @@ async fn list(
 
 async fn update(
     req: tonic::Request<api::OrgServiceUpdateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::OrgServiceUpdateResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::OrgUpdate, conn).await?;
     let req = req.into_inner();
     let Resource::User(user_id) = claims.resource() else {
@@ -182,16 +176,16 @@ async fn update(
     let msg = api::OrgMessage::updated(org, user);
     let resp = api::OrgServiceUpdateResponse {};
 
-    ctx.notifier.send([msg]).await?;
+    mqtt_tx.send(msg.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn delete(
     req: tonic::Request<api::OrgServiceDeleteRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::OrgServiceDeleteResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::OrgDelete, conn).await?;
     let req = req.into_inner();
     let Resource::User(user_id) = claims.resource() else {
@@ -212,16 +206,16 @@ async fn delete(
     let msg = api::OrgMessage::deleted(org, user);
     let resp = api::OrgServiceDeleteResponse {};
 
-    ctx.notifier.send([msg]).await?;
+    mqtt_tx.send(msg.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn remove_member(
     req: tonic::Request<api::OrgServiceRemoveMemberRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::OrgServiceRemoveMemberResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::OrgRemoveMember, conn).await?;
     let req = req.into_inner();
     let Resource::User(caller_id) = claims.resource() else {
@@ -247,16 +241,16 @@ async fn remove_member(
     let msg = api::OrgMessage::updated(org, user);
     let resp = api::OrgServiceRemoveMemberResponse {};
 
-    ctx.notifier.send([msg]).await?;
+    mqtt_tx.send(msg.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn get_provision_token(
     req: tonic::Request<api::OrgServiceGetProvisionTokenRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::OrgServiceGetProvisionTokenResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx
         .claims(&req, Endpoint::OrgGetProvisionToken, conn)
         .await?;
@@ -283,9 +277,9 @@ async fn get_provision_token(
 
 async fn reset_provision_token(
     req: tonic::Request<api::OrgServiceResetProvisionTokenRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::OrgServiceResetProvisionTokenResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx
         .claims(&req, Endpoint::OrgResetProvisionToken, conn)
         .await?;

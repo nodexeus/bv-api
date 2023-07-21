@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use anyhow::Context as _;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use futures_util::future::OptionFuture;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::auth::claims::Claims;
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::{HostId, NodeId, Resource, UserId};
-use crate::config::Context;
 use crate::cookbook::script::HardwareRequirements;
-use crate::database::{Conn, Transaction};
+use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::blockchain::{BlockchainProperty, BlockchainPropertyUiType};
 use crate::models::command::NewCommand;
 use crate::models::node::{FilteredIpAddr, NewNode, NodeFilter, UpdateNode};
@@ -18,6 +18,7 @@ use crate::models::{
     NodeProperty, NodeScheduler, NodeStakingStatus, NodeSyncStatus, NodeType, Org, Region,
     ResourceAffinity, SimilarNodeAffinity, User,
 };
+use crate::mqtt::Message;
 use crate::timestamp::NanosUtc;
 
 use super::api::{self, node_service_server};
@@ -29,31 +30,28 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceCreateRequest>,
     ) -> super::Resp<api::NodeServiceCreateResponse> {
-        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn get(
         &self,
         req: tonic::Request<api::NodeServiceGetRequest>,
     ) -> super::Resp<api::NodeServiceGetResponse> {
-        self.read(|conn, ctx| get(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| get(req, read).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::NodeServiceListRequest>,
     ) -> super::Resp<api::NodeServiceListResponse> {
-        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 
     async fn update_config(
         &self,
         req: tonic::Request<api::NodeServiceUpdateConfigRequest>,
     ) -> super::Resp<api::NodeServiceUpdateConfigResponse> {
-        self.write(|conn, ctx| update_config(req, conn, ctx).scope_boxed())
+        self.write(|write| update_config(req, write).scope_boxed())
             .await
     }
 
@@ -61,7 +59,7 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceUpdateStatusRequest>,
     ) -> super::Resp<api::NodeServiceUpdateStatusResponse> {
-        self.write(|conn, ctx| update_status(req, conn, ctx).scope_boxed())
+        self.write(|write| update_status(req, write).scope_boxed())
             .await
     }
 
@@ -69,40 +67,36 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceDeleteRequest>,
     ) -> super::Resp<api::NodeServiceDeleteResponse> {
-        self.write(|conn, ctx| delete(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| delete(req, write).scope_boxed()).await
     }
 
     async fn start(
         &self,
         req: tonic::Request<api::NodeServiceStartRequest>,
     ) -> super::Resp<api::NodeServiceStartResponse> {
-        self.write(|conn, ctx| start(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| start(req, write).scope_boxed()).await
     }
 
     async fn stop(
         &self,
         req: tonic::Request<api::NodeServiceStopRequest>,
     ) -> super::Resp<api::NodeServiceStopResponse> {
-        self.write(|conn, ctx| stop(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| stop(req, write).scope_boxed()).await
     }
 
     async fn restart(
         &self,
         req: tonic::Request<api::NodeServiceRestartRequest>,
     ) -> super::Resp<api::NodeServiceRestartResponse> {
-        self.write(|conn, ctx| restart(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| restart(req, write).scope_boxed()).await
     }
 }
 
 async fn get(
     req: tonic::Request<api::NodeServiceGetRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::NodeServiceGetResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::NodeGet, conn).await?;
     let req = req.into_inner();
     let node = Node::find_by_id(req.id.parse()?, conn).await?;
@@ -123,9 +117,9 @@ async fn get(
 
 async fn list(
     req: tonic::Request<api::NodeServiceListRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::NodeServiceListResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::NodeList, conn).await?;
     let filter = req.into_inner().as_filter()?;
     let is_allowed = match claims.resource() {
@@ -145,9 +139,9 @@ async fn list(
 
 async fn create(
     req: tonic::Request<api::NodeServiceCreateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::NodeServiceCreateResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::NodeCreate, conn).await?;
     let Resource::User(user_id) = claims.resource() else { super::forbidden!("Need user_id!") };
 
@@ -198,18 +192,18 @@ async fn create(
         node: Some(node_api),
     };
 
-    ctx.notifier.send([create_cmd]).await?;
-    ctx.notifier.send([created]).await?;
-    ctx.notifier.send([start_cmd]).await?;
+    mqtt_tx.send(create_cmd.into()).expect("mqtt_rx");
+    mqtt_tx.send(created.into()).expect("mqtt_rx");
+    mqtt_tx.send(start_cmd.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn update_config(
     req: tonic::Request<api::NodeServiceUpdateConfigRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::NodeServiceUpdateConfigResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::NodeUpdateConfig, conn).await?;
     let req = req.into_inner();
     let node = Node::find_by_id(req.id.parse()?, conn).await?;
@@ -234,17 +228,17 @@ async fn update_config(
     let msg = api::NodeMessage::updated(node, user, conn).await?;
     let resp = api::NodeServiceUpdateConfigResponse {};
 
-    ctx.notifier.send([cmd]).await?;
-    ctx.notifier.send([msg]).await?;
+    mqtt_tx.send(cmd.into()).expect("mqtt_rx");
+    mqtt_tx.send(msg.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn update_status(
     req: tonic::Request<api::NodeServiceUpdateStatusRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::NodeServiceUpdateStatusResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::NodeUpdateStatus, conn).await?;
     let req = req.into_inner();
     let node = Node::find_by_id(req.id.parse()?, conn).await?;
@@ -261,16 +255,16 @@ async fn update_status(
     let node_message = api::NodeMessage::updated(node, user, conn).await?;
     let resp = api::NodeServiceUpdateStatusResponse {};
 
-    ctx.notifier.send([node_message]).await?;
+    mqtt_tx.send(node_message.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn delete(
     req: tonic::Request<api::NodeServiceDeleteRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::NodeServiceDeleteResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::NodeDelete, conn).await?;
     let Resource::User(user_id) = claims.resource() else { super::forbidden!("Need user_id!") };
     let req = req.into_inner();
@@ -313,40 +307,40 @@ async fn delete(
     let deleted = api::NodeMessage::deleted(node, user);
     let resp = api::NodeServiceDeleteResponse {};
 
-    ctx.notifier.send([cmd]).await?;
-    ctx.notifier.send([deleted]).await?;
+    mqtt_tx.send(cmd.into()).expect("mqtt_rx");
+    mqtt_tx.send(deleted.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(resp))
 }
 
 async fn start(
     req: tonic::Request<api::NodeServiceStartRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::NodeServiceStartResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::NodeStart, conn).await?;
     let req = req.into_inner();
-    change_node_state(&req.id, CommandType::RestartNode, claims, conn, ctx).await
+    change_node_state(&req.id, CommandType::RestartNode, claims, conn, mqtt_tx).await
 }
 
 async fn stop(
     req: tonic::Request<api::NodeServiceStopRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::NodeServiceStopResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::NodeStop, conn).await?;
     let req = req.into_inner();
-    change_node_state(&req.id, CommandType::KillNode, claims, conn, ctx).await
+    change_node_state(&req.id, CommandType::KillNode, claims, conn, mqtt_tx).await
 }
 
 async fn restart(
     req: tonic::Request<api::NodeServiceRestartRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::NodeServiceRestartResponse> {
+    let WriteConn { conn, ctx, mqtt_tx } = write;
     let claims = ctx.claims(&req, Endpoint::NodeRestart, conn).await?;
     let req = req.into_inner();
-    change_node_state(&req.id, CommandType::RestartNode, claims, conn, ctx).await
+    change_node_state(&req.id, CommandType::RestartNode, claims, conn, mqtt_tx).await
 }
 
 async fn change_node_state<Res: Default>(
@@ -354,7 +348,7 @@ async fn change_node_state<Res: Default>(
     cmd_type: CommandType,
     claims: Claims,
     conn: &mut Conn<'_>,
-    ctx: &Context,
+    mqtt_tx: UnboundedSender<Message>,
 ) -> super::Result<Res> {
     let node = Node::find_by_id(id.parse()?, conn).await?;
     let is_allowed = match claims.resource() {
@@ -369,7 +363,7 @@ async fn change_node_state<Res: Default>(
     let create_notif = create_node_command(&node, cmd_type, conn).await?;
     let cmd = api::Command::from_model(&create_notif, conn).await?;
 
-    ctx.notifier.send([cmd]).await?;
+    mqtt_tx.send(cmd.into()).expect("mqtt_rx");
 
     Ok(tonic::Response::new(Default::default()))
 }

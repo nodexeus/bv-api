@@ -4,8 +4,7 @@ use tonic::{Request, Response};
 
 use crate::auth::endpoint::Endpoint;
 use crate::auth::resource::Resource;
-use crate::config::Context;
-use crate::database::{Conn, Transaction};
+use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::models::node_key_file::{NewNodeKeyFile, NodeKeyFile};
 use crate::models::{Node, Org};
 
@@ -17,24 +16,22 @@ impl key_file_service_server::KeyFileService for super::Grpc {
         &self,
         req: Request<api::KeyFileServiceCreateRequest>,
     ) -> super::Resp<api::KeyFileServiceCreateResponse> {
-        self.write(|conn, ctx| create(req, conn, ctx).scope_boxed())
-            .await
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: Request<api::KeyFileServiceListRequest>,
     ) -> super::Resp<api::KeyFileServiceListResponse> {
-        self.read(|conn, ctx| list(req, conn, ctx).scope_boxed())
-            .await
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 }
 
 async fn create(
     req: Request<api::KeyFileServiceCreateRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    write: WriteConn<'_, '_>,
 ) -> super::Result<api::KeyFileServiceCreateResponse> {
+    let WriteConn { conn, ctx, .. } = write;
     let claims = ctx.claims(&req, Endpoint::KeyFileCreate, conn).await?;
     let req = req.into_inner();
     let node = Node::find_by_id(req.node_id.parse()?, conn).await?;
@@ -66,9 +63,9 @@ async fn create(
 
 async fn list(
     req: Request<api::KeyFileServiceListRequest>,
-    conn: &mut Conn<'_>,
-    ctx: &Context,
+    read: ReadConn<'_, '_>,
 ) -> super::Result<api::KeyFileServiceListResponse> {
+    let ReadConn { conn, ctx } = read;
     let claims = ctx.claims(&req, Endpoint::KeyFileList, conn).await?;
     let req = req.into_inner();
     let node = Node::find_by_id(req.node_id.parse()?, conn).await?;
