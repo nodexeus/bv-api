@@ -1,6 +1,4 @@
 use blockvisor_api::auth::resource::{OrgId, UserId};
-use blockvisor_api::database::tests::TestDb;
-use blockvisor_api::database::Database;
 use blockvisor_api::grpc::api;
 use blockvisor_api::models::node::NewNode;
 use blockvisor_api::models::{
@@ -51,7 +49,7 @@ fn create_new_node<'a>(
 #[tokio::test]
 #[ignore]
 async fn test_notify_success() {
-    let tester = super::Tester::new().await;
+    let tester = &super::Tester::new().await;
     let blockchain = tester.blockchain().await;
     let user = tester.user().await;
     let org = tester.org_for(&user).await;
@@ -60,7 +58,6 @@ async fn test_notify_success() {
     // Create a loop of 20 nodes and store it in db. Only even number of them are upgradable.
     let mut ids = stream::iter(0..20)
         .filter_map(|i| {
-            let t = tester.pool();
             let h = host_id;
             let ip = ip_address.clone();
             async move {
@@ -74,8 +71,9 @@ async fn test_notify_success() {
                     version,
                     NodeType::Validator,
                 );
-                let mut conn = t.conn().await.unwrap();
-                TestDb::create_node(&req, &h, &ip, &format!("dns-id-{i}"), &mut conn).await;
+                tester
+                    .create_node(&req, &h, &ip, &format!("dns-id-{i}"))
+                    .await;
                 if i % 2 == 0 {
                     Some(req.id.to_string())
                 } else {
@@ -117,7 +115,7 @@ async fn test_notify_success() {
 
 #[tokio::test]
 async fn test_nothing_to_notify_no_nodes_to_update_all_up_to_date() {
-    let tester = super::Tester::new().await;
+    let tester = &super::Tester::new().await;
     let blockchain = tester.blockchain().await;
     let user = tester.user().await;
     let org = tester.org_for(&user).await;
@@ -126,7 +124,6 @@ async fn test_nothing_to_notify_no_nodes_to_update_all_up_to_date() {
     // Create a loop of 20 nodes and store it in db. Only even number of them are upgradable.
     let _ = stream::iter(0..20)
         .filter_map(|i| {
-            let t = tester.pool();
             let h = host_id;
             let ip = ip_address.clone();
             async move {
@@ -139,8 +136,8 @@ async fn test_nothing_to_notify_no_nodes_to_update_all_up_to_date() {
                     "2.0.0",
                     NodeType::Validator,
                 );
-                let mut conn = t.conn().await.unwrap();
-                TestDb::create_node(&req, &h, &ip, format!("dns-id-{}", i).as_str(), &mut conn)
+                tester
+                    .create_node(&req, &h, &ip, format!("dns-id-{}", i).as_str())
                     .await;
                 None
             }
@@ -164,7 +161,7 @@ async fn test_nothing_to_notify_no_nodes_to_update_all_up_to_date() {
 
 #[tokio::test]
 async fn test_nothing_to_notify_no_nodes_to_update_diff_node_type() {
-    let tester = super::Tester::new().await;
+    let tester = &super::Tester::new().await;
     let blockchain = tester.blockchain().await;
     let user = tester.user().await;
     let org = tester.org_for(&user).await;
@@ -173,15 +170,14 @@ async fn test_nothing_to_notify_no_nodes_to_update_diff_node_type() {
     // Create a loop of 20 nodes and store it in db. Only even number of them are upgradable.
     let _ = stream::iter(0..20)
         .filter_map(|i| {
-            let t = tester.pool();
             let h = host_id;
             let ip = ip_address.clone();
             async move {
                 let blockchain_id = blockchain.id.to_owned();
                 let req =
                     create_new_node(i, org.id, &blockchain_id, user.id, "1.0.0", NodeType::Miner);
-                let mut conn = t.conn().await.unwrap();
-                TestDb::create_node(&req, &h, &ip, format!("dns-id-{}", i).as_str(), &mut conn)
+                tester
+                    .create_node(&req, &h, &ip, format!("dns-id-{}", i).as_str())
                     .await;
                 None
             }

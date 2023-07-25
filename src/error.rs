@@ -111,6 +111,15 @@ pub enum Error {
 
     #[error("Storage error: {0}")]
     S3(#[from] aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::get_object::GetObjectError>),
+
+    #[error("Protobuf BillingAmount is missing an Amount")]
+    BillingAmountMissingAmount,
+
+    #[error("Unsupported BillingAmount Currency: {0:?}")]
+    BillingAmountCurrency(i32),
+
+    #[error("Unsupported BillingAmount Period: {0:?}")]
+    BillingAmountPeriod(i32),
 }
 
 impl Error {
@@ -172,6 +181,9 @@ impl From<Error> for tonic::Status {
             InvalidArgument(s) => s,
             BabelConfigConvertError(s) => tonic::Status::invalid_argument(s),
             UpgradeProcessError(s) => tonic::Status::internal(s),
+            BillingAmountMissingAmount | BillingAmountCurrency(_) | BillingAmountPeriod(_) => {
+                tonic::Status::invalid_argument("BillingAmount")
+            }
             _ => tonic::Status::internal(msg),
         }
     }

@@ -6,30 +6,30 @@ import "google/protobuf/timestamp.proto";
 
 // API key service functionality.
 service ApiKeyService {
-  rpc Create(CreateApiKeyRequest) returns (CreateApiKeyResponse);
-  rpc List(ListApiKeyRequest) returns (ListApiKeyResponse);
-  rpc Update(UpdateApiKeyRequest) returns (UpdateApiKeyResponse);
-  rpc Regenerate(RegenerateApiKeyRequest) returns (RegenerateApiKeyResponse);
-  rpc Delete(DeleteApiKeyRequest) returns (DeleteApiKeyResponse);
+  rpc Create(ApiKeyServiceCreateRequest) returns (ApiKeyServiceCreateResponse);
+  rpc List(ApiKeyServiceListRequest) returns (ApiKeyServiceListResponse);
+  rpc Update(ApiKeyServiceUpdateRequest) returns (ApiKeyServiceUpdateResponse);
+  rpc Regenerate(ApiKeyServiceRegenerateRequest) returns (ApiKeyServiceRegenerateResponse);
+  rpc Delete(ApiKeyServiceDeleteRequest) returns (ApiKeyServiceDeleteResponse);
 }
 
-message CreateApiKeyRequest {
+message ApiKeyServiceCreateRequest {
   // The (non-unique) label for this api key.
   string label = 1;
   // The scope of the api key.
   ApiKeyScope scope = 2;
 }
 
-message CreateApiKeyResponse {
+message ApiKeyServiceCreateResponse {
   // The bearer secret representation of the api key.
   optional string api_key = 1;
   // The time this api key was created.
   google.protobuf.Timestamp created_at = 2;
 }
 
-message ListApiKeyRequest {}
+message ApiKeyServiceListRequest {}
 
-message ListApiKeyResponse {
+message ApiKeyServiceListResponse {
   // A list of the api keys.
   repeated ListApiKey api_keys = 1;
 }
@@ -47,7 +47,7 @@ message ListApiKey {
   google.protobuf.Timestamp updated_at = 5;
 }
 
-message UpdateApiKeyRequest {
+message ApiKeyServiceUpdateRequest {
   // The unique identifier to the api key to update.
   string id = 1;
   // The (non-unique) new label for this api key.
@@ -56,29 +56,29 @@ message UpdateApiKeyRequest {
   ApiKeyScope scope = 3;
 }
 
-message UpdateApiKeyResponse {
+message ApiKeyServiceUpdateResponse {
   // The time the api key was updated.
   google.protobuf.Timestamp updated_at = 1;
 }
 
-message RegenerateApiKeyRequest {
+message ApiKeyServiceRegenerateRequest {
   // The unique identifier to the api key to regenerate.
   string id = 1;
 }
 
-message RegenerateApiKeyResponse {
+message ApiKeyServiceRegenerateResponse {
   // The new bearer secret representation for this api key.
   optional string api_key = 1;
   // The time the api key was updated.
   google.protobuf.Timestamp updated_at = 2;
 }
 
-message DeleteApiKeyRequest {
+message ApiKeyServiceDeleteRequest {
   // The unique identifier to the api key to delete.
   string id = 1;
 }
 
-message DeleteApiKeyResponse {}
+message ApiKeyServiceDeleteResponse {}
 
 message ApiKeyScope {
   // The resource scope of this api key.

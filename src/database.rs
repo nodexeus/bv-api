@@ -273,10 +273,9 @@ pub mod tests {
     use rand::Rng;
     use uuid::Uuid;
 
-    use crate::auth::resource::{HostId, NodeId, OrgId};
-    use crate::models::node::NewNode;
-    use crate::models::schema::{blockchains, commands, nodes, orgs};
-    use crate::models::{Blockchain, Command, CommandType, Host, Node, Org, Region, User};
+    use crate::auth::resource::{NodeId, OrgId};
+    use crate::models::schema::{blockchains, nodes, orgs};
+    use crate::models::{Blockchain, Host, Node, Org, Region, User};
 
     use super::*;
 
@@ -343,25 +342,6 @@ pub mod tests {
             self.pool.conn().await.unwrap()
         }
 
-        pub async fn create_node(
-            node: &NewNode<'_>,
-            host_id_param: &HostId,
-            ip_add_param: &str,
-            dns_id: &str,
-            conn: &mut AsyncPgConnection,
-        ) {
-            diesel::insert_into(nodes::table)
-                .values((
-                    node,
-                    nodes::host_id.eq(host_id_param),
-                    nodes::ip_addr.eq(ip_add_param),
-                    nodes::dns_record_id.eq(dns_id),
-                ))
-                .execute(conn)
-                .await
-                .unwrap();
-        }
-
         async fn tear_down(test_db_name: String, main_db_url: String) {
             let mut conn = AsyncPgConnection::establish(&main_db_url).await.unwrap();
             diesel::sql_query(&format!("DROP DATABASE {test_db_name}"))
@@ -380,37 +360,9 @@ pub mod tests {
             db_name
         }
 
-        pub async fn host(&self) -> Host {
+        pub async fn blockchain(&self) -> Blockchain {
             let mut conn = self.conn().await;
-            Host::find_by_name("Host-1", &mut conn).await.unwrap()
-        }
-
-        pub async fn node(&self) -> Node {
-            nodes::table
-                .limit(1)
-                .get_result(&mut self.conn().await)
-                .await
-                .unwrap()
-        }
-
-        pub async fn org(&self) -> Org {
-            let id = seed::ORG_ID.parse().unwrap();
-            let mut conn = self.conn().await;
-            Org::find_by_id(id, &mut conn).await.unwrap()
-        }
-
-        pub async fn command(&self) -> Command {
-            let host = self.host().await;
-            let node = self.node().await;
-            let id: Uuid = "eab8a84b-8e3d-4b02-bf14-4160e76c177b".parse().unwrap();
-            diesel::insert_into(commands::table)
-                .values((
-                    commands::id.eq(id),
-                    commands::host_id.eq(host.id),
-                    commands::node_id.eq(node.id),
-                    commands::cmd.eq(CommandType::RestartNode),
-                ))
-                .get_result(&mut self.conn().await)
+            Blockchain::find_by_name("Ethereum", &mut conn)
                 .await
                 .unwrap()
         }
@@ -430,12 +382,26 @@ pub mod tests {
                 .expect("Could not get pleb test user from db.")
         }
 
-        pub async fn blockchain(&self) -> Blockchain {
-            blockchains::table
-                .filter(blockchains::name.eq("Ethereum"))
-                .get_result(&mut self.conn().await)
-                .await
-                .unwrap()
+        pub async fn org(&self) -> Org {
+            let id = seed::ORG_ID.parse().unwrap();
+            let mut conn = self.conn().await;
+            Org::find_by_id(id, &mut conn).await.unwrap()
+        }
+
+        pub async fn host(&self) -> Host {
+            let mut conn = self.conn().await;
+            Host::find_by_name("Host-1", &mut conn).await.unwrap()
+        }
+
+        pub async fn host2(&self) -> Host {
+            let mut conn = self.conn().await;
+            Host::find_by_name("Host-2", &mut conn).await.unwrap()
+        }
+
+        pub async fn node(&self) -> Node {
+            let id = seed::NODE_ID.parse().unwrap();
+            let mut conn = self.conn().await;
+            Node::find_by_id(id, &mut conn).await.unwrap()
         }
     }
 
@@ -455,7 +421,8 @@ pub mod tests {
     }
 
     pub mod seed {
-        use crate::models::host::NewHost;
+        use crate::grpc::common;
+        use crate::models::host::{MonthlyCostUsd, NewHost};
         use crate::models::ip_address::NewIpAddressRange;
         use crate::models::org::NewOrgUser;
         use crate::models::user::NewUser;
@@ -540,6 +507,14 @@ pub mod tests {
         }
 
         async fn hosts(user: User, org_id: OrgId, region: &Region, conn: &mut Conn<'_>) -> Host {
+            let billing = common::BillingAmount {
+                amount: Some(common::Amount {
+                    currency: common::Currency::Usd as i32,
+                    value: 123,
+                }),
+                period: common::Period::Monthly as i32,
+            };
+
             let host1 = NewHost {
                 name: "Host-1",
                 version: "0.1.0",
@@ -557,9 +532,10 @@ pub mod tests {
                 created_by: user.id,
                 region_id: Some(region.id),
                 host_type: HostType::Cloud,
+                monthly_cost_in_usd: Some(MonthlyCostUsd::from_proto(&billing).unwrap()),
             };
 
-            host1.create(conn).await.unwrap();
+            let host1 = host1.create(conn).await.unwrap();
 
             let host2 = NewHost {
                 name: "Host-2",
@@ -578,9 +554,12 @@ pub mod tests {
                 created_by: user.id,
                 region_id: Some(region.id),
                 host_type: HostType::Cloud,
+                monthly_cost_in_usd: None,
             };
 
-            host2.create(conn).await.unwrap()
+            host2.create(conn).await.unwrap();
+
+            host1
         }
 
         async fn ip_addresses(host: &Host, conn: &mut Conn<'_>) -> (String, String) {
