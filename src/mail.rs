@@ -130,7 +130,10 @@ impl MailClient {
         // A little bit lame but not that big of a deal: the id of the invitation as the id of the
         // user because there is no user here yet.
         let resource = Resource::Org(invitation.org_id);
-        let claims = Claims::from_now(expires, resource, endpoints);
+        let data = [("email".to_string(), invitee.email.to_owned())]
+            .into_iter()
+            .collect();
+        let claims = Claims::from_now(expires, resource, endpoints).with_data(data);
         let token = self.cipher.jwt.encode(&claims)?;
 
         let accept_link = format!("{}/accept-invite?token={}", self.base_url, *token);
