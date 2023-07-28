@@ -85,17 +85,14 @@ impl MailClient {
         let templates = toml::from_str(TEMPLATES)
             .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
 
-        let link = format!(
-            "{}/invite-registered?invitation_id={}",
-            self.base_url, invitation.id
-        );
-        let inviter = format!(
-            "{} {} ({})",
-            inviter.first_name, inviter.last_name, inviter.email
-        );
+        let query_params = format!("?invitation_id={}", invitation.id);
+        let link = format!("{}/invite-registered{query_params}", self.base_url);
+        let decline_link = format!("{}/decline-registered{query_params}", self.base_url);
+        let inviter = format!("{} ({})", inviter.name(), inviter.email);
         let mut context = HashMap::new();
         context.insert("inviter".to_owned(), inviter);
         context.insert("link".to_owned(), link);
+        context.insert("decline_link".to_owned(), decline_link);
         context.insert("expiration".to_owned(), expiration.to_string());
 
         self.send_mail(
@@ -138,10 +135,7 @@ impl MailClient {
 
         let accept_link = format!("{}/accept-invite?token={}", self.base_url, *token);
         let decline_link = format!("{}/decline-invite?token={}", self.base_url, *token);
-        let inviter = format!(
-            "{} {} ({})",
-            inviter.first_name, inviter.last_name, inviter.email
-        );
+        let inviter = format!("{} ({})", inviter.name(), inviter.email);
         let context = HashMap::from([
             ("inviter".to_owned(), inviter),
             ("accept_link".to_owned(), accept_link),
