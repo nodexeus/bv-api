@@ -77,6 +77,7 @@ impl MailClient {
         &self,
         inviter: &User,
         invitee: &User,
+        invitation: &Invitation,
         expiration: impl std::fmt::Display,
     ) -> crate::Result<()> {
         const TEMPLATES: &str = include_str!("../mails/invite_registered_user.toml");
@@ -84,7 +85,10 @@ impl MailClient {
         let templates = toml::from_str(TEMPLATES)
             .map_err(|e| anyhow!("Our email toml template {TEMPLATES} is bad! {e}"))?;
 
-        let link = format!("{}/invite-registered?uid={}", self.base_url, *invitee.id);
+        let link = format!(
+            "{}/invite-registered?invitation_id={}",
+            self.base_url, invitation.id
+        );
         let inviter = format!(
             "{} {} ({})",
             inviter.first_name, inviter.last_name, inviter.email
