@@ -26,6 +26,8 @@ pub struct User {
     pub confirmed_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub billing_id: Option<String>,
+    // TODO: drop this column again when sc-2322 (RBAC) is ready
+    pub is_blockjoy_admin: bool,
 }
 
 type NotDeleted = dsl::Filter<users::table, dsl::IsNull<users::deleted_at>>;
@@ -169,6 +171,12 @@ impl User {
         Ok(())
     }
 
+    pub async fn is_blockjoy_admin(user_id: UserId, conn: &mut Conn<'_>) -> crate::Result<bool> {
+        Self::find_by_id(user_id, conn)
+            .await
+            .map(|user| user.is_blockjoy_admin)
+    }
+
     pub fn preferred_language(&self) -> &str {
         // Needs to be done later, but we want to have some stub in place so we keep our code aware
         // of language differences.
@@ -259,24 +267,6 @@ impl<'a> UpdateUser<'a> {
     }
 }
 
-// TODO: delete?
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct UserLogin {
-    pub(crate) id: uuid::Uuid,
-    pub(crate) email: String,
-    pub(crate) fee_bps: i64,
-    pub(crate) staking_quota: i64,
-    pub(crate) token: String,
-}
-
-// TODO: delete?
-#[derive(Debug, Clone, Queryable)]
-pub struct UserPayAddress {
-    pub id: UserId,
-    // TODO: This field should not need to be optional
-    pub pay_address: Option<String>,
-}
-
 #[cfg(test)]
 mod tests {
     use uuid::Uuid;
@@ -296,6 +286,7 @@ mod tests {
             confirmed_at: Some(chrono::Utc::now()),
             deleted_at: None,
             billing_id: None,
+            is_blockjoy_admin: false,
         };
         user.verify_password("A password that cannot be hacked!1")
             .unwrap()
