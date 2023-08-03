@@ -337,6 +337,7 @@ diesel::table! {
         confirmed_at -> Nullable<Timestamptz>,
         deleted_at -> Nullable<Timestamptz>,
         billing_id -> Nullable<Text>,
+        is_blockjoy_admin -> Bool,
     }
 }
 
