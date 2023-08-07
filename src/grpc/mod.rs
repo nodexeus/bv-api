@@ -89,6 +89,7 @@ pub async fn server(context: Arc<Context>) -> Router<CorsServer> {
     let discovery = api::discovery_service_server::DiscoveryServiceServer::new(grpc.clone());
     let host = api::host_service_server::HostServiceServer::new(grpc.clone());
     let invitation = api::invitation_service_server::InvitationServiceServer::new(grpc.clone());
+    let kernel = api::kernel_service_server::KernelServiceServer::new(grpc.clone());
     let key_file = api::key_file_service_server::KeyFileServiceServer::new(grpc.clone());
     let manifest = api::manifest_service_server::ManifestServiceServer::new(grpc.clone());
     let metrics = api::metrics_service_server::MetricsServiceServer::new(grpc.clone());
@@ -122,6 +123,7 @@ pub async fn server(context: Arc<Context>) -> Router<CorsServer> {
         .add_service(discovery)
         .add_service(host)
         .add_service(invitation)
+        .add_service(kernel)
         .add_service(key_file)
         .add_service(manifest)
         .add_service(metrics)
