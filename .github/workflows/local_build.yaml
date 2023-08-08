@@ -15,6 +15,7 @@ jobs:
         name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
         with:
+          submodules: true
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
 
       - name: Build and Push API
