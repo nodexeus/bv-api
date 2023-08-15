@@ -199,6 +199,7 @@ impl Node {
         }
 
         let (total, nodes) = query
+            .order_by(nodes::created_at)
             .paginate(limit.try_into()?, offset.try_into()?)
             .get_results_counted(conn)
             .await

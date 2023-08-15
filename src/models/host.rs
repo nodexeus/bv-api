@@ -128,6 +128,7 @@ impl Host {
         let query = hosts::table.filter(hosts::org_id.eq(org_id)).into_boxed();
 
         let (total, hosts) = query
+            .order_by(hosts::created_at)
             .paginate(limit.try_into()?, offset.try_into()?)
             .get_results_counted(conn)
             .await?;
