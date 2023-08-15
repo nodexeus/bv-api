@@ -45,7 +45,8 @@ impl Region {
         diesel::insert_into(regions::table)
             .values(regions::name.eq(name.to_lowercase()))
             .on_conflict(regions::name)
-            .do_nothing()
+            .do_update()
+            .set(regions::name.eq(name.to_lowercase()))
             .get_result(conn)
             .await
             .for_table("regions")
