@@ -104,6 +104,7 @@ pub enum Endpoint {
     CookbookAll = 1300,
     CookbookRetrievePlugin = 1301,
     CookbookRetrieveImage = 1302,
+    CookbookRetrieveKernel = 1303,
     CookbookRequirements = 1304,
     CookbookNetConfigurations = 1305,
     CookbookListBabelVersions = 1306,
