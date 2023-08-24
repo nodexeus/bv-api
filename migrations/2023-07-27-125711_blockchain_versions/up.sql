@@ -28,13 +28,13 @@ CREATE TABLE blockchain_versions (
 -- Here we populate the first two tables with the data that is currently still
 -- in the blockchain_properties table.
 INSERT INTO blockchain_node_types (blockchain_id, node_type)
-SELECT
+SELECT DISTINCT
     blockchain_id, node_type
 FROM
     blockchain_properties;
 
 INSERT INTO blockchain_versions (blockchain_id, blockchain_node_type_id, version)
-SELECT
+SELECT DISTINCT
     blockchain_properties.blockchain_id, blockchain_node_types.id, version
 FROM
     blockchain_properties
