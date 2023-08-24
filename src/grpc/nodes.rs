@@ -30,65 +30,69 @@ impl node_service_server::NodeService for Grpc {
         &self,
         req: tonic::Request<api::NodeServiceCreateRequest>,
     ) -> super::Resp<api::NodeServiceCreateResponse> {
-        self.write(|write| create(req, write).scope_boxed()).await
+        dbg!(self.write(|write| create(req, write).scope_boxed()).await)
     }
 
     async fn get(
         &self,
         req: tonic::Request<api::NodeServiceGetRequest>,
     ) -> super::Resp<api::NodeServiceGetResponse> {
-        self.read(|read| get(req, read).scope_boxed()).await
+        dbg!(self.read(|read| get(req, read).scope_boxed()).await)
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::NodeServiceListRequest>,
     ) -> super::Resp<api::NodeServiceListResponse> {
-        self.read(|read| list(req, read).scope_boxed()).await
+        dbg!(self.read(|read| list(req, read).scope_boxed()).await)
     }
 
     async fn update_config(
         &self,
         req: tonic::Request<api::NodeServiceUpdateConfigRequest>,
     ) -> super::Resp<api::NodeServiceUpdateConfigResponse> {
-        self.write(|write| update_config(req, write).scope_boxed())
-            .await
+        dbg!(
+            self.write(|write| update_config(req, write).scope_boxed())
+                .await
+        )
     }
 
     async fn update_status(
         &self,
         req: tonic::Request<api::NodeServiceUpdateStatusRequest>,
     ) -> super::Resp<api::NodeServiceUpdateStatusResponse> {
-        self.write(|write| update_status(req, write).scope_boxed())
-            .await
+        dbg!(
+            self.write(|write| update_status(req, write).scope_boxed())
+                .await
+        )
     }
 
     async fn delete(
         &self,
         req: tonic::Request<api::NodeServiceDeleteRequest>,
     ) -> super::Resp<api::NodeServiceDeleteResponse> {
-        self.write(|write| delete(req, write).scope_boxed()).await
+        dbg!(self.write(|write| delete(req, write).scope_boxed()).await)
     }
 
     async fn start(
         &self,
         req: tonic::Request<api::NodeServiceStartRequest>,
     ) -> super::Resp<api::NodeServiceStartResponse> {
-        self.write(|write| start(req, write).scope_boxed()).await
+        dbg!(self.write(|write| start(req, write).scope_boxed()).await)
     }
 
     async fn stop(
         &self,
         req: tonic::Request<api::NodeServiceStopRequest>,
     ) -> super::Resp<api::NodeServiceStopResponse> {
-        self.write(|write| stop(req, write).scope_boxed()).await
+        dbg!(self.write(|write| stop(req, write).scope_boxed()).await)
     }
 
     async fn restart(
         &self,
         req: tonic::Request<api::NodeServiceRestartRequest>,
     ) -> super::Resp<api::NodeServiceRestartResponse> {
-        self.write(|write| restart(req, write).scope_boxed()).await
+        dbg!(self.write(|write| restart(req, write).scope_boxed()).await)
     }
 }
 

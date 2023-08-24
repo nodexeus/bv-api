@@ -21,35 +21,35 @@ impl invitation_service_server::InvitationService for super::Grpc {
         &self,
         req: Request<api::InvitationServiceCreateRequest>,
     ) -> super::Resp<api::InvitationServiceCreateResponse> {
-        self.write(|write| create(req, write).scope_boxed()).await
+        dbg!(self.write(|write| create(req, write).scope_boxed()).await)
     }
 
     async fn list(
         &self,
         req: Request<api::InvitationServiceListRequest>,
     ) -> super::Resp<api::InvitationServiceListResponse> {
-        self.read(|read| list(req, read).scope_boxed()).await
+        dbg!(self.read(|read| list(req, read).scope_boxed()).await)
     }
 
     async fn accept(
         &self,
         req: Request<api::InvitationServiceAcceptRequest>,
     ) -> super::Resp<api::InvitationServiceAcceptResponse> {
-        self.write(|write| accept(req, write).scope_boxed()).await
+        dbg!(self.write(|write| accept(req, write).scope_boxed()).await)
     }
 
     async fn decline(
         &self,
         req: Request<api::InvitationServiceDeclineRequest>,
     ) -> super::Resp<api::InvitationServiceDeclineResponse> {
-        self.write(|write| decline(req, write).scope_boxed()).await
+        dbg!(self.write(|write| decline(req, write).scope_boxed()).await)
     }
 
     async fn revoke(
         &self,
         req: Request<api::InvitationServiceRevokeRequest>,
     ) -> super::Resp<api::InvitationServiceRevokeResponse> {
-        self.write(|write| revoke(req, write).scope_boxed()).await
+        dbg!(self.write(|write| revoke(req, write).scope_boxed()).await)
     }
 }
 

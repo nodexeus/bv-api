@@ -15,51 +15,55 @@ impl user_service_server::UserService for super::Grpc {
         &self,
         req: tonic::Request<api::UserServiceCreateRequest>,
     ) -> super::Resp<api::UserServiceCreateResponse> {
-        self.write(|write| create(req, write).scope_boxed()).await
+        dbg!(self.write(|write| create(req, write).scope_boxed()).await)
     }
 
     async fn get(
         &self,
         req: tonic::Request<api::UserServiceGetRequest>,
     ) -> super::Resp<api::UserServiceGetResponse> {
-        self.read(|read| get(req, read).scope_boxed()).await
+        dbg!(self.read(|read| get(req, read).scope_boxed()).await)
     }
 
     async fn update(
         &self,
         req: tonic::Request<api::UserServiceUpdateRequest>,
     ) -> super::Resp<api::UserServiceUpdateResponse> {
-        self.write(|write| update(req, write).scope_boxed()).await
+        dbg!(self.write(|write| update(req, write).scope_boxed()).await)
     }
 
     async fn delete(
         &self,
         req: tonic::Request<api::UserServiceDeleteRequest>,
     ) -> super::Resp<api::UserServiceDeleteResponse> {
-        self.write(|write| delete(req, write).scope_boxed()).await
+        dbg!(self.write(|write| delete(req, write).scope_boxed()).await)
     }
 
     async fn get_billing(
         &self,
         req: tonic::Request<api::UserServiceGetBillingRequest>,
     ) -> super::Resp<api::UserServiceGetBillingResponse> {
-        self.read(|read| get_billing(req, read).scope_boxed()).await
+        dbg!(self.read(|read| get_billing(req, read).scope_boxed()).await)
     }
 
     async fn update_billing(
         &self,
         req: tonic::Request<api::UserServiceUpdateBillingRequest>,
     ) -> super::Resp<api::UserServiceUpdateBillingResponse> {
-        self.write(|write| update_billing(req, write).scope_boxed())
-            .await
+        dbg!(
+            self.write(|write| update_billing(req, write).scope_boxed())
+                .await
+        )
     }
 
     async fn delete_billing(
         &self,
         req: tonic::Request<api::UserServiceDeleteBillingRequest>,
     ) -> super::Resp<api::UserServiceDeleteBillingResponse> {
-        self.write(|write| delete_billing(req, write).scope_boxed())
-            .await
+        dbg!(
+            self.write(|write| delete_billing(req, write).scope_boxed())
+                .await
+        )
     }
 }
 

@@ -64,36 +64,35 @@ impl ApiKeyService for Grpc {
         &self,
         req: Request<api::ApiKeyServiceCreateRequest>,
     ) -> super::Resp<api::ApiKeyServiceCreateResponse> {
-        self.write(|write| create(req, write).scope_boxed()).await
+        dbg!(self.write(|write| create(req, write).scope_boxed()).await)
     }
 
     async fn list(
         &self,
         req: Request<api::ApiKeyServiceListRequest>,
     ) -> super::Resp<api::ApiKeyServiceListResponse> {
-        self.read(|read| list(req, read).scope_boxed()).await
+        dbg!(self.read(|read| list(req, read).scope_boxed()).await)
     }
 
     async fn update(
         &self,
         req: Request<api::ApiKeyServiceUpdateRequest>,
     ) -> super::Resp<api::ApiKeyServiceUpdateResponse> {
-        self.write(|write| update(req, write).scope_boxed()).await
+        dbg!(self.write(|write| update(req, write).scope_boxed()).await)
     }
 
     async fn regenerate(
         &self,
         req: Request<api::ApiKeyServiceRegenerateRequest>,
     ) -> super::Resp<api::ApiKeyServiceRegenerateResponse> {
-        self.write(|write| regenerate(req, write).scope_boxed())
-            .await
+        dbg!(self.write(|write| regenerate(req, write).scope_boxed())).await
     }
 
     async fn delete(
         &self,
         req: Request<api::ApiKeyServiceDeleteRequest>,
     ) -> super::Resp<api::ApiKeyServiceDeleteResponse> {
-        self.write(|write| delete(req, write).scope_boxed()).await
+        dbg!(self.write(|write| delete(req, write).scope_boxed()).await)
     }
 }
 

@@ -48,63 +48,63 @@ impl host_service_server::HostService for super::Grpc {
         &self,
         req: tonic::Request<api::HostServiceCreateRequest>,
     ) -> super::Resp<api::HostServiceCreateResponse> {
-        self.write(|write| create(req, write).scope_boxed()).await
+        dbg!(self.write(|write| create(req, write).scope_boxed()).await)
     }
 
     async fn get(
         &self,
         req: tonic::Request<api::HostServiceGetRequest>,
     ) -> super::Resp<api::HostServiceGetResponse> {
-        self.read(|read| get(req, read).scope_boxed()).await
+        dbg!(self.read(|read| get(req, read).scope_boxed()).await)
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::HostServiceListRequest>,
     ) -> super::Resp<api::HostServiceListResponse> {
-        self.read(|read| list(req, read).scope_boxed()).await
+        dbg!(self.read(|read| list(req, read).scope_boxed()).await)
     }
 
     async fn update(
         &self,
         req: tonic::Request<api::HostServiceUpdateRequest>,
     ) -> super::Resp<api::HostServiceUpdateResponse> {
-        self.write(|write| update(req, write).scope_boxed()).await
+        dbg!(self.write(|write| update(req, write).scope_boxed()).await)
     }
 
     async fn delete(
         &self,
         req: tonic::Request<api::HostServiceDeleteRequest>,
     ) -> super::Resp<api::HostServiceDeleteResponse> {
-        self.write(|write| delete(req, write).scope_boxed()).await
+        dbg!(self.write(|write| delete(req, write).scope_boxed()).await)
     }
 
     async fn start(
         &self,
         req: tonic::Request<api::HostServiceStartRequest>,
     ) -> super::Resp<api::HostServiceStartResponse> {
-        self.write(|write| start(req, write).scope_boxed()).await
+        dbg!(self.write(|write| start(req, write).scope_boxed()).await)
     }
 
     async fn stop(
         &self,
         req: tonic::Request<api::HostServiceStopRequest>,
     ) -> super::Resp<api::HostServiceStopResponse> {
-        self.write(|write| stop(req, write).scope_boxed()).await
+        dbg!(self.write(|write| stop(req, write).scope_boxed()).await)
     }
 
     async fn restart(
         &self,
         req: tonic::Request<api::HostServiceRestartRequest>,
     ) -> super::Resp<api::HostServiceRestartResponse> {
-        self.write(|write| restart(req, write).scope_boxed()).await
+        dbg!(self.write(|write| restart(req, write).scope_boxed()).await)
     }
 
     async fn regions(
         &self,
         req: tonic::Request<api::HostServiceRegionsRequest>,
     ) -> super::Resp<api::HostServiceRegionsResponse> {
-        self.read(|read| regions(req, read).scope_boxed()).await
+        dbg!(self.read(|read| regions(req, read).scope_boxed()).await)
     }
 }
 

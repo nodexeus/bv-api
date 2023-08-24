@@ -11,7 +11,7 @@ impl discovery_service_server::DiscoveryService for super::Grpc {
         &self,
         req: tonic::Request<api::DiscoveryServiceServicesRequest>,
     ) -> super::Resp<api::DiscoveryServiceServicesResponse> {
-        self.read(|read| services(req, read).scope_boxed()).await
+        dbg!(self.read(|read| services(req, read).scope_boxed()).await)
     }
 }
 

@@ -23,21 +23,21 @@ impl command_service_server::CommandService for super::Grpc {
         &self,
         req: tonic::Request<api::CommandServiceUpdateRequest>,
     ) -> super::Resp<api::CommandServiceUpdateResponse> {
-        self.write(|write| update(req, write).scope_boxed()).await
+        dbg!(self.write(|write| update(req, write).scope_boxed()).await)
     }
 
     async fn ack(
         &self,
         req: tonic::Request<api::CommandServiceAckRequest>,
     ) -> super::Resp<api::CommandServiceAckResponse> {
-        self.write(|write| ack(req, write).scope_boxed()).await
+        dbg!(self.write(|write| ack(req, write).scope_boxed()).await)
     }
 
     async fn pending(
         &self,
         req: tonic::Request<api::CommandServicePendingRequest>,
     ) -> super::Resp<api::CommandServicePendingResponse> {
-        self.read(|read| pending(req, read).scope_boxed()).await
+        dbg!(self.read(|read| pending(req, read).scope_boxed()).await)
     }
 }
 

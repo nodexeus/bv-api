@@ -38,21 +38,21 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceLoginRequest>,
     ) -> super::Resp<api::AuthServiceLoginResponse> {
-        self.write(|write| login(req, write).scope_boxed()).await
+        dbg!(self.write(|write| login(req, write).scope_boxed()).await)
     }
 
     async fn confirm(
         &self,
         req: tonic::Request<api::AuthServiceConfirmRequest>,
     ) -> super::Resp<api::AuthServiceConfirmResponse> {
-        self.write(|write| confirm(req, write).scope_boxed()).await
+        dbg!(self.write(|write| confirm(req, write).scope_boxed()).await)
     }
 
     async fn refresh(
         &self,
         req: tonic::Request<api::AuthServiceRefreshRequest>,
     ) -> super::Resp<api::AuthServiceRefreshResponse> {
-        self.write(|write| refresh(req, write).scope_boxed()).await
+        dbg!(self.write(|write| refresh(req, write).scope_boxed()).await)
     }
 
     /// This endpoint triggers the sending of the reset-password email. The actual resetting is
@@ -61,24 +61,30 @@ impl auth_service_server::AuthService for super::Grpc {
         &self,
         req: tonic::Request<api::AuthServiceResetPasswordRequest>,
     ) -> super::Resp<api::AuthServiceResetPasswordResponse> {
-        self.write(|write| reset_password(req, write).scope_boxed())
-            .await
+        dbg!(
+            self.write(|write| reset_password(req, write).scope_boxed())
+                .await
+        )
     }
 
     async fn update_password(
         &self,
         req: tonic::Request<api::AuthServiceUpdatePasswordRequest>,
     ) -> super::Resp<api::AuthServiceUpdatePasswordResponse> {
-        self.write(|write| update_password(req, write).scope_boxed())
-            .await
+        dbg!(
+            self.write(|write| update_password(req, write).scope_boxed())
+                .await
+        )
     }
 
     async fn update_ui_password(
         &self,
         req: tonic::Request<api::AuthServiceUpdateUiPasswordRequest>,
     ) -> super::Resp<api::AuthServiceUpdateUiPasswordResponse> {
-        self.write(|write| update_ui_password(req, write).scope_boxed())
-            .await
+        dbg!(
+            self.write(|write| update_ui_password(req, write).scope_boxed())
+                .await
+        )
     }
 }
 

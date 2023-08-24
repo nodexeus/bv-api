@@ -6,6 +6,8 @@ impl babel_service_server::BabelService for super::Grpc {
         &self,
         _req: tonic::Request<api::BabelServiceNotifyRequest>,
     ) -> super::Resp<api::BabelServiceNotifyResponse> {
-        Err(tonic::Status::unimplemented("Node upgrade needs a rework"))
+        dbg!(Err(tonic::Status::unimplemented(
+            "Node upgrade needs a rework"
+        )))
     }
 }
