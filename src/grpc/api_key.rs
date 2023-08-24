@@ -85,7 +85,10 @@ impl ApiKeyService for Grpc {
         &self,
         req: Request<api::ApiKeyServiceRegenerateRequest>,
     ) -> super::Resp<api::ApiKeyServiceRegenerateResponse> {
-        dbg!(self.write(|write| regenerate(req, write).scope_boxed())).await
+        dbg!(
+            self.write(|write| regenerate(req, write).scope_boxed())
+                .await
+        )
     }
 
     async fn delete(
