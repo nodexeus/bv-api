@@ -48,7 +48,7 @@ INNER JOIN
 -- it, which have become redundant.
 ALTER TABLE blockchain_properties ADD COLUMN blockchain_node_type_id UUID NULL REFERENCES blockchain_node_types ON DELETE RESTRICT;
 ALTER TABLE blockchain_properties ADD COLUMN blockchain_version_id UUID NULL REFERENCES blockchain_versions ON DELETE RESTRICT;
-ALTER TABLE blockchain_properties ADD COLUMN display_name TEXT NOT NULL;
+ALTER TABLE blockchain_properties ADD COLUMN display_name TEXT NULL;
 UPDATE blockchain_properties SET
     display_name = name,
     blockchain_node_type_id = blockchain_node_types.id,
