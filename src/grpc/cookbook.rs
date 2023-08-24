@@ -19,8 +19,10 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceRetrievePluginRequest>,
     ) -> super::Resp<api::CookbookServiceRetrievePluginResponse> {
-        self.read(|read| retrieve_plugin(req, read).scope_boxed())
-            .await
+        dbg!(
+            self.read(|read| retrieve_plugin(req, read).scope_boxed())
+                .await
+        )
     }
 
     // Retrieve image for specific version and state.
@@ -28,8 +30,10 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceRetrieveImageRequest>,
     ) -> super::Resp<api::CookbookServiceRetrieveImageResponse> {
-        self.read(|read| retrieve_image(req, read).scope_boxed())
-            .await
+        dbg!(
+            self.read(|read| retrieve_image(req, read).scope_boxed())
+                .await
+        )
     }
 
     // Retrieve hardware requirements for given identifier.
@@ -37,8 +41,10 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceRequirementsRequest>,
     ) -> super::Resp<api::CookbookServiceRequirementsResponse> {
-        self.read(|read| requirements(req, read).scope_boxed())
-            .await
+        dbg!(
+            self.read(|read| requirements(req, read).scope_boxed())
+                .await
+        )
     }
 
     // Retrieve net configurations for given chain.
@@ -46,8 +52,10 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceNetConfigurationsRequest>,
     ) -> super::Resp<api::CookbookServiceNetConfigurationsResponse> {
-        self.read(|read| net_configurations(req, read).scope_boxed())
-            .await
+        dbg!(
+            self.read(|read| net_configurations(req, read).scope_boxed())
+                .await
+        )
     }
 
     // List all available babel versions.
@@ -55,8 +63,10 @@ impl cookbook_service_server::CookbookService for super::Grpc {
         &self,
         req: tonic::Request<api::CookbookServiceListBabelVersionsRequest>,
     ) -> super::Resp<api::CookbookServiceListBabelVersionsResponse> {
-        self.read(|read| list_babel_versions(req, read).scope_boxed())
-            .await
+        dbg!(
+            self.read(|read| list_babel_versions(req, read).scope_boxed())
+                .await
+        )
     }
 }
 
@@ -199,7 +209,7 @@ impl bundle_service_server::BundleService for super::Grpc {
         &self,
         req: tonic::Request<api::BundleServiceRetrieveRequest>,
     ) -> super::Resp<api::BundleServiceRetrieveResponse> {
-        self.read(|read| retrieve(req, read).scope_boxed()).await
+        dbg!(self.read(|read| retrieve(req, read).scope_boxed()).await)
     }
 
     /// List all available bundle versions.
@@ -207,8 +217,10 @@ impl bundle_service_server::BundleService for super::Grpc {
         &self,
         req: tonic::Request<api::BundleServiceListBundleVersionsRequest>,
     ) -> super::Resp<api::BundleServiceListBundleVersionsResponse> {
-        self.read(|read| list_bundle_versions(req, read).scope_boxed())
-            .await
+        dbg!(
+            self.read(|read| list_bundle_versions(req, read).scope_boxed())
+                .await
+        )
     }
 
     /// Delete bundle from storage.
@@ -216,7 +228,7 @@ impl bundle_service_server::BundleService for super::Grpc {
         &self,
         req: tonic::Request<api::BundleServiceDeleteRequest>,
     ) -> super::Resp<api::BundleServiceDeleteResponse> {
-        self.read(|read| delete(req, read).scope_boxed()).await
+        dbg!(self.read(|read| delete(req, read).scope_boxed()).await)
     }
 }
 
@@ -268,16 +280,20 @@ impl kernel_service_server::KernelService for super::Grpc {
         &self,
         req: tonic::Request<api::KernelServiceRetrieveRequest>,
     ) -> super::Resp<api::KernelServiceRetrieveResponse> {
-        self.read(|read| retrieve_kernel_(req, read).scope_boxed())
-            .await
+        dbg!(
+            self.read(|read| retrieve_kernel_(req, read).scope_boxed())
+                .await
+        )
     }
 
     async fn list_kernel_versions(
         &self,
         req: tonic::Request<api::KernelServiceListKernelVersionsRequest>,
     ) -> super::Resp<api::KernelServiceListKernelVersionsResponse> {
-        self.read(|read| list_kernel_versions(req, read).scope_boxed())
-            .await
+        dbg!(
+            self.read(|read| list_kernel_versions(req, read).scope_boxed())
+                .await
+        )
     }
 }
 
@@ -318,8 +334,10 @@ impl manifest_service_server::ManifestService for super::Grpc {
         &self,
         req: tonic::Request<api::ManifestServiceRetrieveDownloadManifestRequest>,
     ) -> super::Resp<api::ManifestServiceRetrieveDownloadManifestResponse> {
-        self.read(|read| retrieve_download_manifest(req, read).scope_boxed())
-            .await
+        dbg!(
+            self.read(|read| retrieve_download_manifest(req, read).scope_boxed())
+                .await
+        )
     }
 }
 
