@@ -926,6 +926,7 @@ impl api::NodeProperty {
     fn from_model(model: NodeProperty, bprop: BlockchainProperty) -> Self {
         let mut prop = Self {
             name: bprop.name,
+            display_name: bprop.display_name,
             ui_type: 0,
             disabled: bprop.disabled,
             required: bprop.required,
