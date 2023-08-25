@@ -66,28 +66,28 @@ impl subscription_service_server::SubscriptionService for Grpc {
         &self,
         req: Request<api::SubscriptionServiceCreateRequest>,
     ) -> super::Resp<api::SubscriptionServiceCreateResponse> {
-        dbg!(self.write(|write| create(req, write).scope_boxed()).await)
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn get(
         &self,
         req: Request<api::SubscriptionServiceGetRequest>,
     ) -> super::Resp<api::SubscriptionServiceGetResponse> {
-        dbg!(self.read(|read| get(req, read).scope_boxed()).await)
+        self.read(|read| get(req, read).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: Request<api::SubscriptionServiceListRequest>,
     ) -> super::Resp<api::SubscriptionServiceListResponse> {
-        dbg!(self.read(|read| list(req, read).scope_boxed()).await)
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 
     async fn delete(
         &self,
         req: Request<api::SubscriptionServiceDeleteRequest>,
     ) -> super::Resp<api::SubscriptionServiceDeleteResponse> {
-        dbg!(self.write(|write| delete(req, write).scope_boxed()).await)
+        self.write(|write| delete(req, write).scope_boxed()).await
     }
 }
 

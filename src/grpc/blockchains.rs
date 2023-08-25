@@ -19,14 +19,14 @@ impl blockchain_service_server::BlockchainService for super::Grpc {
         &self,
         req: tonic::Request<api::BlockchainServiceGetRequest>,
     ) -> super::Resp<api::BlockchainServiceGetResponse> {
-        dbg!(self.read(|read| get(req, read).scope_boxed()).await)
+        self.read(|read| get(req, read).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::BlockchainServiceListRequest>,
     ) -> super::Resp<api::BlockchainServiceListResponse> {
-        dbg!(self.read(|read| list(req, read).scope_boxed()).await)
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 }
 

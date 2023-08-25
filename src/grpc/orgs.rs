@@ -18,65 +18,59 @@ impl org_service_server::OrgService for super::Grpc {
         &self,
         req: tonic::Request<api::OrgServiceCreateRequest>,
     ) -> super::Resp<api::OrgServiceCreateResponse> {
-        dbg!(self.write(|write| create(req, write).scope_boxed()).await)
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn get(
         &self,
         req: tonic::Request<api::OrgServiceGetRequest>,
     ) -> super::Resp<api::OrgServiceGetResponse> {
-        dbg!(self.read(|read| get(req, read).scope_boxed()).await)
+        self.read(|read| get(req, read).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: tonic::Request<api::OrgServiceListRequest>,
     ) -> super::Resp<api::OrgServiceListResponse> {
-        dbg!(self.read(|read| list(req, read).scope_boxed()).await)
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 
     async fn update(
         &self,
         req: tonic::Request<api::OrgServiceUpdateRequest>,
     ) -> super::Resp<api::OrgServiceUpdateResponse> {
-        dbg!(self.write(|write| update(req, write).scope_boxed()).await)
+        self.write(|write| update(req, write).scope_boxed()).await
     }
 
     async fn delete(
         &self,
         req: tonic::Request<api::OrgServiceDeleteRequest>,
     ) -> super::Resp<api::OrgServiceDeleteResponse> {
-        dbg!(self.write(|write| delete(req, write).scope_boxed()).await)
+        self.write(|write| delete(req, write).scope_boxed()).await
     }
 
     async fn remove_member(
         &self,
         req: tonic::Request<api::OrgServiceRemoveMemberRequest>,
     ) -> super::Resp<api::OrgServiceRemoveMemberResponse> {
-        dbg!(
-            self.write(|write| remove_member(req, write).scope_boxed())
-                .await
-        )
+        self.write(|write| remove_member(req, write).scope_boxed())
+            .await
     }
 
     async fn get_provision_token(
         &self,
         req: tonic::Request<api::OrgServiceGetProvisionTokenRequest>,
     ) -> super::Resp<api::OrgServiceGetProvisionTokenResponse> {
-        dbg!(
-            self.read(|read| get_provision_token(req, read).scope_boxed())
-                .await
-        )
+        self.read(|read| get_provision_token(req, read).scope_boxed())
+            .await
     }
 
     async fn reset_provision_token(
         &self,
         req: tonic::Request<api::OrgServiceResetProvisionTokenRequest>,
     ) -> super::Resp<api::OrgServiceResetProvisionTokenResponse> {
-        dbg!(
-            self.write(|write| reset_provision_token(req, write).scope_boxed())
-                .await
-        )
+        self.write(|write| reset_provision_token(req, write).scope_boxed())
+            .await
     }
 }
 

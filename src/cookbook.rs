@@ -287,7 +287,9 @@ impl api::ConfigIdentifier {
         let key = key.as_ref();
         let parts: Vec<&str> = key.split('/').collect();
         let [_, protocol, node_type, node_version, ..] = &parts[..] else {
-            return Err(anyhow!("{key} is not splittable in at least 4 `/`-separated parts").into());
+            return Err(
+                anyhow!("{key} is not splittable in at least 4 `/`-separated parts").into(),
+            );
         };
         let node_type: NodeType = node_type.parse()?;
         let id = api::ConfigIdentifier {

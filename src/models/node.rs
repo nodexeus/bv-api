@@ -272,7 +272,9 @@ impl Node {
     }
 
     pub async fn scheduler(&self, conn: &mut Conn<'_>) -> crate::Result<Option<NodeScheduler>> {
-        let Some(resource) = self.scheduler_resource else { return Ok(None); };
+        let Some(resource) = self.scheduler_resource else {
+            return Ok(None);
+        };
         Ok(Some(NodeScheduler {
             region: self.region(conn).await?,
             similarity: self.scheduler_similarity,
@@ -430,7 +432,9 @@ impl NewNode<'_> {
     }
 
     async fn scheduler(&self, conn: &mut Conn<'_>) -> crate::Result<Option<NodeScheduler>> {
-        let Some(resource) = self.scheduler_resource else { return Ok(None); };
+        let Some(resource) = self.scheduler_resource else {
+            return Ok(None);
+        };
         let region = self.scheduler_region.map(|id| Region::by_id(id, conn));
         let region = OptionFuture::from(region).await.transpose()?;
         Ok(Some(NodeScheduler {

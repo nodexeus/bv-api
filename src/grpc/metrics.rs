@@ -25,14 +25,14 @@ impl metrics_service_server::MetricsService for super::Grpc {
         &self,
         req: tonic::Request<api::MetricsServiceNodeRequest>,
     ) -> super::Resp<api::MetricsServiceNodeResponse> {
-        dbg!(self.write(|write| node(req, write).scope_boxed()).await)
+        self.write(|write| node(req, write).scope_boxed()).await
     }
 
     async fn host(
         &self,
         req: tonic::Request<api::MetricsServiceHostRequest>,
     ) -> super::Resp<api::MetricsServiceHostResponse> {
-        dbg!(self.write(|write| host(req, write).scope_boxed()).await)
+        self.write(|write| host(req, write).scope_boxed()).await
     }
 }
 

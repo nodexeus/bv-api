@@ -16,14 +16,14 @@ impl key_file_service_server::KeyFileService for super::Grpc {
         &self,
         req: Request<api::KeyFileServiceCreateRequest>,
     ) -> super::Resp<api::KeyFileServiceCreateResponse> {
-        dbg!(self.write(|write| create(req, write).scope_boxed()).await)
+        self.write(|write| create(req, write).scope_boxed()).await
     }
 
     async fn list(
         &self,
         req: Request<api::KeyFileServiceListRequest>,
     ) -> super::Resp<api::KeyFileServiceListResponse> {
-        dbg!(self.read(|read| list(req, read).scope_boxed()).await)
+        self.read(|read| list(req, read).scope_boxed()).await
     }
 }
 
