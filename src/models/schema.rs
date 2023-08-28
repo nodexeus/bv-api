@@ -188,6 +188,7 @@ diesel::table! {
         created_by -> Nullable<Uuid>,
         region_id -> Nullable<Uuid>,
         monthly_cost_in_usd -> Nullable<Int8>,
+        vmm_mountpoint -> Nullable<Text>,
     }
 }
 
@@ -294,6 +295,7 @@ diesel::table! {
         scheduler_similarity -> Nullable<EnumNodeSimilarityAffinity>,
         scheduler_resource -> Nullable<EnumNodeResourceAffinity>,
         scheduler_region -> Nullable<Uuid>,
+        data_directory_mountpoint -> Nullable<Text>,
     }
 }
 
