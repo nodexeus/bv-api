@@ -137,8 +137,7 @@ async fn list(
     if !is_allowed {
         super::forbidden!("Access denied for nodes list");
     }
-    let (node_count, mut nodes) = Node::filter(filter, conn).await?;
-    nodes.sort_by(|n1, n2| n2.created_at.cmp(&n1.created_at));
+    let (node_count, nodes) = Node::filter(filter, conn).await?;
     let nodes = api::Node::from_models(nodes, conn).await?;
     let resp = api::NodeServiceListResponse { nodes, node_count };
     Ok(tonic::Response::new(resp))
