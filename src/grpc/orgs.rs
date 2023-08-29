@@ -203,6 +203,8 @@ async fn delete(
 
     debug!("Deleting org: {}", *org_id);
     org.delete(conn).await?;
+    let invitations = Invitation::find_by_org(&org, conn).await?;
+    Invitation::bulk_delete(invitations, conn).await?;
     let user = User::find_by_id(user_id, conn).await?;
     let msg = api::OrgMessage::deleted(org, user);
     let resp = api::OrgServiceDeleteResponse {};
