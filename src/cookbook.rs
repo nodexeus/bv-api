@@ -16,13 +16,14 @@ pub const BUNDLE_NAME: &str = "bvd-bundle.tgz";
 
 #[derive(Clone)]
 pub struct Cookbook {
+    pub data_prefix: String,
     pub prefix: String,
     pub bucket: String,
     pub bundle_bucket: String,
     pub kernel_bucket: String,
-    pub expiration: std::time::Duration,
+    pub expiration: Duration,
     pub client: Arc<dyn Client>,
-    pub engine: std::sync::Arc<rhai::Engine>,
+    pub engine: Arc<rhai::Engine>,
 }
 
 #[tonic::async_trait]
@@ -129,9 +130,10 @@ impl Cookbook {
         config: &config::cookbook::Config,
         client: impl Client + 'static,
     ) -> Self {
-        let engine = std::sync::Arc::new(rhai::Engine::new());
+        let engine = Arc::new(rhai::Engine::new());
 
         Self {
+            data_prefix: config.dir_chains_data_prefix.clone(),
             prefix: config.dir_chains_prefix.clone(),
             bucket: config.r2_bucket.clone(),
             bundle_bucket: config.bundle_bucket.clone(),
@@ -248,16 +250,32 @@ impl Cookbook {
         id: api::ConfigIdentifier,
         network: String,
     ) -> crate::Result<api::DownloadManifest> {
+        let node_version = semver::Version::parse(&id.node_version)
+            .with_context(|| format!("node version must be semver, but is {}", id.node_version))?;
         let path = format!(
-            "{}/{}/{}/{}/{}/manifest.json",
-            self.prefix,
+            "{}/{}/{}",
+            self.data_prefix,
             id.protocol,
             id.node_type().into_model(),
-            id.node_version,
-            network
         );
-        let mut manifest: manifest::DownloadManifest =
-            serde_json::from_str(&self.client.read_string(&self.bucket, &path).await?)?;
+        let min_versions = self.get_min_node_versions(&path).await?;
+        let mut version_iter = min_versions.iter().rev();
+        let mut manifest = loop {
+            let Some((version_str, version)) = version_iter.next() else {
+                return Err(crate::Error::UnexpectedError(anyhow!(
+                    "No valid manifest found for node {id:?}-{network} in {path}"
+                )));
+            };
+            if node_version >= *version {
+                if let Ok(manifest) = self
+                    .find_valid_manifest(&format!("{path}/{version_str}/{network}"))
+                    .await
+                {
+                    break manifest;
+                }
+            }
+        };
+
         for chunk in manifest.chunks.iter_mut() {
             chunk.url = self
                 .client
@@ -265,6 +283,62 @@ impl Cookbook {
                 .await?;
         }
         Ok(manifest.try_into()?)
+    }
+
+    async fn get_min_node_versions(
+        &self,
+        path: &str,
+    ) -> crate::Result<Vec<(String, semver::Version)>> {
+        let min_versions = self.client.list(&self.bucket, path).await?;
+        let mut min_versions: Vec<_> = min_versions
+            .into_iter()
+            .filter_map(|version_str| {
+                version_str.rsplit('/').next().and_then(|version_str| {
+                    semver::Version::parse(version_str)
+                        .ok()
+                        .map(|version| (version_str.to_owned(), version))
+                })
+            })
+            .collect();
+        min_versions.sort_by(|(_, a), (_, b)| a.cmp(b));
+        Ok(min_versions)
+    }
+
+    async fn find_valid_manifest(&self, path: &str) -> crate::Result<manifest::DownloadManifest> {
+        let min_versions = self.get_min_data_versions(path).await?;
+        let mut version_iter = min_versions.iter().rev();
+        Ok(loop {
+            let Some((version_str, _)) = version_iter.next() else {
+                return Err(crate::Error::UnexpectedError(anyhow!(
+                    "No valid manifest found in {path}"
+                )));
+            };
+            if let Ok(manifest) = self
+                .client
+                .read_string(&self.bucket, &format!("{path}/{version_str}/manifest.json"))
+                .await
+                .and_then(|manifest| Ok(serde_json::from_str(&manifest)?))
+            {
+                break manifest;
+            }
+        })
+    }
+
+    async fn get_min_data_versions(&self, path: &str) -> crate::Result<Vec<(String, u64)>> {
+        let min_versions = self.client.list(&self.bucket, path).await?;
+        let mut min_versions: Vec<_> = min_versions
+            .into_iter()
+            .filter_map(|version_str| {
+                version_str.rsplit('/').next().and_then(|version_str| {
+                    version_str
+                        .parse::<u64>()
+                        .ok()
+                        .map(|version| (version_str.to_owned(), version))
+                })
+            })
+            .collect();
+        min_versions.sort_by(|(_, a), (_, b)| a.cmp(b));
+        Ok(min_versions)
     }
 
     fn script_to_metadata(
@@ -616,6 +690,40 @@ mod manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::cookbook::Config;
+    use crate::grpc::api::ConfigIdentifier;
+    use mockall::*;
+
+    mock! {
+        pub Client {}
+
+        #[tonic::async_trait]
+        impl Client for Client {
+            async fn read_file(&self, bucket: &str, path: &str) -> crate::Result<Vec<u8>>;
+            async fn download_url(
+                &self,
+                bucket: &str,
+                path: &str,
+                expiration: Duration,
+            ) -> crate::Result<String>;
+            async fn list(&self, bucket: &str, path: &str) -> crate::Result<Vec<String>>;
+        }
+    }
+
+    fn dummy_config() -> Config {
+        Config {
+            dir_chains_data_prefix: "data".to_string(),
+            dir_chains_prefix: "chains".to_string(),
+            r2_bucket: "bucket".to_string(),
+            r2_url: "https://dummy.url".parse().unwrap(),
+            presigned_url_expiration: "1d".parse().unwrap(),
+            region: "eu-west-3".to_string(),
+            key_id: Default::default(),
+            key: Default::default(),
+            bundle_bucket: "bundles".to_string(),
+            kernel_bucket: "kernles".to_string(),
+        }
+    }
 
     #[test]
     fn test_config_identifier_from_key() {
@@ -641,5 +749,265 @@ mod tests {
         assert_eq!(parsed[1].version, "0.10.0");
         assert_eq!(parsed[2].version, "0.7.0");
         assert_eq!(parsed[3].version, "0.9.0");
+    }
+
+    #[tokio::test]
+    async fn test_get_download_manifest_invalid_node_version() -> anyhow::Result<()> {
+        let cookbook = Cookbook::new_with_client(&dummy_config(), MockClient::new());
+        assert_eq!(
+            "node version must be semver, but is not semver",
+            cookbook
+                .get_download_manifest(
+                    ConfigIdentifier {
+                        protocol: "test_blockchain".to_string(),
+                        node_type: NodeType::Node.into(),
+                        node_version: "not semver".to_string(),
+                    },
+                    "test".to_owned()
+                )
+                .await
+                .unwrap_err()
+                .to_string()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_download_manifest_client_error() -> anyhow::Result<()> {
+        let mut client_mock = MockClient::new();
+        client_mock
+            .expect_list()
+            .with(
+                predicate::eq("bucket"),
+                predicate::eq("data/test_blockchain/Node"),
+            )
+            .once()
+            .returning(|_, _| Err(crate::Error::unexpected("some client error")));
+        let cookbook = Cookbook::new_with_client(&dummy_config(), client_mock);
+        assert_eq!(
+            "some client error",
+            cookbook
+                .get_download_manifest(
+                    ConfigIdentifier {
+                        protocol: "test_blockchain".to_string(),
+                        node_type: NodeType::Node.into(),
+                        node_version: "1.2.3".to_string(),
+                    },
+                    "test".to_owned()
+                )
+                .await
+                .unwrap_err()
+                .to_string()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_download_manifest_no_min_versions() -> anyhow::Result<()> {
+        let mut client_mock = MockClient::new();
+        client_mock
+            .expect_list()
+            .with(
+                predicate::eq("bucket"),
+                predicate::eq("data/test_blockchain/Node"),
+            )
+            .once()
+            .returning(|_, _| Ok(vec![]));
+        client_mock
+            .expect_list()
+            .with(
+                predicate::eq("bucket"),
+                predicate::eq("data/test_blockchain/Node"),
+            )
+            .once()
+            .returning(|_, _| {
+                Ok(vec![
+                    "invalid".to_owned(),
+                    "7.7.7".to_owned(),
+                    "8.8.8".to_owned(),
+                ])
+            });
+        let cookbook = Cookbook::new_with_client(&dummy_config(), client_mock);
+        assert_eq!(
+            r#"No valid manifest found for node ConfigIdentifier { protocol: "test_blockchain", node_type: Node, node_version: "1.2.3" }-test in data/test_blockchain/Node"#,
+            cookbook
+                .get_download_manifest(
+                    ConfigIdentifier {
+                        protocol: "test_blockchain".to_string(),
+                        node_type: NodeType::Node.into(),
+                        node_version: "1.2.3".to_string(),
+                    },
+                    "test".to_owned()
+                )
+                .await
+                .unwrap_err()
+                .to_string()
+        );
+        assert_eq!(
+            r#"No valid manifest found for node ConfigIdentifier { protocol: "test_blockchain", node_type: Node, node_version: "1.2.3" }-test in data/test_blockchain/Node"#,
+            cookbook
+                .get_download_manifest(
+                    ConfigIdentifier {
+                        protocol: "test_blockchain".to_string(),
+                        node_type: NodeType::Node.into(),
+                        node_version: "1.2.3".to_string(),
+                    },
+                    "test".to_owned()
+                )
+                .await
+                .unwrap_err()
+                .to_string()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_download_manifest_no_data_version() -> anyhow::Result<()> {
+        let mut client_mock = MockClient::new();
+        client_mock
+            .expect_list()
+            .with(
+                predicate::eq("bucket"),
+                predicate::eq("data/test_blockchain/Node"),
+            )
+            .once()
+            .returning(|_, _| {
+                Ok(vec![
+                    "invalid".to_owned(),
+                    "9.0.1".to_owned(),
+                    "0.0.1".to_owned(),
+                    "1.2.3".to_owned(),
+                ])
+            });
+        client_mock
+            .expect_list()
+            .with(
+                predicate::eq("bucket"),
+                predicate::eq("data/test_blockchain/Node/1.2.3/test"),
+            )
+            .once()
+            .returning(|_, _| Ok(vec![]));
+        client_mock
+            .expect_list()
+            .with(
+                predicate::eq("bucket"),
+                predicate::eq("data/test_blockchain/Node/0.0.1/test"),
+            )
+            .once()
+            .returning(|_, _| Ok(vec![]));
+        let cookbook = Cookbook::new_with_client(&dummy_config(), client_mock);
+        assert_eq!(
+            r#"No valid manifest found for node ConfigIdentifier { protocol: "test_blockchain", node_type: Node, node_version: "1.2.3" }-test in data/test_blockchain/Node"#,
+            cookbook
+                .get_download_manifest(
+                    ConfigIdentifier {
+                        protocol: "test_blockchain".to_string(),
+                        node_type: NodeType::Node.into(),
+                        node_version: "1.2.3".to_string(),
+                    },
+                    "test".to_owned()
+                )
+                .await
+                .unwrap_err()
+                .to_string()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_download_manifest_no_manifest_or_invalid() -> anyhow::Result<()> {
+        let mut client_mock = MockClient::new();
+        client_mock
+            .expect_list()
+            .with(
+                predicate::eq("bucket"),
+                predicate::eq("data/test_blockchain/Node"),
+            )
+            .once()
+            .returning(|_, _| {
+                Ok(vec![
+                    "invalid".to_owned(),
+                    "9.0.1".to_owned(),
+                    "1.2.3".to_owned(),
+                ])
+            });
+        client_mock
+            .expect_list()
+            .with(
+                predicate::eq("bucket"),
+                predicate::eq("data/test_blockchain/Node/1.2.3/test"),
+            )
+            .once()
+            .returning(|_, _| Ok(vec!["invalid".to_owned(), "1".to_owned(), "2".to_owned()]));
+        client_mock
+            .expect_read_file()
+            .once()
+            .returning(|_, _| Err(crate::Error::unexpected("no file")));
+        client_mock
+            .expect_read_file()
+            .once()
+            .returning(|_, _| Ok("invalid manifest content".to_owned().into_bytes()));
+        let cookbook = Cookbook::new_with_client(&dummy_config(), client_mock);
+        assert_eq!(
+            r#"No valid manifest found for node ConfigIdentifier { protocol: "test_blockchain", node_type: Node, node_version: "1.2.3" }-test in data/test_blockchain/Node"#,
+            cookbook
+                .get_download_manifest(
+                    ConfigIdentifier {
+                        protocol: "test_blockchain".to_string(),
+                        node_type: NodeType::Node.into(),
+                        node_version: "1.2.3".to_string(),
+                    },
+                    "test".to_owned()
+                )
+                .await
+                .unwrap_err()
+                .to_string()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_download_manifest_ok() -> anyhow::Result<()> {
+        let mut client_mock = MockClient::new();
+        client_mock
+            .expect_list()
+            .with(
+                predicate::eq("bucket"),
+                predicate::eq("data/test_blockchain/Node"),
+            )
+            .once()
+            .returning(|_, _| Ok(vec!["1.1.1".to_owned()]));
+        client_mock
+            .expect_list()
+            .with(
+                predicate::eq("bucket"),
+                predicate::eq("data/test_blockchain/Node/1.1.1/test"),
+            )
+            .once()
+            .returning(|_, _| Ok(vec!["2".to_owned()]));
+        client_mock
+            .expect_read_file()
+            .once()
+            .returning(|_, _| Ok(r#"{"total_size": 128,"chunks": []}"#.to_owned().into_bytes()));
+        let cookbook = Cookbook::new_with_client(&dummy_config(), client_mock);
+        assert_eq!(
+            api::DownloadManifest {
+                total_size: 128,
+                compression: None,
+                chunks: vec![],
+            },
+            cookbook
+                .get_download_manifest(
+                    ConfigIdentifier {
+                        protocol: "test_blockchain".to_string(),
+                        node_type: NodeType::Node.into(),
+                        node_version: "1.2.3".to_string(),
+                    },
+                    "test".to_owned()
+                )
+                .await
+                .unwrap()
+        );
+        Ok(())
     }
 }
