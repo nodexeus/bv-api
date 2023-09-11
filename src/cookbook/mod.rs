@@ -45,7 +45,11 @@ pub trait Client: Send + Sync {
         expiration: Duration,
     ) -> Result<String, Error>;
 
+    /// List entries in given `path` non-recursively.
     async fn list(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error>;
+
+    /// List all entries in given `path` recursively.
+    async fn list_all(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error>;
 }
 
 #[derive(Debug, Display, Error)]
@@ -130,6 +134,25 @@ impl Client for aws_sdk_s3::Client {
     }
 
     async fn list(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error> {
+        let path = path.to_lowercase();
+        let resp = self
+            .list_objects_v2()
+            .bucket(bucket)
+            .prefix(&path)
+            .delimiter('/')
+            .send()
+            .await
+            .map_err(|err| Error::ListPath(path, err))?;
+        let files = resp
+            .common_prefixes()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|object| object.prefix().map(|prefix| prefix.to_owned()))
+            .collect();
+        Ok(files)
+    }
+
+    async fn list_all(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error> {
         let path = path.to_lowercase();
         let resp = self
             .list_objects_v2()
@@ -260,7 +283,7 @@ impl Cookbook {
         // identifier, and use that map to construct our final result.
         let path = format!("{prefix}/{protocol}/{node_type}", prefix = self.prefix);
         let mut idents = HashMap::new();
-        for ident in self.client.list(&self.bucket, &path).await?.iter() {
+        for ident in self.client.list_all(&self.bucket, &path).await?.iter() {
             let ident = api::ConfigIdentifier::from_key(ident)?;
             idents.insert(ident.node_type(), ident);
         }
@@ -270,7 +293,7 @@ impl Cookbook {
     pub async fn list_bundles(&self) -> Result<Vec<api::BundleIdentifier>, Error> {
         Ok(self
             .client
-            .list(&self.bundle_bucket, "")
+            .list_all(&self.bundle_bucket, "")
             .await?
             .iter()
             .flat_map(api::BundleIdentifier::from_key)
@@ -280,7 +303,7 @@ impl Cookbook {
     pub async fn list_kernels(&self) -> Result<Vec<api::KernelIdentifier>, Error> {
         Ok(self
             .client
-            .list(&self.kernel_bucket, "")
+            .list_all(&self.kernel_bucket, "")
             .await?
             .iter()
             .flat_map(api::KernelIdentifier::from_key)
@@ -344,11 +367,10 @@ impl Cookbook {
 
     async fn get_min_node_versions(&self, path: &str) -> Result<Vec<(String, Version)>, Error> {
         let min_versions = self.client.list(&self.bucket, path).await?;
-        debug!("QWERTemporaryYYYYYYYYYYY debug: {:?}", min_versions);
         let mut min_versions: Vec<_> = min_versions
             .into_iter()
             .filter_map(|version_str| {
-                version_str.rsplit('/').next().and_then(|version_str| {
+                subdir_name(&version_str).and_then(|version_str| {
                     Version::parse(version_str)
                         .ok()
                         .map(|version| (version_str.to_owned(), version))
@@ -384,7 +406,7 @@ impl Cookbook {
         let mut min_versions: Vec<_> = min_versions
             .into_iter()
             .filter_map(|version_str| {
-                version_str.rsplit('/').next().and_then(|version_str| {
+                subdir_name(&version_str).and_then(|version_str| {
                     version_str
                         .parse::<u64>()
                         .ok()
@@ -409,6 +431,10 @@ impl Cookbook {
 
         rhai::serde::from_dynamic(&dynamic).map_err(Error::InvalidScript)
     }
+}
+
+fn subdir_name(path: &str) -> Option<&str> {
+    path.trim_end_matches('/').rsplit('/').next()
 }
 
 impl api::ConfigIdentifier {
@@ -479,6 +505,7 @@ pub mod tests {
             async fn read_file(&self, bucket: &str, path: &str) -> Result<Vec<u8>, Error>;
             async fn download_url(&self, bucket: &str, path: &str, expiration: Duration) -> Result<String, Error>;
             async fn list(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error>;
+            async fn list_all(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error>;
         }
     }
 
@@ -495,6 +522,10 @@ pub mod tests {
         }
 
         async fn list(&self, _: &str, _: &str) -> Result<Vec<String>, Error> {
+            panic!("We're not using this in tests.")
+        }
+
+        async fn list_all(&self, _: &str, _: &str) -> Result<Vec<String>, Error> {
             panic!("We're not using this in tests.")
         }
     }
@@ -636,9 +667,9 @@ pub mod tests {
             .once()
             .returning(|_, _| {
                 Ok(vec![
-                    "invalid".to_owned(),
-                    "7.7.7".to_owned(),
-                    "8.8.8".to_owned(),
+                    "data/test_blockchain/node/invalid/".to_owned(),
+                    "data/test_blockchain/node/7.7.7/".to_owned(),
+                    "data/test_blockchain/node/8.8.8/".to_owned(),
                 ])
             });
 
@@ -675,10 +706,10 @@ pub mod tests {
             .once()
             .returning(|_, _| {
                 Ok(vec![
-                    "invalid".to_owned(),
-                    "9.0.1".to_owned(),
-                    "0.0.1".to_owned(),
-                    "1.2.3".to_owned(),
+                    "data/test_blockchain/node/invalid/".to_owned(),
+                    "data/test_blockchain/node/9.0.1/".to_owned(),
+                    "data/test_blockchain/node/0.0.1/".to_owned(),
+                    "data/test_blockchain/node/1.2.3/".to_owned(),
                 ])
             });
         client
@@ -717,16 +748,22 @@ pub mod tests {
             .once()
             .returning(|_, _| {
                 Ok(vec![
-                    "invalid".to_owned(),
-                    "9.0.1".to_owned(),
-                    "1.2.3".to_owned(),
+                    "data/test_blockchain/node/invalid/".to_owned(),
+                    "data/test_blockchain/node/9.0.1/".to_owned(),
+                    "data/test_blockchain/node/1.2.3/".to_owned(),
                 ])
             });
         client
             .expect_list()
             .with(eq("bucket"), eq("data/test_blockchain/Node/1.2.3/test"))
             .once()
-            .returning(|_, _| Ok(vec!["invalid".to_owned(), "1".to_owned(), "2".to_owned()]));
+            .returning(|_, _| {
+                Ok(vec![
+                    "data/test_blockchain/node/1.2.3/test/invalid/".to_owned(),
+                    "data/test_blockchain/node/1.2.3/test/1/".to_owned(),
+                    "data/test_blockchain/node/1.2.3/test/2/".to_owned(),
+                ])
+            });
         client
             .expect_read_file()
             .once()
@@ -759,12 +796,12 @@ pub mod tests {
             .expect_list()
             .with(eq("bucket"), eq("data/test_blockchain/Node"))
             .once()
-            .returning(|_, _| Ok(vec!["1.1.1".to_owned()]));
+            .returning(|_, _| Ok(vec!["data/test_blockchain/node/1.1.1/".to_owned()]));
         client
             .expect_list()
             .with(eq("bucket"), eq("data/test_blockchain/Node/1.1.1/test"))
             .once()
-            .returning(|_, _| Ok(vec!["2".to_owned()]));
+            .returning(|_, _| Ok(vec!["data/test_blockchain/node/1.1.1/test/2/".to_owned()]));
         client
             .expect_read_file()
             .once()
