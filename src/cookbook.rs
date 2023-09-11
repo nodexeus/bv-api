@@ -294,6 +294,7 @@ impl Cookbook {
         path: &str,
     ) -> crate::Result<Vec<(String, semver::Version)>> {
         let min_versions = self.client.list(&self.bucket, path).await?;
+        debug!("QWERTemporaryYYYYYYYYYYY debug: {:?}", min_versions);
         let mut min_versions: Vec<_> = min_versions
             .into_iter()
             .filter_map(|version_str| {
