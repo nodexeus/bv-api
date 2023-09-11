@@ -68,6 +68,7 @@ pub mod tests {
 
         pub fn mock_config(&self) -> Arc<crate::config::cookbook::Config> {
             let config = crate::config::cookbook::Config {
+                dir_chains_data_prefix: "fake".to_string(),
                 dir_chains_prefix: "fake".to_string(),
                 r2_bucket: "news".to_string(),
                 r2_url: self.mock.url().parse().unwrap(),

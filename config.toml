@@ -8,6 +8,7 @@ base = "n0des.xyz"
 ttl = 300
 
 [cookbook]
+data_prefix = "chains_data"
 prefix = "chains"
 r2_bucket = "backet"
 url = "https://r2.dev"
