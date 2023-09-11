@@ -270,9 +270,12 @@ impl Cookbook {
             if node_version >= *version {
                 match self
                     .find_valid_manifest(&format!("{path}/{version_str}/{network}"))
-                    .await {
+                    .await
+                {
                     Ok(manifest) => break manifest,
-                    Err(err) => debug!("Manifest not found in {path}/{version_str}/{network}: {err:#}"),
+                    Err(err) => {
+                        debug!("Manifest not found in {path}/{version_str}/{network}: {err:#}")
+                    }
                 }
             }
         };
@@ -314,13 +317,14 @@ impl Cookbook {
                     "No valid manifest found in {path}"
                 )));
             };
-            if let Ok(manifest) = self
+            match self
                 .client
                 .read_string(&self.bucket, &format!("{path}/{version_str}/manifest.json"))
                 .await
                 .and_then(|manifest| Ok(serde_json::from_str(&manifest)?))
             {
-                break manifest;
+                Ok(manifest) => break manifest,
+                Err(err) => debug!("Invalid manifest {path}/{version_str}/manifest.json: {err:#}"),
             }
         })
     }
