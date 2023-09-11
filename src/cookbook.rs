@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context};
 use aws_sdk_s3::config::Credentials;
+use tracing::log::debug;
 
 use crate::config;
 use crate::grpc::api;
@@ -267,11 +268,11 @@ impl Cookbook {
                 )));
             };
             if node_version >= *version {
-                if let Ok(manifest) = self
+                match self
                     .find_valid_manifest(&format!("{path}/{version_str}/{network}"))
-                    .await
-                {
-                    break manifest;
+                    .await {
+                    Ok(manifest) => break manifest,
+                    Err(err) => debug!("Manifest not found in {path}/{version_str}/{network}: {err:#}"),
                 }
             }
         };
@@ -763,7 +764,7 @@ mod tests {
                         node_type: NodeType::Node.into(),
                         node_version: "not semver".to_string(),
                     },
-                    "test".to_owned()
+                    "test".to_owned(),
                 )
                 .await
                 .unwrap_err()
@@ -793,7 +794,7 @@ mod tests {
                         node_type: NodeType::Node.into(),
                         node_version: "1.2.3".to_string(),
                     },
-                    "test".to_owned()
+                    "test".to_owned(),
                 )
                 .await
                 .unwrap_err()
@@ -837,7 +838,7 @@ mod tests {
                         node_type: NodeType::Node.into(),
                         node_version: "1.2.3".to_string(),
                     },
-                    "test".to_owned()
+                    "test".to_owned(),
                 )
                 .await
                 .unwrap_err()
@@ -852,7 +853,7 @@ mod tests {
                         node_type: NodeType::Node.into(),
                         node_version: "1.2.3".to_string(),
                     },
-                    "test".to_owned()
+                    "test".to_owned(),
                 )
                 .await
                 .unwrap_err()
@@ -905,7 +906,7 @@ mod tests {
                         node_type: NodeType::Node.into(),
                         node_version: "1.2.3".to_string(),
                     },
-                    "test".to_owned()
+                    "test".to_owned(),
                 )
                 .await
                 .unwrap_err()
@@ -957,7 +958,7 @@ mod tests {
                         node_type: NodeType::Node.into(),
                         node_version: "1.2.3".to_string(),
                     },
-                    "test".to_owned()
+                    "test".to_owned(),
                 )
                 .await
                 .unwrap_err()
@@ -1003,7 +1004,7 @@ mod tests {
                         node_type: NodeType::Node.into(),
                         node_version: "1.2.3".to_string(),
                     },
-                    "test".to_owned()
+                    "test".to_owned(),
                 )
                 .await
                 .unwrap()
