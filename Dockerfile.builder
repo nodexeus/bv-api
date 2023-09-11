@@ -8,9 +8,7 @@ ENV RUSTFLAGS -Ctarget-feature=-crt-static
 
 WORKDIR /src
 
-RUN ls /src/proto
 RUN cargo init
-
 
 COPY build.rs /src
 COPY Cargo.lock /src
