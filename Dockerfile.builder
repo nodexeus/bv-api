@@ -8,7 +8,6 @@ ENV RUSTFLAGS -Ctarget-feature=-crt-static
 
 WORKDIR /src
 
-COPY proto /src
 RUN ls /src/proto
 RUN cargo init
 
@@ -16,7 +15,7 @@ RUN cargo init
 COPY build.rs /src
 COPY Cargo.lock /src
 COPY Cargo.toml /src
-
+COPY proto /src/proto
 COPY rust-toolchain.toml /src
 
 RUN cargo build --release
