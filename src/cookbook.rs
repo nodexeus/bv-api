@@ -198,7 +198,7 @@ impl Cookbook {
         // prefix/eth/validator/0.0.3/data.txt
         // prefix/eth/validator/0.0.3/babel.rhai
         // prefix/eth/validator/0.0.6/babel.rhai
-        // Then we want to return the configidentifiers from this that have version 0.0.3 and 0.0.6.
+        // Then we want to return the config identifiers from this that have version 0.0.3 and 0.0.6.
         // Since we are filtering by protocol and node_type, we will only need to deduplicate using
         // the version field, so we throw everything into a map from version to the config
         // identifier, and use that map to construct our final result.
@@ -305,8 +305,8 @@ impl Cookbook {
     }
 
     async fn find_valid_manifest(&self, path: &str) -> crate::Result<manifest::DownloadManifest> {
-        let min_versions = self.get_min_data_versions(path).await?;
-        let mut version_iter = min_versions.iter().rev();
+        let data_versions = self.get_data_versions(path).await?;
+        let mut version_iter = data_versions.iter().rev();
         Ok(loop {
             let Some((version_str, _)) = version_iter.next() else {
                 return Err(crate::Error::UnexpectedError(anyhow!(
@@ -324,7 +324,7 @@ impl Cookbook {
         })
     }
 
-    async fn get_min_data_versions(&self, path: &str) -> crate::Result<Vec<(String, u64)>> {
+    async fn get_data_versions(&self, path: &str) -> crate::Result<Vec<(String, u64)>> {
         let min_versions = self.client.list(&self.bucket, path).await?;
         let mut min_versions: Vec<_> = min_versions
             .into_iter()
