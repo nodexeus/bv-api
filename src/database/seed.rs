@@ -396,6 +396,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-login', 'api-key-list'),
         ('grpc-login', 'api-key-regenerate'),
         ('grpc-login', 'api-key-update'),
+        ('grpc-login', 'auth-list-permissions'),
         ('grpc-login', 'auth-refresh'),
         ('grpc-login', 'auth-update-ui-password'),
         ('grpc-login', 'babel-notify'),

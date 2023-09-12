@@ -12,6 +12,7 @@ use crate::auth::token::refresh::Refresh;
 use crate::auth::token::RequestToken;
 use crate::auth::Authorize;
 use crate::database::{Transaction, WriteConn};
+use crate::models::rbac::RbacPerm;
 use crate::models::{Host, Node, Org, User};
 
 use super::api::auth_service_server::AuthService;
@@ -43,14 +44,20 @@ pub enum Error {
     Org(#[from] crate::models::org::Error),
     /// Failed to parse RequestToken: {0}
     ParseToken(crate::auth::token::Error),
+    /// Failed to parse OrgId: {0}
+    ParseOrgId(uuid::Error),
     /// Failed to parse UserId: {0}
     ParseUserId(uuid::Error),
+    /// User RBAC error: {0}
+    Rbac(#[from] crate::models::rbac::Error),
     /// Refresh token failure: {0}
     Refresh(#[from] crate::auth::token::refresh::Error),
     /// Refresh token doesn't match JWT Resource.
     RefreshResource,
     /// User auth error: {0}
     User(#[from] crate::models::user::Error),
+    /// Requested user does not match claims user.
+    UserMismatch,
 }
 
 impl From<Error> for Status {
@@ -58,18 +65,20 @@ impl From<Error> for Status {
         error!("{err}");
         use Error::*;
         match err {
-            ClaimsNotUser | Jwt(_) | ParseToken(_) | RefreshResource => {
+            ClaimsNotUser | Jwt(_) | ParseToken(_) | RefreshResource | UserMismatch => {
                 Status::permission_denied("Access denied.")
             }
             Diesel(_) | Email(_) => Status::internal("Internal error."),
             NotBearer => Status::unauthenticated("Not bearer."),
             NoRefresh => Status::invalid_argument("No refresh token."),
+            ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Host(err) => err.into(),
             Node(err) => err.into(),
             Org(err) => err.into(),
+            Rbac(err) => err.into(),
             Refresh(err) => err.into(),
             User(err) => err.into(),
         }
@@ -129,6 +138,15 @@ impl AuthService for Grpc {
     ) -> Result<Response<api::AuthServiceUpdateUiPasswordResponse>, Status> {
         let (meta, _, req) = req.into_parts();
         self.write(|write| update_ui_password(req, meta, write).scope_boxed())
+            .await
+    }
+
+    async fn list_permissions(
+        &self,
+        req: Request<api::AuthServiceListPermissionsRequest>,
+    ) -> Result<Response<api::AuthServiceListPermissionsResponse>, Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| list_permissions(req, meta, write).scope_boxed())
             .await
     }
 }
@@ -285,4 +303,25 @@ async fn update_ui_password(
     write.ctx.email.update_password(&user).await?;
 
     Ok(api::AuthServiceUpdateUiPasswordResponse {})
+}
+
+async fn list_permissions(
+    req: api::AuthServiceListPermissionsRequest,
+    meta: MetadataMap,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::AuthServiceListPermissionsResponse, Error> {
+    let user_id = req.user_id.parse().map_err(Error::ParseUserId)?;
+    let org_id = req.org_id.parse().map_err(Error::ParseOrgId)?;
+
+    let authz = write.auth_all(&meta, AuthPerm::ListPermissions).await?;
+    let claims_user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
+
+    if user_id != claims_user_id {
+        return Err(Error::UserMismatch);
+    }
+
+    let perms = RbacPerm::for_org(user_id, org_id, &mut write).await?;
+    let permissions = perms.into_iter().map(|perm| perm.to_string()).collect();
+
+    Ok(api::AuthServiceListPermissionsResponse { permissions })
 }
