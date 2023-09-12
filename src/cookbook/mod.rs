@@ -633,7 +633,7 @@ pub mod tests {
         let mut client = MockClient::new();
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node"))
+            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
             .once()
             .returning(|_, _| Err(Error::Unexpected("some client error")));
 
@@ -658,12 +658,12 @@ pub mod tests {
         let mut client = MockClient::new();
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node"))
+            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
             .once()
             .returning(|_, _| Ok(vec![]));
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node"))
+            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
             .once()
             .returning(|_, _| {
                 Ok(vec![
@@ -702,7 +702,7 @@ pub mod tests {
         let mut client = MockClient::new();
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node"))
+            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
             .once()
             .returning(|_, _| {
                 Ok(vec![
@@ -714,12 +714,12 @@ pub mod tests {
             });
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/1.2.3/test"))
+            .with(eq("bucket"), eq("data/test_blockchain/Node/1.2.3/test/"))
             .once()
             .returning(|_, _| Ok(vec![]));
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/0.0.1/test"))
+            .with(eq("bucket"), eq("data/test_blockchain/Node/0.0.1/test/"))
             .once()
             .returning(|_, _| Ok(vec![]));
 
@@ -744,7 +744,7 @@ pub mod tests {
         let mut client = MockClient::new();
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node"))
+            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
             .once()
             .returning(|_, _| {
                 Ok(vec![
@@ -755,7 +755,7 @@ pub mod tests {
             });
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/1.2.3/test"))
+            .with(eq("bucket"), eq("data/test_blockchain/Node/1.2.3/test/"))
             .once()
             .returning(|_, _| {
                 Ok(vec![
@@ -794,12 +794,12 @@ pub mod tests {
         let mut client = MockClient::new();
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node"))
+            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
             .once()
             .returning(|_, _| Ok(vec!["data/test_blockchain/node/1.1.1/".to_owned()]));
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/1.1.1/test"))
+            .with(eq("bucket"), eq("data/test_blockchain/Node/1.1.1/test/"))
             .once()
             .returning(|_, _| Ok(vec!["data/test_blockchain/node/1.1.1/test/2/".to_owned()]));
         client
