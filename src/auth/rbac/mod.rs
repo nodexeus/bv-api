@@ -52,6 +52,7 @@ define_perms! {
 
     Auth => {
         Confirm,
+        ListPermissions,
         Refresh,
         ResetPassword,
         UpdatePassword,
