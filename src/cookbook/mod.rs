@@ -338,7 +338,6 @@ impl Cookbook {
         );
         let min_versions = self.get_min_node_versions(&path).await?;
         let mut version_iter = min_versions.iter().rev();
-        debug!("QWERTemporaryYYYYYYYYYYY min_versions_: {:?}", min_versions);
         let mut manifest = loop {
             let Some((version_str, version)) = version_iter.next() else {
                 return Err(Error::NoManifest(id, network, path));
@@ -367,8 +366,7 @@ impl Cookbook {
     }
 
     async fn get_min_node_versions(&self, path: &str) -> Result<Vec<(String, Version)>, Error> {
-        let min_versions = self.client.list(&self.bucket, path).await?;
-        debug!("QWERTemporaryYYYYYYYYYYY min_versions: {:?}", min_versions);
+        let min_versions = self.client.list(&self.bucket, &format!("{path}/")).await?;
         let mut min_versions: Vec<_> = min_versions
             .into_iter()
             .filter_map(|version_str| {
@@ -404,11 +402,7 @@ impl Cookbook {
     }
 
     async fn get_data_versions(&self, path: &str) -> Result<Vec<(String, u64)>, Error> {
-        let data_versions = self.client.list(&self.bucket, path).await?;
-        debug!(
-            "QWERTemporaryYYYYYYYYYYY data_versions ({}): {:?}",
-            path, data_versions
-        );
+        let data_versions = self.client.list(&self.bucket, &format!("{path}/")).await?;
         let mut min_versions: Vec<_> = data_versions
             .into_iter()
             .filter_map(|version_str| {
