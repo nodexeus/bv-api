@@ -31,17 +31,37 @@ values
 ('org-admin'),
 ('org-member');
 
+
 insert into user_roles (user_id, org_id, role)
-select
-    user_id,
-    org_id,
-    case role
-        when 'admin' then 'org-admin'
-        when 'owner' then 'org-owner'
-        when 'member' then 'org-member'
-        else null
-    end
-from orgs_users;
+select user_id, org_id, 'org-owner'
+from orgs_users
+where role = 'owner';
+
+insert into user_roles (user_id, org_id, role)
+select user_id, org_id, 'org-admin'
+from orgs_users
+where role = 'owner';
+
+insert into user_roles (user_id, org_id, role)
+select user_id, org_id, 'org-member'
+from orgs_users
+where role = 'owner';
+
+insert into user_roles (user_id, org_id, role)
+select user_id, org_id, 'org-admin'
+from orgs_users
+where role = 'admin';
+
+insert into user_roles (user_id, org_id, role)
+select user_id, org_id, 'org-member'
+from orgs_users
+where role = 'admin';
+
+insert into user_roles (user_id, org_id, role)
+select user_id, org_id, 'org-member'
+from orgs_users
+where role = 'member';
+
 
 alter table users drop column is_blockjoy_admin;
 alter table orgs_users drop column role;
