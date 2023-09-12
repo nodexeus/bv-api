@@ -25,6 +25,12 @@ create table if not exists user_roles (
 
 create index idx_user_roles_role on user_roles using btree (role);
 
+insert into roles (name)
+values
+('org-owner'),
+('org-admin'),
+('org-member');
+
 insert into user_roles (user_id, org_id, role)
 select
     user_id,
