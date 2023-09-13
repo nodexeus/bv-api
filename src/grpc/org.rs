@@ -190,7 +190,7 @@ async fn list(
     let _ = if let Some(user_id) = member_id {
         read.auth(&meta, OrgPerm::List, user_id).await?
     } else {
-        read.auth_all(&meta, OrgAdminPerm::ListAll).await?
+        read.auth_all(&meta, OrgAdminPerm::List).await?
     };
 
     let orgs = Org::filter(member_id, &mut read).await?;

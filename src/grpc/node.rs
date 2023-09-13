@@ -246,7 +246,7 @@ async fn list(
 ) -> Result<api::NodeServiceListResponse, Error> {
     let filter = req.as_filter()?;
     let _ = read
-        .auth_or_all(&meta, NodeAdminPerm::ListAll, NodePerm::List, filter.org_id)
+        .auth_or_all(&meta, NodeAdminPerm::List, NodePerm::List, filter.org_id)
         .await?;
 
     let (node_count, nodes) = Node::filter(filter, &mut read).await?;
@@ -264,7 +264,7 @@ async fn create(
     let (host, authz) = if let Some(host_id) = req.host_id()? {
         let host = Host::find_by_id(host_id, &mut write).await?;
         let authz = write
-            .auth_or_all(&meta, NodeAdminPerm::CreateAll, NodePerm::Create, host_id)
+            .auth_or_all(&meta, NodeAdminPerm::Create, NodePerm::Create, host_id)
             .await?;
         (Some(host), authz)
     } else {
@@ -335,7 +335,7 @@ async fn update_config(
     let authz = write
         .auth_or_all(
             &meta,
-            NodeAdminPerm::UpdateConfigAll,
+            NodeAdminPerm::UpdateConfig,
             NodePerm::UpdateConfig,
             node_id,
         )
@@ -371,7 +371,7 @@ async fn update_status(
     let authz = write
         .auth_or_all(
             &meta,
-            NodeAdminPerm::UpdateStatusAll,
+            NodeAdminPerm::UpdateStatus,
             NodePerm::UpdateStatus,
             node_id,
         )
@@ -402,7 +402,7 @@ async fn delete(
     let node = Node::find_by_id(node_id, &mut write).await?;
 
     let authz = write
-        .auth_or_all(&meta, NodeAdminPerm::DeleteAll, NodePerm::Delete, node_id)
+        .auth_or_all(&meta, NodeAdminPerm::Delete, NodePerm::Delete, node_id)
         .await?;
     let user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
     let user = User::find_by_id(user_id, &mut write).await?;
@@ -451,7 +451,7 @@ async fn start(
     let node = Node::find_by_id(node_id, &mut write).await?;
 
     let _ = write
-        .auth_or_all(&meta, NodeAdminPerm::StartAll, NodePerm::Start, node_id)
+        .auth_or_all(&meta, NodeAdminPerm::Start, NodePerm::Start, node_id)
         .await?;
 
     let cmd = create_node_command(&node, CommandType::RestartNode, &mut write).await?;
@@ -471,7 +471,7 @@ async fn stop(
     let node = Node::find_by_id(node_id, &mut write).await?;
 
     let _ = write
-        .auth_or_all(&meta, NodeAdminPerm::StopAll, NodePerm::Stop, node_id)
+        .auth_or_all(&meta, NodeAdminPerm::Stop, NodePerm::Stop, node_id)
         .await?;
 
     let cmd = create_node_command(&node, CommandType::KillNode, &mut write).await?;
@@ -491,7 +491,7 @@ async fn restart(
     let node = Node::find_by_id(node_id, &mut write).await?;
 
     let _ = write
-        .auth_or_all(&meta, NodeAdminPerm::RestartAll, NodePerm::Restart, node_id)
+        .auth_or_all(&meta, NodeAdminPerm::Restart, NodePerm::Restart, node_id)
         .await?;
 
     let cmd = create_node_command(&node, CommandType::RestartNode, &mut write).await?;
