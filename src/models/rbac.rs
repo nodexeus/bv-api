@@ -1,5 +1,7 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use chrono::DateTime;
+use chrono::Utc;
 use diesel::dsl;
 use diesel::prelude::*;
 use diesel::result::DatabaseErrorKind::UniqueViolation;
@@ -28,6 +30,8 @@ pub enum Error {
     FindPermsForRole(Role, diesel::result::Error),
     /// Failed to find permissions for roles: {0}
     FindPermsForRoles(diesel::result::Error),
+    /// Failed to find user roles for org ids `{0:?}`: `{1}`
+    FindUserRolesForOrgIds(HashSet<OrgId>, diesel::result::Error),
     /// Failed to check if User `{0}` is a blockjoy admin: {1}
     IsBlockjoyAdmin(UserId, diesel::result::Error),
     /// Failed to link Role `{0}` to Perm `{1}`: {2}
@@ -71,6 +75,7 @@ impl From<Error> for Status {
             FindOrgRoles(_, _, NotFound)
             | FindPermsForRole(_, NotFound)
             | FindPermsForRoles(NotFound)
+            | FindUserRolesForOrgIds(_, NotFound)
             | NothingDeleted
             | NothingInserted => Status::not_found("Not found."),
             UserNotInOrg(..) => Status::permission_denied("Permission denied."),
@@ -380,5 +385,52 @@ impl RbacUser {
                 1 => Ok(()),
                 n => Err(Error::UnexpectedDeleted(n)),
             })
+    }
+}
+
+#[derive(Debug, Queryable, Selectable)]
+#[diesel(table_name = user_roles)]
+pub struct UserRole {
+    pub user_id: UserId,
+    pub org_id: OrgId,
+    pub role: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Provides a mapping of `UserId` to their roles within some `OrgId`.
+#[derive(Debug)]
+pub struct OrgUsers {
+    pub org_id: OrgId,
+    pub user_roles: HashMap<UserId, Vec<Role>>,
+}
+
+impl OrgUsers {
+    pub async fn for_org_ids(
+        org_ids: HashSet<OrgId>,
+        conn: &mut Conn<'_>,
+    ) -> Result<HashMap<OrgId, OrgUsers>, Error> {
+        let rows: Vec<UserRole> = user_roles::table
+            .filter(user_roles::org_id.eq_any(org_ids.iter()))
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::FindUserRolesForOrgIds(org_ids, err))?;
+
+        let mut orgs_users: HashMap<OrgId, OrgUsers> = HashMap::with_capacity(rows.len());
+
+        for row in rows {
+            let org_users = orgs_users.entry(row.org_id).or_insert_with(|| OrgUsers {
+                org_id: row.org_id,
+                user_roles: HashMap::new(),
+            });
+
+            let role = row.role.parse().map_err(Error::ParseRole)?;
+            org_users
+                .user_roles
+                .entry(row.user_id)
+                .or_default()
+                .push(role)
+        }
+
+        Ok(orgs_users)
     }
 }
