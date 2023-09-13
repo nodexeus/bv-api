@@ -416,9 +416,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-login', 'org-list'),
         ('grpc-login', 'org-provision-get-token'),
         ('grpc-login', 'org-provision-reset-token'),
-        ('grpc-login', 'subscription-create'),
-        ('grpc-login', 'subscription-delete'),
-        ('grpc-login', 'subscription-get'),
         ('grpc-login', 'subscription-list'),
         ('grpc-login', 'user-create'),
         ('grpc-login', 'user-delete'),
@@ -478,7 +475,10 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('org-admin', 'invitation-revoke'),
         ('org-admin', 'node-update-status'),
         ('org-admin', 'org-remove-member'),
-        ('org-admin', 'org-update');
+        ('org-admin', 'org-update'),
+        ('org-admin', 'subscription-create'),
+        ('org-admin', 'subscription-delete'),
+        ('org-admin', 'subscription-update');
         ",
         "
         insert into role_permissions (role, permission)
@@ -513,7 +513,8 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('org-member', 'org-get'),
         ('org-member', 'org-list'),
         ('org-member', 'org-provision-get-token'),
-        ('org-member', 'org-provision-reset-token');
+        ('org-member', 'org-provision-reset-token'),
+        ('org-member', 'subscription-get');
         ",
     ];
 
