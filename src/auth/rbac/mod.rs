@@ -38,6 +38,7 @@ define_roles! {
         Admin,
         Member,
         Owner,
+        Personal,
     }
 }
 

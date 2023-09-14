@@ -354,6 +354,23 @@ impl RbacUser {
             })
     }
 
+    pub async fn link_roles<I, R>(
+        user_id: UserId,
+        org_id: OrgId,
+        roles: I,
+        conn: &mut Conn<'_>,
+    ) -> Result<(), Error>
+    where
+        I: Iterator<Item = R>,
+        R: Into<Role>,
+    {
+        for role in roles {
+            Self::link_role(user_id, org_id, role, conn).await?;
+        }
+
+        Ok(())
+    }
+
     /// Unlinks the user from a role within an org.
     ///
     /// If `role` is None then the user is unlinked from all roles within that org.
