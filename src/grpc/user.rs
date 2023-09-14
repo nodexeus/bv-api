@@ -166,10 +166,10 @@ async fn filter(
         .transpose()?;
 
     let _ = if let Some(org_id) = org_id {
-        read.auth_or_all(&meta, UserAdminPerm::FilterAll, UserPerm::Filter, org_id)
+        read.auth_or_all(&meta, UserAdminPerm::Filter, UserPerm::Filter, org_id)
             .await?
     } else {
-        read.auth_all(&meta, UserAdminPerm::FilterAll).await?
+        read.auth_all(&meta, UserAdminPerm::Filter).await?
     };
 
     let users = User::filter(org_id, req.email_like.as_deref(), &mut read)
@@ -186,7 +186,7 @@ async fn update(
 ) -> Result<api::UserServiceUpdateResponse, Error> {
     let user_id: UserId = req.id.parse().map_err(Error::ParseId)?;
     let _ = write
-        .auth_or_all(&meta, UserAdminPerm::UpdateAll, UserPerm::Update, user_id)
+        .auth_or_all(&meta, UserAdminPerm::Update, UserPerm::Update, user_id)
         .await?;
 
     let user = req.as_update(user_id).update(&mut write).await?;

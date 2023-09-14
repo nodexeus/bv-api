@@ -292,17 +292,18 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         "
         insert into role_permissions (role, permission)
         values
-        ('blockjoy-admin', 'node-admin-create-all'),
-        ('blockjoy-admin', 'node-admin-delete-all'),
-        ('blockjoy-admin', 'node-admin-list-all'),
-        ('blockjoy-admin', 'node-admin-restart-all'),
-        ('blockjoy-admin', 'node-admin-start-all'),
-        ('blockjoy-admin', 'node-admin-stop-all'),
-        ('blockjoy-admin', 'node-admin-update-config-all'),
-        ('blockjoy-admin', 'node-admin-update-status-all'),
-        ('blockjoy-admin', 'org-admin-list-all'),
-        ('blockjoy-admin', 'user-admin-filter-all'),
-        ('blockjoy-admin', 'user-admin-update-all');
+        ('blockjoy-admin', 'auth-admin-list-permissions'),
+        ('blockjoy-admin', 'node-admin-create'),
+        ('blockjoy-admin', 'node-admin-delete'),
+        ('blockjoy-admin', 'node-admin-list'),
+        ('blockjoy-admin', 'node-admin-restart'),
+        ('blockjoy-admin', 'node-admin-start'),
+        ('blockjoy-admin', 'node-admin-stop'),
+        ('blockjoy-admin', 'node-admin-update-config'),
+        ('blockjoy-admin', 'node-admin-update-status'),
+        ('blockjoy-admin', 'org-admin-list'),
+        ('blockjoy-admin', 'user-admin-filter'),
+        ('blockjoy-admin', 'user-admin-update');
         ",
         "
         insert into role_permissions (role, permission)
@@ -408,6 +409,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-login', 'key-file-list'),
         ('grpc-login', 'metrics-host'),
         ('grpc-login', 'metrics-node'),
+        ('grpc-login', 'mqtt-acl'),
         ('grpc-login', 'node-create'),
         ('grpc-login', 'org-create'),
         ('grpc-login', 'org-get'),

@@ -59,6 +59,10 @@ define_perms! {
         UpdateUiPassword,
     }
 
+    AuthAdmin => {
+        ListPermissions,
+    }
+
     Babel => {
         Notify,
     }
@@ -155,14 +159,14 @@ define_perms! {
     }
 
     NodeAdmin => {
-        CreateAll,
-        DeleteAll,
-        ListAll,
-        RestartAll,
-        StartAll,
-        StopAll,
-        UpdateConfigAll,
-        UpdateStatusAll,
+        Create,
+        Delete,
+        List,
+        Restart,
+        Start,
+        Stop,
+        UpdateConfig,
+        UpdateStatus,
     }
 
     Org => {
@@ -175,7 +179,7 @@ define_perms! {
     }
 
     OrgAdmin => {
-        ListAll,
+        List,
     }
 
     OrgProvision => {
@@ -199,8 +203,8 @@ define_perms! {
     }
 
     UserAdmin => {
-        FilterAll,
-        UpdateAll,
+        Filter,
+        Update,
     }
 
     UserBilling => {

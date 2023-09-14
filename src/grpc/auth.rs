@@ -6,7 +6,7 @@ use tonic::{Request, Response, Status};
 use tracing::{error, warn};
 
 use crate::auth::claims::{Claims, Expirable};
-use crate::auth::rbac::{AuthPerm, GrpcRole};
+use crate::auth::rbac::{AuthAdminPerm, AuthPerm, GrpcRole};
 use crate::auth::resource::{Resource, ResourceId};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::token::RequestToken;
@@ -56,8 +56,6 @@ pub enum Error {
     RefreshResource,
     /// User auth error: {0}
     User(#[from] crate::models::user::Error),
-    /// Requested user does not match claims user.
-    UserMismatch,
 }
 
 impl From<Error> for Status {
@@ -65,7 +63,7 @@ impl From<Error> for Status {
         error!("{err}");
         use Error::*;
         match err {
-            ClaimsNotUser | Jwt(_) | ParseToken(_) | RefreshResource | UserMismatch => {
+            ClaimsNotUser | Jwt(_) | ParseToken(_) | RefreshResource => {
                 Status::permission_denied("Access denied.")
             }
             Diesel(_) | Email(_) => Status::internal("Internal error."),
@@ -313,15 +311,15 @@ async fn list_permissions(
     let user_id = req.user_id.parse().map_err(Error::ParseUserId)?;
     let org_id = req.org_id.parse().map_err(Error::ParseOrgId)?;
 
-    let authz = write.auth_all(&meta, AuthPerm::ListPermissions).await?;
-    let claims_user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
+    let (admin_perm, perm) = (AuthAdminPerm::ListPermissions, AuthPerm::ListPermissions);
+    let _ = write.auth_or_all(&meta, admin_perm, perm, user_id).await?;
 
-    if user_id != claims_user_id {
-        return Err(Error::UserMismatch);
-    }
-
-    let perms = RbacPerm::for_org(user_id, org_id, &mut write).await?;
-    let permissions = perms.into_iter().map(|perm| perm.to_string()).collect();
+    let mut permissions = RbacPerm::for_org(user_id, org_id, &mut write)
+        .await?
+        .into_iter()
+        .map(|perm| perm.to_string())
+        .collect::<Vec<_>>();
+    permissions.sort();
 
     Ok(api::AuthServiceListPermissionsResponse { permissions })
 }
