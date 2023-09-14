@@ -343,7 +343,7 @@ impl api::Org {
 
         let user_ids = org_users
             .values()
-            .flat_map(|ou| ou.user_roles.keys().cloned())
+            .flat_map(|ou| ou.user_roles.keys().copied())
             .collect();
         let users: HashMap<UserId, User> = User::find_by_ids(user_ids, conn)
             .await?

@@ -246,16 +246,20 @@ impl<'a> NewOrg<'a> {
         }
     }
 
-    /// Creates a new organization with the creator as the owner.
     pub async fn create(self, user_id: UserId, conn: &mut Conn<'_>) -> Result<Org, Error> {
+        let role = if self.is_personal {
+            OrgRole::Personal
+        } else {
+            OrgRole::Owner
+        };
+
         let org: Org = diesel::insert_into(orgs::table)
             .values(self)
             .get_result(conn)
             .await
             .map_err(Error::Create)?;
 
-        let org_user = NewOrgUser::new(org.id, user_id, OrgRole::Owner);
-        org_user.create(conn).await?;
+        NewOrgUser::new(org.id, user_id, role).create(conn).await?;
 
         Ok(org)
     }
@@ -362,16 +366,13 @@ impl NewOrgUser {
             .await
             .map_err(Error::CreateOrgUser)?;
 
-        if let OrgRole::Owner = self.role {
-            RbacUser::link_role(self.user_id, self.org_id, OrgRole::Owner, conn).await?;
-        }
-        if let OrgRole::Owner | OrgRole::Admin = self.role {
-            RbacUser::link_role(self.user_id, self.org_id, OrgRole::Admin, conn).await?;
-        }
-        #[allow(irrefutable_let_patterns)]
-        if let OrgRole::Owner | OrgRole::Admin | OrgRole::Member = self.role {
-            RbacUser::link_role(self.user_id, self.org_id, OrgRole::Member, conn).await?;
-        }
+        let roles = match self.role {
+            OrgRole::Owner => [OrgRole::Owner, OrgRole::Admin, OrgRole::Member].iter(),
+            OrgRole::Admin => [OrgRole::Admin, OrgRole::Member].iter(),
+            OrgRole::Member => [OrgRole::Member].iter(),
+            OrgRole::Personal => [OrgRole::Personal].iter(),
+        };
+        RbacUser::link_roles(self.user_id, self.org_id, roles.copied(), conn).await?;
 
         Ok(org_user)
     }

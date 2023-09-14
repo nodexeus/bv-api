@@ -12,7 +12,7 @@ update orgs_users as ou
 set role = 'owner'::enum_org_role
 from (
     select user_id, org_id from user_roles
-    where role = 'org-owner'
+    where role in ('org-owner', 'org-personal')
 ) as q
 where ou.user_id = q.user_id
 and ou.org_id = q.org_id
