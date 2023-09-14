@@ -10,7 +10,6 @@ use tonic::{Request, Response, Status};
 use tracing::error;
 
 use crate::auth::rbac::CommandPerm;
-use crate::auth::resource::Resource;
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::grpc::api::command_service_server::CommandService;
@@ -112,11 +111,9 @@ async fn update(
     let id = req.id.parse().map_err(Error::ParseId)?;
     let command = Command::find_by_id(id, &mut write).await?;
 
-    let host = command.host(&mut write).await?;
-    let node = command.node(&mut write).await?;
-    let resource: Resource = node.map(|n| n.id.into()).unwrap_or_else(|| host.id.into());
-
-    let _ = write.auth(&meta, CommandPerm::Update, resource).await?;
+    let _ = command.host(&mut write).await?;
+    let _ = command.node(&mut write).await?;
+    let _ = write.auth_all(&meta, CommandPerm::Update).await?;
 
     let update_cmd = req.as_update()?;
     let cmd = update_cmd.update(&mut write).await?;
