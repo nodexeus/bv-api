@@ -191,6 +191,7 @@ define_perms! {
         Create,
         Get,
         List,
+        Update,
         Delete,
     }
 
