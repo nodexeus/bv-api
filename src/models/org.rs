@@ -40,8 +40,6 @@ pub enum Error {
     FindByIds(HashSet<OrgId>, diesel::result::Error),
     /// Failed to find org user: {0}
     FindOrgUser(diesel::result::Error),
-    /// Failed to find org users: {0}
-    FindOrgUsers(diesel::result::Error),
     /// Failed to find org user by token: {0}
     FindOrgUserByToken(diesel::result::Error),
     /// Failed to find personal org for user `{0}`: {1}
@@ -205,7 +203,7 @@ impl Org {
     }
 
     pub async fn node_counts(
-        org_ids: HashSet<OrgId>,
+        org_ids: &HashSet<OrgId>,
         conn: &mut Conn<'_>,
     ) -> Result<HashMap<OrgId, u64>, Error> {
         let counts: Vec<(OrgId, i64)> = nodes::table
@@ -224,6 +222,12 @@ impl Org {
 
     fn not_deleted() -> NotDeleted {
         orgs::table.filter(orgs::deleted_at.is_null())
+    }
+}
+
+impl AsRef<Org> for Org {
+    fn as_ref(&self) -> &Org {
+        self
     }
 }
 
@@ -285,24 +289,6 @@ pub struct OrgUser {
 }
 
 impl OrgUser {
-    /// Returns a map from OrgId to all users belonging to that org.
-    pub async fn by_org_ids(
-        org_ids: HashSet<OrgId>,
-        conn: &mut Conn<'_>,
-    ) -> Result<HashMap<OrgId, Vec<Self>>, Error> {
-        let org_users: Vec<Self> = orgs_users::table
-            .filter(orgs_users::org_id.eq_any(org_ids))
-            .get_results(conn)
-            .await
-            .map_err(Error::FindOrgUsers)?;
-
-        let mut res: HashMap<OrgId, Vec<Self>> = HashMap::new();
-        for org_user in org_users {
-            res.entry(org_user.org_id).or_default().push(org_user)
-        }
-        Ok(res)
-    }
-
     pub async fn by_user_org(
         user_id: UserId,
         org_id: OrgId,
