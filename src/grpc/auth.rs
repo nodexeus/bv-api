@@ -6,7 +6,7 @@ use tonic::{Request, Response, Status};
 use tracing::{error, warn};
 
 use crate::auth::claims::{Claims, Expirable};
-use crate::auth::rbac::{AuthAdminPerm, AuthPerm, GrpcRole};
+use crate::auth::rbac::{Access, AuthAdminPerm, AuthPerm, GrpcRole};
 use crate::auth::resource::{Resource, ResourceId};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::token::RequestToken;
@@ -224,11 +224,16 @@ async fn refresh(
         return Err(Error::RefreshResource);
     }
 
+    // HACK: temporary fix to force Endpoint migration
+    let access = match claims.access {
+        Access::Roles(_) | Access::Perms(_) => claims.access,
+        Access::Endpoints(_) => GrpcRole::Login.into(),
+    };
     let expirable = Expirable::from_now(write.ctx.config.token.expire.token);
     let new_claims = if let Some(data) = claims.data {
-        Claims::new(resource, expirable, claims.access).with_data(data)
+        Claims::new(resource, expirable, access).with_data(data)
     } else {
-        Claims::new(resource, expirable, claims.access)
+        Claims::new(resource, expirable, access)
     };
     let token = write.ctx.auth.cipher.jwt.encode(&new_claims)?;
 
