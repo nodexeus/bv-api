@@ -403,6 +403,13 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-login', 'babel-notify'),
         ('grpc-login', 'blockchain-get'),
         ('grpc-login', 'blockchain-list'),
+        ('grpc-login', 'bundle-list-bundle-versions'),
+        ('grpc-login', 'bundle-retrieve'),
+        ('grpc-login', 'command-ack'),
+        ('grpc-login', 'command-create'),
+        ('grpc-login', 'command-get'),
+        ('grpc-login', 'command-pending'),
+        ('grpc-login', 'command-update'),
         ('grpc-login', 'discovery-services'),
         ('grpc-login', 'invitation-accept'),
         ('grpc-login', 'invitation-decline'),
@@ -485,11 +492,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         "
         insert into role_permissions (role, permission)
         values
-        ('org-member', 'command-ack'),
-        ('org-member', 'command-create'),
-        ('org-member', 'command-get'),
-        ('org-member', 'command-pending'),
-        ('org-member', 'command-update'),
         ('org-member', 'host-create'),
         ('org-member', 'host-delete'),
         ('org-member', 'host-get'),
@@ -500,8 +502,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('org-member', 'host-stop'),
         ('org-member', 'host-provision-create'),
         ('org-member', 'host-provision-get'),
-        ('org-member', 'metrics-host'),
-        ('org-member', 'metrics-node'),
         ('org-member', 'node-create'),
         ('org-member', 'node-delete'),
         ('org-member', 'node-get'),
@@ -520,11 +520,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         "
         insert into role_permissions (role, permission)
         values
-        ('org-personal', 'command-ack'),
-        ('org-personal', 'command-create'),
-        ('org-personal', 'command-get'),
-        ('org-personal', 'command-pending'),
-        ('org-personal', 'command-update'),
         ('org-personal', 'host-billing-get'),
         ('org-personal', 'host-create'),
         ('org-personal', 'host-delete'),
@@ -536,8 +531,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('org-personal', 'host-stop'),
         ('org-personal', 'host-provision-create'),
         ('org-personal', 'host-provision-get'),
-        ('org-personal', 'metrics-host'),
-        ('org-personal', 'metrics-node'),
         ('org-personal', 'node-create'),
         ('org-personal', 'node-delete'),
         ('org-personal', 'node-get'),
