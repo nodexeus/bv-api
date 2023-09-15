@@ -37,6 +37,8 @@ pub enum Error {
     Invitation(#[from] crate::models::invitation::Error),
     /// Failed to parse member count: {0}
     MemberCount(std::num::TryFromIntError),
+    /// Missing permission: org-remove-member
+    MissingRemoveMember,
     /// Org model error: {0}
     Model(#[from] crate::models::org::Error),
     /// Org not found: {0}
@@ -49,8 +51,6 @@ pub enum Error {
     ParseUserId(uuid::Error),
     /// Org rbac error: {0}
     Rbac(#[from] crate::models::rbac::Error),
-    /// Can't remove self from org.
-    RemoveSelf,
     /// Org user error: {0}
     User(#[from] crate::models::user::Error),
 }
@@ -60,13 +60,14 @@ impl From<Error> for Status {
         error!("{err}");
         use Error::*;
         match err {
-            ClaimsNotUser | DeletePersonal => Status::permission_denied("Access denied."),
+            ClaimsNotUser | DeletePersonal | MissingRemoveMember => {
+                Status::permission_denied("Access denied.")
+            }
             ConvertNoOrg | Diesel(_) | MemberCount(_) => Status::internal("Internal error."),
             OrgNotFound(_) => Status::not_found("Not found."),
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
-            RemoveSelf => Status::failed_precondition("Remove self."),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Invitation(err) => err.into(),
@@ -267,24 +268,26 @@ async fn remove_member(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::OrgServiceRemoveMemberResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
-    let authz = write.auth(&meta, OrgPerm::RemoveMember, org_id).await?;
+    let authz = write.auth(&meta, OrgPerm::RemoveSelf, org_id).await?;
 
-    let user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
+    let self_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
+    let user_id = req.user_id.parse().map_err(Error::ParseUserId)?;
+
     let user = User::find_by_id(user_id, &mut write).await?;
+    let org = Org::find_by_id(org_id, &mut write).await?;
 
-    let remove_id = req.user_id.parse().map_err(Error::ParseUserId)?;
-    if user_id == remove_id {
-        return Err(Error::RemoveSelf);
+    if user_id != self_id && !authz.has_perm(OrgPerm::RemoveMember) {
+        return Err(Error::MissingRemoveMember);
+    } else if org.is_personal {
+        return Err(Error::DeletePersonal);
     }
 
-    let remove_user = User::find_by_id(remove_id, &mut write).await?;
-    let org = Org::find_by_id(org_id, &mut write).await?;
-    org.remove_user(remove_id, &mut write).await?;
+    org.remove_user(user_id, &mut write).await?;
 
     // In case a user needs to be re-invited later, we also remove the (already accepted) invites
     // from the database. This is to prevent them from running into a unique constraint when they
     // are invited again.
-    Invitation::remove_by_org_user(&remove_user.email, org_id, &mut write).await?;
+    Invitation::remove_by_org_user(&user.email, org_id, &mut write).await?;
 
     let org = api::Org::from_model(&org, &mut write).await?;
     let msg = api::OrgMessage::updated(org, user);

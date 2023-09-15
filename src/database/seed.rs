@@ -513,6 +513,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('org-member', 'org-create'),
         ('org-member', 'org-get'),
         ('org-member', 'org-list'),
+        ('org-member', 'org-remove-self'),
         ('org-member', 'org-provision-get-token'),
         ('org-member', 'org-provision-reset-token'),
         ('org-member', 'subscription-get');
