@@ -469,7 +469,8 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-new-host', 'node-restart'),
         ('grpc-new-host', 'node-start'),
         ('grpc-new-host', 'node-stop'),
-        ('grpc-new-host', 'node-update-config');
+        ('grpc-new-host', 'node-update-config'),
+        ('grpc-new-host', 'node-update-status');
         ",
         "
         insert into role_permissions (role, permission)
