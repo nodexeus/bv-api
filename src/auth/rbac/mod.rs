@@ -149,14 +149,14 @@ define_perms! {
 
     Node => {
         Create,
+        Delete,
         Get,
         List,
-        UpdateConfig,
-        Delete,
-        UpdateStatus,
+        Restart,
         Start,
         Stop,
-        Restart,
+        UpdateConfig,
+        UpdateStatus,
     }
 
     NodeAdmin => {
