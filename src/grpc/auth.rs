@@ -5,14 +5,13 @@ use tonic::metadata::MetadataMap;
 use tonic::{Request, Response, Status};
 use tracing::{error, warn};
 
-use crate::auth::claims::{Claims, Expirable};
+use crate::auth::claims::{Claims, Expirable, Granted};
 use crate::auth::rbac::{Access, AuthAdminPerm, AuthPerm, GrpcRole};
 use crate::auth::resource::{Resource, ResourceId};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::token::RequestToken;
 use crate::auth::Authorize;
 use crate::database::{Transaction, WriteConn};
-use crate::models::rbac::RbacPerm;
 use crate::models::{Host, Node, Org, User};
 
 use super::api::auth_service_server::AuthService;
@@ -317,11 +316,17 @@ async fn list_permissions(
     let org_id = req.org_id.parse().map_err(Error::ParseOrgId)?;
 
     let (admin_perm, perm) = (AuthAdminPerm::ListPermissions, AuthPerm::ListPermissions);
-    let _ = write.auth_or_all(&meta, admin_perm, perm, user_id).await?;
+    let authz = write.auth_or_all(&meta, admin_perm, perm, user_id).await?;
 
-    let mut permissions = RbacPerm::for_org(user_id, org_id, &mut write)
-        .await?
-        .into_iter()
+    let granted = Granted::for_org(user_id, org_id, &mut write).await?;
+    let granted = if req.include_token.unwrap_or_default() {
+        Granted::from_access(&authz.claims.access, Some(granted), &mut write).await?
+    } else {
+        granted
+    };
+
+    let mut permissions = granted
+        .iter()
         .map(|perm| perm.to_string())
         .collect::<Vec<_>>();
     permissions.sort();

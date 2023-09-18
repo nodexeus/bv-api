@@ -271,6 +271,17 @@ impl Granted {
         Ok(RbacUser::admin_perms(user_id, conn).await?.map(Self))
     }
 
+    pub async fn for_org(
+        user_id: UserId,
+        org_id: OrgId,
+        conn: &mut Conn<'_>,
+    ) -> Result<Self, Error> {
+        RbacPerm::for_org(user_id, org_id, conn)
+            .await
+            .map(Self)
+            .map_err(Into::into)
+    }
+
     fn push<P>(&mut self, perm: P)
     where
         P: Into<Perm>,
