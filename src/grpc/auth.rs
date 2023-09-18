@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
@@ -6,7 +8,8 @@ use tonic::{Request, Response, Status};
 use tracing::{error, warn};
 
 use crate::auth::claims::{Claims, Expirable, Granted};
-use crate::auth::rbac::{Access, AuthAdminPerm, AuthPerm, GrpcRole};
+use crate::auth::endpoint::Endpoints;
+use crate::auth::rbac::{Access, AuthAdminPerm, AuthPerm, GrpcRole, Perms};
 use crate::auth::resource::{Resource, ResourceId};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::token::RequestToken;
@@ -226,8 +229,22 @@ async fn refresh(
     // HACK: temporary fix to force Endpoint migration
     let access = match claims.access {
         Access::Roles(_) | Access::Perms(_) => claims.access,
-        Access::Endpoints(_) => GrpcRole::Login.into(),
+
+        Access::Endpoints(Endpoints::Single(endpoint)) => Perms::from(endpoint).into(),
+        Access::Endpoints(Endpoints::Multiple(endpoints)) => {
+            let mut permissions = HashSet::new();
+            for endpoint in endpoints {
+                match endpoint.into() {
+                    Perms::One(perm) => {
+                        permissions.insert(perm);
+                    }
+                    Perms::Many(perms) => permissions.extend(perms),
+                }
+            }
+            Perms::Many(permissions).into()
+        }
     };
+
     let expirable = Expirable::from_now(write.ctx.config.token.expire.token);
     let new_claims = if let Some(data) = claims.data {
         Claims::new(resource, expirable, access).with_data(data)
