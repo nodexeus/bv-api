@@ -60,8 +60,6 @@ pub enum Error {
     InvalidScript(Box<rhai::EvalAltResult>),
     /// Failed to list path `{0}`: {1}
     ListPath(String, SdkError<ListObjectsV2Error>),
-    /// Manifest error: {0}
-    Manifest(manifest::Error),
     /// No manifest found for node `{0:?}-{1}` in `{2}`.
     NoManifest(api::ConfigIdentifier, String, String),
     /// No manifest found in path `{0}`.
@@ -362,7 +360,7 @@ impl Cookbook {
                 .await?;
         }
 
-        manifest.try_into().map_err(Error::Manifest)
+        Ok(manifest.into())
     }
 
     async fn get_min_node_versions(&self, path: &str) -> Result<Vec<(String, Version)>, Error> {
