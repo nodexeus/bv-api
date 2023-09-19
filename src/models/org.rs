@@ -18,7 +18,7 @@ use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
 
 use super::rbac::RbacUser;
-use super::schema::{nodes, orgs, orgs_users};
+use super::schema::{nodes, orgs, orgs_users, user_roles};
 
 const PERSONAL_ORG_NAME: &str = "Personal";
 
@@ -118,11 +118,11 @@ impl Org {
         conn: &mut Conn<'_>,
     ) -> Result<Vec<Self>, Error> {
         let mut query = Self::not_deleted()
-            .left_join(orgs_users::table)
+            .left_join(user_roles::table)
             .into_boxed();
 
         if let Some(member_id) = member_id {
-            query = query.filter(orgs_users::user_id.eq(member_id));
+            query = query.filter(user_roles::user_id.eq(member_id));
         }
 
         query
@@ -135,8 +135,8 @@ impl Org {
 
     pub async fn find_personal(user_id: UserId, conn: &mut Conn<'_>) -> Result<Org, Error> {
         Self::not_deleted()
-            .inner_join(orgs_users::table)
-            .filter(orgs_users::user_id.eq(user_id))
+            .inner_join(user_roles::table)
+            .filter(user_roles::user_id.eq(user_id))
             .filter(orgs::is_personal)
             .select(Org::as_select())
             .get_result(conn)
@@ -149,9 +149,9 @@ impl Org {
         user_id: UserId,
         conn: &mut Conn<'_>,
     ) -> Result<bool, Error> {
-        let target_user = orgs_users::table
-            .filter(orgs_users::user_id.eq(user_id))
-            .filter(orgs_users::org_id.eq(org_id));
+        let target_user = user_roles::table
+            .filter(user_roles::user_id.eq(user_id))
+            .filter(user_roles::org_id.eq(org_id));
 
         diesel::select(dsl::exists(target_user))
             .get_result(conn)
