@@ -933,7 +933,7 @@ impl api::NodeProperty {
     fn from_model(model: NodeProperty, bprop: BlockchainProperty) -> Self {
         let mut prop = api::NodeProperty {
             name: bprop.name,
-            display_name: "".into(), // FIXME: actual value
+            display_name: bprop.display_name,
             ui_type: 0,
             disabled: bprop.disabled,
             required: bprop.required,
