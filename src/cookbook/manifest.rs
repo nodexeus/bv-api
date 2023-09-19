@@ -41,9 +41,10 @@ pub struct Chunk {
     pub destinations: Vec<FileLocation>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum Compression {}
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+pub enum Compression {
+    ZSTD(i32),
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct DownloadManifest {
