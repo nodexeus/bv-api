@@ -137,7 +137,7 @@ pub mod tests {
     #[test]
     fn can_deserialize_rhai() {
         let engine = rhai::Engine::new();
-        let config = Cookbook::script_to_metadata(&engine, TEST_SCRIPT).unwrap();
+        let config = Cookbook::script_to_metadata(&engine, TEST_SCRIPT, "test").unwrap();
 
         assert_eq!(config.requirements.vcpu_count, 1);
         assert_eq!(config.requirements.mem_size_mb, 8192);
