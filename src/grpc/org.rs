@@ -43,7 +43,7 @@ pub enum Error {
     Model(#[from] crate::models::org::Error),
     /// Org not found: {0}
     OrgNotFound(OrgId),
-    /// Failed to parse OrgId: {0}
+    /// Failed to parse `id` as OrgId: {0}
     ParseId(uuid::Error),
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
