@@ -372,9 +372,10 @@ impl api::Invitation {
         models
             .into_iter()
             .filter_map(|i| orgs.get(&i.org_id).map(|o| (i, o)))
-            .map(|(i, org)| {
-                let creator = &creators[&i.created_by];
-                Self::new(i, creator, org)
+            .filter_map(|(i, org)| {
+                creators
+                    .get(&i.created_by)
+                    .map(|creator| Self::new(i, creator, org))
             })
             .collect()
     }
