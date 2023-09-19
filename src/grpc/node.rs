@@ -232,7 +232,9 @@ async fn get(
     let node_id = req.id.parse().map_err(Error::ParseId)?;
     let node = Node::find_by_id(node_id, &mut read).await?;
 
-    let _ = read.auth(&meta, NodePerm::Get, node_id).await?;
+    let _ = read
+        .auth_or_all(&meta, NodeAdminPerm::Get, NodePerm::Get, node_id)
+        .await?;
 
     Ok(api::NodeServiceGetResponse {
         node: Some(api::Node::from_model(node, &mut read).await?),

@@ -162,6 +162,7 @@ define_perms! {
     NodeAdmin => {
         Create,
         Delete,
+        Get,
         List,
         Restart,
         Start,
