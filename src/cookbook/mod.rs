@@ -54,8 +54,8 @@ pub trait Client: Send + Sync {
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to compile script: {0}
-    CompileScript(rhai::ParseError),
+    /// Failed to compile script at path `{0}`: {1}
+    CompileScript(String, rhai::ParseError),
     /// Invalid rhai script: {0}
     InvalidScript(Box<rhai::EvalAltResult>),
     /// Failed to list path `{0}`: {1}
@@ -319,7 +319,7 @@ impl Cookbook {
             prefix = self.prefix,
         );
         let script = self.client.read_string(&self.bucket, &path).await?;
-        Self::script_to_metadata(&self.engine, &script)
+        Self::script_to_metadata(&self.engine, &script, &path)
     }
 
     pub async fn get_download_manifest(
@@ -419,10 +419,11 @@ impl Cookbook {
     fn script_to_metadata(
         engine: &rhai::Engine,
         script: &str,
+        path: &str,
     ) -> Result<BlockchainMetadata, Error> {
         let (_, _, dynamic) = engine
             .compile(script)
-            .map_err(Error::CompileScript)?
+            .map_err(|err| Error::CompileScript(path.into(), err))?
             .iter_literal_variables(true, false)
             .find(|&(name, _, _)| name == "METADATA")
             .ok_or(Error::NoMetadata)?;
