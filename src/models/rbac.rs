@@ -12,6 +12,7 @@ use thiserror::Error;
 use tonic::Status;
 
 use crate::auth::rbac::BlockjoyRole;
+use crate::auth::rbac::OrgRole;
 use crate::auth::rbac::{Perm, Role};
 use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
@@ -24,6 +25,8 @@ pub enum Error {
     CreatePerm(Perm, diesel::result::Error),
     /// Failed to create Role `{0}`: {1}
     CreateRole(Role, diesel::result::Error),
+    /// Failed to find org owners for org `{0}`: {1}
+    FindOrgOwners(OrgId, diesel::result::Error),
     /// Failed to find roles for user `{0}` and org `{1}`: {2}
     FindOrgRoles(UserId, OrgId, diesel::result::Error),
     /// Failed to find permissions for Role `{0}`: {1}
@@ -301,6 +304,16 @@ impl RbacUser {
             .into_iter()
             .map(|role: String| role.parse().map_err(Error::ParseRole))
             .collect()
+    }
+
+    pub async fn org_owners(org_id: OrgId, conn: &mut Conn<'_>) -> Result<Vec<UserId>, Error> {
+        user_roles::table
+            .filter(user_roles::org_id.eq(org_id))
+            .filter(user_roles::role.eq(OrgRole::Owner.to_string()))
+            .select(user_roles::user_id)
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::FindOrgOwners(org_id, err))
     }
 
     /// Predicate to determine whether the user is a blockjoy admin.
