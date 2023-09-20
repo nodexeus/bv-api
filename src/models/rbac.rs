@@ -412,8 +412,7 @@ impl RbacUser {
             .map_err(|err| Error::UnlinkUserRole(user_id, org_id, role, err))
             .and_then(|deleted| match deleted {
                 0 => Err(Error::NothingDeleted),
-                1 => Ok(()),
-                n => Err(Error::UnexpectedDeleted(n)),
+                _ => Ok(()),
             })
     }
 }
