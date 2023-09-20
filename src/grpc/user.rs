@@ -133,7 +133,7 @@ async fn create(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::UserServiceCreateResponse, Error> {
     let authz = write.auth_all(&meta, UserPerm::Create).await?;
-    let invitation_id = match authz.get_data("inivitation_id") {
+    let invitation_id = match authz.get_data("invitation_id") {
         Some(id) => Some(id.parse().map_err(Error::ParseInvitationId)?),
         None => None,
     };
