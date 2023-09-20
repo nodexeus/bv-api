@@ -12,7 +12,7 @@ use crate::auth::resource::{OrgId, UserId};
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::org::{NewOrg, UpdateOrg};
-use crate::models::rbac::OrgUsers;
+use crate::models::rbac::{OrgUsers, RbacUser};
 use crate::models::{Invitation, Org, OrgUser, User};
 use crate::timestamp::NanosUtc;
 
@@ -51,6 +51,8 @@ pub enum Error {
     ParseUserId(uuid::Error),
     /// Org rbac error: {0}
     Rbac(#[from] crate::models::rbac::Error),
+    /// Cannot remove last owner from an org.
+    RemoveLastOwner,
     /// Org user error: {0}
     User(#[from] crate::models::user::Error),
 }
@@ -68,6 +70,7 @@ impl From<Error> for Status {
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
+            RemoveLastOwner => Status::failed_precondition("Can't remove last org owner."),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Invitation(err) => err.into(),
@@ -275,7 +278,12 @@ async fn remove_member(
 
     let remover = User::find_by_id(self_id, &mut write).await?;
     let removee = User::find_by_id(user_id, &mut write).await?;
+
     let org = Org::find_by_id(org_id, &mut write).await?;
+    let owners = RbacUser::org_owners(org_id, &mut write).await?;
+    if owners.len() == 1 && owners[0] == user_id {
+        return Err(Error::RemoveLastOwner);
+    }
 
     if user_id != self_id && !authz.has_perm(OrgPerm::RemoveMember) {
         return Err(Error::MissingRemoveMember);
