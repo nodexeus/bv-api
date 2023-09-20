@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use diesel::result::Error::NotFound;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use futures_util::future::OptionFuture;
@@ -526,8 +527,14 @@ impl api::Node {
     /// perform a seperate query to the blockchains table.
     pub async fn from_model(node: Node, conn: &mut Conn<'_>) -> Result<Self, Error> {
         let blockchain = Blockchain::find_by_id(node.blockchain_id, conn).await?;
-        let user_fut = node.created_by.map(|u_id| User::find_by_id(u_id, conn));
-        let user = OptionFuture::from(user_fut).await.transpose()?;
+        let user = match node.created_by {
+            Some(id) => match User::find_by_id(id, conn).await {
+                Ok(user) => Some(user),
+                Err(crate::models::user::Error::FindById(_, NotFound)) => None,
+                Err(err) => return Err(err.into()),
+            },
+            None => None,
+        };
 
         // We need to get both the node properties and the blockchain properties to construct the
         // final dto. First we query both, and then we zip them together.
