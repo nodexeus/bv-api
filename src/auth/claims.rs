@@ -97,6 +97,21 @@ impl Claims {
         self
     }
 
+    pub fn insert_data<K, V>(&mut self, key: K, value: V)
+    where
+        K: ToString,
+        V: ToString,
+    {
+        match self.data {
+            Some(ref mut data) => {
+                data.insert(key.to_string(), value.to_string());
+            }
+            None => {
+                self.data = Some(hashmap! { key.to_string() => value.to_string() });
+            }
+        }
+    }
+
     pub fn resource(&self) -> Resource {
         self.resource_entry.into()
     }
