@@ -273,7 +273,8 @@ async fn remove_member(
     let self_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
     let user_id = req.user_id.parse().map_err(Error::ParseUserId)?;
 
-    let user = User::find_by_id(user_id, &mut write).await?;
+    let remover = User::find_by_id(self_id, &mut write).await?;
+    let removee = User::find_by_id(user_id, &mut write).await?;
     let org = Org::find_by_id(org_id, &mut write).await?;
 
     if user_id != self_id && !authz.has_perm(OrgPerm::RemoveMember) {
@@ -287,10 +288,10 @@ async fn remove_member(
     // In case a user needs to be re-invited later, we also remove the (already accepted) invites
     // from the database. This is to prevent them from running into a unique constraint when they
     // are invited again.
-    Invitation::remove_by_org_user(&user.email, org_id, &mut write).await?;
+    Invitation::remove_by_org_user(&removee.email, org_id, &mut write).await?;
 
     let org = api::Org::from_model(&org, &mut write).await?;
-    let msg = api::OrgMessage::updated(org, user);
+    let msg = api::OrgMessage::updated(org, remover);
     write.mqtt(msg);
 
     Ok(api::OrgServiceRemoveMemberResponse {})

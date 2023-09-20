@@ -66,12 +66,14 @@ pub enum Error {
     MemSize(std::num::TryFromIntError),
     /// Node MQTT message error: {0}
     Message(#[from] Box<crate::mqtt::message::Error>),
+    /// Missing placement.
+    MissingPlacement,
+    /// Missing blockchain property id: {0}.
+    MissingPropertyId(BlockchainPropertyId),
     /// Node model error: {0}
     Model(#[from] crate::models::node::Error),
     /// Node model property error: {0}
     ModelProperty(#[from] crate::models::node::property::Error),
-    /// Missing placement.
-    MissingPlacement,
     /// No ResourceAffinity.
     NoResourceAffinity,
     /// No UiType.
@@ -108,8 +110,8 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             ClaimsNotUser => Status::permission_denied("Access denied."),
-            ModelProperty(_) | Cookbook(_) | Diesel(_) | Message(_) | ParseIpAddr(_)
-            | PropertyNotFound(_) => Status::internal("Internal error."),
+            Cookbook(_) | Diesel(_) | Message(_) | MissingPropertyId(_) | ModelProperty(_)
+            | ParseIpAddr(_) | PropertyNotFound(_) => Status::internal("Internal error."),
             AllowIps(_) => Status::invalid_argument("allow_ips"),
             BlockHeight(_) => Status::invalid_argument("block_height"),
             DenyIps(_) => Status::invalid_argument("deny_ips"),
@@ -542,10 +544,11 @@ impl api::Node {
         let props = node_props
             .into_iter()
             .map(|node_prop| {
-                let block_prop = block_props[&node_prop.blockchain_property_id].clone();
-                (node_prop, block_prop)
+                let id = node_prop.blockchain_property_id;
+                let block_prop = block_props.get(&id).ok_or(Error::MissingPropertyId(id))?;
+                Ok::<_, Error>((node_prop, block_prop.clone()))
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         let host = Host::find_by_id(node.host_id, conn).await?;
         let org = Org::find_by_id(node.org_id, conn).await?;
@@ -647,8 +650,6 @@ impl api::Node {
         host: &Host,
         region: Option<&Region>,
     ) -> Result<Self, Error> {
-        use api::{ContainerStatus, NodeStatus, NodeType, StakingStatus, SyncStatus};
-
         let properties = properties
             .into_iter()
             .map(|(nprop, bprop)| api::NodeProperty::from_model(nprop, bprop))
@@ -686,7 +687,7 @@ impl api::Node {
 
         let data_sync_progress = Self::data_sync_progress(&node)?;
 
-        let mut dto = api::Node {
+        let mut out = api::Node {
             id: node.id.to_string(),
             org_id: node.org_id.to_string(),
             host_id: node.host_id.to_string(),
@@ -724,15 +725,15 @@ impl api::Node {
             data_directory_mountpoint: node.data_directory_mountpoint,
             data_sync_progress,
         };
-        dto.set_node_type(NodeType::from_model(node.node_type));
-        dto.set_status(NodeStatus::from_model(node.chain_status));
+        out.set_node_type(api::NodeType::from_model(node.node_type));
+        out.set_status(api::NodeStatus::from_model(node.chain_status));
         if let Some(ss) = node.staking_status {
-            dto.set_staking_status(StakingStatus::from_model(ss));
+            out.set_staking_status(api::StakingStatus::from_model(ss));
         }
-        dto.set_container_status(ContainerStatus::from_model(node.container_status));
-        dto.set_sync_status(SyncStatus::from_model(node.sync_status));
+        out.set_container_status(api::ContainerStatus::from_model(node.container_status));
+        out.set_sync_status(api::SyncStatus::from_model(node.sync_status));
 
-        Ok(dto)
+        Ok(out)
     }
 
     fn data_sync_progress(node: &Node) -> Result<Option<api::DataSyncProgress>, Error> {
