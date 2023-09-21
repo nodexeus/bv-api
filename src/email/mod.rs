@@ -1,6 +1,5 @@
 pub mod template;
 pub use template::{Kind, Language, Template, Templates};
-use uuid::Uuid;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,6 +9,7 @@ use displaydoc::Display;
 use sendgrid::{Destination, Mail, SGClient};
 use thiserror::Error;
 use url::Url;
+use uuid::Uuid;
 
 use crate::auth::claims::Claims;
 use crate::auth::rbac::EmailRole;
