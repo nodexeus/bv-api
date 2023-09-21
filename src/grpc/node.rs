@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::auth::rbac::{NodeAdminPerm, NodePerm};
 use crate::auth::resource::{HostId, NodeId, UserId};
 use crate::auth::Authorize;
+use crate::cookbook::identifier::Identifier;
 use crate::cookbook::script::HardwareRequirements;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::blockchain::{
@@ -61,6 +62,8 @@ pub enum Error {
     DiskSize(std::num::TryFromIntError),
     /// Node host error: {0}
     Host(#[from] crate::models::host::Error),
+    /// Node cookbook Identifier error: {0}
+    Identifier(#[from] crate::cookbook::identifier::Error),
     /// Node ip address error: {0}
     IpAddress(#[from] crate::models::ip_address::Error),
     /// Failed to parse mem size bytes: {0}
@@ -111,8 +114,10 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             ClaimsNotUser => Status::permission_denied("Access denied."),
-            Cookbook(_) | Diesel(_) | Message(_) | MissingPropertyId(_) | ModelProperty(_)
-            | ParseIpAddr(_) | PropertyNotFound(_) => Status::internal("Internal error."),
+            Cookbook(_) | Diesel(_) | Identifier(_) | Message(_) | MissingPropertyId(_)
+            | ModelProperty(_) | ParseIpAddr(_) | PropertyNotFound(_) => {
+                Status::internal("Internal error.")
+            }
             AllowIps(_) => Status::invalid_argument("allow_ips"),
             BlockHeight(_) => Status::invalid_argument("block_height"),
             DenyIps(_) => Status::invalid_argument("deny_ips"),
@@ -287,15 +292,12 @@ async fn create(
     let blockchain = Blockchain::find_by_id(blockchain_id, &mut write).await?;
 
     let node_type = req.node_type().into_model();
-    let _ = BlockchainVersion::find(&blockchain, &req.version, node_type, &mut write).await?;
+    let id = Identifier::new(&blockchain.name, node_type, &req.version)?;
+    let version = id.node_version();
 
-    let requirements = write
-        .ctx
-        .cookbook
-        .rhai_metadata(&blockchain.name, node_type, &req.version)
-        .await?
-        .requirements;
+    let _ = BlockchainVersion::find(&blockchain, &version, node_type, &mut write).await?;
 
+    let requirements = write.ctx.cookbook.rhai_metadata(&id).await?.requirements;
     let new_node = req.as_new(user.id, requirements, &mut write).await?;
     let node = new_node.create(host, &mut write).await?;
 
@@ -702,7 +704,7 @@ impl api::Node {
             blockchain_id: node.blockchain_id.to_string(),
             name: node.name,
             address: node.address,
-            version: node.version,
+            version: node.version.into(),
             ip: node.ip_addr,
             ip_gateway: node.ip_gateway,
             node_type: 0, // We use the setter to set this field for type-safety
@@ -766,7 +768,7 @@ impl api::NodeServiceCreateRequest {
         user_id: UserId,
         req: HardwareRequirements,
         conn: &mut Conn<'_>,
-    ) -> Result<NewNode<'_>, Error> {
+    ) -> Result<NewNode, Error> {
         let inner = self.placement.as_ref().ok_or(Error::MissingPlacement)?;
         let placement = inner.placement.as_ref().ok_or(Error::MissingPlacement)?;
         let scheduler = match placement {
@@ -793,7 +795,7 @@ impl api::NodeServiceCreateRequest {
             id: Uuid::new_v4().into(),
             org_id: self.org_id.parse().map_err(Error::ParseOrgId)?,
             name: petname::Petnames::large().generate_one(3, "_"),
-            version: &self.version,
+            version: self.version.clone().into(),
             blockchain_id: self
                 .blockchain_id
                 .parse()
@@ -812,7 +814,7 @@ impl api::NodeServiceCreateRequest {
             disk_size_bytes: (req.disk_size_gb * 1000 * 1000 * 1000)
                 .try_into()
                 .map_err(Error::DiskSize)?,
-            network: &self.network,
+            network: self.network.clone().into(),
             node_type: self.node_type().into_model(),
             allow_ips: serde_json::to_value(allow_ips).map_err(Error::AllowIps)?,
             deny_ips: serde_json::to_value(deny_ips).map_err(Error::DenyIps)?,

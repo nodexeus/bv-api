@@ -1,7 +1,9 @@
 use std::fmt;
 use std::str::FromStr;
 
+use derive_more::{AsRef, Deref, From, Into};
 use diesel_derive_enum::DbEnum;
+use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display;
 use thiserror::Error;
 
@@ -15,6 +17,12 @@ pub enum Error {
     /// Unknown NodeType value: {0}
     UnknownNodeTypeValue(i32),
 }
+
+#[derive(Clone, Debug, DieselNewType, AsRef, Deref, From, Into)]
+pub struct NodeNetwork(String);
+
+#[derive(Clone, Debug, DieselNewType, AsRef, Deref, From, Into)]
+pub struct NodeVersion(String);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumNodeType"]
