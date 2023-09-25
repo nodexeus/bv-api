@@ -169,7 +169,7 @@ pub mod tests {
     #[test]
     fn can_deserialize_rhai() {
         let engine = Engine::new();
-        let id = Identifier::new("test", NodeType::Node, "1.2.3").unwrap();
+        let id = Identifier::new("test", NodeType::Node, "1.2.3".to_string().into());
         let meta = BlockchainMetadata::from_script(&engine, TEST_SCRIPT, &id).unwrap();
 
         assert_eq!(meta.requirements.vcpu_count, 1);

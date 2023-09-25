@@ -62,8 +62,6 @@ pub enum Error {
     DiskSize(std::num::TryFromIntError),
     /// Node host error: {0}
     Host(#[from] crate::models::host::Error),
-    /// Node cookbook Identifier error: {0}
-    Identifier(#[from] crate::cookbook::identifier::Error),
     /// Node ip address error: {0}
     IpAddress(#[from] crate::models::ip_address::Error),
     /// Failed to parse mem size bytes: {0}
@@ -114,10 +112,8 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             ClaimsNotUser => Status::permission_denied("Access denied."),
-            Cookbook(_) | Diesel(_) | Identifier(_) | Message(_) | MissingPropertyId(_)
-            | ModelProperty(_) | ParseIpAddr(_) | PropertyNotFound(_) => {
-                Status::internal("Internal error.")
-            }
+            Cookbook(_) | Diesel(_) | Message(_) | MissingPropertyId(_) | ModelProperty(_)
+            | ParseIpAddr(_) | PropertyNotFound(_) => Status::internal("Internal error."),
             AllowIps(_) => Status::invalid_argument("allow_ips"),
             BlockHeight(_) => Status::invalid_argument("block_height"),
             DenyIps(_) => Status::invalid_argument("deny_ips"),
@@ -292,7 +288,7 @@ async fn create(
     let blockchain = Blockchain::find_by_id(blockchain_id, &mut write).await?;
 
     let node_type = req.node_type().into_model();
-    let id = Identifier::new(&blockchain.name, node_type, &req.version)?;
+    let id = Identifier::new(&blockchain.name, node_type, req.version.clone().into());
     let version = id.node_version();
 
     let _ = BlockchainVersion::find(&blockchain, &version, node_type, &mut write).await?;

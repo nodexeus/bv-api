@@ -26,8 +26,6 @@ pub enum Error {
     Cookbook(#[from] crate::cookbook::Error),
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
-    /// Cookbook Identifier error: {0}
-    Identifier(#[from] crate::cookbook::identifier::Error),
     /// Missing cookbook id.
     MissingId,
 }
@@ -37,7 +35,7 @@ impl From<Error> for Status {
         error!("{err}");
         use Error::*;
         match err {
-            Cookbook(_) | Diesel(_) | Identifier(_) => Status::internal("Internal error."),
+            Cookbook(_) | Diesel(_) => Status::internal("Internal error."),
             MissingId => Status::invalid_argument("id"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
@@ -105,7 +103,7 @@ async fn retrieve_plugin(
 ) -> Result<api::CookbookServiceRetrievePluginResponse, Error> {
     let _ = read.auth_all(&meta, CookbookPerm::RetrievePlugin).await?;
 
-    let id = req.id.ok_or(Error::MissingId)?.try_into()?;
+    let id = req.id.ok_or(Error::MissingId)?.into();
     let rhai_content = read.ctx.cookbook.read_rhai_file(&id).await?;
 
     let plugin = api::Plugin {
@@ -125,7 +123,7 @@ async fn retrieve_image(
 ) -> Result<api::CookbookServiceRetrieveImageResponse, Error> {
     let _ = read.auth_all(&meta, CookbookPerm::RetrieveImage).await?;
 
-    let id = req.id.ok_or(Error::MissingId)?.try_into()?;
+    let id = req.id.ok_or(Error::MissingId)?.into();
     let url = read
         .ctx
         .cookbook
@@ -145,7 +143,7 @@ async fn requirements(
 ) -> Result<api::CookbookServiceRequirementsResponse, Error> {
     let _ = read.auth_all(&meta, CookbookPerm::Requirements).await?;
 
-    let id = req.id.ok_or(Error::MissingId)?.try_into()?;
+    let id = req.id.ok_or(Error::MissingId)?.into();
     let requirements = read.ctx.cookbook.rhai_metadata(&id).await?.requirements;
 
     Ok(api::CookbookServiceRequirementsResponse {
@@ -164,7 +162,7 @@ async fn net_configurations(
         .auth_all(&meta, CookbookPerm::NetConfigurations)
         .await?;
 
-    let id = req.id.ok_or(Error::MissingId)?.try_into()?;
+    let id = req.id.ok_or(Error::MissingId)?.into();
     let meta = read.ctx.cookbook.rhai_metadata(&id).await?;
 
     let networks = meta

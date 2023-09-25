@@ -37,8 +37,6 @@ pub enum Error {
     Claims(#[from] crate::auth::claims::Error),
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
-    /// Blockchain cookbook Identifier error: {0}
-    Identifier(#[from] crate::cookbook::identifier::Error),
     /// Missing blockchain version id. This should not happen.
     MissingVersionId,
     /// Missing blockchain version node type. This should not happen.
@@ -54,7 +52,7 @@ impl From<Error> for Status {
         error!("{err}");
         use Error::*;
         match err {
-            Diesel(_) | Identifier(_) | MissingVersionId | MissingVersionNodeType => {
+            Diesel(_) | MissingVersionId | MissingVersionNodeType => {
                 Status::internal("Internal error.")
             }
             ParseId(_) => Status::invalid_argument("id"),
@@ -108,7 +106,7 @@ async fn get(
                 .get(&version.blockchain_node_type_id)
                 .map(|chain_node_type| chain_node_type.node_type)
                 .ok_or(Error::MissingVersionNodeType)?;
-            let id = Identifier::new(&blockchain.name, node_type, &version.version)?;
+            let id = Identifier::new(&blockchain.name, node_type, version.version.clone().into());
 
             Ok((version.id, id))
         })
@@ -163,7 +161,7 @@ async fn list(
                 .map(|chain_node_type| chain_node_type.node_type)
                 .ok_or(Error::MissingVersionNodeType)?;
 
-            let id = Identifier::new(protocol, node_type, &version.version)?;
+            let id = Identifier::new(protocol, node_type, version.version.clone().into());
 
             Ok((version.id, id))
         })

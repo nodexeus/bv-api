@@ -21,8 +21,6 @@ pub enum Error {
     Cookbook(#[from] crate::cookbook::Error),
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
-    /// Cookbook Identifier error: {0}
-    Identifier(#[from] crate::cookbook::identifier::Error),
     /// Missing cookbook id.
     MissingId,
 }
@@ -32,7 +30,7 @@ impl From<Error> for Status {
         error!("{err}");
         use Error::*;
         match err {
-            Cookbook(_) | Diesel(_) | Identifier(_) => Status::internal("Internal error."),
+            Cookbook(_) | Diesel(_) => Status::internal("Internal error."),
             MissingId => Status::invalid_argument("id"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
@@ -60,7 +58,7 @@ async fn retrieve_download_manifest(
 ) -> Result<api::ManifestServiceRetrieveDownloadManifestResponse, Error> {
     let _ = read.auth_all(&meta, ManifestPerm::RetrieveDownload).await?;
 
-    let id = req.id.ok_or(Error::MissingId)?.try_into()?;
+    let id = req.id.ok_or(Error::MissingId)?.into();
     let manifest = read
         .ctx
         .cookbook

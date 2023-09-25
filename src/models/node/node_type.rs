@@ -1,16 +1,16 @@
 use std::fmt;
 use std::str::FromStr;
 
-use derive_more::{AsRef, Deref, From, Into};
+use derive_more::{AsRef, Deref, Display, From, Into};
 use diesel_derive_enum::DbEnum;
 use diesel_derive_newtype::DieselNewType;
-use displaydoc::Display;
+use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
 
 use crate::grpc::api;
 use crate::models::schema::sql_types;
 
-#[derive(Debug, Display, Error)]
+#[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
     /// Unknown NodeType: {0}
     UnknownNodeType(String),
@@ -18,10 +18,10 @@ pub enum Error {
     UnknownNodeTypeValue(i32),
 }
 
-#[derive(Clone, Debug, DieselNewType, AsRef, Deref, From, Into)]
+#[derive(Clone, Debug, Display, DieselNewType, AsRef, Deref, From, Into)]
 pub struct NodeNetwork(String);
 
-#[derive(Clone, Debug, DieselNewType, AsRef, Deref, From, Into)]
+#[derive(Clone, Debug, Display, DieselNewType, AsRef, Deref, From, Into)]
 pub struct NodeVersion(String);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DbEnum)]

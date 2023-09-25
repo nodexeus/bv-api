@@ -176,6 +176,15 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
+    fn test_identifier() -> Identifier {
+        Identifier::new(
+            "test_blockchain",
+            NodeType::Node,
+            "1.2.3".to_string().into(),
+        )
+    }
+
     #[tokio::test]
     async fn test_get_download_manifest_client_error() {
         let mut client = MockClient::new();
@@ -187,12 +196,11 @@ mod tests {
             .returning(|_, _| Err(Error::Unexpected("some client error")));
 
         let cookbook = Cookbook::new(&dummy_config(), client);
-        let id = Identifier::new("test_blockchain", NodeType::Node, "1.2.3").unwrap();
 
         assert_eq!(
             "Cookbook client error: Unexpected error: some client error",
             cookbook
-                .get_download_manifest(&id, "test")
+                .get_download_manifest(&test_identifier(), "test")
                 .await
                 .unwrap_err()
                 .to_string()
@@ -221,20 +229,19 @@ mod tests {
             });
 
         let cookbook = Cookbook::new(&dummy_config(), client);
-        let id = Identifier::new("test_blockchain", NodeType::Node, "1.2.3").unwrap();
 
         assert_eq!(
-            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: Version { major: 1, minor: 2, patch: 3 } }` in network test."#,
+            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
             cookbook
-                .get_download_manifest(&id, "test")
+                .get_download_manifest(&test_identifier(), "test")
                 .await
                 .unwrap_err()
                 .to_string()
         );
         assert_eq!(
-            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: Version { major: 1, minor: 2, patch: 3 } }` in network test."#,
+            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
             cookbook
-                .get_download_manifest(&id, "test")
+                .get_download_manifest(&test_identifier(), "test")
                 .await
                 .unwrap_err()
                 .to_string()
@@ -269,12 +276,11 @@ mod tests {
             .returning(|_, _| Ok(vec![]));
 
         let cookbook = Cookbook::new(&dummy_config(), client);
-        let id = Identifier::new("test_blockchain", NodeType::Node, "1.2.3").unwrap();
 
         assert_eq!(
-            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: Version { major: 1, minor: 2, patch: 3 } }` in network test."#,
+            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
             cookbook
-                .get_download_manifest(&id, "test")
+                .get_download_manifest(&test_identifier(), "test")
                 .await
                 .unwrap_err()
                 .to_string()
@@ -317,12 +323,11 @@ mod tests {
             .returning(|_, _| Ok("invalid manifest content".to_owned().into_bytes()));
 
         let cookbook = Cookbook::new(&dummy_config(), client);
-        let id = Identifier::new("test_blockchain", NodeType::Node, "1.2.3").unwrap();
 
         assert_eq!(
-            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: Version { major: 1, minor: 2, patch: 3 } }` in network test."#,
+            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
             cookbook
-                .get_download_manifest(&id, "test")
+                .get_download_manifest(&test_identifier(), "test")
                 .await
                 .unwrap_err()
                 .to_string()
@@ -349,8 +354,10 @@ mod tests {
             .returning(|_, _| Ok(r#"{"total_size": 128,"chunks": []}"#.to_owned().into_bytes()));
 
         let cookbook = Cookbook::new(&dummy_config(), client);
-        let id = Identifier::new("test_blockchain", NodeType::Node, "1.2.3").unwrap();
-        let manifest = cookbook.get_download_manifest(&id, "test").await.unwrap();
+        let manifest = cookbook
+            .get_download_manifest(&test_identifier(), "test")
+            .await
+            .unwrap();
 
         assert_eq!(
             manifest,

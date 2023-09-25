@@ -65,8 +65,6 @@ pub enum Error {
     Host(#[from] super::host::Error),
     /// Only available host candidate failed.
     HostCandidateFailed,
-    /// Node cookbook Identifier error: {0}
-    Identifier(#[from] crate::cookbook::identifier::Error),
     /// Failed to parse node limit as i64: {0}
     Limit(std::num::TryFromIntError),
     /// Failed to get next host ip for node: {0}
@@ -269,7 +267,7 @@ impl Node {
     pub async fn find_host(&self, write: &mut WriteConn<'_, '_>) -> Result<Host, Error> {
         let chain = Blockchain::find_by_id(self.blockchain_id, write).await?;
 
-        let id = Identifier::new(chain.name, self.node_type, &self.version)?;
+        let id = Identifier::new(chain.name, self.node_type, self.version.clone());
         let meta = write.ctx.cookbook.rhai_metadata(&id).await?;
 
         let candidates = match self.scheduler(write).await? {
@@ -429,7 +427,7 @@ impl NewNode {
             .get_node_dns(&self.name, ip_addr.clone())
             .await?;
 
-        let id = Identifier::new(blockchain.name, self.node_type, &self.version)?;
+        let id = Identifier::new(blockchain.name, self.node_type, self.version.clone());
         let meta = write.ctx.cookbook.rhai_metadata(&id).await?;
         let data_directory_mountpoint = meta
             .babel_config
@@ -462,7 +460,7 @@ impl NewNode {
     ) -> Result<Host, Error> {
         let chain = Blockchain::find_by_id(self.blockchain_id, write).await?;
 
-        let id = Identifier::new(chain.name, self.node_type, &self.version)?;
+        let id = Identifier::new(chain.name, self.node_type, self.version.clone());
         let metadata = write.ctx.cookbook.rhai_metadata(&id).await?;
 
         let requirements = HostRequirements {

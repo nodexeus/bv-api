@@ -40,6 +40,8 @@ pub enum Error {
     NoValidManifest(Identifier, Version, String),
     /// Failed to parse manifest: {0}
     ParseManifest(serde_json::Error),
+    /// Failed to parse semantic version from Identifier: {0}
+    ParseVersion(semver::Error),
     /// Cookbook script error: {0}
     Script(#[from] script::Error),
 }
@@ -177,15 +179,16 @@ impl Cookbook {
         id: &Identifier,
         network: &str,
     ) -> Result<api::DownloadManifest, Error> {
+        let node_version = Version::parse(&id.node_version).map_err(Error::ParseVersion)?;
         let node_versions = self.get_node_versions(id).await?;
-        let mut versions = node_versions.iter().rev();
 
+        let mut versions = node_versions.iter().rev();
         let mut manifest = loop {
             let Some(version) = versions.next() else {
                 return Err(Error::NoManifest(id.clone(), network.into()));
             };
 
-            if *version <= id.node_version {
+            if *version <= node_version {
                 match self.find_valid_manifest(id, version, network).await {
                     Ok(manifest) => break manifest,
                     Err(err) => debug!("Manifest not found: {err:#}"),

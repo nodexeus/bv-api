@@ -11,7 +11,7 @@ use super::{BUNDLE_NAME, KERNEL_NAME};
 pub enum Error {
     /// Failed to parse NodeType: {0}
     ParseNodeType(crate::models::node::node_type::Error),
-    /// Failed to parse semantic Version from NodeVersion: {0}
+    /// Failed to parse semantic version from key: {0}
     ParseVersion(semver::Error),
     /// Key `{0}` is not splittable into at least 4 `/` separated parts.
     SplitKey(String),
@@ -26,20 +26,20 @@ pub enum Error {
 pub struct Identifier {
     pub protocol: String,
     pub node_type: NodeType,
-    pub node_version: Version,
+    pub node_version: NodeVersion,
 }
 
 impl Identifier {
     pub fn new<S: Into<String>>(
         protocol: S,
         node_type: NodeType,
-        node_version: &str,
-    ) -> Result<Self, Error> {
-        Ok(Identifier {
+        node_version: NodeVersion,
+    ) -> Self {
+        Identifier {
             protocol: protocol.into(),
             node_type,
-            node_version: Version::parse(node_version).map_err(Error::ParseVersion)?,
-        })
+            node_version,
+        }
     }
 
     pub fn node_version(&self) -> NodeVersion {
@@ -47,17 +47,15 @@ impl Identifier {
     }
 }
 
-impl TryFrom<api::ConfigIdentifier> for Identifier {
-    type Error = Error;
-
-    fn try_from(api: api::ConfigIdentifier) -> Result<Self, Self::Error> {
+impl From<api::ConfigIdentifier> for Identifier {
+    fn from(api: api::ConfigIdentifier) -> Self {
         let node_type = api.node_type().into_model();
 
-        Ok(Identifier {
+        Identifier {
             protocol: api.protocol,
             node_type,
-            node_version: Version::parse(&api.node_version).map_err(Error::ParseVersion)?,
-        })
+            node_version: api.node_version.into(),
+        }
     }
 }
 
@@ -66,7 +64,7 @@ impl From<Identifier> for api::ConfigIdentifier {
         api::ConfigIdentifier {
             protocol: id.protocol,
             node_type: api::NodeType::from_model(id.node_type) as i32,
-            node_version: id.node_version.to_string(),
+            node_version: id.node_version.into(),
         }
     }
 }
