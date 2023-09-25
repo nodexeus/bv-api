@@ -99,8 +99,7 @@ impl api::ConfigIdentifier {
 impl api::BundleIdentifier {
     /// Extract the bundle version from a key.
     ///
-    /// The key format looks like:
-    /// `.../0.1.0/bvd-bundle.tgz`
+    /// The key format looks like: `0.1.0/bvd-bundle.tgz`
     pub fn from_key<K: AsRef<str>>(key: K) -> Result<Self, Error> {
         let version = key
             .as_ref()
@@ -118,8 +117,7 @@ impl api::BundleIdentifier {
 impl api::KernelIdentifier {
     /// Extract the kernel version from a key.
     ///
-    /// The key format looks like:
-    /// `.../5.10.174-build.1+fc.ufw/kernel.gz`
+    /// The key format looks like: `5.10.174-build.1+fc.ufw/kernel.gz`
     pub fn from_key<K: AsRef<str>>(key: K) -> Result<Self, Error> {
         let version = key
             .as_ref()

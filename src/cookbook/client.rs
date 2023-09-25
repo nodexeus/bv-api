@@ -99,12 +99,14 @@ impl Client for aws_sdk_s3::Client {
             .send()
             .await
             .map_err(|err| Error::ListPath(path, err))?;
+
         let files = resp
             .common_prefixes()
             .unwrap_or_default()
             .iter()
             .filter_map(|object| object.prefix().map(|prefix| prefix.to_owned()))
             .collect();
+
         Ok(files)
     }
 
@@ -177,9 +179,10 @@ mod tests {
     #[tokio::test]
     async fn test_get_download_manifest_client_error() {
         let mut client = MockClient::new();
+
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
+            .with(eq("archive"), eq("test_blockchain/Node/"))
             .once()
             .returning(|_, _| Err(Error::Unexpected("some client error")));
 
@@ -199,25 +202,27 @@ mod tests {
     #[tokio::test]
     async fn test_get_download_manifest_no_min_versions() {
         let mut client = MockClient::new();
+
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
+            .with(eq("archive"), eq("test_blockchain/Node/"))
             .once()
             .returning(|_, _| Ok(vec![]));
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
+            .with(eq("archive"), eq("test_blockchain/Node/"))
             .once()
             .returning(|_, _| {
                 Ok(vec![
-                    "data/test_blockchain/node/invalid/".to_owned(),
-                    "data/test_blockchain/node/7.7.7/".to_owned(),
-                    "data/test_blockchain/node/8.8.8/".to_owned(),
+                    "test_blockchain/node/invalid/".to_owned(),
+                    "test_blockchain/node/7.7.7/".to_owned(),
+                    "test_blockchain/node/8.8.8/".to_owned(),
                 ])
             });
 
         let cookbook = Cookbook::new(&dummy_config(), client);
         let id = Identifier::new("test_blockchain", NodeType::Node, "1.2.3").unwrap();
+
         assert_eq!(
             r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: Version { major: 1, minor: 2, patch: 3 } }` in network test."#,
             cookbook
@@ -239,31 +244,33 @@ mod tests {
     #[tokio::test]
     async fn test_get_download_manifest_no_data_version() {
         let mut client = MockClient::new();
+
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
+            .with(eq("archive"), eq("test_blockchain/Node/"))
             .once()
             .returning(|_, _| {
                 Ok(vec![
-                    "data/test_blockchain/node/invalid/".to_owned(),
-                    "data/test_blockchain/node/9.0.1/".to_owned(),
-                    "data/test_blockchain/node/0.0.1/".to_owned(),
-                    "data/test_blockchain/node/1.2.3/".to_owned(),
+                    "test_blockchain/node/invalid/".to_owned(),
+                    "test_blockchain/node/9.0.1/".to_owned(),
+                    "test_blockchain/node/0.0.1/".to_owned(),
+                    "test_blockchain/node/1.2.3/".to_owned(),
                 ])
             });
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/1.2.3/test/"))
+            .with(eq("archive"), eq("test_blockchain/Node/1.2.3/test/"))
             .once()
             .returning(|_, _| Ok(vec![]));
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/0.0.1/test/"))
+            .with(eq("archive"), eq("test_blockchain/Node/0.0.1/test/"))
             .once()
             .returning(|_, _| Ok(vec![]));
 
         let cookbook = Cookbook::new(&dummy_config(), client);
         let id = Identifier::new("test_blockchain", NodeType::Node, "1.2.3").unwrap();
+
         assert_eq!(
             r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: Version { major: 1, minor: 2, patch: 3 } }` in network test."#,
             cookbook
@@ -277,26 +284,27 @@ mod tests {
     #[tokio::test]
     async fn test_get_download_manifest_no_manifest_or_invalid() {
         let mut client = MockClient::new();
+
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
+            .with(eq("archive"), eq("test_blockchain/Node/"))
             .once()
             .returning(|_, _| {
                 Ok(vec![
-                    "data/test_blockchain/node/invalid/".to_owned(),
-                    "data/test_blockchain/node/9.0.1/".to_owned(),
-                    "data/test_blockchain/node/1.2.3/".to_owned(),
+                    "test_blockchain/node/invalid/".to_owned(),
+                    "test_blockchain/node/9.0.1/".to_owned(),
+                    "test_blockchain/node/1.2.3/".to_owned(),
                 ])
             });
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/1.2.3/test/"))
+            .with(eq("archive"), eq("test_blockchain/Node/1.2.3/test/"))
             .once()
             .returning(|_, _| {
                 Ok(vec![
-                    "data/test_blockchain/node/1.2.3/test/invalid/".to_owned(),
-                    "data/test_blockchain/node/1.2.3/test/1/".to_owned(),
-                    "data/test_blockchain/node/1.2.3/test/2/".to_owned(),
+                    "test_blockchain/node/1.2.3/test/invalid/".to_owned(),
+                    "test_blockchain/node/1.2.3/test/1/".to_owned(),
+                    "test_blockchain/node/1.2.3/test/2/".to_owned(),
                 ])
             });
         client
@@ -310,6 +318,7 @@ mod tests {
 
         let cookbook = Cookbook::new(&dummy_config(), client);
         let id = Identifier::new("test_blockchain", NodeType::Node, "1.2.3").unwrap();
+
         assert_eq!(
             r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: Version { major: 1, minor: 2, patch: 3 } }` in network test."#,
             cookbook
@@ -323,16 +332,17 @@ mod tests {
     #[tokio::test]
     async fn test_get_download_manifest_ok() {
         let mut client = MockClient::new();
+
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/"))
+            .with(eq("archive"), eq("test_blockchain/Node/"))
             .once()
-            .returning(|_, _| Ok(vec!["data/test_blockchain/node/1.1.1/".to_owned()]));
+            .returning(|_, _| Ok(vec!["test_blockchain/node/1.1.1/".to_owned()]));
         client
             .expect_list()
-            .with(eq("bucket"), eq("data/test_blockchain/Node/1.1.1/test/"))
+            .with(eq("archive"), eq("test_blockchain/Node/1.1.1/test/"))
             .once()
-            .returning(|_, _| Ok(vec!["data/test_blockchain/node/1.1.1/test/2/".to_owned()]));
+            .returning(|_, _| Ok(vec!["test_blockchain/node/1.1.1/test/2/".to_owned()]));
         client
             .expect_read_file()
             .once()

@@ -14,7 +14,7 @@ use semver::Version;
 use thiserror::Error;
 use tracing::debug;
 
-use crate::config::cookbook::Config;
+use crate::config::cookbook::{BucketConfig, Config};
 use crate::grpc::api;
 use crate::models::node::NodeType;
 
@@ -45,11 +45,8 @@ pub enum Error {
 }
 
 pub struct Cookbook {
-    pub data_prefix: String,
+    pub bucket: BucketConfig,
     pub prefix: String,
-    pub bucket: String,
-    pub bundle_bucket: String,
-    pub kernel_bucket: String,
     pub expiration: Duration,
     pub client: Arc<dyn Client>,
     pub engine: Arc<Engine>,
@@ -61,12 +58,9 @@ impl Cookbook {
         C: Client + 'static,
     {
         Cookbook {
-            data_prefix: config.dir_chains_data_prefix.clone(),
+            bucket: config.bucket.clone(),
             prefix: config.dir_chains_prefix.clone(),
-            bucket: config.r2_bucket.clone(),
-            bundle_bucket: config.bundle_bucket.clone(),
-            kernel_bucket: config.kernel_bucket.clone(),
-            expiration: *config.presigned_url_expiration.clone(),
+            expiration: *config.presigned_url_expiration,
             client: Arc::new(client),
             engine: Arc::new(Engine::new()),
         }
@@ -97,22 +91,22 @@ impl Cookbook {
 
     pub async fn read_file(&self, id: &Identifier, file: &str) -> Result<Vec<u8>, Error> {
         let path = self.file_path(id, file);
-        Ok(self.client.read_file(&self.bucket, &path).await?)
+        Ok(self.client.read_file(&self.bucket.cookbook, &path).await?)
     }
 
     pub async fn download_url(&self, id: &Identifier, file: &str) -> Result<String, Error> {
         let path = self.file_path(id, file);
-        self.download(&self.bucket, &path).await
+        self.download(&self.bucket.cookbook, &path).await
     }
 
     pub async fn download_bundle(&self, version: &str) -> Result<String, Error> {
         let path = format!("{version}/{BUNDLE_NAME}");
-        self.download(&self.bundle_bucket, &path).await
+        self.download(&self.bucket.bundle, &path).await
     }
 
     pub async fn download_kernel(&self, version: &str) -> Result<String, Error> {
         let path = format!("{version}/{KERNEL_NAME}");
-        self.download(&self.kernel_bucket, &path).await
+        self.download(&self.bucket.kernel, &path).await
     }
 
     async fn download(&self, bucket: &str, path: &str) -> Result<String, Error> {
@@ -125,7 +119,7 @@ impl Cookbook {
     /// Retrieve config identifiers from the S3 path structure.
     ///
     /// A bucket listing looks like:
-    /// ```
+    /// ```ignore
     /// prefix/eth/validator/0.0.3/data.txt
     /// prefix/eth/validator/0.0.3/babel.rhai
     /// prefix/eth/validator/0.0.6/babel.rhai
@@ -139,42 +133,41 @@ impl Cookbook {
         node_type: NodeType,
     ) -> Result<Vec<api::ConfigIdentifier>, Error> {
         let path = format!("{prefix}/{protocol}/{node_type}", prefix = self.prefix);
-        let keys = self.client.list_all(&self.bucket, &path).await?;
+        let keys = self.client.list_all(&self.bucket.cookbook, &path).await?;
 
-        let mut idents = HashMap::new();
-        for key in keys {
-            let ident = api::ConfigIdentifier::from_key(key)?;
-            idents.insert(ident.node_version.clone(), ident);
-        }
+        let idents: HashMap<String, api::ConfigIdentifier> = keys
+            .into_iter()
+            .map(|key| {
+                api::ConfigIdentifier::from_key(key)
+                    .map(|ident| (ident.node_version.clone(), ident))
+            })
+            .collect::<Result<_, _>>()?;
 
         Ok(idents.into_values().collect())
     }
 
     pub async fn list_bundles(&self) -> Result<Vec<api::BundleIdentifier>, Error> {
-        let keys = self.client.list_all(&self.bundle_bucket, "").await?;
+        let keys = self.client.list_all(&self.bucket.bundle, "").await?;
 
-        let mut idents = Vec::new();
-        for key in keys {
-            idents.push(api::BundleIdentifier::from_key(key)?);
-        }
-
-        Ok(idents)
+        keys.into_iter()
+            .map(|key| api::BundleIdentifier::from_key(key).map_err(Into::into))
+            .collect()
     }
 
     pub async fn list_kernels(&self) -> Result<Vec<api::KernelIdentifier>, Error> {
-        let keys = self.client.list_all(&self.kernel_bucket, "").await?;
+        let keys = self.client.list_all(&self.bucket.kernel, "").await?;
 
-        let mut idents = Vec::new();
-        for key in keys {
-            idents.push(api::KernelIdentifier::from_key(key)?);
-        }
-
-        Ok(idents)
+        keys.into_iter()
+            .map(|key| api::KernelIdentifier::from_key(key).map_err(Into::into))
+            .collect()
     }
 
     pub async fn rhai_metadata(&self, id: &Identifier) -> Result<BlockchainMetadata, Error> {
         let path = self.file_path(id, RHAI_FILE_NAME);
-        let script = self.client.read_string(&self.bucket, &path).await?;
+        let script = self
+            .client
+            .read_string(&self.bucket.cookbook, &path)
+            .await?;
 
         BlockchainMetadata::from_script(&self.engine, &script, id).map_err(Into::into)
     }
@@ -203,7 +196,7 @@ impl Cookbook {
         for chunk in manifest.chunks.iter_mut() {
             chunk.url = self
                 .client
-                .download_url(&self.bucket, &chunk.key, self.expiration)
+                .download_url(&self.bucket.archive, &chunk.key, self.expiration)
                 .await?;
         }
 
@@ -211,15 +204,15 @@ impl Cookbook {
     }
 
     async fn get_node_versions(&self, id: &Identifier) -> Result<Vec<Version>, Error> {
-        let path = format!("{}/{}/{}/", self.data_prefix, id.protocol, id.node_type);
-        let keys = self.client.list(&self.bucket, &path).await?;
+        let path = format!("{}/{}/", id.protocol, id.node_type);
+        let keys = self.client.list(&self.bucket.archive, &path).await?;
 
         let mut versions = keys
             .iter()
-            .filter_map(|key| last_segment(&key).and_then(|segment| Version::parse(segment).ok()))
+            .filter_map(|key| last_segment(key).and_then(|segment| Version::parse(segment).ok()))
             .collect::<Vec<_>>();
 
-        versions.sort_by(|a, b| a.cmp(b));
+        versions.sort();
         Ok(versions)
     }
 
@@ -233,15 +226,14 @@ impl Cookbook {
 
         for data_version in data_versions.iter().rev() {
             let path = format!(
-                "{prefix}/{protocol}/{node_type}/{version}/{network}/{data_version}/manifest.json",
-                prefix = self.data_prefix,
+                "{protocol}/{node_type}/{version}/{network}/{data_version}/manifest.json",
                 protocol = id.protocol,
                 node_type = id.node_type
             );
 
             match self
                 .client
-                .read_string(&self.bucket, &path)
+                .read_string(&self.bucket.archive, &path)
                 .await
                 .map_err(Into::into)
                 .and_then(|manifest| serde_json::from_str(&manifest).map_err(Error::ParseManifest))
@@ -265,19 +257,18 @@ impl Cookbook {
         network: &str,
     ) -> Result<Vec<u64>, Error> {
         let path = format!(
-            "{prefix}/{protocol}/{node_type}/{version}/{network}/",
-            prefix = self.data_prefix,
+            "{protocol}/{node_type}/{version}/{network}/",
             protocol = id.protocol,
             node_type = id.node_type
         );
 
-        let data_versions = self.client.list(&self.bucket, &path).await?;
+        let data_versions = self.client.list(&self.bucket.archive, &path).await?;
         let mut versions: Vec<_> = data_versions
             .into_iter()
             .filter_map(|ver| last_segment(&ver).and_then(|segment| segment.parse::<u64>().ok()))
             .collect();
 
-        versions.sort_by(|a, b| a.cmp(b));
+        versions.sort();
         Ok(versions)
     }
 
@@ -329,34 +320,38 @@ pub mod tests {
             r2_server
         }
 
-        pub fn mock_config(&self) -> crate::config::cookbook::Config {
-            crate::config::cookbook::Config {
-                dir_chains_data_prefix: "fake".to_string(),
+        pub fn mock_config(&self) -> Config {
+            Config {
+                bucket: BucketConfig {
+                    cookbook: "news".to_string(),
+                    bundle: "bundles".to_string(),
+                    kernel: "oui oui ceci sont les kernles".to_string(),
+                    archive: "archive".to_string(),
+                },
                 dir_chains_prefix: "fake".to_string(),
-                r2_bucket: "news".to_string(),
                 r2_url: self.mock.url().parse().unwrap(),
                 presigned_url_expiration: "1d".parse().unwrap(),
                 region: "eu-west-3".to_string(),
                 key_id: "not actually a".parse().unwrap(),
                 key: "key".parse().unwrap(),
-                bundle_bucket: "bundles".to_string(),
-                kernel_bucket: "oui oui ceci sont les kernles".to_string(),
             }
         }
     }
 
-    pub fn dummy_config() -> crate::config::cookbook::Config {
-        crate::config::cookbook::Config {
-            dir_chains_data_prefix: "data".to_string(),
+    pub fn dummy_config() -> Config {
+        Config {
+            bucket: BucketConfig {
+                cookbook: "cookbook".to_string(),
+                bundle: "bundle".to_string(),
+                kernel: "kernel".to_string(),
+                archive: "archive".to_string(),
+            },
             dir_chains_prefix: "chains".to_string(),
-            r2_bucket: "bucket".to_string(),
             r2_url: "https://dummy.url".parse().unwrap(),
             presigned_url_expiration: "1d".parse().unwrap(),
             region: "eu-west-3".to_string(),
             key_id: Default::default(),
             key: Default::default(),
-            bundle_bucket: "bundles".to_string(),
-            kernel_bucket: "kernles".to_string(),
         }
     }
 

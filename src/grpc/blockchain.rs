@@ -37,14 +37,14 @@ pub enum Error {
     Claims(#[from] crate::auth::claims::Error),
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
+    /// Blockchain cookbook Identifier error: {0}
+    Identifier(#[from] crate::cookbook::identifier::Error),
     /// Missing blockchain version id. This should not happen.
     MissingVersionId,
     /// Missing blockchain version node type. This should not happen.
     MissingVersionNodeType,
     /// Failed to parse BlockchainId: {0}
     ParseId(uuid::Error),
-    /// Failed to parse blockchain version: {0}
-    ParseVersion(semver::Error),
     /// Failed to get blockchain property: {0}
     Property(#[from] crate::models::blockchain::property::Error),
 }
@@ -54,7 +54,7 @@ impl From<Error> for Status {
         error!("{err}");
         use Error::*;
         match err {
-            Diesel(_) | MissingVersionId | MissingVersionNodeType | ParseVersion(_) => {
+            Diesel(_) | Identifier(_) | MissingVersionId | MissingVersionNodeType => {
                 Status::internal("Internal error.")
             }
             ParseId(_) => Status::invalid_argument("id"),
@@ -104,14 +104,11 @@ async fn get(
     let ids = versions
         .iter()
         .map(|version| {
-            let id = Identifier {
-                protocol: blockchain.name.clone(),
-                node_type: node_type_map
-                    .get(&version.blockchain_node_type_id)
-                    .map(|chain_node_type| chain_node_type.node_type)
-                    .ok_or(Error::MissingVersionNodeType)?,
-                node_version: version.version.parse().map_err(Error::ParseVersion)?,
-            };
+            let node_type = node_type_map
+                .get(&version.blockchain_node_type_id)
+                .map(|chain_node_type| chain_node_type.node_type)
+                .ok_or(Error::MissingVersionNodeType)?;
+            let id = Identifier::new(&blockchain.name, node_type, &version.version)?;
 
             Ok((version.id, id))
         })
@@ -156,18 +153,17 @@ async fn list(
     let ids = versions
         .iter()
         .map(|version| {
-            let id = Identifier {
-                protocol: blockchain_map
-                    .get(&version.blockchain_id)
-                    .ok_or(Error::MissingVersionId)?
-                    .name
-                    .clone(),
-                node_type: node_type_map
-                    .get(&version.blockchain_node_type_id)
-                    .map(|chain_node_type| chain_node_type.node_type)
-                    .ok_or(Error::MissingVersionNodeType)?,
-                node_version: version.version.parse().map_err(Error::ParseVersion)?,
-            };
+            let protocol = &blockchain_map
+                .get(&version.blockchain_id)
+                .ok_or(Error::MissingVersionId)?
+                .name;
+
+            let node_type = node_type_map
+                .get(&version.blockchain_node_type_id)
+                .map(|chain_node_type| chain_node_type.node_type)
+                .ok_or(Error::MissingVersionNodeType)?;
+
+            let id = Identifier::new(protocol, node_type, &version.version)?;
 
             Ok((version.id, id))
         })
