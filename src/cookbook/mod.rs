@@ -16,7 +16,7 @@ use tracing::debug;
 
 use crate::config::cookbook::{BucketConfig, Config};
 use crate::grpc::api;
-use crate::models::node::NodeType;
+use crate::models::node::{NodeType, NodeVersion};
 
 use self::client::Client;
 use self::identifier::Identifier;
@@ -40,8 +40,8 @@ pub enum Error {
     NoValidManifest(Identifier, Version, String),
     /// Failed to parse manifest: {0}
     ParseManifest(serde_json::Error),
-    /// Failed to parse semantic version from Identifier: {0}
-    ParseVersion(semver::Error),
+    /// Failed to parse semantic version from Identifier NodeVersion `{0}`: {1}
+    ParseVersion(NodeVersion, semver::Error),
     /// Cookbook script error: {0}
     Script(#[from] script::Error),
 }
@@ -179,7 +179,8 @@ impl Cookbook {
         id: &Identifier,
         network: &str,
     ) -> Result<api::DownloadManifest, Error> {
-        let node_version = Version::parse(&id.node_version).map_err(Error::ParseVersion)?;
+        let node_version = Version::parse(&id.node_version)
+            .map_err(|err| Error::ParseVersion(id.node_version.clone(), err))?;
         let node_versions = self.get_node_versions(id).await?;
 
         let mut versions = node_versions.iter().rev();

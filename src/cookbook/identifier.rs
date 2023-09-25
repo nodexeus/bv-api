@@ -11,8 +11,8 @@ use super::{BUNDLE_NAME, KERNEL_NAME};
 pub enum Error {
     /// Failed to parse NodeType: {0}
     ParseNodeType(crate::models::node::node_type::Error),
-    /// Failed to parse semantic version from key: {0}
-    ParseVersion(semver::Error),
+    /// Failed to parse semantic version from key `{0}`: {1}
+    ParseVersion(String, semver::Error),
     /// Key `{0}` is not splittable into at least 4 `/` separated parts.
     SplitKey(String),
     /// File name should end in `/{BUNDLE_NAME:?}` but is `{0}`.
@@ -104,7 +104,8 @@ impl api::BundleIdentifier {
             .strip_suffix(&format!("/{BUNDLE_NAME}"))
             .ok_or_else(|| Error::SuffixBundle(key.as_ref().into()))?;
 
-        let _ = Version::parse(version).map_err(Error::ParseVersion)?;
+        let _ =
+            Version::parse(version).map_err(|err| Error::ParseVersion(key.as_ref().into(), err))?;
 
         Ok(api::BundleIdentifier {
             version: version.to_owned(),
