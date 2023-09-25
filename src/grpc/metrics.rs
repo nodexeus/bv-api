@@ -69,8 +69,8 @@ pub enum Error {
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
-        error!("{err}");
         use Error::*;
+        error!("{err}");
         match err {
             Diesel(_) | Message(_) => Status::internal("Internal error."),
             BlockAge(_) => Status::invalid_argument("block_age"),

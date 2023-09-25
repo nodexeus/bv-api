@@ -37,8 +37,8 @@ pub enum Error {
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
-        error!("{err}");
         use Error::*;
+        error!("{err}");
         match err {
             Diesel(_) => Status::internal("Internal error."),
             Content(_) => Status::invalid_argument("key_file.content"),

@@ -54,8 +54,8 @@ pub enum Error {
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
-        error!("{err}");
         use Error::*;
+        error!("{err}");
         match err {
             MissingNodeId => Status::invalid_argument("command.node_id"),
             ParseHostId(_) => Status::invalid_argument("host_id"),
@@ -132,7 +132,7 @@ async fn update(
                 .await
                 .unwrap_or_default()
                 .into_iter()
-                .for_each(|cmd| write.mqtt(cmd))
+                .for_each(|cmd| write.mqtt(cmd));
         }
         None => (),
     };
@@ -315,7 +315,7 @@ impl api::Command {
                 }
 
                 rules.push(api::Rule {
-                    name: "".to_string(),
+                    name: String::new(),
                     action: action as i32,
                     direction: api::Direction::In as i32,
                     protocol: api::Protocol::Both as i32,

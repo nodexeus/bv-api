@@ -320,6 +320,7 @@ impl Host {
         {order_by}
         {limit_clause};");
 
+        #[allow(clippy::cast_possible_wrap)]
         let hosts: Vec<HostCandidate> = diesel::sql_query(query)
             .bind::<BigInt, _>(requirements.vcpu_count as i64)
             .bind::<BigInt, _>(requirements.mem_size_mb as i64 * 1000 * 1000)
@@ -381,7 +382,7 @@ impl Host {
         let regions = Self::host_candidates(requirements, None, conn)
             .await?
             .into_iter()
-            .flat_map(|host| host.region_id)
+            .filter_map(|host| host.region_id)
             .collect();
 
         Region::by_ids(regions, conn).await.map_err(Error::Region)

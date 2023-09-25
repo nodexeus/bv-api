@@ -59,8 +59,8 @@ pub enum Error {
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
-        error!("{err}");
         use Error::*;
+        error!("{err}");
         match err {
             ClaimsNotUser | DeletePersonal | MissingRemoveMember => {
                 Status::permission_denied("Access denied.")
@@ -259,7 +259,7 @@ async fn delete(
     let invitation_ids = invitations.into_iter().map(|i| i.id).collect();
     Invitation::bulk_delete(invitation_ids, &mut write).await?;
 
-    let msg = api::OrgMessage::deleted(org, user);
+    let msg = api::OrgMessage::deleted(&org, user);
     write.mqtt(msg);
 
     Ok(api::OrgServiceDeleteResponse {})
@@ -344,7 +344,7 @@ impl api::Org {
     /// Performs O(1) database queries irrespective of the number of orgs.
     pub async fn from_models<O>(orgs: &[O], conn: &mut Conn<'_>) -> Result<Vec<Self>, Error>
     where
-        O: AsRef<Org>,
+        O: AsRef<Org> + Send + Sync,
     {
         let org_ids = orgs
             .iter()

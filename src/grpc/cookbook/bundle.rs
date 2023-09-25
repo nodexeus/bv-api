@@ -29,8 +29,8 @@ pub enum Error {
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
-        error!("{err}");
         use Error::*;
+        error!("{err}");
         match err {
             Cookbook(_) | Diesel(_) | NotUsed => Status::internal("Internal error."),
             MissingId => Status::invalid_argument("id"),

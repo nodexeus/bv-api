@@ -417,16 +417,16 @@ impl NewNode {
         host: Option<Host>,
         mut write: &mut WriteConn<'_, '_>,
     ) -> Result<Node, Error> {
-        let host = match host {
-            Some(host) => host,
-            None => {
-                let scheduler = self
-                    .scheduler(write)
-                    .await?
-                    .ok_or(Error::NoHostOrScheduler)?;
-                self.find_host(scheduler, write).await?
-            }
+        let host = if let Some(host) = host {
+            host
+        } else {
+            let scheduler = self
+                .scheduler(write)
+                .await?
+                .ok_or(Error::NoHostOrScheduler)?;
+            self.find_host(scheduler, write).await?
         };
+
         let ip_addr = IpAddress::next_for_host(host.id, write)
             .await
             .map_err(Error::NextHostIp)?

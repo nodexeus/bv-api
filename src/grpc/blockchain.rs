@@ -49,8 +49,8 @@ pub enum Error {
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
-        error!("{err}");
         use Error::*;
+        error!("{err}");
         match err {
             Diesel(_) | MissingVersionId | MissingVersionNodeType => {
                 Status::internal("Internal error.")
@@ -178,10 +178,12 @@ async fn list(
     Ok(api::BlockchainServiceListResponse { blockchains })
 }
 
-/// This is a helper function for BlockchainService::list. It retrieves the networks for a given set
-/// of query parameters, and logs an error when something goes wrong. This behaviour is important,
-/// because calls to cookbook sometimes fail and we don't want this whole endpoint to crash when
-/// cookbook is having a sad day.
+/// This is a helper function for `BlockchainService::list`.
+///
+/// It retrieves the networks for a given set of query parameters, and logs an
+/// error when something goes wrong. This behaviour is important because calls
+/// to cookbook sometimes fail and we don't want this whole endpoint to crash
+/// when cookbook is having a sad day.
 async fn try_get_networks(
     cookbook: &Cookbook,
     version_id: BlockchainVersionId,

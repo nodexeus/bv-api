@@ -39,8 +39,8 @@ pub enum Error {
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
-        error!("{err}");
         use Error::*;
+        error!("{err}");
         match err {
             Diesel(_) | Email(_) | ParseInvitationId(_) => Status::internal("Internal error."),
             ParseId(_) => Status::invalid_argument("id"),
