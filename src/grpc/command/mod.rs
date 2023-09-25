@@ -240,7 +240,7 @@ impl api::Command {
                 let blockchain = Blockchain::find_by_id(node.blockchain_id, conn).await?;
                 let mut image = api::ContainerImage {
                     protocol: blockchain.name,
-                    node_version: node.version.to_lowercase(),
+                    node_version: node.version.as_ref().to_lowercase(),
                     node_type: 0, // We use the setter to set this field for type-safety
                 };
                 image.set_node_type(api::NodeType::from_model(node.node_type));
@@ -260,7 +260,7 @@ impl api::Command {
                 let id_to_name_map = BlockchainProperty::id_to_name_map(&variant, conn).await?;
                 let mut image = api::ContainerImage {
                     protocol: blockchain.name,
-                    node_version: node.version.to_lowercase(),
+                    node_version: node.version.as_ref().to_lowercase(),
                     node_type: 0, // We use the setter to set this field for type-safety
                 };
                 image.set_node_type(api::NodeType::from_model(node.node_type));

@@ -12,6 +12,7 @@ use crate::auth::rbac::{GrpcRole, HostPerm};
 use crate::auth::resource::{HostId, OrgId};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::{AuthZ, Authorize};
+use crate::cookbook::identifier::Identifier;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::command::NewCommand;
 use crate::models::host::{
@@ -45,6 +46,8 @@ pub enum Error {
     DiskSize(std::num::TryFromIntError),
     /// Host model error: {0}
     Host(#[from] crate::models::host::Error),
+    /// Cookbook Identifier error: {0}
+    Identifier(#[from] crate::cookbook::identifier::Error),
     /// Host JWT failure: {0}
     Jwt(#[from] crate::auth::token::jwt::Error),
     /// Looking is missing org id: {0}
@@ -78,7 +81,7 @@ impl From<Error> for Status {
         error!("{err}");
         use Error::*;
         match err {
-            Cookbook(_) | Diesel(_) | Jwt(_) | LookupMissingOrg(_) | Refresh(_) => {
+            Cookbook(_) | Diesel(_) | Identifier(_) | Jwt(_) | LookupMissingOrg(_) | Refresh(_) => {
                 Status::internal("Internal error.")
             }
             CpuCount(_) | DiskSize(_) | MemSize(_) => Status::out_of_range("Host resource."),
@@ -351,12 +354,8 @@ async fn regions(
     let blockchain = Blockchain::find_by_id(blockchain_id, &mut read).await?;
 
     let node_type = req.node_type().into_model();
-    let requirements = read
-        .ctx
-        .cookbook
-        .rhai_metadata(&blockchain.name, node_type, &req.version)
-        .await?
-        .requirements;
+    let id = Identifier::new(&blockchain.name, node_type, &req.version)?;
+    let requirements = read.ctx.cookbook.rhai_metadata(&id).await?.requirements;
 
     let host_type = req.host_type().into_model();
     let regions = Host::regions_for(
