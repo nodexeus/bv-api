@@ -12,7 +12,7 @@ use displaydoc::Display;
 use rhai::Engine;
 use semver::Version;
 use thiserror::Error;
-use tracing::debug;
+use tracing::warn;
 
 use crate::config::cookbook::{BucketConfig, Config};
 use crate::grpc::api;
@@ -150,18 +150,22 @@ impl Cookbook {
 
     pub async fn list_bundles(&self) -> Result<Vec<api::BundleIdentifier>, Error> {
         let keys = self.client.list_all(&self.bucket.bundle, "").await?;
+        let idents = keys
+            .iter()
+            .filter_map(api::BundleIdentifier::maybe_from_key)
+            .collect();
 
-        keys.into_iter()
-            .map(|key| api::BundleIdentifier::from_key(key).map_err(Into::into))
-            .collect()
+        Ok(idents)
     }
 
     pub async fn list_kernels(&self) -> Result<Vec<api::KernelIdentifier>, Error> {
         let keys = self.client.list_all(&self.bucket.kernel, "").await?;
+        let idents = keys
+            .iter()
+            .filter_map(api::KernelIdentifier::maybe_from_key)
+            .collect();
 
-        keys.into_iter()
-            .map(|key| api::KernelIdentifier::from_key(key).map_err(Into::into))
-            .collect()
+        Ok(idents)
     }
 
     pub async fn rhai_metadata(&self, id: &Identifier) -> Result<BlockchainMetadata, Error> {
@@ -192,7 +196,7 @@ impl Cookbook {
             if *version <= node_version {
                 match self.find_valid_manifest(id, version, network).await {
                     Ok(manifest) => break manifest,
-                    Err(err) => debug!("Manifest not found: {err:#}"),
+                    Err(err) => warn!("Manifest not found: {err:#}"),
                 }
             }
         };
@@ -243,7 +247,7 @@ impl Cookbook {
                 .and_then(|manifest| serde_json::from_str(&manifest).map_err(Error::ParseManifest))
             {
                 Ok(manifest) => return Ok(manifest),
-                Err(err) => debug!("Invalid manifest at `{path}`: {err:#}"),
+                Err(err) => warn!("Invalid manifest at `{path}`: {err:#}"),
             }
         }
 
