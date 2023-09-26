@@ -4,6 +4,7 @@ use crate::models::node::{NodeType, NodeVersion};
 use displaydoc::Display;
 use semver::Version;
 use thiserror::Error;
+use tracing::trace;
 
 use super::{BUNDLE_NAME, KERNEL_NAME};
 
@@ -111,6 +112,14 @@ impl api::BundleIdentifier {
             version: version.to_owned(),
         })
     }
+
+    /// Try and parse a `BundleIdentifier` from a key, or return None otherwise.
+    pub fn maybe_from_key<K: AsRef<str>>(key: K) -> Option<Self> {
+        let key = key.as_ref();
+        Self::from_key(key)
+            .map_err(|err| trace!("Failed to parse bundle key `{key}`: {err}"))
+            .ok()
+    }
 }
 
 impl api::KernelIdentifier {
@@ -126,5 +135,13 @@ impl api::KernelIdentifier {
         Ok(api::KernelIdentifier {
             version: version.to_owned(),
         })
+    }
+
+    /// Try and parse a `KernelIdentifier` from a key, or return None otherwise.
+    pub fn maybe_from_key<K: AsRef<str>>(key: K) -> Option<Self> {
+        let key = key.as_ref();
+        Self::from_key(key)
+            .map_err(|err| trace!("Failed to parse kernel key `{key}`: {err}"))
+            .ok()
     }
 }
