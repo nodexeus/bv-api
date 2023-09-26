@@ -260,7 +260,7 @@ async fn update(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceUpdateResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
-    let _ = write.auth(&meta, HostPerm::Update, id).await?;
+    write.auth(&meta, HostPerm::Update, id).await?;
 
     let region = if let Some(ref region) = req.region {
         Region::get_or_create(region, &mut write).await.map(Some)?
@@ -268,7 +268,7 @@ async fn update(
         None
     };
 
-    let _ = req.as_update(region.as_ref())?.update(&mut write).await?;
+    req.as_update(region.as_ref())?.update(&mut write).await?;
 
     Ok(api::HostServiceUpdateResponse {})
 }
@@ -279,7 +279,7 @@ async fn delete(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceDeleteResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
-    let _ = write.auth(&meta, HostPerm::Delete, id).await?;
+    write.auth(&meta, HostPerm::Delete, id).await?;
 
     Host::delete(id, &mut write).await?;
 
@@ -292,7 +292,7 @@ async fn start(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceStartResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
-    let _ = write.auth(&meta, HostPerm::Start, id).await?;
+    write.auth(&meta, HostPerm::Start, id).await?;
 
     let command = NewCommand::from(id, CommandType::RestartBVS)
         .create(&mut write)
@@ -309,7 +309,7 @@ async fn stop(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceStopResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
-    let _ = write.auth(&meta, HostPerm::Stop, id).await?;
+    write.auth(&meta, HostPerm::Stop, id).await?;
 
     let command = NewCommand::from(id, CommandType::StopBVS)
         .create(&mut write)
@@ -326,7 +326,7 @@ async fn restart(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceRestartResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
-    let _ = write.auth(&meta, HostPerm::Restart, id).await?;
+    write.auth(&meta, HostPerm::Restart, id).await?;
 
     let command = NewCommand::from(id, CommandType::RestartBVS)
         .create(&mut write)
@@ -343,7 +343,7 @@ async fn regions(
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::HostServiceRegionsResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
-    let _ = read.auth(&meta, HostPerm::Regions, org_id).await?;
+    read.auth(&meta, HostPerm::Regions, org_id).await?;
 
     let blockchain_id = req
         .blockchain_id

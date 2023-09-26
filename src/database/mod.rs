@@ -290,7 +290,7 @@ fn root_certs() -> RootCertStore {
 /// have to implement a custom certificate verifier for our certificate. The custom implementation
 /// falls back to the stardard `WebPkiVerifier`, but when it sees an `UnsupportedNameType` error
 /// being returned from the verification process, it marks the verification as succeeded. This
-/// emulates the default behaviour of sqlx and libpq.
+/// emulates the default behaviour of `SQLx` and libpq.
 struct DontVerifyHostName {
     pki: WebPkiVerifier,
 }

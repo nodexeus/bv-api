@@ -311,7 +311,7 @@ async fn update_ui_password(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceUpdateUiPasswordResponse, Error> {
     let user_id = req.user_id.parse().map_err(Error::ParseUserId)?;
-    let _ = write
+    write
         .auth(&meta, AuthPerm::UpdateUiPassword, user_id)
         .await?;
 

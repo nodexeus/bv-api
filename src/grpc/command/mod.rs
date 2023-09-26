@@ -111,9 +111,9 @@ async fn update(
     let id = req.id.parse().map_err(Error::ParseId)?;
     let command = Command::find_by_id(id, &mut write).await?;
 
-    let _ = command.host(&mut write).await?;
-    let _ = command.node(&mut write).await?;
-    let _ = write.auth_all(&meta, CommandPerm::Update).await?;
+    command.host(&mut write).await?;
+    command.node(&mut write).await?;
+    write.auth_all(&meta, CommandPerm::Update).await?;
 
     let update_cmd = req.as_update()?;
     let cmd = update_cmd.update(&mut write).await?;
@@ -153,9 +153,9 @@ async fn ack(
     let id = req.id.parse().map_err(Error::ParseId)?;
     let command = Command::find_by_id(id, &mut write).await?;
 
-    let _ = command.host(&mut write).await?;
-    let _ = command.node(&mut write).await?;
-    let _ = write.auth_all(&meta, CommandPerm::Ack).await?;
+    command.host(&mut write).await?;
+    command.node(&mut write).await?;
+    write.auth_all(&meta, CommandPerm::Ack).await?;
 
     if command.acked_at.is_none() {
         command.ack(&mut write).await?;
@@ -171,8 +171,8 @@ async fn pending(
 ) -> Result<api::CommandServicePendingResponse, Error> {
     let host_id = req.host_id.parse().map_err(Error::ParseHostId)?;
 
-    let _ = read.auth(&meta, CommandPerm::Pending, host_id).await?;
-    let _ = Host::find_by_id(host_id, &mut read).await?;
+    read.auth(&meta, CommandPerm::Pending, host_id).await?;
+    Host::find_by_id(host_id, &mut read).await?;
 
     let pending = Command::find_pending_by_host(host_id, &mut read).await?;
     let mut commands = Vec::with_capacity(pending.len());

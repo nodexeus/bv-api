@@ -121,7 +121,7 @@ impl Cookbook {
     /// Retrieve config identifiers from the S3 path structure.
     ///
     /// A bucket listing looks like:
-    /// ```ignore
+    /// ```text
     /// prefix/eth/validator/0.0.3/data.txt
     /// prefix/eth/validator/0.0.3/babel.rhai
     /// prefix/eth/validator/0.0.6/babel.rhai

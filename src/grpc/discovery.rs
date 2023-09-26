@@ -51,7 +51,7 @@ async fn services(
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::DiscoveryServiceServicesResponse, Error> {
-    let _ = read.auth_all(&meta, DiscoveryPerm::Services).await?;
+    read.auth_all(&meta, DiscoveryPerm::Services).await?;
 
     Ok(api::DiscoveryServiceServicesResponse {
         key_service_url: read.ctx.config.key_service.url.to_string(),

@@ -241,8 +241,7 @@ async fn get(
     let node_id = req.id.parse().map_err(Error::ParseId)?;
     let node = Node::find_by_id(node_id, &mut read).await?;
 
-    let _ = read
-        .auth_or_all(&meta, NodeAdminPerm::Get, NodePerm::Get, node_id)
+    read.auth_or_all(&meta, NodeAdminPerm::Get, NodePerm::Get, node_id)
         .await?;
 
     Ok(api::NodeServiceGetResponse {
@@ -256,8 +255,7 @@ async fn list(
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::NodeServiceListResponse, Error> {
     let filter = req.as_filter()?;
-    let _ = read
-        .auth_or_all(&meta, NodeAdminPerm::List, NodePerm::List, filter.org_id)
+    read.auth_or_all(&meta, NodeAdminPerm::List, NodePerm::List, filter.org_id)
         .await?;
 
     let (node_count, nodes) = Node::filter(filter, &mut read).await?;
@@ -296,7 +294,7 @@ async fn create(
     let id = Identifier::new(&blockchain.name, node_type, req.version.clone().into());
     let version = id.node_version();
 
-    let _ = BlockchainVersion::find(&blockchain, &version, node_type, &mut write).await?;
+    BlockchainVersion::find(&blockchain, &version, node_type, &mut write).await?;
 
     let requirements = write.ctx.cookbook.rhai_metadata(&id).await?.requirements;
     let new_node = req.as_new(user.id, requirements, &mut write).await?;
@@ -339,7 +337,7 @@ async fn update_config(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceUpdateConfigResponse, Error> {
     let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
-    let _ = Node::find_by_id(node_id, &mut write).await?;
+    Node::find_by_id(node_id, &mut write).await?;
 
     let authz = write
         .auth_or_all(
@@ -375,7 +373,7 @@ async fn update_status(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceUpdateStatusResponse, Error> {
     let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
-    let _ = Node::find_by_id(node_id, &mut write).await?;
+    Node::find_by_id(node_id, &mut write).await?;
 
     let authz = write
         .auth_or_all(
@@ -459,7 +457,7 @@ async fn start(
     let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
     let node = Node::find_by_id(node_id, &mut write).await?;
 
-    let _ = write
+    write
         .auth_or_all(&meta, NodeAdminPerm::Start, NodePerm::Start, node_id)
         .await?;
 
@@ -479,7 +477,7 @@ async fn stop(
     let node_id = req.id.parse().map_err(Error::ParseId)?;
     let node = Node::find_by_id(node_id, &mut write).await?;
 
-    let _ = write
+    write
         .auth_or_all(&meta, NodeAdminPerm::Stop, NodePerm::Stop, node_id)
         .await?;
 
@@ -499,7 +497,7 @@ async fn restart(
     let node_id = req.id.parse().map_err(Error::ParseId)?;
     let node = Node::find_by_id(node_id, &mut write).await?;
 
-    let _ = write
+    write
         .auth_or_all(&meta, NodeAdminPerm::Restart, NodePerm::Restart, node_id)
         .await?;
 

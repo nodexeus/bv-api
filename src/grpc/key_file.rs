@@ -77,9 +77,9 @@ async fn create(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::KeyFileServiceCreateResponse, Error> {
     let node_id: NodeId = req.node_id.parse().map_err(Error::ParseNodeId)?;
-    let _ = Node::find_by_id(node_id, &mut write).await?;
+    Node::find_by_id(node_id, &mut write).await?;
 
-    let _ = write.auth(&meta, KeyFilePerm::Create, node_id).await?;
+    write.auth(&meta, KeyFilePerm::Create, node_id).await?;
 
     let key_files = req
         .key_files
@@ -104,9 +104,9 @@ async fn list(
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::KeyFileServiceListResponse, Error> {
     let node_id: NodeId = req.node_id.parse().map_err(Error::ParseNodeId)?;
-    let _ = Node::find_by_id(node_id, &mut read).await?;
+    Node::find_by_id(node_id, &mut read).await?;
 
-    let _ = read.auth(&meta, KeyFilePerm::List, node_id).await?;
+    read.auth(&meta, KeyFilePerm::List, node_id).await?;
 
     let key_files = NodeKeyFile::find_by_id(node_id, &mut read)
         .await

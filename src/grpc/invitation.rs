@@ -216,7 +216,7 @@ async fn list(
         return Err(Error::ListResource);
     };
 
-    let _ = read.auth(&meta, InvitationPerm::List, resource).await?;
+    read.auth(&meta, InvitationPerm::List, resource).await?;
 
     let filter = req.as_filter()?;
     let invitations = Invitation::filter(filter, &mut read).await?;
@@ -261,7 +261,7 @@ async fn accept(
     // Only registered users can accept an invitation
     let user = User::find_by_email(&invitation.invitee_email, &mut write).await?;
     let org = Org::find_by_id(invitation.org_id, &mut write).await?;
-    let _ = org.add_member(user.id, &mut write).await?;
+    org.add_member(user.id, &mut write).await?;
 
     let msg = api::OrgMessage::invitation_accepted(invitation, org, user, &mut write)
         .await
@@ -327,7 +327,7 @@ async fn revoke(
     let authz = write
         .auth(&meta, InvitationPerm::Revoke, invitation.org_id)
         .await?;
-    let _ = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
+    authz.resource().user().ok_or(Error::ClaimsNotUser)?;
 
     if invitation.accepted_at.is_some() {
         return Err(Error::AlreadyAccepted);

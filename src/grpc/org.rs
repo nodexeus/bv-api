@@ -182,7 +182,7 @@ async fn get(
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceGetResponse, Error> {
     let org_id: OrgId = req.id.parse().map_err(Error::ParseId)?;
-    let _ = read.auth(&meta, OrgPerm::Get, org_id).await?;
+    read.auth(&meta, OrgPerm::Get, org_id).await?;
 
     let org = Org::find_by_id(org_id, &mut read).await?;
     let org = api::Org::from_model(&org, &mut read).await?;
@@ -200,7 +200,7 @@ async fn list(
         None => None,
     };
 
-    let _ = if let Some(user_id) = member_id {
+    if let Some(user_id) = member_id {
         read.auth(&meta, OrgPerm::List, user_id).await?
     } else {
         read.auth_all(&meta, OrgAdminPerm::List).await?
@@ -311,7 +311,7 @@ async fn get_provision_token(
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceGetProvisionTokenResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
-    let _ = read.auth(&meta, OrgProvisionPerm::GetToken, org_id).await?;
+    read.auth(&meta, OrgProvisionPerm::GetToken, org_id).await?;
 
     let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
     let org_user = OrgUser::by_user_org(user_id, org_id, &mut read).await?;
@@ -327,7 +327,7 @@ async fn reset_provision_token(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::OrgServiceResetProvisionTokenResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
-    let _ = write
+    write
         .auth(&meta, OrgProvisionPerm::ResetToken, org_id)
         .await?;
 

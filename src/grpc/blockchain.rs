@@ -90,7 +90,7 @@ async fn get(
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServiceGetResponse, Error> {
-    let _ = read.auth_all(&meta, BlockchainPerm::Get).await?;
+    read.auth_all(&meta, BlockchainPerm::Get).await?;
 
     let id = req.id.parse().map_err(Error::ParseId)?;
     let blockchain = Blockchain::find_by_id(id, &mut read).await?;
@@ -130,7 +130,7 @@ async fn list(
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServiceListResponse, Error> {
-    let _ = read.auth_all(&meta, BlockchainPerm::List).await?;
+    read.auth_all(&meta, BlockchainPerm::List).await?;
 
     // We need to combine info from two seperate sources: the database and cookbook. Since
     // cookbook is slow, the step where we call it is parallelized.
