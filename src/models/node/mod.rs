@@ -55,10 +55,12 @@ pub enum Error {
     Filter(diesel::result::Error),
     /// Failed to parse filtered IP addresses: {0}
     FilteredIps(serde_json::Error),
-    /// Failed to find node id `{0}`: {1}
+    /// Failed to find node by id `{0}`: {1}
     FindById(NodeId, diesel::result::Error),
-    /// Failed to find node ids `{0:?}`: {1}
+    /// Failed to find nodes by id `{0:?}`: {1}
     FindByIds(HashSet<NodeId>, diesel::result::Error),
+    /// Failed to find node ids `{0:?}`: {1}
+    FindExistingIds(HashSet<NodeId>, diesel::result::Error),
     /// Failed to find outdated nodes: {0}
     FindOutdated(diesel::result::Error),
     /// Host error for node: {0}
@@ -91,8 +93,8 @@ pub enum Error {
     Update(diesel::result::Error),
     /// Failed to update node `{0}`: {1}
     UpdateById(NodeId, diesel::result::Error),
-    /// Failed to update node metrics: {0}
-    UpdateMetrics(diesel::result::Error),
+    /// Failed to update node {1}'s metrics: {0}
+    UpdateMetrics(diesel::result::Error, NodeId),
 }
 
 impl From<Error> for Status {
@@ -181,6 +183,20 @@ impl Node {
             .get_results(conn)
             .await
             .map_err(|err| Error::FindByIds(ids, err))
+    }
+
+    /// Filters out any node ids that do no exist.
+    pub async fn existing_ids(
+        ids: HashSet<NodeId>,
+        conn: &mut Conn<'_>,
+    ) -> Result<HashSet<NodeId>, Error> {
+        let ids = nodes::table
+            .filter(nodes::id.eq_any(ids.iter()))
+            .select(nodes::id)
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::FindExistingIds(ids, err))?;
+        Ok(ids.into_iter().collect())
     }
 
     pub async fn properties(&self, conn: &mut Conn<'_>) -> Result<Vec<NodeProperty>, Error> {
@@ -541,19 +557,22 @@ pub struct UpdateNodeMetrics {
 
 impl UpdateNodeMetrics {
     pub async fn update_metrics(
-        updates: Vec<Self>,
+        mut updates: Vec<Self>,
         conn: &mut Conn<'_>,
     ) -> Result<Vec<Node>, Error> {
-        let mut results = Vec::with_capacity(updates.len());
+        // We do this for determinism in our tests.
+        updates.sort_by_key(|u| u.id);
+
+        let mut nodes = Vec::with_capacity(updates.len());
         for update in updates {
             let updated = diesel::update(nodes::table.find(update.id))
-                .set(update)
+                .set(&update)
                 .get_result(conn)
                 .await
-                .map_err(Error::UpdateMetrics)?;
-            results.push(updated);
+                .map_err(|err| Error::UpdateMetrics(err, update.id))?;
+            nodes.push(updated);
         }
-        Ok(results)
+        Ok(nodes)
     }
 }
 

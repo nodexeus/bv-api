@@ -3,8 +3,11 @@
 //! does not store a history of metrics. Rather, it overwrites the metrics that are know for each
 //! time new ones are provided. This makes sure that the database doesn't grow overly large.
 
+use std::collections::HashSet;
+
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
+use itertools::Itertools;
 use thiserror::Error;
 use tonic::metadata::MetadataMap;
 use tonic::{Request, Response, Status};
@@ -13,8 +16,9 @@ use tracing::error;
 use crate::auth::rbac::MetricsPerm;
 use crate::auth::Authorize;
 use crate::database::{Transaction, WriteConn};
-use crate::models::host::{Host, UpdateHostMetrics};
-use crate::models::node::{Node, UpdateNodeMetrics};
+use crate::models::host::UpdateHostMetrics;
+use crate::models::node::UpdateNodeMetrics;
+use crate::models::{Host, Node};
 
 use super::api::metrics_service_server::MetricsService;
 use super::{api, Grpc};
@@ -57,6 +61,10 @@ pub enum Error {
     UsedDisk(std::num::TryFromIntError),
     /// Failed to parse used memory: {0}
     UsedMemory(std::num::TryFromIntError),
+    /// Attempt to update the metrics for node(s) `{msg}`, which don't exist
+    MetricsForMissingNode { msg: String },
+    /// Attempt to update the metrics for host(s) `{msg}`, which don't exist
+    MetricsForMissingHost { msg: String },
 }
 
 impl From<Error> for Status {
@@ -81,6 +89,8 @@ impl From<Error> for Status {
             Claims(err) => err.into(),
             Host(err) => err.into(),
             Node(err) => err.into(),
+            MetricsForMissingNode { .. } => Status::not_found("Not found."),
+            MetricsForMissingHost { .. } => Status::not_found("Not found."),
         }
     }
 }
@@ -95,8 +105,13 @@ impl MetricsService for Grpc {
         req: Request<api::MetricsServiceNodeRequest>,
     ) -> Result<Response<api::MetricsServiceNodeResponse>, Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| node(req, meta, write).scope_boxed())
-            .await
+        let outcome = self
+            .write(|write| node(req, meta, write).scope_boxed())
+            .await?;
+        match outcome.into_inner() {
+            RespOrError::Resp(resp) => Ok(tonic::Response::new(resp)),
+            RespOrError::Error(error) => Err(error.into()),
+        }
     }
 
     async fn host(
@@ -104,26 +119,37 @@ impl MetricsService for Grpc {
         req: Request<api::MetricsServiceHostRequest>,
     ) -> Result<Response<api::MetricsServiceHostResponse>, Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| host(req, meta, write).scope_boxed())
-            .await
+        let outcome = self
+            .write(|write| host(req, meta, write).scope_boxed())
+            .await?;
+        match outcome.into_inner() {
+            RespOrError::Resp(resp) => Ok(tonic::Response::new(resp)),
+            RespOrError::Error(error) => Err(error.into()),
+        }
     }
+}
+
+enum RespOrError<T> {
+    Resp(T),
+    Error(Error),
 }
 
 async fn node(
     req: api::MetricsServiceNodeRequest,
     meta: MetadataMap,
     mut write: WriteConn<'_, '_>,
-) -> Result<api::MetricsServiceNodeResponse, Error> {
+) -> Result<RespOrError<api::MetricsServiceNodeResponse>, Error> {
     let updates = req
         .metrics
         .into_iter()
         .map(|(key, val)| val.as_metrics_update(&key))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let node_ids = updates.iter().map(|update| update.id).collect();
+    let node_ids: HashSet<_> = updates.iter().map(|update| update.id).collect();
+    let node_ids = Node::existing_ids(node_ids, &mut write).await?;
     let _ = write.auth(&meta, MetricsPerm::Node, &node_ids).await?;
-    let _ = Node::find_by_ids(node_ids, &mut write).await?;
 
+    let (updates, missing) = updates.into_iter().partition(|u| node_ids.contains(&u.id));
     let nodes = UpdateNodeMetrics::update_metrics(updates, &mut write).await?;
 
     api::NodeMessage::updated_many(nodes, &mut write)
@@ -132,24 +158,31 @@ async fn node(
         .into_iter()
         .for_each(|msg| write.mqtt(msg));
 
-    Ok(api::MetricsServiceNodeResponse {})
+    match missing.len() {
+        0 => Ok(RespOrError::Resp(api::MetricsServiceNodeResponse {})),
+        _ => {
+            let msg = missing.iter().map(|m| m.id).join(", ");
+            Ok(RespOrError::Error(Error::MetricsForMissingNode { msg }))
+        }
+    }
 }
 
 async fn host(
     req: api::MetricsServiceHostRequest,
     meta: MetadataMap,
     mut write: WriteConn<'_, '_>,
-) -> Result<api::MetricsServiceHostResponse, Error> {
+) -> Result<RespOrError<api::MetricsServiceHostResponse>, Error> {
     let updates = req
         .metrics
         .into_iter()
         .map(|(key, val)| val.as_metrics_update(&key))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let host_ids = updates.iter().map(|update| update.id).collect();
+    let host_ids: HashSet<_> = updates.iter().map(|update| update.id).collect();
+    let host_ids = Host::existing_ids(host_ids, &mut write).await?;
     let _ = write.auth(&meta, MetricsPerm::Host, &host_ids).await?;
-    let _ = Host::find_by_ids(host_ids, &mut write).await?;
 
+    let (updates, missing) = updates.into_iter().partition(|u| host_ids.contains(&u.id));
     let hosts = UpdateHostMetrics::update_metrics(updates, &mut write).await?;
 
     api::HostMessage::updated_many(hosts, &mut write)
@@ -158,7 +191,13 @@ async fn host(
         .into_iter()
         .for_each(|msg| write.mqtt(msg));
 
-    Ok(api::MetricsServiceHostResponse {})
+    match missing.len() {
+        0 => Ok(RespOrError::Resp(api::MetricsServiceHostResponse {})),
+        _ => {
+            let msg = missing.iter().map(|m| m.id).join(", ");
+            Ok(RespOrError::Error(Error::MetricsForMissingHost { msg }))
+        }
+    }
 }
 
 impl api::NodeMetrics {

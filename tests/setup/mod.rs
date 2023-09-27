@@ -134,6 +134,11 @@ impl TestServer {
         self.cipher().jwt.encode(&claims).unwrap()
     }
 
+    pub async fn host1(&self) -> Host {
+        let mut conn = self.conn().await;
+        Host::find_by_name(seed::HOST_1, &mut conn).await.unwrap()
+    }
+
     pub async fn host2(&self) -> Host {
         let mut conn = self.conn().await;
         Host::find_by_name(seed::HOST_2, &mut conn).await.unwrap()

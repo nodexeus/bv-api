@@ -40,10 +40,12 @@ pub enum Error {
     Delete(HostId, diesel::result::Error),
     /// Failed to filter hosts: {0}
     Filter(diesel::result::Error),
-    /// Failed to find host id `{0}`: {1}
+    /// Failed to find host by id `{0}`: {1}
     FindById(HostId, diesel::result::Error),
-    /// Failed to find host ids `{0:?}`: {1}
+    /// Failed to find hosts by id `{0:?}`: {1}
     FindByIds(HashSet<HostId>, diesel::result::Error),
+    /// Failed to find host ids `{0:?}`: {1}
+    FindExistingIds(HashSet<HostId>, diesel::result::Error),
     /// Failed to find host by name `{0}`: {1}
     FindByName(String, diesel::result::Error),
     /// Failed to get host candidates: {0}
@@ -66,8 +68,8 @@ pub enum Error {
     Total(std::num::TryFromIntError),
     /// Failed to update host: {0}
     Update(diesel::result::Error),
-    /// Failed to update host metrics: {0}
-    UpdateMetrics(diesel::result::Error),
+    /// Failed to update host {1}'s metrics: {0}
+    UpdateMetrics(diesel::result::Error, HostId),
 }
 
 impl From<Error> for Status {
@@ -189,6 +191,20 @@ impl Host {
             .get_results(conn)
             .await
             .map_err(|err| Error::FindByIds(ids, err))
+    }
+
+    /// Filters out any node ids that do no exist.
+    pub async fn existing_ids(
+        ids: HashSet<HostId>,
+        conn: &mut Conn<'_>,
+    ) -> Result<HashSet<HostId>, Error> {
+        let ids = hosts::table
+            .filter(hosts::id.eq_any(ids.iter()))
+            .select(hosts::id)
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::FindExistingIds(ids, err))?;
+        Ok(ids.into_iter().collect())
     }
 
     /// For each provided argument, filters the hosts by that argument.
@@ -478,19 +494,22 @@ pub struct UpdateHostMetrics {
 impl UpdateHostMetrics {
     /// Performs a selective update of only the columns related to metrics of the provided nodes.
     pub async fn update_metrics(
-        updates: Vec<Self>,
+        mut updates: Vec<Self>,
         conn: &mut Conn<'_>,
     ) -> Result<Vec<Host>, Error> {
-        let mut results = Vec::with_capacity(updates.len());
+        // We do this for determinism in our tests.
+        updates.sort_by_key(|u| u.id);
+
+        let mut hosts = Vec::with_capacity(updates.len());
         for update in updates {
             let updated = diesel::update(hosts::table.find(update.id))
-                .set(update)
+                .set(&update)
                 .get_result(conn)
                 .await
-                .map_err(Error::UpdateMetrics)?;
-            results.push(updated);
+                .map_err(|err| Error::UpdateMetrics(err, update.id))?;
+            hosts.push(updated);
         }
-        Ok(results)
+        Ok(hosts)
     }
 }
 

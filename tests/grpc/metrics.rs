@@ -98,3 +98,36 @@ async fn responds_ok_for_write_host_empty() {
     let req = api::MetricsServiceHostRequest { metrics };
     test.send_with(Service::host, req, &jwt).await.unwrap();
 }
+
+#[tokio::test]
+async fn single_failure_doesnt_abort_all_updates() {
+    let test = TestServer::new().await;
+    let jwt = test.host_jwt();
+
+    let mut metrics = std::collections::HashMap::new();
+    let metric = api::NodeMetrics {
+        height: Some(10),
+        block_age: Some(5),
+        staking_status: Some(4),
+        consensus: Some(false),
+        application_status: Some(8),
+        sync_status: Some(2),
+        data_sync_progress_total: Some(2),
+        data_sync_progress_current: Some(3),
+        data_sync_progress_message: Some("wowie".to_string()),
+    };
+    let node_id = test.seed().node.id;
+    metrics.insert(node_id.to_string(), metric.clone());
+    metrics.insert(uuid::Uuid::from_u128(0).to_string(), metric);
+    let req = api::MetricsServiceNodeRequest { metrics };
+    dbg!(test.send_with(Service::node, req, &jwt).await.unwrap_err());
+
+    let mut conn = test.conn().await;
+    let node = Node::find_by_id(node_id, &mut conn).await.unwrap();
+    assert_eq!(node.block_height, Some(10));
+    assert_eq!(node.block_age, Some(5));
+    assert_eq!(node.staking_status, Some(NodeStakingStatus::Validating));
+    assert_eq!(node.consensus, Some(false));
+    assert_eq!(node.chain_status, NodeChainStatus::Electing);
+    assert_eq!(node.sync_status, NodeSyncStatus::Synced);
+}

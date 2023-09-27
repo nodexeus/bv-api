@@ -6,16 +6,72 @@ use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, Deref, From, FromStr, DieselNewType)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Display,
+    Hash,
+    PartialEq,
+    Eq,
+    Deref,
+    From,
+    FromStr,
+    PartialOrd,
+    Ord,
+    DieselNewType,
+)]
 pub struct UserId(Uuid);
 
-#[derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, Deref, From, FromStr, DieselNewType)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Display,
+    Hash,
+    PartialEq,
+    Eq,
+    Deref,
+    From,
+    FromStr,
+    PartialOrd,
+    Ord,
+    DieselNewType,
+)]
 pub struct OrgId(Uuid);
 
-#[derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, Deref, From, FromStr, DieselNewType)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Display,
+    Hash,
+    PartialEq,
+    Eq,
+    Deref,
+    From,
+    FromStr,
+    PartialOrd,
+    Ord,
+    DieselNewType,
+)]
 pub struct HostId(Uuid);
 
-#[derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, Deref, From, FromStr, DieselNewType)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Display,
+    Hash,
+    PartialEq,
+    Eq,
+    Deref,
+    From,
+    FromStr,
+    PartialOrd,
+    Ord,
+    DieselNewType,
+)]
 pub struct NodeId(Uuid);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
