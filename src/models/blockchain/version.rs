@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use diesel::prelude::*;
-use diesel::result::Error::NotFound;
+use diesel::result::DatabaseErrorKind::UniqueViolation;
+use diesel::result::Error::{DatabaseError, NotFound};
 use diesel_async::RunQueryDsl;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
@@ -19,9 +20,11 @@ use super::{Blockchain, BlockchainId, BlockchainNodeTypeId};
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
-    /// Failed to find blockchain version by id `{0}`: {1}
+    /// Failed to create blockchain version: {0}
+    Create(diesel::result::Error),
+    /// Failed to find blockchain versions by id `{0}`: {1}
     FindById(BlockchainId, diesel::result::Error),
-    /// Failed to find blockchain version by ids `{0:?}`: {1}
+    /// Failed to find blockchain versions by ids `{0:?}`: {1}
     FindByIds(HashSet<BlockchainId>, diesel::result::Error),
     /// Failed to find blockchain version `{0}`: {1}
     FindVersion(String, diesel::result::Error),
@@ -31,6 +34,7 @@ impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
         match err {
+            Create(DatabaseError(UniqueViolation, _)) => Status::already_exists("Already exists."),
             FindVersion(_, NotFound) | FindById(_, NotFound) | FindByIds(_, NotFound) => {
                 Status::not_found("Not found.")
             }

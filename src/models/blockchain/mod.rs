@@ -1,9 +1,8 @@
 pub mod node_type;
-use diesel::dsl::{count, not};
 pub use node_type::{BlockchainNodeType, BlockchainNodeTypeId};
 
 pub mod property;
-pub use property::{BlockchainProperty, BlockchainPropertyId, BlockchainPropertyUiType};
+pub use property::{BlockchainProperty, BlockchainPropertyId, UiType};
 
 pub mod version;
 pub use version::{BlockchainVersion, BlockchainVersionId};
@@ -12,6 +11,7 @@ use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
+use diesel::dsl::{count, not};
 use diesel::prelude::*;
 use diesel::result::Error::NotFound;
 use diesel_async::RunQueryDsl;

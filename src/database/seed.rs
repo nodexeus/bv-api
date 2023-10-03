@@ -443,6 +443,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-new-host', 'blockchain-get'),
         ('grpc-new-host', 'blockchain-list'),
         ('grpc-new-host', 'bundle-list-bundle-versions'),
+        ('grpc-new-host', 'bundle-retrieve'),
         ('grpc-new-host', 'command-ack'),
         ('grpc-new-host', 'command-create'),
         ('grpc-new-host', 'command-get'),

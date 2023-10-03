@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
 use diesel::prelude::*;
-use diesel::result::Error::NotFound;
+use diesel::result::DatabaseErrorKind::UniqueViolation;
+use diesel::result::Error::{DatabaseError, NotFound};
 use diesel_async::RunQueryDsl;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
@@ -31,6 +32,9 @@ impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
         match err {
+            BulkCreate(DatabaseError(UniqueViolation, _)) => {
+                Status::already_exists("Already exists.")
+            }
             FindById(_, NotFound) | FindByIds(_, NotFound) => Status::not_found("Not found."),
             _ => Status::internal("Internal error."),
         }

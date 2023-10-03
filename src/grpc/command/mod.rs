@@ -254,10 +254,10 @@ impl api::Command {
             CreateNode => {
                 let node = Node::find_by_id(node_id()?, conn).await?;
                 let blockchain = Blockchain::find_by_id(node.blockchain_id, conn).await?;
-                let variant =
+                let version =
                     BlockchainVersion::find(&blockchain, &node.version, node.node_type, conn)
                         .await?;
-                let id_to_name_map = BlockchainProperty::id_to_name_map(&variant, conn).await?;
+                let id_to_name_map = BlockchainProperty::id_to_name_map(version.id, conn).await?;
                 let mut image = api::ContainerImage {
                     protocol: blockchain.name,
                     node_version: node.version.as_ref().to_lowercase(),

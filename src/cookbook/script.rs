@@ -7,12 +7,12 @@ use thiserror::Error;
 
 use crate::grpc::api;
 
-use super::identifier::Identifier;
+use super::image::Image;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
     /// Failed to compile script from identifier `{0:?}`: {1}
-    CompileScript(Identifier, rhai::ParseError),
+    CompileScript(Image, rhai::ParseError),
     /// Invalid rhai script: {0}
     InvalidScript(Box<rhai::EvalAltResult>),
     /// No metadata in rhai script.
@@ -32,7 +32,7 @@ pub struct BlockchainMetadata {
 }
 
 impl BlockchainMetadata {
-    pub fn from_script(engine: &Engine, script: &str, id: &Identifier) -> Result<Self, Error> {
+    pub fn from_script(engine: &Engine, script: &str, id: &Image) -> Result<Self, Error> {
         let (_, _, dynamic) = engine
             .compile(script)
             .map_err(|err| Error::CompileScript(id.clone(), err))?
@@ -80,10 +80,10 @@ impl From<NetType> for api::NetType {
 #[cfg(any(test, feature = "integration-test"))]
 pub mod tests {
     #[cfg(test)]
-    use {
-        super::*,
-        crate::{cookbook::identifier::Identifier, models::NodeType},
-    };
+    use crate::{cookbook::image::Image, models::NodeType};
+
+    #[cfg(test)]
+    use super::*;
 
     pub const TEST_SCRIPT: &str = r#"
         const METADATA = #{
@@ -167,7 +167,7 @@ pub mod tests {
     #[test]
     fn can_deserialize_rhai() {
         let engine = Engine::new();
-        let id = Identifier::new("test", NodeType::Node, "1.2.3".to_string().into());
+        let id = Image::new("test", NodeType::Node, "1.2.3".to_string().into());
         let meta = BlockchainMetadata::from_script(&engine, TEST_SCRIPT, &id).unwrap();
 
         assert_eq!(meta.requirements.vcpu_count, 1);
