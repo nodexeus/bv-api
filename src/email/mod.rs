@@ -4,7 +4,6 @@ pub use template::{Kind, Language, Template, Templates};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::Utc;
 use displaydoc::Display;
 use sendgrid::{Destination, Mail, SGClient};
 use thiserror::Error;
