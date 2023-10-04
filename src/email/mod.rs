@@ -189,7 +189,7 @@ impl Email {
             html: &template.html,
             text: &template.text,
             from_name: FROM_NAME,
-            date: &Utc::now().to_rfc2822(),
+            // date: &Utc::now().to_rfc2822(),
             ..Default::default()
         };
 
