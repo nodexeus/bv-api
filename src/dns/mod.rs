@@ -2,6 +2,7 @@ pub mod cloudflare;
 pub use cloudflare::Cloudflare;
 
 use displaydoc::Display;
+use rand::rngs::OsRng;
 use thiserror::Error;
 
 #[derive(Debug, Display, Error)]
@@ -45,16 +46,14 @@ pub mod tests {
     }
 
     impl MockDns {
-        pub async fn new() -> Self {
+        pub async fn new(rng: &mut OsRng) -> Self {
             let mut server = mockito::Server::new_async().await;
-
-            let mut rng = rand::thread_rng();
             let id_dns = rng.gen_range(200_000..5_000_000);
 
             server
                 .mock("POST", Matcher::Regex(r"^/zones/.*/dns_records$".into()))
                 .with_status(200)
-                .with_body(format!("{{\"result\":{{\"id\":\"{:x}\"}}}}", id_dns))
+                .with_body(format!("{{\"result\":{{\"id\":\"{id_dns:x}\"}}}}"))
                 .create_async()
                 .await;
 

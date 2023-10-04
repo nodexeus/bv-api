@@ -89,7 +89,7 @@ impl Email {
         let expires = self.expires.registration_confirmation;
         let mut claims = Claims::from_now(expires, user.id, EmailRole::RegistrationConfirmation);
         if let Some(id) = invitation_id {
-            claims.insert_data("invitation_id", id)
+            claims.insert_data("invitation_id", id.to_string());
         }
 
         let token = self.cipher.jwt.encode(&claims).map_err(Error::EncodeJwt)?;
@@ -103,13 +103,16 @@ impl Email {
             .await
     }
 
-    pub async fn invitation_for_registered(
+    pub async fn invitation_for_registered<S>(
         &self,
         invitation: &Invitation,
         inviter: &User,
         invitee: &User,
-        expiration: impl std::fmt::Display,
-    ) -> Result<(), Error> {
+        expiration: S,
+    ) -> Result<(), Error>
+    where
+        S: ToString + Send,
+    {
         let base = &self.base_url;
         let context = hashmap! {
             "inviter" => format!("{} ({})", inviter.name(), inviter.email),
@@ -122,13 +125,16 @@ impl Email {
             .await
     }
 
-    pub async fn invitation(
+    pub async fn invitation<S>(
         &self,
         invitation: &Invitation,
         inviter: &User,
         invitee: Recipient<'_>,
-        expiration: impl std::fmt::Display,
-    ) -> Result<(), Error> {
+        expiration: S,
+    ) -> Result<(), Error>
+    where
+        S: ToString + Send,
+    {
         let resource = Resource::Org(invitation.org_id);
         let expires = self.expires.invitation;
         let data = hashmap! {
@@ -171,7 +177,7 @@ impl Email {
         context: Option<HashMap<&'static str, String>>,
     ) -> Result<(), Error>
     where
-        R: Into<Recipient<'r>>,
+        R: Into<Recipient<'r>> + Send,
     {
         let recipient = recipient.into();
         let name = recipient.name();

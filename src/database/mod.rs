@@ -142,7 +142,7 @@ impl<'c, 't> Authorize for WriteConn<'c, 't> {
 impl<'c, 't> WriteConn<'c, 't> {
     pub fn meta(&mut self, key: &'static str, val: AsciiMetadataValue) {
         // safety: meta_rx is open for the lifetime of WriteConn
-        self.meta_tx.send((key, val)).expect("meta_rx")
+        self.meta_tx.send((key, val)).expect("meta_rx");
     }
 
     pub fn mqtt<M>(&mut self, message: M)
@@ -150,7 +150,7 @@ impl<'c, 't> WriteConn<'c, 't> {
         M: Into<Message>,
     {
         // safety: mqtt_rx is open for the lifetime of WriteConn
-        self.mqtt_tx.send(message.into()).expect("mqtt_rx")
+        self.mqtt_tx.send(message.into()).expect("mqtt_rx");
     }
 }
 
@@ -290,7 +290,7 @@ fn root_certs() -> RootCertStore {
 /// have to implement a custom certificate verifier for our certificate. The custom implementation
 /// falls back to the stardard `WebPkiVerifier`, but when it sees an `UnsupportedNameType` error
 /// being returned from the verification process, it marks the verification as succeeded. This
-/// emulates the default behaviour of SQLx and libpq.
+/// emulates the default behaviour of `SQLx` and libpq.
 struct DontVerifyHostName {
     pki: WebPkiVerifier,
 }
@@ -362,7 +362,10 @@ pub mod tests {
         ///
         /// This creates a new db with a random name, runs all migrations, and
         /// fills it with seed data.
-        pub async fn new<R: RngCore>(config: &Config, rng: &mut R) -> TestDb {
+        pub async fn new<R>(config: &Config, rng: &mut R) -> TestDb
+        where
+            R: RngCore + Send,
+        {
             let main_db_url = config.url.to_string();
             let test_db_name = Self::db_name(rng);
 

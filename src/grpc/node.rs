@@ -111,8 +111,8 @@ pub enum Error {
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
-        error!("{err}");
         use Error::*;
+        error!("{err}");
         match err {
             ClaimsNotUser => Status::permission_denied("Access denied."),
             Cookbook(_) | Diesel(_) | GeneratePetnames | Message(_) | MissingPropertyId(_)
@@ -241,8 +241,7 @@ async fn get(
     let node_id = req.id.parse().map_err(Error::ParseId)?;
     let node = Node::find_by_id(node_id, &mut read).await?;
 
-    let _ = read
-        .auth_or_all(&meta, NodeAdminPerm::Get, NodePerm::Get, node_id)
+    read.auth_or_all(&meta, NodeAdminPerm::Get, NodePerm::Get, node_id)
         .await?;
 
     Ok(api::NodeServiceGetResponse {
@@ -256,8 +255,7 @@ async fn list(
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::NodeServiceListResponse, Error> {
     let filter = req.as_filter()?;
-    let _ = read
-        .auth_or_all(&meta, NodeAdminPerm::List, NodePerm::List, filter.org_id)
+    read.auth_or_all(&meta, NodeAdminPerm::List, NodePerm::List, filter.org_id)
         .await?;
 
     let (node_count, nodes) = Node::filter(filter, &mut read).await?;
@@ -296,7 +294,7 @@ async fn create(
     let id = Identifier::new(&blockchain.name, node_type, req.version.clone().into());
     let version = id.node_version();
 
-    let _ = BlockchainVersion::find(&blockchain, &version, node_type, &mut write).await?;
+    BlockchainVersion::find(&blockchain, &version, node_type, &mut write).await?;
 
     let requirements = write.ctx.cookbook.rhai_metadata(&id).await?.requirements;
     let new_node = req.as_new(user.id, requirements, &mut write).await?;
@@ -314,7 +312,8 @@ async fn create(
         .into_iter()
         .map(|(k, v)| (v, k))
         .collect();
-    NodeProperty::bulk_create(req.properties(&node, name_to_id_map)?, &mut write).await?;
+    let properties = req.properties(&node, &name_to_id_map)?;
+    NodeProperty::bulk_create(properties, &mut write).await?;
 
     let create_notif = create_node_command(&node, CommandType::CreateNode, &mut write).await?;
     let create_cmd = api::Command::from_model(&create_notif, &mut write).await?;
@@ -338,7 +337,7 @@ async fn update_config(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceUpdateConfigResponse, Error> {
     let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
-    let _ = Node::find_by_id(node_id, &mut write).await?;
+    Node::find_by_id(node_id, &mut write).await?;
 
     let authz = write
         .auth_or_all(
@@ -374,7 +373,7 @@ async fn update_status(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceUpdateStatusResponse, Error> {
     let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
-    let _ = Node::find_by_id(node_id, &mut write).await?;
+    Node::find_by_id(node_id, &mut write).await?;
 
     let authz = write
         .auth_or_all(
@@ -442,7 +441,7 @@ async fn delete(
     let cmd = new_command.create(&mut write).await?;
     let cmd = api::Command::from_model(&cmd, &mut write).await?;
 
-    let deleted = api::NodeMessage::deleted(node, user);
+    let deleted = api::NodeMessage::deleted(&node, user);
 
     write.mqtt(cmd);
     write.mqtt(deleted);
@@ -458,7 +457,7 @@ async fn start(
     let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
     let node = Node::find_by_id(node_id, &mut write).await?;
 
-    let _ = write
+    write
         .auth_or_all(&meta, NodeAdminPerm::Start, NodePerm::Start, node_id)
         .await?;
 
@@ -478,7 +477,7 @@ async fn stop(
     let node_id = req.id.parse().map_err(Error::ParseId)?;
     let node = Node::find_by_id(node_id, &mut write).await?;
 
-    let _ = write
+    write
         .auth_or_all(&meta, NodeAdminPerm::Stop, NodePerm::Stop, node_id)
         .await?;
 
@@ -498,7 +497,7 @@ async fn restart(
     let node_id = req.id.parse().map_err(Error::ParseId)?;
     let node = Node::find_by_id(node_id, &mut write).await?;
 
-    let _ = write
+    write
         .auth_or_all(&meta, NodeAdminPerm::Restart, NodePerm::Restart, node_id)
         .await?;
 
@@ -592,7 +591,7 @@ impl api::Node {
             .into_iter()
             .map(|b| (b.id, b))
             .collect();
-        let user_ids = nodes.iter().flat_map(|n| n.created_by).collect();
+        let user_ids = nodes.iter().filter_map(|n| n.created_by).collect();
         let users: HashMap<_, _> = User::find_by_ids(user_ids, conn)
             .await?
             .into_iter()
@@ -627,7 +626,7 @@ impl api::Node {
             .map(|host| (host.id, host))
             .collect();
 
-        let region_ids = nodes.iter().flat_map(|n| n.scheduler_region).collect();
+        let region_ids = nodes.iter().filter_map(|n| n.scheduler_region).collect();
         let regions: HashMap<_, _> = Region::by_ids(region_ids, conn)
             .await?
             .into_iter()
@@ -674,12 +673,12 @@ impl api::Node {
                 region: Some(region.clone()),
             });
 
-        let placement = scheduler
-            .map(api::NodeScheduler::new)
-            // If there is a scheduler, we will return the scheduler variant of node placement.
-            .map(api::node_placement::Placement::Scheduler)
-            // If there isn't one, we return the host id variant.
-            .unwrap_or_else(|| api::node_placement::Placement::HostId(node.host_id.to_string()));
+        // If there is a scheduler, we return the scheduler variant of node placement.
+        // If there isn't one, we return the host id variant.
+        let placement = scheduler.map(api::NodeScheduler::new).map_or_else(
+            || api::node_placement::Placement::HostId(node.host_id.to_string()),
+            api::node_placement::Placement::Scheduler,
+        );
         let placement = api::NodePlacement {
             placement: Some(placement),
         };
@@ -725,7 +724,7 @@ impl api::Node {
             network: node.network,
             blockchain_name: blockchain.name.clone(),
             created_by: user.map(|u| u.id.to_string()),
-            created_by_name: user.map(|u| u.name()),
+            created_by_name: user.map(User::name),
             created_by_email: user.map(|u| u.email.clone()),
             allow_ips,
             deny_ips,
@@ -849,7 +848,7 @@ impl api::NodeServiceCreateRequest {
     fn properties(
         &self,
         node: &Node,
-        name_to_id_map: HashMap<String, BlockchainPropertyId>,
+        name_to_id_map: &HashMap<String, BlockchainPropertyId>,
     ) -> Result<Vec<NodeProperty>, Error> {
         self.properties
             .iter()
@@ -874,8 +873,8 @@ impl api::NodeServiceListRequest {
             org_id: self.org_id.parse().map_err(Error::ParseOrgId)?,
             offset: self.offset,
             limit: self.limit,
-            status: self.statuses().map(|s| s.into_model()).collect(),
-            node_types: self.node_types().map(|t| t.into_model()).collect(),
+            status: self.statuses().map(api::NodeStatus::into_model).collect(),
+            node_types: self.node_types().map(api::NodeType::into_model).collect(),
             blockchains: self
                 .blockchain_ids
                 .iter()
@@ -960,7 +959,7 @@ impl api::NodeProperty {
 }
 
 impl api::UiType {
-    pub fn from_model(model: BlockchainPropertyUiType) -> Self {
+    pub const fn from_model(model: BlockchainPropertyUiType) -> Self {
         match model {
             BlockchainPropertyUiType::Switch => api::UiType::Switch,
             BlockchainPropertyUiType::Password => api::UiType::Password,
@@ -969,7 +968,7 @@ impl api::UiType {
         }
     }
 
-    pub fn into_model(self) -> Result<BlockchainPropertyUiType, Error> {
+    pub const fn into_model(self) -> Result<BlockchainPropertyUiType, Error> {
         match self {
             Self::Unspecified => Err(Error::NoUiType),
             Self::Switch => Ok(BlockchainPropertyUiType::Switch),
