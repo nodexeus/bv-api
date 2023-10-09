@@ -29,6 +29,7 @@ pub mod common {
     }
 }
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Extension;
@@ -119,8 +120,6 @@ pub fn server(context: &Arc<Context>) -> Router<CorsServer> {
         .add_service(UserServiceServer::new(grpc))
 }
 
-use std::collections::HashMap;
-
 trait HashVec {
     type Elem;
 
@@ -143,10 +142,11 @@ where
 
     fn hash_vec<F, K, V>(self, f: F) -> HashMap<K, Vec<V>>
     where
-        F: Fn(Elem) -> (K, V),
+        F: FnMut(Elem) -> (K, V),
         K: Eq + std::hash::Hash,
     {
-        let mut map: HashMap<_, Vec<_>> = HashMap::new();
+        let mut iter = self.into_iter();
+        let mut map: HashMap<_, Vec<_>> = HashMap::with_capacity(iter.size_hint().0);
         for (k, v) in self.into_iter().map(f) {
             map.entry(k).or_default().push(v);
         }
@@ -155,7 +155,7 @@ where
 
     fn hash_map<F, K, V>(self, f: F) -> HashMap<K, V>
     where
-        F: Fn(Self::Elem) -> (K, V),
+        F: FnMut(Self::Elem) -> (K, V),
         K: Eq + std::hash::Hash,
     {
         self.into_iter().map(f).collect()
