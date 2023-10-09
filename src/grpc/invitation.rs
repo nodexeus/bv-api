@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
@@ -18,7 +16,7 @@ use crate::models::user::User;
 use crate::timestamp::NanosUtc;
 
 use super::api::invitation_service_server::InvitationService;
-use super::{api, Grpc};
+use super::{api, Grpc, HashVec};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -359,18 +357,14 @@ impl api::InvitationServiceCreateRequest {
 impl api::Invitation {
     async fn from_models(models: Vec<Invitation>, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
         let creator_ids = models.iter().map(|i| i.created_by).collect();
-        let creators: HashMap<_, _> = User::find_by_ids(creator_ids, conn)
+        let creators = User::find_by_ids(creator_ids, conn)
             .await?
-            .into_iter()
-            .map(|u| (u.id, u))
-            .collect();
+            .hash_map(|u| (u.id, u));
 
         let org_ids = models.iter().map(|i| i.org_id).collect();
-        let orgs: HashMap<_, _> = Org::find_by_ids(org_ids, conn)
+        let orgs = Org::find_by_ids(org_ids, conn)
             .await?
-            .into_iter()
-            .map(|o| (o.id, o))
-            .collect();
+            .hash_map(|o| (o.id, o));
 
         let invitations = models
             .into_iter()
