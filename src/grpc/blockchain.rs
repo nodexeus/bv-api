@@ -21,7 +21,7 @@ use crate::models::blockchain::{
 use crate::timestamp::NanosUtc;
 
 use super::api::blockchain_service_server::BlockchainService;
-use super::{api, Grpc, HashVec};
+use super::{api, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -96,7 +96,7 @@ async fn get(
     let blockchain = Blockchain::find_by_id(id, &mut read).await?;
 
     let node_types = BlockchainNodeType::by_blockchain_id(blockchain.id, &mut read).await?;
-    let node_type_map = node_types.hash_map(|nt| (nt.id, nt));
+    let node_type_map: HashMap<_, _> = node_types.into_iter().map(|nt| (nt.id, nt)).collect();
 
     let versions = BlockchainVersion::by_blockchain_id(blockchain.id, &mut read).await?;
     let ids = versions
@@ -138,14 +138,14 @@ async fn list(
     // We query the necessary blockchains from the database.
     let blockchains = Blockchain::find_all(&mut read).await?;
     let blockchain_ids: HashSet<_> = blockchains.iter().map(|b| b.id).collect();
-    let blockchain_map = blockchains.iter().hash_map(|b| (b.id, b));
+    let blockchain_map: HashMap<_, _> = blockchains.iter().map(|b| (b.id, b)).collect();
 
     // Now we need to combine this info with the networks that are stored in the cookbook
     // service. Since we want to do this in parallel, `network_futs` will contain a number of
     // futures that each resolve to a list of networks for that blockchain version.
     let node_types =
         BlockchainNodeType::by_blockchain_ids(blockchain_ids.clone(), &mut read).await?;
-    let node_type_map = node_types.hash_map(|nt| (nt.id, nt));
+    let node_type_map: HashMap<_, _> = node_types.into_iter().map(|nt| (nt.id, nt)).collect();
 
     let versions = BlockchainVersion::by_blockchain_ids(blockchain_ids, &mut read).await?;
     let ids = versions
@@ -226,15 +226,29 @@ impl api::Blockchain {
     ) -> Result<Vec<Self>, Error> {
         let ids: HashSet<_> = models.iter().map(|blockchain| blockchain.id).collect();
 
-        let blockchain_to_node_type_map = BlockchainNodeType::by_blockchain_ids(ids.clone(), conn)
-            .await?
-            .hash_vec(|node_type| (node_type.blockchain_id, node_type));
-        let node_type_to_version_map = BlockchainVersion::by_blockchain_ids(ids.clone(), conn)
-            .await?
-            .hash_vec(|version| (version.blockchain_node_type_id, version));
-        let version_to_property_map = BlockchainProperty::by_blockchain_ids(ids, conn)
-            .await?
-            .hash_vec(|property| (property.blockchain_version_id, property));
+        let mut blockchain_to_node_type_map: HashMap<_, Vec<_>> = HashMap::new();
+        for node_type in BlockchainNodeType::by_blockchain_ids(ids.clone(), conn).await? {
+            blockchain_to_node_type_map
+                .entry(node_type.blockchain_id)
+                .or_default()
+                .push(node_type);
+        }
+
+        let mut node_type_to_version_map: HashMap<_, Vec<_>> = HashMap::new();
+        for version in BlockchainVersion::by_blockchain_ids(ids.clone(), conn).await? {
+            node_type_to_version_map
+                .entry(version.blockchain_node_type_id)
+                .or_default()
+                .push(version);
+        }
+
+        let mut version_to_property_map: HashMap<_, Vec<_>> = HashMap::new();
+        for property in BlockchainProperty::by_blockchain_ids(ids, conn).await? {
+            version_to_property_map
+                .entry(property.blockchain_version_id)
+                .or_default()
+                .push(property);
+        }
 
         models
             .into_iter()

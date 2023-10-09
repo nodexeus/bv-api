@@ -30,7 +30,7 @@ use crate::models::{Blockchain, Command, CommandType, Host, IpAddress, Org, Regi
 use crate::timestamp::NanosUtc;
 
 use super::api::node_service_server::NodeService;
-use super::{api, Grpc, HashVec};
+use super::{api, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -548,7 +548,9 @@ impl api::Node {
             .collect();
         let block_props = BlockchainProperty::by_property_ids(property_ids, conn)
             .await?
-            .hash_map(|prop| (prop.id, prop));
+            .into_iter()
+            .map(|prop| (prop.id, prop))
+            .collect::<HashMap<_, _>>();
         let props = node_props
             .into_iter()
             .map(|node_prop| {
@@ -585,36 +587,52 @@ impl api::Node {
             .collect();
 
         let blockchain_ids = nodes.iter().map(|n| n.blockchain_id).collect();
-        let blockchains = Blockchain::find_by_ids(blockchain_ids, conn)
+        let blockchains: HashMap<_, _> = Blockchain::find_by_ids(blockchain_ids, conn)
             .await?
-            .hash_map(|b| (b.id, b));
+            .into_iter()
+            .map(|b| (b.id, b))
+            .collect();
         let user_ids = nodes.iter().filter_map(|n| n.created_by).collect();
-        let users = User::find_by_ids(user_ids, conn)
+        let users: HashMap<_, _> = User::find_by_ids(user_ids, conn)
             .await?
-            .hash_map(|u| (u.id, u));
+            .into_iter()
+            .map(|u| (u.id, u))
+            .collect();
 
         let block_props = BlockchainProperty::by_property_ids(property_ids, conn)
             .await?
-            .hash_map(|prop| (prop.id, prop));
-        let props_map = node_props.hash_vec(|p| {
-            let prop_id = p.blockchain_property_id;
-            (p.node_id, (p, block_props[&prop_id].clone()))
-        });
+            .into_iter()
+            .map(|prop| (prop.id, prop))
+            .collect::<HashMap<_, _>>();
+        let mut props_map: HashMap<NodeId, Vec<(_, _)>> = HashMap::new();
+        for prop in node_props {
+            let id = prop.blockchain_property_id;
+            props_map
+                .entry(prop.node_id)
+                .or_default()
+                .push((prop, block_props[&id].clone()));
+        }
 
         let org_ids = nodes.iter().map(|n| n.org_id).collect();
-        let orgs = Org::find_by_ids(org_ids, conn)
+        let orgs: HashMap<_, _> = Org::find_by_ids(org_ids, conn)
             .await?
-            .hash_map(|org| (org.id, org));
+            .into_iter()
+            .map(|org| (org.id, org))
+            .collect();
 
         let host_ids = nodes.iter().map(|n| n.host_id).collect();
-        let hosts = Host::find_by_ids(host_ids, conn)
+        let hosts: HashMap<_, _> = Host::find_by_ids(host_ids, conn)
             .await?
-            .hash_map(|host| (host.id, host));
+            .into_iter()
+            .map(|host| (host.id, host))
+            .collect();
 
         let region_ids = nodes.iter().filter_map(|n| n.scheduler_region).collect();
-        let regions = Region::by_ids(region_ids, conn)
+        let regions: HashMap<_, _> = Region::by_ids(region_ids, conn)
             .await?
-            .hash_map(|region| (region.id, region));
+            .into_iter()
+            .map(|region| (region.id, region))
+            .collect();
 
         nodes
             .into_iter()

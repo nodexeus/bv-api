@@ -3,6 +3,8 @@
 //! does not store a history of metrics. Rather, it overwrites the metrics that are know for each
 //! time new ones are provided. This makes sure that the database doesn't grow overly large.
 
+use std::collections::HashMap;
+
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use itertools::Itertools;
@@ -20,7 +22,7 @@ use crate::models::node::{NodeJob, UpdateNodeMetrics};
 use crate::models::{Host, Node};
 
 use super::api::metrics_service_server::MetricsService;
-use super::{api, Grpc, HashVec};
+use super::{api, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -159,7 +161,7 @@ async fn node(
     // a patch-sort-of-update on that field.
     let nodes = Node::find_by_ids(node_ids.clone(), &mut write).await?;
     // Now we can create the UpdateNodeMetrics models using our existing, queried nodes.
-    let nodes_map = nodes.iter().hash_map(|n| (n.id, n));
+    let nodes_map: HashMap<NodeId, &Node> = nodes.iter().map(|n| (n.id, n)).collect();
     let updates = updates
         .into_iter()
         .zip(all_node_ids.iter())
@@ -251,11 +253,12 @@ impl api::NodeMetrics {
         if self.jobs.is_empty() {
             return Ok(None);
         }
-        let jobs = node
+        let jobs: HashMap<String, NodeJob> = node
             .jobs()?
             .into_iter()
             .chain(self.jobs.iter().cloned().map(api::NodeJob::into_model))
-            .hash_map(|n| (n.name.clone(), n));
+            .map(|n| (n.name.clone(), n))
+            .collect();
         Ok(Some(jobs.into_values().collect()))
     }
 }
