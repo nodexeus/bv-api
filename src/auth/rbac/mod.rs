@@ -69,13 +69,13 @@ define_perms! {
     }
 
     Blockchain => {
-        List,
         Get,
+        List,
     }
 
     BlockchainAdmin => {
-        List,
         Get,
+        List,
     }
 
     Bundle => {

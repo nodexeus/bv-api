@@ -1,5 +1,5 @@
 pub mod client;
-pub mod identifier;
+pub mod image;
 pub mod manifest;
 pub mod script;
 
@@ -19,7 +19,7 @@ use crate::grpc::api;
 use crate::models::node::{NodeType, NodeVersion};
 
 use self::client::Client;
-use self::identifier::Identifier;
+use self::image::Image;
 use self::manifest::DownloadManifest;
 use self::script::BlockchainMetadata;
 
@@ -32,15 +32,15 @@ pub const BUNDLE_NAME: &str = "bvd-bundle.tgz";
 pub enum Error {
     /// Cookbook client error: {0}
     Client(#[from] client::Error),
-    /// Cookbook identifier error: {0}
-    Identifier(#[from] identifier::Error),
+    /// Cookbook image error: {0}
+    Image(#[from] image::Error),
     /// No manifest found for `{0:?}` in network {1}.
-    NoManifest(Identifier, String),
+    NoManifest(Image, String),
     /// No valid manifest found for identifier `{0:?}`, version `{1}`, network `{2}`.
-    NoValidManifest(Identifier, Version, String),
+    NoValidManifest(Image, Version, String),
     /// Failed to parse manifest: {0}
     ParseManifest(serde_json::Error),
-    /// Failed to parse semantic version from Identifier NodeVersion `{0}`: {1}
+    /// Failed to parse semantic version from NodeVersion `{0}`: {1}
     ParseVersion(NodeVersion, semver::Error),
     /// Cookbook script error: {0}
     Script(#[from] script::Error),
@@ -87,17 +87,27 @@ impl Cookbook {
         Self::new(config, aws_sdk_s3::Client::from_conf(s3_config))
     }
 
-    pub async fn read_rhai_file(&self, id: &Identifier) -> Result<Vec<u8>, Error> {
-        self.read_file(id, RHAI_FILE_NAME).await
+    fn file_path(&self, image: &Image, file: &str) -> String {
+        format!(
+            "{prefix}/{protocol}/{node_type}/{node_version}/{file}",
+            prefix = self.prefix,
+            protocol = image.protocol,
+            node_type = image.node_type,
+            node_version = image.node_version
+        )
     }
 
-    pub async fn read_file(&self, id: &Identifier, file: &str) -> Result<Vec<u8>, Error> {
-        let path = self.file_path(id, file);
+    pub async fn read_rhai_file(&self, image: &Image) -> Result<Vec<u8>, Error> {
+        self.read_file(image, RHAI_FILE_NAME).await
+    }
+
+    pub async fn read_file(&self, image: &Image, file: &str) -> Result<Vec<u8>, Error> {
+        let path = self.file_path(image, file);
         Ok(self.client.read_file(&self.bucket.cookbook, &path).await?)
     }
 
-    pub async fn download_url(&self, id: &Identifier, file: &str) -> Result<String, Error> {
-        let path = self.file_path(id, file);
+    pub async fn download_url(&self, image: &Image, file: &str) -> Result<String, Error> {
+        let path = self.file_path(image, file);
         self.download(&self.bucket.cookbook, &path).await
     }
 
@@ -168,33 +178,33 @@ impl Cookbook {
         Ok(idents)
     }
 
-    pub async fn rhai_metadata(&self, id: &Identifier) -> Result<BlockchainMetadata, Error> {
-        let path = self.file_path(id, RHAI_FILE_NAME);
+    pub async fn rhai_metadata(&self, image: &Image) -> Result<BlockchainMetadata, Error> {
+        let path = self.file_path(image, RHAI_FILE_NAME);
         let script = self
             .client
             .read_string(&self.bucket.cookbook, &path)
             .await?;
 
-        BlockchainMetadata::from_script(&self.engine, &script, id).map_err(Into::into)
+        BlockchainMetadata::from_script(&self.engine, &script, image).map_err(Into::into)
     }
 
     pub async fn get_download_manifest(
         &self,
-        id: &Identifier,
+        image: &Image,
         network: &str,
     ) -> Result<api::DownloadManifest, Error> {
-        let node_version = Version::parse(&id.node_version)
-            .map_err(|err| Error::ParseVersion(id.node_version.clone(), err))?;
-        let node_versions = self.get_node_versions(id).await?;
+        let node_version = Version::parse(&image.node_version)
+            .map_err(|err| Error::ParseVersion(image.node_version.clone(), err))?;
+        let node_versions = self.get_node_versions(image).await?;
 
         let mut versions = node_versions.iter().rev();
         let mut manifest = loop {
             let Some(version) = versions.next() else {
-                return Err(Error::NoManifest(id.clone(), network.into()));
+                return Err(Error::NoManifest(image.clone(), network.into()));
             };
 
             if *version <= node_version {
-                match self.find_valid_manifest(id, version, network).await {
+                match self.find_valid_manifest(image, version, network).await {
                     Ok(manifest) => break manifest,
                     Err(err) => warn!("Manifest not found: {err:#}"),
                 }
@@ -211,8 +221,8 @@ impl Cookbook {
         Ok(manifest.into())
     }
 
-    async fn get_node_versions(&self, id: &Identifier) -> Result<Vec<Version>, Error> {
-        let path = format!("{}/{}/", id.protocol, id.node_type);
+    async fn get_node_versions(&self, image: &Image) -> Result<Vec<Version>, Error> {
+        let path = format!("{}/{}/", image.protocol, image.node_type);
         let keys = self.client.list(&self.bucket.archive, &path).await?;
 
         let mut versions = keys
@@ -226,17 +236,17 @@ impl Cookbook {
 
     async fn find_valid_manifest(
         &self,
-        id: &Identifier,
+        image: &Image,
         version: &Version,
         network: &str,
     ) -> Result<DownloadManifest, Error> {
-        let data_versions = self.get_data_versions(id, version, network).await?;
+        let data_versions = self.get_data_versions(image, version, network).await?;
 
         for data_version in data_versions.iter().rev() {
             let path = format!(
                 "{protocol}/{node_type}/{version}/{network}/{data_version}/manifest.json",
-                protocol = id.protocol,
-                node_type = id.node_type
+                protocol = image.protocol,
+                node_type = image.node_type
             );
 
             match self
@@ -252,7 +262,7 @@ impl Cookbook {
         }
 
         Err(Error::NoValidManifest(
-            id.clone(),
+            image.clone(),
             version.clone(),
             network.into(),
         ))
@@ -260,14 +270,14 @@ impl Cookbook {
 
     async fn get_data_versions(
         &self,
-        id: &Identifier,
+        image: &Image,
         version: &Version,
         network: &str,
     ) -> Result<Vec<u64>, Error> {
         let path = format!(
             "{protocol}/{node_type}/{version}/{network}/",
-            protocol = id.protocol,
-            node_type = id.node_type
+            protocol = image.protocol,
+            node_type = image.node_type
         );
 
         let data_versions = self.client.list(&self.bucket.archive, &path).await?;
@@ -278,16 +288,6 @@ impl Cookbook {
 
         versions.sort_unstable();
         Ok(versions)
-    }
-
-    fn file_path(&self, id: &Identifier, file: &str) -> String {
-        format!(
-            "{prefix}/{protocol}/{node_type}/{node_version}/{file}",
-            prefix = self.prefix,
-            protocol = id.protocol,
-            node_type = id.node_type,
-            node_version = id.node_version
-        )
     }
 }
 
