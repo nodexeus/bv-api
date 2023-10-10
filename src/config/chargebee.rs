@@ -1,8 +1,13 @@
+use derive_more::FromStr;
+
 use displaydoc::Display;
 use serde::Deserialize;
 use thiserror::Error;
 
-use super::provider::{self, Provider};
+use super::{
+    provider::{self, Provider},
+    Redacted,
+};
 
 const CHARGEBEE_SECRET_VAR: &str = "CHARGEBEE_SECRET";
 const CHARGEBEE_SECRET_ENTRY: &str = "chargebee.secret";
@@ -16,7 +21,16 @@ pub enum Error {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    pub secret: String,
+    pub secret: Secret,
+}
+
+#[derive(Debug, FromStr, Deserialize)]
+pub struct Secret(Redacted<String>);
+
+impl PartialEq<String> for Secret {
+    fn eq(&self, other: &String) -> bool {
+        self.0.eq(other)
+    }
 }
 
 impl TryFrom<&Provider> for Config {

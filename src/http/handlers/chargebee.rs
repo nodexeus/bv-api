@@ -28,13 +28,25 @@ where
 }
 
 async fn callback(
-    Path(secret): Path<String>,
     State(ctx): State<Arc<Context>>,
-    Json(callback): Json<Callback>,
-) -> Result<Response, (Response, StatusCode)> {
-    if secret != ctx.config.chargebee.secret {
-        return Err((Resp::new("not found"), StatusCode::NOT_FOUND));
+    Path(secret): Path<String>,
+    body: String,
+) -> Result<Response, (StatusCode, Response)>
+where
+    Result<Response, (StatusCode, Response)>: IntoResponse,
+{
+    if ctx.config.chargebee.secret != secret {
+        tracing::warn!("Incorrect secret");
+        return Err((StatusCode::NOT_FOUND, Resp::new("not found")));
     }
+
+    let callback: Callback = match serde_json::from_str(&body) {
+        Ok(body) => body,
+        Err(e) => {
+            tracing::warn!("Invalid request: {e:?}");
+            return Err((StatusCode::BAD_REQUEST, Resp::new("invalid request")));
+        }
+    };
 
     let resp = match callback.event.event_type {
         EventType::SubscriptionCancelled => {
@@ -44,23 +56,21 @@ async fn callback(
         EventType::Other => return Ok(Resp::new("event ignored")),
     };
 
-    resp.map(|resp| Resp::new(resp.into_inner())).map_err(|e| {
-        tracing::warn!("{e:?}");
-        (Resp::new("error"), StatusCode::INTERNAL_SERVER_ERROR)
-    })
+    resp.map(|resp| Resp::new(resp.into_inner()))
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Resp::new("error")))
 }
 
 async fn subscription_cancelled(
     callback: Callback,
     mut write: WriteConn<'_, '_>,
-) -> Result<tonic::Response<&'static str>, Error> {
+) -> Result<&'static str, Error> {
     let subscription =
         Subscription::find_by_external_id(&callback.event.subscription.id, &mut write).await?;
     let nodes = Node::find_by_org(subscription.org_id, &mut write).await?;
     for node in nodes {
         delete_node(&node, &mut write).await?;
     }
-    Ok(tonic::Response::new("subscription canceled"))
+    Ok("subscription canceled")
 }
 
 #[derive(serde::Deserialize)]
@@ -148,7 +158,6 @@ pub enum Error {
     CommandGrpc(#[from] crate::grpc::command::Error),
     /// Database error: {0}
     Database(#[from] diesel::result::Error),
-
     /// Failed to parse IpAddr: {0}
     ParseIpAddr(std::net::AddrParseError),
 }
@@ -156,10 +165,25 @@ pub enum Error {
 impl From<Error> for tonic::Status {
     fn from(err: Error) -> Self {
         use Error::*;
-        tracing::error!("{err}");
         match err {
             Node(_) | Subscription(_) | Database(_) | ParseIpAddr(_) | IpAddress(_)
             | Command(_) | CommandGrpc(_) => tonic::Status::internal("Internal error"),
+        }
+    }
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> Response {
+        let code = StatusCode::INTERNAL_SERVER_ERROR;
+        tracing::error!("{self}");
+        match self {
+            Error::Node(_) => (code, Resp::new("Internal error")).into_response(),
+            Error::Subscription(_) => (code, Resp::new("Internal error")).into_response(),
+            Error::IpAddress(_) => (code, Resp::new("Internal error")).into_response(),
+            Error::Command(_) => (code, Resp::new("Internal error")).into_response(),
+            Error::CommandGrpc(_) => (code, Resp::new("Internal error")).into_response(),
+            Error::Database(_) => (code, Resp::new("Internal error")).into_response(),
+            Error::ParseIpAddr(_) => (code, Resp::new("Internal error")).into_response(),
         }
     }
 }

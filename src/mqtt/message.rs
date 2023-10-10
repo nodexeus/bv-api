@@ -355,7 +355,7 @@ impl api::NodeMessage {
                 org_id: node.org_id.to_string(),
                 deleted_by: user.as_ref().map(|u| u.id.to_string()).unwrap_or_default(),
                 deleted_by_name: user.as_ref().map(|u| u.name()).unwrap_or_default(),
-                deleted_by_email: user.as_ref().map(|u| u.email).unwrap_or_default(),
+                deleted_by_email: user.map(|u| u.email).unwrap_or_default(),
             })),
         }
     }

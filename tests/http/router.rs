@@ -15,6 +15,11 @@ async fn test_possible_routes() {
         // MQTT routes
         ("/mqtt/auth", "POST", StatusCode::BAD_REQUEST),
         ("/mqtt/acl", "POST", StatusCode::BAD_REQUEST),
+        (
+            "/chargebee/callback/asdfasdf",
+            "POST",
+            StatusCode::BAD_REQUEST,
+        ),
     ];
 
     for (route, method, status) in routes.into_iter() {
