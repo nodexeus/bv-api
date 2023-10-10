@@ -227,10 +227,8 @@ async fn list(
                 .get(&version.blockchain_node_type_id)
                 .ok_or(Error::MissingNodeType)?
                 .node_type;
-            Ok((
-                version.id,
-                Image::new(&blockchain.name, node_type, version.version.clone().into()),
-            ))
+            let image = Image::new(&blockchain.name, node_type, version.version.clone().into());
+            Ok((version.id, image))
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
@@ -405,17 +403,14 @@ impl api::BlockchainVersion {
     ) -> Vec<Self> {
         models
             .into_iter()
-            .filter_map(|model| {
-                let networks = networks.remove(&model.id).or_else(|| {
+            .map(|model| {
+                let networks = networks.remove(&model.id).unwrap_or_else(|| {
                     warn!("No networks for blockchain version `{}`", model.id);
-                    None
-                })?;
-                let properties = properties.remove(&model.id).or_else(|| {
-                    warn!("No properties for blockchain version `{}`", model.id);
-                    None
-                })?;
+                    vec![]
+                });
+                let properties = properties.remove(&model.id).unwrap_or_default();
 
-                Some(Self::from_model(model, networks, properties))
+                Self::from_model(model, networks, properties)
             })
             .collect()
     }
