@@ -102,6 +102,7 @@ impl api::ContainerStatus {
             Self::Installing => ContainerStatus::Installing,
             Self::Snapshotting => ContainerStatus::Snapshotting,
             Self::Failed => ContainerStatus::Failed,
+            Self::Busy => ContainerStatus::Unknown, // TODO
         }
     }
 }
