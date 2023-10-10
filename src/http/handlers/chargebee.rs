@@ -42,6 +42,10 @@ where
         return Err((StatusCode::NOT_FOUND, ().into_response()));
     }
 
+    // This is temporary, until we get it working end to end I (luuk) will definitely be going into
+    // the logs to inspect these values
+    dbg!(&body);
+
     // We only start parsing the json after the secret is verfied so people can't try to discover
     // this endpoint.
     let callback: Callback = match serde_json::from_str(&body) {
@@ -51,6 +55,8 @@ where
             return Err((StatusCode::BAD_REQUEST, Resp::respond("invalid request")));
         }
     };
+
+    dbg!(&callback);
 
     let resp = match callback.event.event_type {
         EventType::SubscriptionCancelled => {
@@ -78,23 +84,23 @@ async fn subscription_cancelled(
     Ok("subscription cancelled")
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct Callback {
     event: Event,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct Event {
     subscription: EventSubscription,
     event_type: EventType,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct EventSubscription {
     id: String,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum EventType {
     SubscriptionCancelled,
@@ -191,4 +197,15 @@ impl IntoResponse for Error {
             Error::ParseIpAddr(_) => (code, Resp::respond("Internal error")).into_response(),
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    // use super::*;
+    //
+    // #[test]
+    // fn can_parse_example_event() {
+    //     let test_event = "put sample event here once we have one";
+    //     let _: Callback = serde_json::from_str(test_event).unwrap();
+    // }
 }
