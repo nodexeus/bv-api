@@ -48,7 +48,7 @@ where
         Ok(body) => body,
         Err(e) => {
             tracing::warn!("Invalid request: {e:?}");
-            return Err((StatusCode::BAD_REQUEST, Resp::new("invalid request")));
+            return Err((StatusCode::BAD_REQUEST, Resp::respond("invalid request")));
         }
     };
 
@@ -57,11 +57,11 @@ where
             ctx.write(|c| subscription_cancelled(callback, c).scope_boxed())
                 .await
         }
-        EventType::Other => return Ok(Resp::new("event ignored")),
+        EventType::Other => return Ok(Resp::respond("event ignored")),
     };
 
-    resp.map(|resp| Resp::new(resp.into_inner()))
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Resp::new("error")))
+    resp.map(|resp| Resp::respond(resp.into_inner()))
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Resp::respond("error")))
 }
 
 /// When a subscription gets cancelled we delete all the the nodes associated with that org.
@@ -108,7 +108,7 @@ struct Resp {
 }
 
 impl Resp {
-    fn new(msg: &'static str) -> Response {
+    fn respond(msg: &'static str) -> Response {
         Json(Self { msg }).into_response()
     }
 }
@@ -141,7 +141,7 @@ async fn delete_node(node: &Node, write: &mut WriteConn<'_, '_>) -> Result<(), E
     let cmd = new_command.create(write).await?;
     let cmd = api::Command::from_model(&cmd, write).await?;
 
-    let deleted = api::NodeMessage::deleted(&node, None);
+    let deleted = api::NodeMessage::deleted(node, None);
 
     write.mqtt(cmd);
     write.mqtt(deleted);
@@ -182,13 +182,13 @@ impl IntoResponse for Error {
         let code = StatusCode::INTERNAL_SERVER_ERROR;
         tracing::error!("{self}");
         match self {
-            Error::Node(_) => (code, Resp::new("Internal error")).into_response(),
-            Error::Subscription(_) => (code, Resp::new("Internal error")).into_response(),
-            Error::IpAddress(_) => (code, Resp::new("Internal error")).into_response(),
-            Error::Command(_) => (code, Resp::new("Internal error")).into_response(),
-            Error::CommandGrpc(_) => (code, Resp::new("Internal error")).into_response(),
-            Error::Database(_) => (code, Resp::new("Internal error")).into_response(),
-            Error::ParseIpAddr(_) => (code, Resp::new("Internal error")).into_response(),
+            Error::Node(_) => (code, Resp::respond("Internal error")).into_response(),
+            Error::Subscription(_) => (code, Resp::respond("Internal error")).into_response(),
+            Error::IpAddress(_) => (code, Resp::respond("Internal error")).into_response(),
+            Error::Command(_) => (code, Resp::respond("Internal error")).into_response(),
+            Error::CommandGrpc(_) => (code, Resp::respond("Internal error")).into_response(),
+            Error::Database(_) => (code, Resp::respond("Internal error")).into_response(),
+            Error::ParseIpAddr(_) => (code, Resp::respond("Internal error")).into_response(),
         }
     }
 }
