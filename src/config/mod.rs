@@ -1,3 +1,4 @@
+pub mod chargebee;
 pub mod cloudflare;
 pub mod cookbook;
 pub mod database;
@@ -32,6 +33,8 @@ const CONFIG_FILE_DEFAULT: &str = "config.toml";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
+    /// Failed to parse Chargebee Config: {0}
+    Chargebee(chargebee::Error),
     /// Failed to convert to chrono::Duration: {0}
     ChronoDuration(chrono::OutOfRangeError),
     /// Failed to parse Cloudflare Config: {0}
@@ -68,6 +71,7 @@ pub enum Error {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    pub chargebee: Arc<chargebee::Config>,
     pub cloudflare: Arc<cloudflare::Config>,
     pub cookbook: Arc<cookbook::Config>,
     pub database: Arc<database::Config>,
@@ -112,6 +116,9 @@ impl TryFrom<&Provider> for Config {
     type Error = Error;
 
     fn try_from(provider: &Provider) -> Result<Self, Self::Error> {
+        let chargebee = chargebee::Config::try_from(provider)
+            .map(Arc::new)
+            .map_err(Error::Chargebee)?;
         let cloudflare = cloudflare::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Cloudflare)?;
@@ -141,6 +148,7 @@ impl TryFrom<&Provider> for Config {
             .map_err(Error::Token)?;
 
         Ok(Config {
+            chargebee,
             cloudflare,
             cookbook,
             database,

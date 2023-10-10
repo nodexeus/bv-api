@@ -20,6 +20,8 @@ pub enum Error {
     CreateNew(diesel::result::Error),
     /// Failed to delete subscription: {0}
     Delete(diesel::result::Error),
+    /// Failed to find subscription by external id: {0}
+    FindByExternalId(diesel::result::Error),
     /// Failed to find subscription by id: {0}
     FindById(diesel::result::Error),
     /// Failed to find subscription by org: {0}
@@ -91,6 +93,17 @@ impl Subscription {
             .get_results(conn)
             .await
             .map_err(Error::FindByUser)
+    }
+
+    pub async fn find_by_external_id(
+        external_id: &str,
+        conn: &mut Conn<'_>,
+    ) -> Result<Self, Error> {
+        subscriptions::table
+            .filter(subscriptions::external_id.eq(external_id))
+            .get_result(conn)
+            .await
+            .map_err(Error::FindByExternalId)
     }
 
     pub async fn delete(id: SubscriptionId, conn: &mut Conn<'_>) -> Result<(), Error> {
