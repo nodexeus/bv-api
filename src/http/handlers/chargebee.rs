@@ -37,9 +37,13 @@ where
 {
     if ctx.config.chargebee.secret != secret {
         tracing::warn!("Incorrect secret");
-        return Err((StatusCode::NOT_FOUND, Resp::new("not found")));
+        // We return a 404 if the secret is incorrect, so we don't give away that there is a secret
+        // in this url that might be brute-forced.
+        return Err((StatusCode::NOT_FOUND, ().into_response()));
     }
 
+    // We only start parsing the json after the secret is verfied so people can't try to discover
+    // this endpoint.
     let callback: Callback = match serde_json::from_str(&body) {
         Ok(body) => body,
         Err(e) => {
@@ -60,6 +64,7 @@ where
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Resp::new("error")))
 }
 
+/// When a subscription gets cancelled we delete all the the nodes associated with that org.
 async fn subscription_cancelled(
     callback: Callback,
     mut write: WriteConn<'_, '_>,
@@ -70,7 +75,7 @@ async fn subscription_cancelled(
     for node in nodes {
         delete_node(&node, &mut write).await?;
     }
-    Ok("subscription canceled")
+    Ok("subscription cancelled")
 }
 
 #[derive(serde::Deserialize)]
