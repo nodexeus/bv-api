@@ -139,6 +139,7 @@ impl Org {
         let (total, orgs) = query
             .order_by(orgs::created_at.desc())
             .select(Self::as_select())
+            .distinct()
             .paginate(limit, offset)
             .get_results_counted(conn)
             .await
