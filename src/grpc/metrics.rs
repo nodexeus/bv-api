@@ -159,7 +159,7 @@ async fn node(
     // a patch-sort-of-update on that field.
     let nodes = Node::find_by_ids(node_ids.clone(), &mut write).await?;
     // Now we can create the UpdateNodeMetrics models using our existing, queried nodes.
-    let nodes_map = nodes.iter().hash_map(|n| (n.id, n));
+    let nodes_map = nodes.iter().to_map_keep_last(|n| (n.id, n));
     let updates = updates
         .into_iter()
         .zip(all_node_ids.iter())
@@ -255,7 +255,7 @@ impl api::NodeMetrics {
             .jobs()?
             .into_iter()
             .chain(self.jobs.iter().cloned().map(api::NodeJob::into_model))
-            .hash_map(|n| (n.name.clone(), n));
+            .to_map_keep_last(|n| (n.name.clone(), n));
         Ok(Some(jobs.into_values().collect()))
     }
 }

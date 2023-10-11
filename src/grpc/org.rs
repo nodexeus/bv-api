@@ -355,7 +355,7 @@ impl api::Org {
             .collect();
         let users = User::find_by_ids(user_ids, conn)
             .await?
-            .hash_map(|u| (u.id, u));
+            .to_map_keep_last(|u| (u.id, u));
 
         orgs.iter()
             .map(|org| {

@@ -132,7 +132,7 @@ async fn get(
     let blockchain = Blockchain::find_by_id(id, &mut read).await?;
 
     let node_types = BlockchainNodeType::by_blockchain_id(blockchain.id, &mut read).await?;
-    let node_types = node_types.hash_map(|nt| (nt.id, nt));
+    let node_types = node_types.to_map_keep_last(|nt| (nt.id, nt));
 
     let versions = BlockchainVersion::by_blockchain_id(blockchain.id, &mut read).await?;
     let version_ids = versions
@@ -207,14 +207,14 @@ async fn list(
     // We query the necessary blockchains from the database.
     let blockchains = Blockchain::find_all(&mut read).await?;
     let blockchain_ids: HashSet<_> = blockchains.iter().map(|b| b.id).collect();
-    let blockchain_map = blockchains.iter().hash_map(|b| (b.id, b));
+    let blockchain_map = blockchains.iter().to_map_keep_last(|b| (b.id, b));
 
     // Now we need to combine this info with the networks that are stored in the cookbook
     // service. Since we want to do this in parallel, `network_futs` will contain a number of
     // futures that each resolve to a list of networks for that blockchain version.
     let node_types =
         BlockchainNodeType::by_blockchain_ids(blockchain_ids.clone(), &mut read).await?;
-    let node_types = node_types.hash_map(|nt| (nt.id, nt));
+    let node_types = node_types.to_map_keep_last(|nt| (nt.id, nt));
 
     let versions = BlockchainVersion::by_blockchain_ids(blockchain_ids, &mut read).await?;
     let version_ids = versions
@@ -293,13 +293,13 @@ impl api::Blockchain {
 
         let mut node_types = BlockchainNodeType::by_blockchain_ids(ids.clone(), conn)
             .await?
-            .hash_vec(|node_type| (node_type.blockchain_id, node_type));
+            .to_map_keep_all(|node_type| (node_type.blockchain_id, node_type));
         let mut versions = BlockchainVersion::by_blockchain_ids(ids.clone(), conn)
             .await?
-            .hash_vec(|version| (version.blockchain_node_type_id, version));
+            .to_map_keep_all(|version| (version.blockchain_node_type_id, version));
         let mut properties = BlockchainProperty::by_blockchain_ids(ids, conn)
             .await?
-            .hash_vec(|property| (property.blockchain_version_id, property));
+            .to_map_keep_all(|property| (property.blockchain_version_id, property));
 
         models
             .into_iter()

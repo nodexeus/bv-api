@@ -543,7 +543,7 @@ impl api::Node {
             .collect();
         let block_props = BlockchainProperty::by_property_ids(property_ids, conn)
             .await?
-            .hash_map(|prop| (prop.id, prop));
+            .to_map_keep_last(|prop| (prop.id, prop));
         let props = node_props
             .into_iter()
             .map(|node_prop| {
@@ -582,16 +582,16 @@ impl api::Node {
         let blockchain_ids = nodes.iter().map(|n| n.blockchain_id).collect();
         let blockchains = Blockchain::find_by_ids(blockchain_ids, conn)
             .await?
-            .hash_map(|b| (b.id, b));
+            .to_map_keep_last(|b| (b.id, b));
         let user_ids = nodes.iter().filter_map(|n| n.created_by).collect();
         let users = User::find_by_ids(user_ids, conn)
             .await?
-            .hash_map(|u| (u.id, u));
+            .to_map_keep_last(|u| (u.id, u));
 
         let block_props = BlockchainProperty::by_property_ids(property_ids, conn)
             .await?
-            .hash_map(|prop| (prop.id, prop));
-        let props_map = node_props.hash_vec(|p| {
+            .to_map_keep_last(|prop| (prop.id, prop));
+        let props_map = node_props.to_map_keep_all(|p| {
             let prop_id = p.blockchain_property_id;
             (p.node_id, (p, block_props[&prop_id].clone()))
         });
@@ -599,17 +599,17 @@ impl api::Node {
         let org_ids = nodes.iter().map(|n| n.org_id).collect();
         let orgs = Org::find_by_ids(org_ids, conn)
             .await?
-            .hash_map(|org| (org.id, org));
+            .to_map_keep_last(|org| (org.id, org));
 
         let host_ids = nodes.iter().map(|n| n.host_id).collect();
         let hosts = Host::find_by_ids(host_ids, conn)
             .await?
-            .hash_map(|host| (host.id, host));
+            .to_map_keep_last(|host| (host.id, host));
 
         let region_ids = nodes.iter().filter_map(|n| n.scheduler_region).collect();
         let regions = Region::by_ids(region_ids, conn)
             .await?
-            .hash_map(|region| (region.id, region));
+            .to_map_keep_last(|region| (region.id, region));
 
         nodes
             .into_iter()

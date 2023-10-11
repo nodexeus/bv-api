@@ -123,12 +123,12 @@ pub fn server(context: &Arc<Context>) -> Router<CorsServer> {
 trait HashVec {
     type Elem;
 
-    fn hash_vec<F, K, V>(self, f: F) -> HashMap<K, Vec<V>>
+    fn to_map_keep_all<F, K, V>(self, f: F) -> HashMap<K, Vec<V>>
     where
         F: Fn(Self::Elem) -> (K, V),
         K: Eq + std::hash::Hash;
 
-    fn hash_map<F, K, V>(self, f: F) -> HashMap<K, V>
+    fn to_map_keep_last<F, K, V>(self, f: F) -> HashMap<K, V>
     where
         F: Fn(Self::Elem) -> (K, V),
         K: Eq + std::hash::Hash;
@@ -140,7 +140,7 @@ where
 {
     type Elem = Elem;
 
-    fn hash_vec<F, K, V>(self, f: F) -> HashMap<K, Vec<V>>
+    fn to_map_keep_all<F, K, V>(self, f: F) -> HashMap<K, Vec<V>>
     where
         F: FnMut(Elem) -> (K, V),
         K: Eq + std::hash::Hash,
@@ -153,7 +153,7 @@ where
         map
     }
 
-    fn hash_map<F, K, V>(self, f: F) -> HashMap<K, V>
+    fn to_map_keep_last<F, K, V>(self, f: F) -> HashMap<K, V>
     where
         F: FnMut(Self::Elem) -> (K, V),
         K: Eq + std::hash::Hash,

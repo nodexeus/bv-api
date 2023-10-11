@@ -454,12 +454,12 @@ impl Lookup {
         let org_ids = hosts.iter().map(|h| h.as_ref().org_id).collect();
         let orgs = Org::find_by_ids(org_ids, conn)
             .await?
-            .hash_map(|org| (org.id, org));
+            .to_map_keep_last(|org| (org.id, org));
 
         let region_ids = hosts.iter().filter_map(|h| h.as_ref().region_id).collect();
         let regions = Region::by_ids(region_ids, conn)
             .await?
-            .hash_map(|region| (region.id, region));
+            .to_map_keep_last(|region| (region.id, region));
 
         Ok(Lookup {
             nodes,

@@ -359,12 +359,12 @@ impl api::Invitation {
         let creator_ids = models.iter().map(|i| i.created_by).collect();
         let creators = User::find_by_ids(creator_ids, conn)
             .await?
-            .hash_map(|u| (u.id, u));
+            .to_map_keep_last(|u| (u.id, u));
 
         let org_ids = models.iter().map(|i| i.org_id).collect();
         let orgs = Org::find_by_ids(org_ids, conn)
             .await?
-            .hash_map(|o| (o.id, o));
+            .to_map_keep_last(|o| (o.id, o));
 
         let invitations = models
             .into_iter()
