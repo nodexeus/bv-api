@@ -14,12 +14,10 @@ use uuid::Uuid;
 use crate::auth::rbac::{NodeAdminPerm, NodePerm};
 use crate::auth::resource::{HostId, NodeId, UserId};
 use crate::auth::Authorize;
-use crate::cookbook::identifier::Identifier;
+use crate::cookbook::image::Image;
 use crate::cookbook::script::HardwareRequirements;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
-use crate::models::blockchain::{
-    BlockchainProperty, BlockchainPropertyId, BlockchainPropertyUiType, BlockchainVersion,
-};
+use crate::models::blockchain::{BlockchainProperty, BlockchainPropertyId, BlockchainVersion};
 use crate::models::command::NewCommand;
 use crate::models::node::{
     ContainerStatus, FilteredIpAddr, NewNode, Node, NodeChainStatus, NodeFilter, NodeJob,
@@ -82,8 +80,6 @@ pub enum Error {
     ModelProperty(#[from] crate::models::node::property::Error),
     /// No ResourceAffinity.
     NoResourceAffinity,
-    /// No UiType.
-    NoUiType,
     /// Node org error: {0}
     Org(#[from] crate::models::org::Error),
     /// Failed to parse BlockchainId: {0}
@@ -127,7 +123,6 @@ impl From<Error> for Status {
             MemSize(_) => Status::invalid_argument("mem_size_bytes"),
             MissingPlacement => Status::invalid_argument("placement"),
             NoResourceAffinity => Status::invalid_argument("resource"),
-            NoUiType => Status::invalid_argument("ui_type"),
             ParseBlockchainId(_) => Status::invalid_argument("blockchain_id"),
             ParseHostId(_) => Status::invalid_argument("host_id"),
             ParseId(_) => Status::invalid_argument("id"),
@@ -292,12 +287,12 @@ async fn create(
     let blockchain = Blockchain::find_by_id(blockchain_id, &mut write).await?;
 
     let node_type = req.node_type().into_model();
-    let id = Identifier::new(&blockchain.name, node_type, req.version.clone().into());
-    let version = id.node_version();
+    let image = Image::new(&blockchain.name, node_type, req.version.clone().into());
+    let version = image.node_version();
 
     BlockchainVersion::find(&blockchain, &version, node_type, &mut write).await?;
 
-    let requirements = write.ctx.cookbook.rhai_metadata(&id).await?.requirements;
+    let requirements = write.ctx.cookbook.rhai_metadata(&image).await?.requirements;
     let new_node = req.as_new(user.id, requirements, &mut write).await?;
     let node = new_node.create(host, &mut write).await?;
 
@@ -308,7 +303,7 @@ async fn create(
     // this requires the names to be unique, but we expect this to be the case.
     let version =
         BlockchainVersion::find(&blockchain, &node.version, node.node_type, &mut write).await?;
-    let name_to_id_map = BlockchainProperty::id_to_name_map(&version, &mut write)
+    let name_to_id_map = BlockchainProperty::id_to_name_map(version.id, &mut write)
         .await?
         .into_iter()
         .map(|(k, v)| (v, k))
@@ -925,29 +920,8 @@ impl api::NodeProperty {
             required: bprop.required,
             value: model.value,
         };
-        prop.set_ui_type(api::UiType::from_model(bprop.ui_type));
+        prop.set_ui_type(api::UiType::from(bprop.ui_type));
         prop
-    }
-}
-
-impl api::UiType {
-    pub const fn from_model(model: BlockchainPropertyUiType) -> Self {
-        match model {
-            BlockchainPropertyUiType::Switch => api::UiType::Switch,
-            BlockchainPropertyUiType::Password => api::UiType::Password,
-            BlockchainPropertyUiType::Text => api::UiType::Text,
-            BlockchainPropertyUiType::FileUpload => api::UiType::FileUpload,
-        }
-    }
-
-    pub const fn into_model(self) -> Result<BlockchainPropertyUiType, Error> {
-        match self {
-            Self::Unspecified => Err(Error::NoUiType),
-            Self::Switch => Ok(BlockchainPropertyUiType::Switch),
-            Self::Password => Ok(BlockchainPropertyUiType::Password),
-            Self::Text => Ok(BlockchainPropertyUiType::Text),
-            Self::FileUpload => Ok(BlockchainPropertyUiType::FileUpload),
-        }
     }
 }
 

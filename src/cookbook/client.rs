@@ -132,18 +132,22 @@ impl Client for aws_sdk_s3::Client {
 }
 
 #[cfg(any(test, feature = "integration-test"))]
-#[allow(unused_imports)]
 mod tests {
-    use mockall::predicate::eq;
-
-    use crate::cookbook::identifier::Identifier;
+    use crate::cookbook::image::Image;
     use crate::cookbook::script::tests::TEST_SCRIPT;
-    use crate::cookbook::tests::{dummy_config, MockStorage};
-    use crate::cookbook::Cookbook;
-    use crate::grpc::api;
+    use crate::cookbook::tests::MockStorage;
     use crate::models::NodeType;
 
     use super::*;
+
+    #[cfg(test)]
+    use crate::{
+        cookbook::{tests::dummy_config, Cookbook},
+        grpc::api,
+    };
+
+    #[cfg(test)]
+    use mockall::predicate::eq;
 
     mockall::mock! {
         pub Client {}
@@ -177,8 +181,8 @@ mod tests {
     }
 
     #[allow(dead_code)]
-    fn test_identifier() -> Identifier {
-        Identifier::new(
+    fn test_image() -> Image {
+        Image::new(
             "test_blockchain",
             NodeType::Node,
             "1.2.3".to_string().into(),
@@ -200,7 +204,7 @@ mod tests {
         assert_eq!(
             "Cookbook client error: Unexpected error: some client error",
             cookbook
-                .get_download_manifest(&test_identifier(), "test")
+                .get_download_manifest(&test_image(), "test")
                 .await
                 .unwrap_err()
                 .to_string()
@@ -231,17 +235,17 @@ mod tests {
         let cookbook = Cookbook::new(&dummy_config(), client);
 
         assert_eq!(
-            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
+            r#"No manifest found for `Image { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
             cookbook
-                .get_download_manifest(&test_identifier(), "test")
+                .get_download_manifest(&test_image(), "test")
                 .await
                 .unwrap_err()
                 .to_string()
         );
         assert_eq!(
-            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
+            r#"No manifest found for `Image { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
             cookbook
-                .get_download_manifest(&test_identifier(), "test")
+                .get_download_manifest(&test_image(), "test")
                 .await
                 .unwrap_err()
                 .to_string()
@@ -278,9 +282,9 @@ mod tests {
         let cookbook = Cookbook::new(&dummy_config(), client);
 
         assert_eq!(
-            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
+            r#"No manifest found for `Image { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
             cookbook
-                .get_download_manifest(&test_identifier(), "test")
+                .get_download_manifest(&test_image(), "test")
                 .await
                 .unwrap_err()
                 .to_string()
@@ -325,9 +329,9 @@ mod tests {
         let cookbook = Cookbook::new(&dummy_config(), client);
 
         assert_eq!(
-            r#"No manifest found for `Identifier { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
+            r#"No manifest found for `Image { protocol: "test_blockchain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
             cookbook
-                .get_download_manifest(&test_identifier(), "test")
+                .get_download_manifest(&test_image(), "test")
                 .await
                 .unwrap_err()
                 .to_string()
@@ -355,7 +359,7 @@ mod tests {
 
         let cookbook = Cookbook::new(&dummy_config(), client);
         let manifest = cookbook
-            .get_download_manifest(&test_identifier(), "test")
+            .get_download_manifest(&test_image(), "test")
             .await
             .unwrap();
 

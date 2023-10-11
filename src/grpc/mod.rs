@@ -145,9 +145,9 @@ where
         F: FnMut(Elem) -> (K, V),
         K: Eq + std::hash::Hash,
     {
-        let mut iter = self.into_iter();
+        let iter = self.into_iter();
         let mut map: HashMap<_, Vec<_>> = HashMap::with_capacity(iter.size_hint().0);
-        for (k, v) in self.into_iter().map(f) {
+        for (k, v) in iter.map(f) {
             map.entry(k).or_default().push(v);
         }
         map

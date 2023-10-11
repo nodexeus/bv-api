@@ -2,7 +2,6 @@ pub mod cloudflare;
 pub use cloudflare::Cloudflare;
 
 use displaydoc::Display;
-use rand::rngs::OsRng;
 use thiserror::Error;
 
 #[derive(Debug, Display, Error)]
@@ -31,10 +30,11 @@ pub mod tests {
     use std::sync::Arc;
 
     use mockito::{Matcher, ServerGuard};
+    use rand::rngs::OsRng;
     use rand::Rng;
 
     use crate::config::cloudflare::{ApiConfig, Config, DnsConfig};
-    #[allow(unused_imports)]
+    #[cfg(test)]
     use crate::config::Context;
 
     use super::*;

@@ -12,7 +12,7 @@ use crate::auth::rbac::{GrpcRole, HostPerm};
 use crate::auth::resource::{HostId, OrgId};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::{AuthZ, Authorize};
-use crate::cookbook::identifier::Identifier;
+use crate::cookbook::image::Image;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::command::NewCommand;
 use crate::models::host::{
@@ -354,8 +354,8 @@ async fn regions(
     let node_type = req.node_type().into_model();
     let host_type = req.host_type().into_model();
 
-    let id = Identifier::new(&blockchain.name, node_type, req.version.into());
-    let requirements = read.ctx.cookbook.rhai_metadata(&id).await?.requirements;
+    let image = Image::new(&blockchain.name, node_type, req.version.into());
+    let requirements = read.ctx.cookbook.rhai_metadata(&image).await?.requirements;
 
     let regions = Host::regions_for(
         org_id,

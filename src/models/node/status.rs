@@ -20,6 +20,7 @@ pub enum ContainerStatus {
     Installing,
     Snapshotting,
     Failed,
+    Busy,
 }
 
 /// `NodeSyncStatus` reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
@@ -84,6 +85,7 @@ impl api::ContainerStatus {
             ContainerStatus::Installing => Self::Installing,
             ContainerStatus::Snapshotting => Self::Snapshotting,
             ContainerStatus::Failed => Self::Failed,
+            ContainerStatus::Busy => Self::Busy,
         }
     }
 
@@ -102,6 +104,7 @@ impl api::ContainerStatus {
             Self::Installing => ContainerStatus::Installing,
             Self::Snapshotting => ContainerStatus::Snapshotting,
             Self::Failed => ContainerStatus::Failed,
+            Self::Busy => ContainerStatus::Busy,
         }
     }
 }
