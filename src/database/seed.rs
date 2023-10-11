@@ -293,6 +293,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         insert into role_permissions (role, permission)
         values
         ('blockjoy-admin', 'auth-admin-list-permissions'),
+        ('blockjoy-admin', 'blockchain-admin-list'),
         ('blockjoy-admin', 'node-admin-create'),
         ('blockjoy-admin', 'node-admin-delete'),
         ('blockjoy-admin', 'node-admin-get'),
