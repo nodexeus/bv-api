@@ -11,9 +11,10 @@ use tonic::Status;
 use uuid::Uuid;
 
 use crate::database::Conn;
+use crate::grpc::api;
 use crate::models::schema::{blockchain_properties, sql_types};
 
-use super::{BlockchainId, BlockchainNodeTypeId, BlockchainVersion, BlockchainVersionId};
+use super::{BlockchainId, BlockchainNodeTypeId, BlockchainVersionId};
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
@@ -29,6 +30,10 @@ pub enum Error {
     ByVersionIds(HashSet<BlockchainVersionId>, diesel::result::Error),
     /// Failed to create map from blockchain property id to name: {0}
     IdToName(diesel::result::Error),
+    /// Unknown api::UiType: {0}
+    UnknownUiType(prost::DecodeError),
+    /// No UiType.
+    UnspecifiedUiType,
 }
 
 impl From<Error> for Status {
@@ -39,6 +44,7 @@ impl From<Error> for Status {
             | ByPropertyIds(_, NotFound)
             | ByVersionId(_, NotFound)
             | ByVersionIds(_, NotFound) => Status::not_found("Not found."),
+            UnspecifiedUiType => Status::invalid_argument("ui_type"),
             _ => Status::internal("Internal error."),
         }
     }
@@ -47,14 +53,14 @@ impl From<Error> for Status {
 #[derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, DieselNewType, Deref, From, FromStr)]
 pub struct BlockchainPropertyId(Uuid);
 
-#[derive(Debug, Clone, Insertable, Queryable)]
+#[derive(Clone, Debug, Insertable, Queryable)]
 #[diesel(table_name = blockchain_properties)]
 pub struct BlockchainProperty {
     pub id: BlockchainPropertyId,
     pub blockchain_id: BlockchainId,
     pub name: String,
     pub default: Option<String>,
-    pub ui_type: BlockchainPropertyUiType,
+    pub ui_type: UiType,
     pub disabled: bool,
     pub required: bool,
     pub blockchain_node_type_id: BlockchainNodeTypeId,
@@ -120,11 +126,11 @@ impl BlockchainProperty {
 
     /// Returns a map from `BlockchainPropertyId` to the `name` field of that blockchain property.
     pub async fn id_to_name_map(
-        version: &BlockchainVersion,
+        version_id: BlockchainVersionId,
         conn: &mut Conn<'_>,
     ) -> Result<HashMap<BlockchainPropertyId, String>, Error> {
         let props: Vec<Self> = blockchain_properties::table
-            .filter(blockchain_properties::blockchain_version_id.eq(version.id))
+            .filter(blockchain_properties::blockchain_version_id.eq(version_id))
             .get_results(conn)
             .await
             .map_err(Error::IdToName)?;
@@ -135,9 +141,34 @@ impl BlockchainProperty {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
 #[ExistingTypePath = "sql_types::BlockchainPropertyUiType"]
-pub enum BlockchainPropertyUiType {
+pub enum UiType {
     Switch,
     Password,
     Text,
     FileUpload,
+}
+
+impl From<UiType> for api::UiType {
+    fn from(ui_type: UiType) -> Self {
+        match ui_type {
+            UiType::Switch => api::UiType::Switch,
+            UiType::Password => api::UiType::Password,
+            UiType::Text => api::UiType::Text,
+            UiType::FileUpload => api::UiType::FileUpload,
+        }
+    }
+}
+
+impl TryFrom<api::UiType> for UiType {
+    type Error = Error;
+
+    fn try_from(api: api::UiType) -> Result<Self, Self::Error> {
+        match api {
+            api::UiType::Unspecified => Err(Error::UnspecifiedUiType),
+            api::UiType::Switch => Ok(UiType::Switch),
+            api::UiType::Password => Ok(UiType::Password),
+            api::UiType::Text => Ok(UiType::Text),
+            api::UiType::FileUpload => Ok(UiType::FileUpload),
+        }
+    }
 }

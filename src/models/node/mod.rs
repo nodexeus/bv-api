@@ -34,7 +34,7 @@ use tonic::Status;
 use tracing::warn;
 
 use crate::auth::resource::{HostId, NodeId, OrgId, UserId};
-use crate::cookbook::identifier::Identifier;
+use crate::cookbook::image::Image;
 use crate::database::{Conn, WriteConn};
 
 use super::blockchain::{Blockchain, BlockchainId};
@@ -296,8 +296,8 @@ impl Node {
     pub async fn find_host(&self, write: &mut WriteConn<'_, '_>) -> Result<Host, Error> {
         let chain = Blockchain::find_by_id(self.blockchain_id, write).await?;
 
-        let id = Identifier::new(chain.name, self.node_type, self.version.clone());
-        let meta = write.ctx.cookbook.rhai_metadata(&id).await?;
+        let image = Image::new(chain.name, self.node_type, self.version.clone());
+        let meta = write.ctx.cookbook.rhai_metadata(&image).await?;
 
         let candidates = match self.scheduler(write).await? {
             Some(scheduler) => {
@@ -460,8 +460,8 @@ impl NewNode {
             .get_node_dns(&self.name, ip_addr.clone())
             .await?;
 
-        let id = Identifier::new(blockchain.name, self.node_type, self.version.clone());
-        let meta = write.ctx.cookbook.rhai_metadata(&id).await?;
+        let image = Image::new(blockchain.name, self.node_type, self.version.clone());
+        let meta = write.ctx.cookbook.rhai_metadata(&image).await?;
         let data_directory_mountpoint = meta
             .babel_config
             .and_then(|cfg| cfg.data_directory_mount_point);
@@ -493,8 +493,8 @@ impl NewNode {
     ) -> Result<Host, Error> {
         let chain = Blockchain::find_by_id(self.blockchain_id, write).await?;
 
-        let id = Identifier::new(chain.name, self.node_type, self.version.clone());
-        let metadata = write.ctx.cookbook.rhai_metadata(&id).await?;
+        let image = Image::new(chain.name, self.node_type, self.version.clone());
+        let metadata = write.ctx.cookbook.rhai_metadata(&image).await?;
 
         let requirements = HostRequirements {
             requirements: metadata.requirements,

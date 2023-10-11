@@ -24,19 +24,19 @@ pub enum Error {
 
 /// A Cookbook plugin identifier.
 #[derive(Clone, Debug)]
-pub struct Identifier {
+pub struct Image {
     pub protocol: String,
     pub node_type: NodeType,
     pub node_version: NodeVersion,
 }
 
-impl Identifier {
+impl Image {
     pub fn new<S: Into<String>>(
         protocol: S,
         node_type: NodeType,
         node_version: NodeVersion,
     ) -> Self {
-        Identifier {
+        Image {
             protocol: protocol.into(),
             node_type,
             node_version,
@@ -48,11 +48,11 @@ impl Identifier {
     }
 }
 
-impl From<api::ConfigIdentifier> for Identifier {
+impl From<api::ConfigIdentifier> for Image {
     fn from(api: api::ConfigIdentifier) -> Self {
         let node_type = api.node_type().into_model();
 
-        Identifier {
+        Image {
             protocol: api.protocol,
             node_type,
             node_version: api.node_version.into(),
@@ -60,12 +60,12 @@ impl From<api::ConfigIdentifier> for Identifier {
     }
 }
 
-impl From<Identifier> for api::ConfigIdentifier {
-    fn from(id: Identifier) -> Self {
+impl From<Image> for api::ConfigIdentifier {
+    fn from(image: Image) -> Self {
         api::ConfigIdentifier {
-            protocol: id.protocol,
-            node_type: api::NodeType::from_model(id.node_type) as i32,
-            node_version: id.node_version.into(),
+            protocol: image.protocol,
+            node_type: api::NodeType::from_model(image.node_type) as i32,
+            node_version: image.node_version.into(),
         }
     }
 }

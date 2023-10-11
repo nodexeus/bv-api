@@ -293,6 +293,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         insert into role_permissions (role, permission)
         values
         ('blockjoy-admin', 'auth-admin-list-permissions'),
+        ('blockjoy-admin', 'blockchain-admin-list'),
         ('blockjoy-admin', 'node-admin-create'),
         ('blockjoy-admin', 'node-admin-delete'),
         ('blockjoy-admin', 'node-admin-get'),
@@ -443,6 +444,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-new-host', 'blockchain-get'),
         ('grpc-new-host', 'blockchain-list'),
         ('grpc-new-host', 'bundle-list-bundle-versions'),
+        ('grpc-new-host', 'bundle-retrieve'),
         ('grpc-new-host', 'command-ack'),
         ('grpc-new-host', 'command-create'),
         ('grpc-new-host', 'command-get'),
