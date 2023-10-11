@@ -4,19 +4,47 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use axum::routing::{post, Router};
-use axum::Json;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
-use hyper::StatusCode;
 use thiserror::Error;
 
 use crate::config::Context;
 use crate::database::{Transaction, WriteConn};
 use crate::grpc::api;
+use crate::http::response::{bad_params, failed, not_found, ok_custom};
 use crate::models::command::NewCommand;
 use crate::models::{Command, CommandType, IpAddress, Node, Subscription};
+
+#[derive(Debug, Display, Error)]
+pub enum Error {
+    /// Node error: {0}
+    Node(#[from] crate::models::node::Error),
+    /// Subscription error: {0}
+    Subscription(#[from] crate::models::subscription::Error),
+    /// IpAddress error: {0}
+    IpAddress(#[from] crate::models::ip_address::Error),
+    /// Command error: {0}
+    Command(#[from] crate::models::command::Error),
+    /// Error constructing a gRPC command message: {0}
+    CommandGrpc(#[from] crate::grpc::command::Error),
+    /// Database error: {0}
+    Database(#[from] diesel::result::Error),
+    /// Failed to parse IpAddr: {0}
+    ParseIpAddr(std::net::AddrParseError),
+}
+
+impl From<Error> for tonic::Status {
+    fn from(err: Error) -> Self {
+        use Error::*;
+        tracing::warn!("Error for chargebee webook: {err:?}");
+        match err {
+            Node(_) | Subscription(_) | Database(_) | ParseIpAddr(_) | IpAddress(_)
+            | Command(_) | CommandGrpc(_) => tonic::Status::internal("Internal error"),
+        }
+    }
+}
 
 pub fn router<S>(context: Arc<Context>) -> Router<S>
 where
@@ -31,15 +59,12 @@ async fn callback(
     State(ctx): State<Arc<Context>>,
     Path(secret): Path<String>,
     body: String,
-) -> Result<Response, (StatusCode, Response)>
-where
-    Result<Response, (StatusCode, Response)>: IntoResponse,
-{
+) -> Response {
     if ctx.config.chargebee.secret != secret {
         tracing::warn!("Incorrect secret");
         // We return a 404 if the secret is incorrect, so we don't give away that there is a secret
         // in this url that might be brute-forced.
-        return Err((StatusCode::NOT_FOUND, ().into_response()));
+        return not_found();
     }
 
     // This is temporary, until we get it working end to end I (luuk) will definitely be going into
@@ -51,8 +76,8 @@ where
     let callback: Callback = match serde_json::from_str(&body) {
         Ok(body) => body,
         Err(e) => {
-            tracing::warn!("Invalid request: {e:?}");
-            return Err((StatusCode::BAD_REQUEST, Resp::respond("invalid request")));
+            tracing::warn!("Invalid request {body}: {e:?}");
+            return bad_params();
         }
     };
 
@@ -63,11 +88,13 @@ where
             ctx.write(|c| subscription_cancelled(callback, c).scope_boxed())
                 .await
         }
-        EventType::Other => return Ok(Resp::respond("event ignored")),
+        EventType::Other(namely) => {
+            tracing::info!("Ignored event type, namely {namely}");
+            return ok_custom("event ignored");
+        }
     };
 
-    resp.map(|resp| Resp::respond(resp.into_inner()))
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Resp::respond("error")))
+    resp.map_or_else(|_| failed(), |resp| ok_custom(resp.into_inner()))
 }
 
 /// When a subscription gets cancelled we delete all the the nodes associated with that org.
@@ -100,23 +127,12 @@ struct EventSubscription {
     id: String,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde_enum_str::Deserialize_enum_str)]
 #[serde(rename_all = "snake_case")]
 enum EventType {
     SubscriptionCancelled,
     #[serde(other)]
-    Other,
-}
-
-#[derive(serde::Serialize)]
-struct Resp {
-    msg: &'static str,
-}
-
-impl Resp {
-    fn respond(msg: &'static str) -> Response {
-        Json(Self { msg }).into_response()
-    }
+    Other(String),
 }
 
 async fn delete_node(node: &Node, write: &mut WriteConn<'_, '_>) -> Result<(), Error> {
@@ -153,50 +169,6 @@ async fn delete_node(node: &Node, write: &mut WriteConn<'_, '_>) -> Result<(), E
     write.mqtt(deleted);
 
     Ok(())
-}
-
-#[derive(Debug, Display, Error)]
-pub enum Error {
-    /// Node error: {0}
-    Node(#[from] crate::models::node::Error),
-    /// Subscription error: {0}
-    Subscription(#[from] crate::models::subscription::Error),
-    /// IpAddress error: {0}
-    IpAddress(#[from] crate::models::ip_address::Error),
-    /// Command error: {0}
-    Command(#[from] crate::models::command::Error),
-    /// Error constructing a gRPC command message: {0}
-    CommandGrpc(#[from] crate::grpc::command::Error),
-    /// Database error: {0}
-    Database(#[from] diesel::result::Error),
-    /// Failed to parse IpAddr: {0}
-    ParseIpAddr(std::net::AddrParseError),
-}
-
-impl From<Error> for tonic::Status {
-    fn from(err: Error) -> Self {
-        use Error::*;
-        match err {
-            Node(_) | Subscription(_) | Database(_) | ParseIpAddr(_) | IpAddress(_)
-            | Command(_) | CommandGrpc(_) => tonic::Status::internal("Internal error"),
-        }
-    }
-}
-
-impl IntoResponse for Error {
-    fn into_response(self) -> Response {
-        let code = StatusCode::INTERNAL_SERVER_ERROR;
-        tracing::error!("{self}");
-        match self {
-            Error::Node(_) => (code, Resp::respond("Internal error")).into_response(),
-            Error::Subscription(_) => (code, Resp::respond("Internal error")).into_response(),
-            Error::IpAddress(_) => (code, Resp::respond("Internal error")).into_response(),
-            Error::Command(_) => (code, Resp::respond("Internal error")).into_response(),
-            Error::CommandGrpc(_) => (code, Resp::respond("Internal error")).into_response(),
-            Error::Database(_) => (code, Resp::respond("Internal error")).into_response(),
-            Error::ParseIpAddr(_) => (code, Resp::respond("Internal error")).into_response(),
-        }
-    }
 }
 
 #[cfg(test)]
