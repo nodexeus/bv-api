@@ -346,15 +346,16 @@ impl api::NodeMessage {
             .collect()
     }
 
-    pub fn deleted(node: &Node, user: User) -> Self {
+    pub fn deleted(node: &Node, user: impl Into<Option<User>>) -> Self {
+        let user = user.into();
         Self {
             message: Some(api::node_message::Message::Deleted(api::NodeDeleted {
                 node_id: node.id.to_string(),
                 host_id: node.host_id.to_string(),
                 org_id: node.org_id.to_string(),
-                deleted_by: user.id.to_string(),
-                deleted_by_name: user.name(),
-                deleted_by_email: user.email,
+                deleted_by: user.as_ref().map(|u| u.id.to_string()).unwrap_or_default(),
+                deleted_by_name: user.as_ref().map(User::name).unwrap_or_default(),
+                deleted_by_email: user.map(|u| u.email).unwrap_or_default(),
             })),
         }
     }

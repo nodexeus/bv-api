@@ -11,7 +11,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::config::Context;
 
-use self::handlers::{health, mqtt};
+use self::handlers::{chargebee, health, mqtt};
 
 pub fn router(context: &Arc<Context>) -> Router {
     let cors = CorsLayer::new()
@@ -25,5 +25,6 @@ pub fn router(context: &Arc<Context>) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(OtelAxumLayer::default())
         .nest("/mqtt", mqtt::router(context.clone()))
+        .nest("/chargebee", chargebee::router(context.clone()))
         .merge(health::router(context.clone()))
 }

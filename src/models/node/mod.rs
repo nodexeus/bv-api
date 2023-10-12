@@ -62,6 +62,8 @@ pub enum Error {
     FindById(NodeId, diesel::result::Error),
     /// Failed to find nodes by id `{0:?}`: {1}
     FindByIds(HashSet<NodeId>, diesel::result::Error),
+    /// Failed to find nodes by org id {0}: {1}
+    FindByOrgId(OrgId, diesel::result::Error),
     /// Failed to find node ids `{0:?}`: {1}
     FindExistingIds(HashSet<NodeId>, diesel::result::Error),
     /// Failed to find outdated nodes: {0}
@@ -186,6 +188,14 @@ impl Node {
             .get_results(conn)
             .await
             .map_err(|err| Error::FindByIds(ids, err))
+    }
+
+    pub async fn find_by_org(org_id: OrgId, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
+        nodes::table
+            .filter(nodes::org_id.eq(org_id))
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::FindByOrgId(org_id, err))
     }
 
     /// Filters out any node ids that do no exist.

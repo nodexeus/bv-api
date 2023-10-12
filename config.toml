@@ -1,3 +1,6 @@
+[chargebee]
+secret = "asdfasdf"
+
 [cloudflare.api]
 base_url = "https://api.cloudflare.com/client/v4"
 zone_id = "89560cdd783e35f7a9d718755ea9c656"

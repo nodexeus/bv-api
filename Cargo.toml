@@ -65,6 +65,7 @@ sendgrid = { version = "0.19.0", default-features = false, features = ["rustls",
 serde = { version = "1.0.164", features = ["derive", "rc"] }
 serde_json = { version = "1.0.97", features = ["raw_value"] }
 serde_with = { version = "3.3.0", features = ["chrono_0_4"] }
+serde-enum-str = { version = "0.4.0" }
 strum = { version = "0.25.0", features = ["derive"] }
 thiserror = "1.0.40"
 tokio = { version = "1.28.2", default-features = false, features = ["io-util", "sync", "macros", "sync", "rt-multi-thread"] }
