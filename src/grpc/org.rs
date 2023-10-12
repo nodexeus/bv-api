@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
@@ -17,7 +17,7 @@ use crate::models::{Invitation, Org, OrgUser, User};
 use crate::timestamp::NanosUtc;
 
 use super::api::org_service_server::OrgService;
-use super::{api, Grpc};
+use super::{api, Grpc, HashVec};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -353,11 +353,9 @@ impl api::Org {
             .values()
             .flat_map(|ou| ou.user_roles.keys().copied())
             .collect();
-        let users: HashMap<UserId, User> = User::find_by_ids(user_ids, conn)
+        let users = User::find_by_ids(user_ids, conn)
             .await?
-            .into_iter()
-            .map(|u| (u.id, u))
-            .collect();
+            .to_map_keep_last(|u| (u.id, u));
 
         orgs.iter()
             .map(|org| {

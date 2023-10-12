@@ -22,7 +22,7 @@ use crate::models::{Blockchain, CommandType, Org, OrgUser, Region, RegionId};
 use crate::timestamp::NanosUtc;
 
 use super::api::host_service_server::HostService;
-use super::{api, common, Grpc};
+use super::{api, common, Grpc, HashVec};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -452,18 +452,14 @@ impl Lookup {
         let nodes = Host::node_counts(host_ids, conn).await?;
 
         let org_ids = hosts.iter().map(|h| h.as_ref().org_id).collect();
-        let orgs: HashMap<_, _> = Org::find_by_ids(org_ids, conn)
+        let orgs = Org::find_by_ids(org_ids, conn)
             .await?
-            .into_iter()
-            .map(|org| (org.id, org))
-            .collect();
+            .to_map_keep_last(|org| (org.id, org));
 
         let region_ids = hosts.iter().filter_map(|h| h.as_ref().region_id).collect();
-        let regions: HashMap<_, _> = Region::by_ids(region_ids, conn)
+        let regions = Region::by_ids(region_ids, conn)
             .await?
-            .into_iter()
-            .map(|region| (region.id, region))
-            .collect();
+            .to_map_keep_last(|region| (region.id, region));
 
         Ok(Lookup {
             nodes,
