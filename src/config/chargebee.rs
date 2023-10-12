@@ -1,13 +1,10 @@
 use derive_more::FromStr;
-
 use displaydoc::Display;
 use serde::Deserialize;
 use thiserror::Error;
 
-use super::{
-    provider::{self, Provider},
-    Redacted,
-};
+use super::provider::{self, Provider};
+use super::Redacted;
 
 const CHARGEBEE_SECRET_VAR: &str = "CHARGEBEE_SECRET";
 const CHARGEBEE_SECRET_ENTRY: &str = "chargebee.secret";

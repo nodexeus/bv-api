@@ -1,5 +1,7 @@
-//! Handler meant to deal will the incoming chargebee events. These are currently only used to deal
-//! with people canceling their billing and in so doing cancel their blockjoy account.
+//! Handler for incoming chargebee events.
+//!
+//! These are currently only used for follow-up actions after the cancellation
+//! of a subscription.
 
 use std::sync::Arc;
 
@@ -8,7 +10,10 @@ use axum::response::Response;
 use axum::routing::{post, Router};
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
+use serde::Deserialize;
+use serde_enum_str::Deserialize_enum_str;
 use thiserror::Error;
+use tracing::{debug, error};
 
 use crate::config::Context;
 use crate::database::{Transaction, WriteConn};
@@ -19,29 +24,29 @@ use crate::models::{Command, CommandType, IpAddress, Node, Subscription};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Node error: {0}
-    Node(#[from] crate::models::node::Error),
-    /// Subscription error: {0}
-    Subscription(#[from] crate::models::subscription::Error),
-    /// IpAddress error: {0}
-    IpAddress(#[from] crate::models::ip_address::Error),
-    /// Command error: {0}
+    /// Chargebee command: {0}
     Command(#[from] crate::models::command::Error),
-    /// Error constructing a gRPC command message: {0}
-    CommandGrpc(#[from] crate::grpc::command::Error),
-    /// Database error: {0}
+    /// Chargebee database error: {0}
     Database(#[from] diesel::result::Error),
-    /// Failed to parse IpAddr: {0}
+    /// Chargebee gRPC command: {0}
+    GrpcCommand(#[from] crate::grpc::command::Error),
+    /// Chargebee IpAddress: {0}
+    IpAddress(#[from] crate::models::ip_address::Error),
+    /// Chargebee node: {0}
+    Node(#[from] crate::models::node::Error),
+    /// Chargebee failed to parse IpAddr: {0}
     ParseIpAddr(std::net::AddrParseError),
+    /// Chargebee subscription: {0}
+    Subscription(#[from] crate::models::subscription::Error),
 }
 
 impl From<Error> for tonic::Status {
     fn from(err: Error) -> Self {
         use Error::*;
-        tracing::warn!("Error for chargebee webook: {err:?}");
+        error!("Chargebee webhook: {err:?}");
         match err {
-            Node(_) | Subscription(_) | Database(_) | ParseIpAddr(_) | IpAddress(_)
-            | Command(_) | CommandGrpc(_) => tonic::Status::internal("Internal error"),
+            Command(_) | Database(_) | GrpcCommand(_) | IpAddress(_) | Node(_) | ParseIpAddr(_)
+            | Subscription(_) => tonic::Status::internal("Internal error"),
         }
     }
 }
@@ -55,28 +60,52 @@ where
         .with_state(context)
 }
 
+#[derive(Debug, Deserialize)]
+struct Callback {
+    event: Event,
+}
+
+#[derive(Debug, Deserialize)]
+struct Event {
+    subscription: EventSubscription,
+    event_type: EventType,
+}
+
+#[derive(Debug, Deserialize)]
+struct EventSubscription {
+    id: String,
+}
+
+#[derive(Debug, Deserialize_enum_str)]
+#[serde(rename_all = "snake_case")]
+enum EventType {
+    SubscriptionCancelled,
+    #[serde(other)]
+    Other(String),
+}
+
 async fn callback(
     State(ctx): State<Arc<Context>>,
     Path(secret): Path<String>,
     body: String,
 ) -> Response {
     if ctx.config.chargebee.secret != secret {
-        tracing::warn!("Incorrect secret");
-        // We return a 404 if the secret is incorrect, so we don't give away that there is a secret
-        // in this url that might be brute-forced.
+        error!("Bad chargebee callback secret. Ignoring event.");
+        // We return a 404 if the secret is incorrect, so we don't give away
+        // that there is a secret in this url that might be brute-forced.
         return not_found();
     }
 
-    // This is temporary, until we get it working end to end I (luuk) will definitely be going into
-    // the logs to inspect these values
+    // This is temporary, until we get it working end to end
+    // I (luuk) will definitely be going into the logs to inspect these values
     dbg!(&body);
 
-    // We only start parsing the json after the secret is verfied so people can't try to discover
-    // this endpoint.
+    // We only start parsing the json after the secret is verfied so people
+    // can't try to discover this endpoint.
     let callback: Callback = match serde_json::from_str(&body) {
         Ok(body) => body,
-        Err(e) => {
-            tracing::warn!("Invalid request {body}: {e:?}");
+        Err(err) => {
+            error!("Failed to parse chargebee callback body `{body}`: {err:?}");
             return bad_params();
         }
     };
@@ -88,8 +117,8 @@ async fn callback(
             ctx.write(|c| subscription_cancelled(callback, c).scope_boxed())
                 .await
         }
-        EventType::Other(namely) => {
-            tracing::info!("Ignored event type, namely {namely}");
+        EventType::Other(event) => {
+            debug!("Skipping chargebee callback event: {event}");
             return ok_custom("event ignored");
         }
     };
@@ -97,42 +126,21 @@ async fn callback(
     resp.map_or_else(|_| failed(), |resp| ok_custom(resp.into_inner()))
 }
 
-/// When a subscription gets cancelled we delete all the the nodes associated with that org.
+/// When a subscription is cancelled we delete all the nodes associated with
+/// that org.
 async fn subscription_cancelled(
     callback: Callback,
     mut write: WriteConn<'_, '_>,
 ) -> Result<&'static str, Error> {
-    let subscription =
-        Subscription::find_by_external_id(&callback.event.subscription.id, &mut write).await?;
+    let id = callback.event.subscription.id;
+    let subscription = Subscription::find_by_external_id(&id, &mut write).await?;
     let nodes = Node::find_by_org(subscription.org_id, &mut write).await?;
+
     for node in nodes {
         delete_node(&node, &mut write).await?;
     }
+
     Ok("subscription cancelled")
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct Callback {
-    event: Event,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct Event {
-    subscription: EventSubscription,
-    event_type: EventType,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct EventSubscription {
-    id: String,
-}
-
-#[derive(Debug, serde_enum_str::Deserialize_enum_str)]
-#[serde(rename_all = "snake_case")]
-enum EventType {
-    SubscriptionCancelled,
-    #[serde(other)]
-    Other(String),
 }
 
 async fn delete_node(node: &Node, write: &mut WriteConn<'_, '_>) -> Result<(), Error> {
@@ -171,13 +179,13 @@ async fn delete_node(node: &Node, write: &mut WriteConn<'_, '_>) -> Result<(), E
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    // use super::*;
-    //
-    // #[test]
-    // fn can_parse_example_event() {
-    //     let test_event = "put sample event here once we have one";
-    //     let _: Callback = serde_json::from_str(test_event).unwrap();
-    // }
-}
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+
+//     #[test]
+//     fn can_parse_example_event() {
+//         let test_event = "put sample event here once we have one";
+//         let _: Callback = serde_json::from_str(test_event).unwrap();
+//     }
+// }
