@@ -117,18 +117,13 @@ async fn get(
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServiceGetResponse, Error> {
+    let authz = match read.auth_all(&meta, BlockchainAdminPerm::Get).await {
+        Ok(authz) => Ok(authz),
+        Err(crate::auth::Error::Claims(_)) => read.auth_all(&meta, BlockchainPerm::Get).await,
+        Err(err) => Err(err),
+    }?;
+
     let id = req.id.parse().map_err(Error::ParseId)?;
-    let org_id = req
-        .org_id
-        .as_deref()
-        .map(|id| id.parse().map_err(Error::ParseOrgId))
-        .transpose()?;
-    if let Some(org_id) = org_id {
-        read.auth_or_all(&meta, BlockchainAdminPerm::Get, BlockchainPerm::Get, org_id)
-            .await?
-    } else {
-        read.auth_all(&meta, BlockchainAdminPerm::Get).await?
-    };
     let blockchain = Blockchain::find_by_id(id, &mut read).await?;
 
     let node_types = BlockchainNodeType::by_blockchain_id(blockchain.id, &mut read).await?;
@@ -163,15 +158,16 @@ async fn get(
         }
     }
 
-    let node_stats = Blockchain::node_stats(org_id, &mut read).await?;
-    let node_stats = node_stats
-        .into_iter()
-        .map(|ns| (ns.blockchain_id, ns))
-        .collect();
+    let node_stats = if let Some(id) = req.org_id {
+        let org_id = id.parse().map_err(Error::ParseOrgId)?;
+        NodeStats::for_org(org_id, &authz, &mut read).await
+    } else {
+        NodeStats::for_all(&authz, &mut read).await
+    }?;
+    let node_stats = node_stats.map(|stats| stats.to_map_keep_last(|ns| (ns.blockchain_id, ns)));
 
     let blockchain =
-        api::Blockchain::from_model(blockchain, &mut networks, Some(&node_stats), &mut read)
-            .await?;
+        api::Blockchain::from_model(blockchain, &mut networks, node_stats, &mut read).await?;
 
     Ok(api::BlockchainServiceGetResponse {
         blockchain: Some(blockchain),
@@ -183,23 +179,11 @@ async fn list(
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServiceListResponse, Error> {
-    let org_id = req
-        .org_id
-        .as_deref()
-        .map(|id| id.parse().map_err(Error::ParseOrgId))
-        .transpose()?;
-
-    if let Some(org_id) = org_id {
-        read.auth_or_all(
-            &meta,
-            BlockchainAdminPerm::List,
-            BlockchainPerm::List,
-            org_id,
-        )
-        .await?
-    } else {
-        read.auth_all(&meta, BlockchainAdminPerm::List).await?
-    };
+    let authz = match read.auth_all(&meta, BlockchainAdminPerm::List).await {
+        Ok(authz) => Ok(authz),
+        Err(crate::auth::Error::Claims(_)) => read.auth_all(&meta, BlockchainPerm::List).await,
+        Err(err) => Err(err),
+    }?;
 
     // We need to combine info from two seperate sources: the database and cookbook. Since
     // cookbook is slow, the step where we call it is parallelized.
@@ -246,15 +230,16 @@ async fn list(
         }
     }
 
-    let node_stats = Blockchain::node_stats(org_id, &mut read).await?;
-    let node_stats = node_stats
-        .into_iter()
-        .map(|ns| (ns.blockchain_id, ns))
-        .collect();
+    let node_stats = if let Some(id) = req.org_id {
+        let org_id = id.parse().map_err(Error::ParseOrgId)?;
+        NodeStats::for_org(org_id, &authz, &mut read).await
+    } else {
+        NodeStats::for_all(&authz, &mut read).await
+    }?;
+    let node_stats = node_stats.map(|stats| stats.to_map_keep_last(|ns| (ns.blockchain_id, ns)));
 
     let blockchains =
-        api::Blockchain::from_models(blockchains, &mut networks, Some(&node_stats), &mut read)
-            .await?;
+        api::Blockchain::from_models(blockchains, &mut networks, node_stats, &mut read).await?;
 
     Ok(api::BlockchainServiceListResponse { blockchains })
 }
@@ -286,7 +271,7 @@ impl api::Blockchain {
     async fn from_models(
         models: Vec<Blockchain>,
         networks: &mut HashMap<BlockchainVersionId, Vec<api::BlockchainNetwork>>,
-        node_stats: Option<&HashMap<BlockchainId, NodeStats>>,
+        node_stats: Option<HashMap<BlockchainId, NodeStats>>,
         conn: &mut Conn<'_>,
     ) -> Result<Vec<Self>, Error> {
         let ids: HashSet<_> = models.iter().map(|blockchain| blockchain.id).collect();
@@ -313,6 +298,7 @@ impl api::Blockchain {
                 );
 
                 let stats = node_stats
+                    .as_ref()
                     .map(|stats| api::BlockchainStats::from_model(&model, stats))
                     .transpose()?;
 
@@ -334,7 +320,7 @@ impl api::Blockchain {
     async fn from_model(
         blockchain: Blockchain,
         networks: &mut HashMap<BlockchainVersionId, Vec<api::BlockchainNetwork>>,
-        node_stats: Option<&HashMap<BlockchainId, NodeStats>>,
+        node_stats: Option<HashMap<BlockchainId, NodeStats>>,
         conn: &mut Conn<'_>,
     ) -> Result<Self, Error> {
         let mut blockchains = Self::from_models(vec![blockchain], networks, node_stats, conn)
