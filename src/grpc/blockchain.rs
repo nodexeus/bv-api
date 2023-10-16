@@ -9,15 +9,19 @@ use tonic::{Request, Response, Status};
 use tracing::{error, warn};
 
 use crate::auth::rbac::{BlockchainAdminPerm, BlockchainPerm};
+use crate::auth::resource::NodeId;
 use crate::auth::Authorize;
 use crate::cookbook::image::Image;
 use crate::cookbook::Cookbook;
-use crate::database::{Conn, ReadConn, Transaction};
+use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::blockchain::{
-    Blockchain, BlockchainNodeType, BlockchainNodeTypeId, BlockchainProperty, BlockchainVersion,
-    BlockchainVersionId, NodeStats,
+    Blockchain, BlockchainId, BlockchainNodeType, BlockchainNodeTypeId, BlockchainProperty,
+    BlockchainVersion, BlockchainVersionId, NewBlockchainNodeType, NewProperty, NewVersion,
+    NodeStats,
 };
-use crate::models::BlockchainId;
+use crate::models::command::NewCommand;
+use crate::models::node::{Node, NodeType, NodeVersion};
+use crate::models::{Command, CommandType};
 use crate::timestamp::NanosUtc;
 
 use super::api::blockchain_service_server::BlockchainService;
@@ -37,14 +41,22 @@ pub enum Error {
     Claims(#[from] crate::auth::claims::Error),
     /// Blockchain failed to get cookbook networks for `{0:?}`: {1}
     CookbookNetworks(Image, crate::cookbook::Error),
+    /// Blockchain command failed: {0}
+    Command(#[from] crate::models::command::Error),
+    /// Blockchain command failed: {0}
+    CommandGrpc(#[from] crate::grpc::command::Error),
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
     /// Missing blockchain id. This should not happen.
     MissingId,
     /// Missing `api::Blockchain` model output. This should not happen.
     MissingModel,
+    /// Missing BlockchainVersionId in networks. This should not happen.
+    MissingNetworksVersion,
     /// Missing blockchain node type. This should not happen.
     MissingNodeType,
+    /// Blockchain node error: {0}
+    Node(#[from] crate::models::node::Error),
     /// Unable to cast node count from i64 to u64: {0}
     NodeCount(std::num::TryFromIntError),
     /// Unable to cast active node count from i64 to u64: {0}
@@ -55,6 +67,10 @@ pub enum Error {
     NodeCountProvisioning(std::num::TryFromIntError),
     /// Unable to cast failed node count from i64 to u64: {0}
     NodeCountFailed(std::num::TryFromIntError),
+    /// The node type already exists.
+    NodeTypeExists,
+    /// Blockchain node type error: {0}
+    NodeType(#[from] crate::models::node::node_type::Error),
     /// Failed to parse BlockchainId: {0}
     ParseId(uuid::Error),
     /// Failed to parse OrgId: {0}
@@ -74,6 +90,7 @@ impl From<Error> for Status {
             | Diesel(_)
             | MissingId
             | MissingModel
+            | MissingNetworksVersion
             | MissingNodeType
             | NodeCount(_)
             | NodeCountActive(_)
@@ -81,13 +98,18 @@ impl From<Error> for Status {
             | NodeCountProvisioning(_)
             | NodeCountFailed(_)
             | UnknownNodeType(_) => Status::internal("Internal error."),
+            NodeTypeExists => Status::already_exists("Already exists."),
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             Auth(err) => err.into(),
-            Claims(err) => err.into(),
             Blockchain(err) => err.into(),
             BlockchainNodeType(err) => err.into(),
             BlockchainVersion(err) => err.into(),
+            Claims(err) => err.into(),
+            Command(err) => err.into(),
+            CommandGrpc(err) => err.into(),
+            Node(err) => err.into(),
+            NodeType(err) => err.into(),
             Property(err) => err.into(),
         }
     }
@@ -110,6 +132,24 @@ impl BlockchainService for Grpc {
         let (meta, _, req) = req.into_parts();
         self.read(|read| list(req, meta, read).scope_boxed()).await
     }
+
+    async fn add_node_type(
+        &self,
+        req: Request<api::BlockchainServiceAddNodeTypeRequest>,
+    ) -> Result<Response<api::BlockchainServiceAddNodeTypeResponse>, Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| add_node_type(req, meta, write).scope_boxed())
+            .await
+    }
+
+    async fn add_version(
+        &self,
+        req: Request<api::BlockchainServiceAddVersionRequest>,
+    ) -> Result<Response<api::BlockchainServiceAddVersionResponse>, Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| add_version(req, meta, write).scope_boxed())
+            .await
+    }
 }
 
 async fn get(
@@ -125,38 +165,7 @@ async fn get(
 
     let id = req.id.parse().map_err(Error::ParseId)?;
     let blockchain = Blockchain::find_by_id(id, &mut read).await?;
-
-    let node_types = BlockchainNodeType::by_blockchain_id(blockchain.id, &mut read).await?;
-    let node_types = node_types.to_map_keep_last(|nt| (nt.id, nt));
-
-    let versions = BlockchainVersion::by_blockchain_id(blockchain.id, &mut read).await?;
-    let version_ids = versions
-        .into_iter()
-        .map(|version| {
-            let node_type = node_types
-                .get(&version.blockchain_node_type_id)
-                .map(|node_type| node_type.node_type)
-                .ok_or(Error::MissingNodeType)?;
-            Ok((
-                version.id,
-                Image::new(&blockchain.name, node_type, version.version.into()),
-            ))
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-
-    let network_futs = version_ids
-        .iter()
-        .map(|(version_id, image)| cookbook_networks(&read.ctx.cookbook, image, *version_id));
-
-    let mut networks: HashMap<BlockchainVersionId, Vec<api::BlockchainNetwork>> = HashMap::new();
-    for result in join_all(network_futs).await {
-        match result {
-            Ok((version_id, nets)) => {
-                networks.entry(version_id).or_default().extend(nets);
-            }
-            Err(err) => warn!("Failed to get cookbook networks: {err}"),
-        }
-    }
+    let mut networks = blockchain_networks([&blockchain], &read.ctx.cookbook, &mut read).await?;
 
     let node_stats = if let Some(id) = req.org_id {
         let org_id = id.parse().map_err(Error::ParseOrgId)?;
@@ -185,50 +194,9 @@ async fn list(
         Err(err) => Err(err),
     }?;
 
-    // We need to combine info from two seperate sources: the database and cookbook. Since
-    // cookbook is slow, the step where we call it is parallelized.
-
-    // We query the necessary blockchains from the database.
     let blockchains = Blockchain::find_all(&mut read).await?;
-    let blockchain_ids: HashSet<_> = blockchains.iter().map(|b| b.id).collect();
-    let blockchain_map = blockchains.iter().to_map_keep_last(|b| (b.id, b));
-
-    // Now we need to combine this info with the networks that are stored in the cookbook
-    // service. Since we want to do this in parallel, `network_futs` will contain a number of
-    // futures that each resolve to a list of networks for that blockchain version.
-    let node_types =
-        BlockchainNodeType::by_blockchain_ids(blockchain_ids.clone(), &mut read).await?;
-    let node_types = node_types.to_map_keep_last(|nt| (nt.id, nt));
-
-    let versions = BlockchainVersion::by_blockchain_ids(blockchain_ids, &mut read).await?;
-    let version_ids = versions
-        .iter()
-        .map(|version| {
-            let blockchain = blockchain_map
-                .get(&version.blockchain_id)
-                .ok_or(Error::MissingId)?;
-            let node_type = node_types
-                .get(&version.blockchain_node_type_id)
-                .ok_or(Error::MissingNodeType)?
-                .node_type;
-            let image = Image::new(&blockchain.name, node_type, version.version.clone().into());
-            Ok((version.id, image))
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-
-    let network_futs = version_ids
-        .iter()
-        .map(|(version_id, image)| cookbook_networks(&read.ctx.cookbook, image, *version_id));
-
-    let mut networks: HashMap<BlockchainVersionId, Vec<api::BlockchainNetwork>> = HashMap::new();
-    for result in join_all(network_futs).await {
-        match result {
-            Ok((version_id, nets)) => {
-                networks.entry(version_id).or_default().extend(nets);
-            }
-            Err(err) => warn!("Failed to get cookbook networks: {err}"),
-        }
-    }
+    let blockchain_refs = blockchains.iter().collect::<Vec<_>>();
+    let mut networks = blockchain_networks(blockchain_refs, &read.ctx.cookbook, &mut read).await?;
 
     let node_stats = if let Some(id) = req.org_id {
         let org_id = id.parse().map_err(Error::ParseOrgId)?;
@@ -244,6 +212,171 @@ async fn list(
     Ok(api::BlockchainServiceListResponse { blockchains })
 }
 
+/// Add a new `NodeType` to an existing blockchain.
+async fn add_node_type(
+    req: api::BlockchainServiceAddNodeTypeRequest,
+    meta: MetadataMap,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::BlockchainServiceAddNodeTypeResponse, Error> {
+    write
+        .auth_all(&meta, BlockchainAdminPerm::AddNodeType)
+        .await?;
+
+    let id = req.id.parse().map_err(Error::ParseId)?;
+    let node_type = api::NodeType::try_from(req.node_type)
+        .map(NodeType::from)
+        .map_err(Error::UnknownNodeType)?;
+
+    let node_types = BlockchainNodeType::by_blockchain_id(id, &mut write).await?;
+    let node_types: HashSet<_> = node_types.iter().map(|nt| nt.node_type).collect();
+    if node_types.contains(&node_type) {
+        return Err(Error::NodeTypeExists);
+    }
+
+    NewBlockchainNodeType::new(id, node_type, req.description)
+        .create(&mut write)
+        .await?;
+
+    Ok(api::BlockchainServiceAddNodeTypeResponse {})
+}
+
+/// Add a new blockchain version for some existing `node_type`.
+///
+/// This will trigger `UpgradeNode` commands for older nodes of this type.
+///
+/// The transaction will fail if it can't retrieve cookbook networks from:
+/// `{blockchain}/{node_type}/{version}/babel.rhai`
+async fn add_version(
+    req: api::BlockchainServiceAddVersionRequest,
+    meta: MetadataMap,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::BlockchainServiceAddVersionResponse, Error> {
+    write
+        .auth_all(&meta, BlockchainAdminPerm::AddVersion)
+        .await?;
+
+    let id = req.id.parse().map_err(Error::ParseId)?;
+    let blockchain = Blockchain::find_by_id(id, &mut write).await?;
+    let node_type = api::NodeType::try_from(req.node_type)
+        .map(NodeType::from)
+        .map_err(Error::UnknownNodeType)?;
+
+    let node_version = NodeVersion::new(&req.version)?;
+    let new_version =
+        NewVersion::new(id, node_type, &node_version, req.description, &mut write).await?;
+    let version = new_version.create(&mut write).await?;
+
+    let image = Image::new(&blockchain.name, node_type, node_version.clone());
+    let (_, networks) = cookbook_networks(&write.ctx.cookbook, &image, version.id).await?;
+
+    let properties = req
+        .properties
+        .iter()
+        .map(|property| NewProperty::new(&version, property.clone()))
+        .collect::<Result<Vec<_>, _>>()?;
+    NewProperty::bulk_create(properties, &mut write).await?;
+
+    let nodes = Node::find_by_type(id, node_type, &mut write).await?;
+    for node in nodes {
+        if let Some(new_command) = upgrade_node(&node, &node_version)? {
+            let command = new_command.create(&mut write).await?;
+            write.mqtt(upgrade_command(node.id, command, image.clone()));
+        }
+    }
+
+    let version =
+        BlockchainVersion::find(blockchain.id, node_type, &node_version, &mut write).await?;
+    let properties = BlockchainProperty::by_version_id(version.id, &mut write).await?;
+
+    Ok(api::BlockchainServiceAddVersionResponse {
+        version: Some(api::BlockchainVersion::from_model(
+            version, networks, properties,
+        )),
+    })
+}
+
+fn upgrade_node<'n>(
+    node: &'n Node,
+    node_version: &'n NodeVersion,
+) -> Result<Option<NewCommand<'n>>, Error> {
+    if node_version.semver()? <= node.version.semver()? {
+        return Ok(None);
+    }
+
+    Ok(Some(NewCommand {
+        host_id: node.host_id,
+        cmd: CommandType::UpgradeNode,
+        sub_cmd: None,
+        node_id: Some(node.id),
+    }))
+}
+
+fn upgrade_command(node_id: NodeId, command: Command, image: Image) -> api::Command {
+    api::Command {
+        id: command.id.to_string(),
+        response: command.response,
+        exit_code: command.exit_status,
+        acked_at: command.acked_at.map(NanosUtc::from).map(Into::into),
+        command: Some(api::command::Command::Node(api::NodeCommand {
+            node_id: node_id.to_string(),
+            host_id: command.host_id.to_string(),
+            command: Some(api::node_command::Command::Upgrade(api::NodeUpgrade {
+                image: Some(api::ContainerImage::from(image)),
+            })),
+            api_command_id: command.id.to_string(),
+            created_at: Some(NanosUtc::from(command.created_at).into()),
+        })),
+    }
+}
+
+/// For each blockchain version, retrieve a list of networks from cookbook.
+async fn blockchain_networks<'b, B>(
+    blockchains: B,
+    cookbook: &Cookbook,
+    conn: &mut Conn<'_>,
+) -> Result<HashMap<BlockchainVersionId, Vec<api::BlockchainNetwork>>, Error>
+where
+    B: AsRef<[&'b Blockchain]> + Send,
+{
+    let chain_ids: HashSet<_> = blockchains.as_ref().iter().map(|b| b.id).collect();
+    let chain_map = blockchains.as_ref().iter().to_map_keep_last(|b| (b.id, b));
+
+    let node_types = BlockchainNodeType::by_blockchain_ids(chain_ids.clone(), conn).await?;
+    let node_types = node_types.to_map_keep_last(|nt| (nt.id, nt));
+
+    let versions = BlockchainVersion::by_blockchain_ids(chain_ids, conn).await?;
+    let version_ids = versions
+        .iter()
+        .map(|row| {
+            let blockchain = chain_map.get(&row.blockchain_id).ok_or(Error::MissingId)?;
+            let node_type = node_types
+                .get(&row.blockchain_node_type_id)
+                .ok_or(Error::MissingNodeType)?
+                .node_type;
+            let node_version = NodeVersion::new(&row.version)?;
+            let image = Image::new(&blockchain.name, node_type, node_version);
+            Ok((row.id, image))
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    let network_futs = version_ids
+        .iter()
+        .map(|(version_id, image)| cookbook_networks(cookbook, image, *version_id));
+
+    let mut networks: HashMap<_, Vec<_>> = HashMap::new();
+    for result in join_all(network_futs).await {
+        match result {
+            Ok((version_id, nets)) => {
+                networks.entry(version_id).or_default().extend(nets);
+            }
+            Err(err) => warn!("Failed to get cookbook networks: {err}"),
+        }
+    }
+
+    Ok(networks)
+}
+
+/// Retrieve a list of networks from cookbook for some `image`.
 async fn cookbook_networks(
     cookbook: &Cookbook,
     image: &Image,
@@ -276,15 +409,14 @@ impl api::Blockchain {
     ) -> Result<Vec<Self>, Error> {
         let ids: HashSet<_> = models.iter().map(|blockchain| blockchain.id).collect();
 
-        let mut node_types = BlockchainNodeType::by_blockchain_ids(ids.clone(), conn)
-            .await?
-            .to_map_keep_all(|node_type| (node_type.blockchain_id, node_type));
-        let mut versions = BlockchainVersion::by_blockchain_ids(ids.clone(), conn)
-            .await?
-            .to_map_keep_all(|version| (version.blockchain_node_type_id, version));
-        let mut properties = BlockchainProperty::by_blockchain_ids(ids, conn)
-            .await?
-            .to_map_keep_all(|property| (property.blockchain_version_id, property));
+        let node_types = BlockchainNodeType::by_blockchain_ids(ids.clone(), conn).await?;
+        let mut node_types = node_types.to_map_keep_all(|nt| (nt.blockchain_id, nt));
+
+        let versions = BlockchainVersion::by_blockchain_ids(ids.clone(), conn).await?;
+        let mut versions = versions.to_map_keep_all(|v| (v.blockchain_node_type_id, v));
+
+        let properties = BlockchainProperty::by_blockchain_ids(ids, conn).await?;
+        let mut properties = properties.to_map_keep_all(|p| (p.blockchain_version_id, p));
 
         models
             .into_iter()
@@ -358,7 +490,7 @@ impl api::BlockchainNodeType {
     ) -> Self {
         api::BlockchainNodeType {
             id: node_type.id.to_string(),
-            node_type: api::NodeType::from_model(node_type.node_type) as i32,
+            node_type: api::NodeType::from(node_type.node_type).into(),
             versions: api::BlockchainVersion::from_models(versions, networks, properties),
             description: node_type.description,
             created_at: Some(NanosUtc::from(node_type.created_at).into()),
@@ -399,25 +531,8 @@ impl api::BlockchainVersion {
             created_at: Some(NanosUtc::from(version.created_at).into()),
             updated_at: Some(NanosUtc::from(version.updated_at).into()),
             networks,
-            properties: properties
-                .into_iter()
-                .map(api::BlockchainProperty::from_model)
-                .collect(),
+            properties: properties.into_iter().map(Into::into).collect(),
         }
-    }
-}
-
-impl api::BlockchainProperty {
-    fn from_model(model: BlockchainProperty) -> Self {
-        let mut prop = api::BlockchainProperty {
-            name: model.name,
-            display_name: model.display_name,
-            default: model.default,
-            ui_type: 0, // We use the setter to set this field for type-safety
-            required: model.required,
-        };
-        prop.set_ui_type(api::UiType::from(model.ui_type));
-        prop
     }
 }
 

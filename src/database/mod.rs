@@ -15,7 +15,7 @@ use displaydoc::Display;
 use futures_util::future::BoxFuture;
 use futures_util::FutureExt;
 use rustls::client::{ServerCertVerified, ServerCertVerifier, WebPkiVerifier};
-use rustls::{Certificate, ClientConfig, RootCertStore, ServerName};
+use rustls::{Certificate, CertificateError, ClientConfig, RootCertStore, ServerName};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio_postgres_rustls::MakeRustlsConnect;
@@ -313,7 +313,7 @@ impl ServerCertVerifier for DontVerifyHostName {
         ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
-        let verified = self.pki.verify_server_cert(
+        let result = self.pki.verify_server_cert(
             end_entity,
             intermediates,
             server_name,
@@ -322,11 +322,17 @@ impl ServerCertVerifier for DontVerifyHostName {
             now,
         );
 
-        // TODO: fix error handling
-        verified.or_else(|err| {
-            warn!("Failed to verify database server certificate: {err}");
-            Ok(ServerCertVerified::assertion())
-        })
+        match result {
+            Ok(verified) => Ok(verified),
+            Err(rustls::Error::InvalidCertificate(CertificateError::UnknownIssuer)) => {
+                Ok(ServerCertVerified::assertion())
+            }
+            Err(err) => {
+                // TODO: return an error here when this warning no longer shows in logs
+                warn!("Failed to verify database server certificate: {err}");
+                Ok(ServerCertVerified::assertion())
+            }
+        }
     }
 }
 

@@ -42,20 +42,16 @@ impl Image {
             node_version,
         }
     }
-
-    pub fn node_version(&self) -> NodeVersion {
-        self.node_version.to_string().into()
-    }
 }
 
 impl From<api::ConfigIdentifier> for Image {
-    fn from(api: api::ConfigIdentifier) -> Self {
-        let node_type = api.node_type().into_model();
+    fn from(image: api::ConfigIdentifier) -> Self {
+        let node_type = image.node_type().into();
 
         Image {
-            protocol: api.protocol,
+            protocol: image.protocol,
             node_type,
-            node_version: api.node_version.into(),
+            node_version: image.node_version.into(),
         }
     }
 }
@@ -64,7 +60,29 @@ impl From<Image> for api::ConfigIdentifier {
     fn from(image: Image) -> Self {
         api::ConfigIdentifier {
             protocol: image.protocol,
-            node_type: api::NodeType::from_model(image.node_type) as i32,
+            node_type: api::NodeType::from(image.node_type).into(),
+            node_version: image.node_version.into(),
+        }
+    }
+}
+
+impl From<api::ContainerImage> for Image {
+    fn from(image: api::ContainerImage) -> Self {
+        let node_type = image.node_type().into();
+
+        Image {
+            protocol: image.protocol,
+            node_type,
+            node_version: image.node_version.into(),
+        }
+    }
+}
+
+impl From<Image> for api::ContainerImage {
+    fn from(image: Image) -> Self {
+        api::ContainerImage {
+            protocol: image.protocol,
+            node_type: api::NodeType::from(image.node_type).into(),
             node_version: image.node_version.into(),
         }
     }
@@ -83,13 +101,13 @@ impl api::ConfigIdentifier {
         };
 
         let node_type = node_type
-            .parse()
-            .map(api::NodeType::from_model)
+            .parse::<NodeType>()
+            .map(api::NodeType::from)
             .map_err(Error::ParseNodeType)?;
 
         Ok(api::ConfigIdentifier {
             protocol: protocol.to_string(),
-            node_type: node_type as i32,
+            node_type: node_type.into(),
             node_version: node_version.to_string(),
         })
     }

@@ -5,17 +5,31 @@ use derive_more::{AsRef, Deref, Display, From, Into};
 use diesel_derive_enum::DbEnum;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
+use semver::Version;
 use thiserror::Error;
+use tonic::Status;
 
 use crate::grpc::api;
 use crate::models::schema::sql_types;
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
+    /// Failed to parse semantic Version: {0}
+    ParseVersion(semver::Error),
     /// Unknown NodeType: {0}
     UnknownNodeType(String),
     /// Unknown NodeType value: {0}
     UnknownNodeTypeValue(i32),
+}
+
+impl From<Error> for Status {
+    fn from(err: Error) -> Self {
+        use Error::*;
+        match err {
+            UnknownNodeType(_) | UnknownNodeTypeValue(_) => Status::internal("Internal error."),
+            ParseVersion(_) => Status::invalid_argument("version"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Display, DieselNewType, AsRef, Deref, From, Into)]
@@ -23,6 +37,19 @@ pub struct NodeNetwork(String);
 
 #[derive(Clone, Debug, Display, DieselNewType, AsRef, Deref, From, Into)]
 pub struct NodeVersion(String);
+
+impl NodeVersion {
+    pub fn new(version: &str) -> Result<Self, Error> {
+        version
+            .parse::<Version>()
+            .map(|version| Self(version.to_string().to_lowercase()))
+            .map_err(Error::ParseVersion)
+    }
+
+    pub fn semver(&self) -> Result<Version, Error> {
+        self.0.parse().map_err(Error::ParseVersion)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumNodeType"]
@@ -40,6 +67,46 @@ pub enum NodeType {
     Node = 10,
     FullNode = 11,
     LightNode = 12,
+}
+
+impl From<api::NodeType> for NodeType {
+    fn from(api: api::NodeType) -> Self {
+        match api {
+            api::NodeType::Unspecified => NodeType::Unknown,
+            api::NodeType::Miner => NodeType::Miner,
+            api::NodeType::Etl => NodeType::Etl,
+            api::NodeType::Validator => NodeType::Validator,
+            api::NodeType::Api => NodeType::Api,
+            api::NodeType::Oracle => NodeType::Oracle,
+            api::NodeType::Relay => NodeType::Relay,
+            api::NodeType::Execution => NodeType::Execution,
+            api::NodeType::Beacon => NodeType::Beacon,
+            api::NodeType::Mevboost => NodeType::MevBoost,
+            api::NodeType::Node => NodeType::Node,
+            api::NodeType::Fullnode => NodeType::FullNode,
+            api::NodeType::Lightnode => NodeType::LightNode,
+        }
+    }
+}
+
+impl From<NodeType> for api::NodeType {
+    fn from(ty: NodeType) -> Self {
+        match ty {
+            NodeType::Unknown => api::NodeType::Unspecified,
+            NodeType::Miner => api::NodeType::Miner,
+            NodeType::Etl => api::NodeType::Etl,
+            NodeType::Validator => api::NodeType::Validator,
+            NodeType::Api => api::NodeType::Api,
+            NodeType::Oracle => api::NodeType::Oracle,
+            NodeType::Relay => api::NodeType::Relay,
+            NodeType::Execution => api::NodeType::Execution,
+            NodeType::Beacon => api::NodeType::Beacon,
+            NodeType::MevBoost => api::NodeType::Mevboost,
+            NodeType::Node => api::NodeType::Node,
+            NodeType::FullNode => api::NodeType::Fullnode,
+            NodeType::LightNode => api::NodeType::Lightnode,
+        }
+    }
 }
 
 impl fmt::Display for NodeType {
@@ -82,87 +149,6 @@ impl FromStr for NodeType {
             "fullnode" => Ok(Self::FullNode),
             "lightnode" => Ok(Self::LightNode),
             _ => Err(Error::UnknownNodeType(s.into())),
-        }
-    }
-}
-
-impl TryFrom<i32> for NodeType {
-    type Error = Error;
-
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(NodeType::Unknown),
-            1 => Ok(NodeType::Miner),
-            2 => Ok(NodeType::Etl),
-            3 => Ok(NodeType::Validator),
-            4 => Ok(NodeType::Api),
-            5 => Ok(NodeType::Oracle),
-            6 => Ok(NodeType::Relay),
-            7 => Ok(NodeType::Execution),
-            8 => Ok(NodeType::Beacon),
-            9 => Ok(NodeType::MevBoost),
-            10 => Ok(NodeType::Node),
-            11 => Ok(NodeType::FullNode),
-            12 => Ok(NodeType::LightNode),
-            _ => Err(Error::UnknownNodeTypeValue(value)),
-        }
-    }
-}
-
-impl From<NodeType> for i32 {
-    fn from(value: NodeType) -> Self {
-        match value {
-            NodeType::Unknown => 0,
-            NodeType::Miner => 1,
-            NodeType::Etl => 2,
-            NodeType::Validator => 3,
-            NodeType::Api => 4,
-            NodeType::Oracle => 5,
-            NodeType::Relay => 6,
-            NodeType::Execution => 7,
-            NodeType::Beacon => 8,
-            NodeType::MevBoost => 9,
-            NodeType::Node => 10,
-            NodeType::FullNode => 11,
-            NodeType::LightNode => 12,
-        }
-    }
-}
-
-impl api::NodeType {
-    pub const fn from_model(model: NodeType) -> Self {
-        match model {
-            NodeType::Unknown => Self::Unspecified,
-            NodeType::Miner => Self::Miner,
-            NodeType::Etl => Self::Etl,
-            NodeType::Validator => Self::Validator,
-            NodeType::Api => Self::Api,
-            NodeType::Oracle => Self::Oracle,
-            NodeType::Relay => Self::Relay,
-            NodeType::Execution => Self::Execution,
-            NodeType::Beacon => Self::Beacon,
-            NodeType::MevBoost => Self::Mevboost,
-            NodeType::Node => Self::Node,
-            NodeType::FullNode => Self::Fullnode,
-            NodeType::LightNode => Self::Lightnode,
-        }
-    }
-
-    pub const fn into_model(self) -> NodeType {
-        match self {
-            Self::Unspecified => NodeType::Unknown,
-            Self::Miner => NodeType::Miner,
-            Self::Etl => NodeType::Etl,
-            Self::Validator => NodeType::Validator,
-            Self::Api => NodeType::Api,
-            Self::Oracle => NodeType::Oracle,
-            Self::Relay => NodeType::Relay,
-            Self::Execution => NodeType::Execution,
-            Self::Beacon => NodeType::Beacon,
-            Self::Mevboost => NodeType::MevBoost,
-            Self::Node => NodeType::Node,
-            Self::Fullnode => NodeType::FullNode,
-            Self::Lightnode => NodeType::LightNode,
         }
     }
 }

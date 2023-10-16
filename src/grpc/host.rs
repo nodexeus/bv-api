@@ -358,7 +358,7 @@ async fn regions(
         .map_err(Error::ParseBlockchainId)?;
     let blockchain = Blockchain::find_by_id(blockchain_id, &mut read).await?;
 
-    let node_type = req.node_type().into_model();
+    let node_type = req.node_type().into();
     let host_type = req.host_type().into_model();
 
     let image = Image::new(&blockchain.name, node_type, req.version.into());

@@ -14,7 +14,7 @@ use crate::database::Conn;
 use crate::grpc::api;
 use crate::models::schema::{blockchain_properties, sql_types};
 
-use super::{BlockchainId, BlockchainNodeTypeId, BlockchainVersionId};
+use super::{BlockchainId, BlockchainNodeTypeId, BlockchainVersion, BlockchainVersionId};
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
@@ -53,7 +53,7 @@ impl From<Error> for Status {
 #[derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, DieselNewType, Deref, From, FromStr)]
 pub struct BlockchainPropertyId(Uuid);
 
-#[derive(Clone, Debug, Insertable, Queryable)]
+#[derive(Clone, Debug, Queryable)]
 #[diesel(table_name = blockchain_properties)]
 pub struct BlockchainProperty {
     pub id: BlockchainPropertyId,
@@ -69,15 +69,15 @@ pub struct BlockchainProperty {
 }
 
 impl BlockchainProperty {
-    pub async fn bulk_create(
-        properties: Vec<Self>,
+    pub async fn by_property_ids(
+        property_ids: HashSet<BlockchainPropertyId>,
         conn: &mut Conn<'_>,
     ) -> Result<Vec<Self>, Error> {
-        diesel::insert_into(blockchain_properties::table)
-            .values(properties)
+        blockchain_properties::table
+            .filter(blockchain_properties::id.eq_any(property_ids.iter()))
             .get_results(conn)
             .await
-            .map_err(Error::BulkCreate)
+            .map_err(|err| Error::ByPropertyIds(property_ids, err))
     }
 
     pub async fn by_blockchain_ids(
@@ -89,17 +89,6 @@ impl BlockchainProperty {
             .get_results(conn)
             .await
             .map_err(|err| Error::ByBlockchainIds(blockchain_ids, err))
-    }
-
-    pub async fn by_property_ids(
-        property_ids: HashSet<BlockchainPropertyId>,
-        conn: &mut Conn<'_>,
-    ) -> Result<Vec<Self>, Error> {
-        blockchain_properties::table
-            .filter(blockchain_properties::id.eq_any(property_ids.iter()))
-            .get_results(conn)
-            .await
-            .map_err(|err| Error::ByPropertyIds(property_ids, err))
     }
 
     pub async fn by_version_id(
@@ -136,6 +125,66 @@ impl BlockchainProperty {
             .map_err(Error::IdToName)?;
 
         Ok(props.into_iter().map(|b| (b.id, b.name)).collect())
+    }
+}
+
+impl From<BlockchainProperty> for api::BlockchainProperty {
+    fn from(property: BlockchainProperty) -> Self {
+        api::BlockchainProperty {
+            name: property.name,
+            display_name: property.display_name,
+            default: property.default,
+            ui_type: api::UiType::from(property.ui_type).into(),
+            required: property.required,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Insertable)]
+#[diesel(table_name = blockchain_properties)]
+pub struct NewProperty {
+    pub blockchain_id: BlockchainId,
+    pub name: String,
+    pub default: Option<String>,
+    pub ui_type: UiType,
+    pub disabled: bool,
+    pub required: bool,
+    pub blockchain_node_type_id: BlockchainNodeTypeId,
+    pub blockchain_version_id: BlockchainVersionId,
+    pub display_name: String,
+}
+
+impl NewProperty {
+    pub fn new(
+        version: &BlockchainVersion,
+        property: api::BlockchainProperty,
+    ) -> Result<Self, Error> {
+        let ui_type = api::UiType::try_from(property.ui_type)
+            .map_err(Error::UnknownUiType)
+            .and_then(TryInto::try_into)?;
+
+        Ok(NewProperty {
+            blockchain_id: version.blockchain_id,
+            name: property.name,
+            default: property.default,
+            ui_type,
+            disabled: false,
+            required: property.required,
+            blockchain_node_type_id: version.blockchain_node_type_id,
+            blockchain_version_id: version.id,
+            display_name: property.display_name,
+        })
+    }
+
+    pub async fn bulk_create(
+        properties: Vec<Self>,
+        conn: &mut Conn<'_>,
+    ) -> Result<Vec<BlockchainProperty>, Error> {
+        diesel::insert_into(blockchain_properties::table)
+            .values(properties)
+            .get_results(conn)
+            .await
+            .map_err(Error::BulkCreate)
     }
 }
 

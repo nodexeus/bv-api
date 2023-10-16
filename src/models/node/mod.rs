@@ -41,7 +41,7 @@ use super::api_key::ApiResource;
 use super::blockchain::{Blockchain, BlockchainId};
 use super::host::{Host, HostRequirements, HostType};
 use super::schema::nodes;
-use super::{string_to_array, IpAddress, Paginate, Region, RegionId};
+use super::{IpAddress, Paginate, Region, RegionId};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -65,10 +65,10 @@ pub enum Error {
     FindByIds(HashSet<NodeId>, diesel::result::Error),
     /// Failed to find nodes by org id {0}: {1}
     FindByOrgId(OrgId, diesel::result::Error),
+    /// Failed to find nodes for blockchain id `{0}` and node type `{1}`: {2}
+    FindByType(BlockchainId, NodeType, diesel::result::Error),
     /// Failed to find node ids `{0:?}`: {1}
     FindExistingIds(HashSet<NodeId>, diesel::result::Error),
-    /// Failed to find outdated nodes: {0}
-    FindOutdated(diesel::result::Error),
     /// Host error for node: {0}
     Host(#[from] super::host::Error),
     /// Only available host candidate failed.
@@ -113,7 +113,7 @@ impl From<Error> for Status {
             Delete(_, NotFound)
             | FindById(_, NotFound)
             | FindByIds(_, NotFound)
-            | FindOutdated(NotFound) => Status::not_found("Not found."),
+            | FindByType(_, _, NotFound) => Status::not_found("Not found."),
             NoMatchingHost => Status::resource_exhausted("No matching host."),
             _ => Status::internal("Internal error."),
         }
@@ -198,6 +198,20 @@ impl Node {
             .get_results(conn)
             .await
             .map_err(|err| Error::FindByOrgId(org_id, err))
+    }
+
+    pub async fn find_by_type(
+        blockchain_id: BlockchainId,
+        node_type: NodeType,
+        conn: &mut Conn<'_>,
+    ) -> Result<Vec<Self>, Error> {
+        nodes::table
+            .filter(nodes::blockchain_id.eq(blockchain_id))
+            .filter(nodes::node_type.eq(node_type))
+            .filter(nodes::self_update)
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::FindByType(blockchain_id, node_type, err))
     }
 
     /// Filters out any node ids that do no exist.
@@ -369,23 +383,6 @@ impl Node {
 
     pub fn deny_ips(&self) -> Result<Vec<FilteredIpAddr>, Error> {
         Self::filtered_ip_addrs(self.deny_ips.clone())
-    }
-
-    /// Returns all nodes that are ready to be upgraded for this variant of a blockchain.
-    pub async fn outdated(
-        blockchain_id: BlockchainId,
-        version: &str,
-        node_type: NodeType,
-        conn: &mut Conn<'_>,
-    ) -> Result<Vec<Self>, Error> {
-        nodes::table
-            .filter(nodes::self_update)
-            .filter(nodes::node_type.eq(node_type))
-            .filter(string_to_array(nodes::version, ".").lt(string_to_array(&version, ".")))
-            .filter(nodes::blockchain_id.eq(blockchain_id))
-            .get_results(conn)
-            .await
-            .map_err(Error::FindOutdated)
     }
 
     fn filtered_ip_addrs(value: serde_json::Value) -> Result<Vec<FilteredIpAddr>, Error> {

@@ -32,7 +32,9 @@ pub const HOST_2: &str = "Host-2";
 
 pub const BLOCKCHAIN_ID: &str = "ab5d8cfc-77b1-4265-9fee-ba71ba9de092";
 pub const BLOCKCHAIN_NAME: &str = "Ethereum";
+pub const BLOCKCHAIN_NODE_TYPE: &str = "validator";
 pub const BLOCKCHAIN_NODE_TYPE_ID: &str = "fb56b151-443b-491a-a2a5-50fc12343a91";
+pub const BLOCKCHAIN_VERSION: &str = "3.3.0";
 pub const BLOCKCHAIN_VERSION_ID: &str = "a69e7195-8a78-4e3a-a79e-4ac89edf1d68";
 pub const BLOCKCHAIN_PROPERTY_KEYSTORE: &str = "5972a35a-333c-421f-ab64-a77f4ae17533";
 pub const BLOCKCHAIN_PROPERTY_SELF_HOSTED: &str = "a989ad08-b455-4a57-9fe0-696405947e48";
@@ -79,8 +81,8 @@ impl Seed {
 async fn create_blockchains(conn: &mut Conn<'_>) -> Blockchain {
     let queries = [
         format!("INSERT INTO blockchains (id, name) VALUES ('{BLOCKCHAIN_ID}','{BLOCKCHAIN_NAME}');"),
-        format!("INSERT INTO blockchain_node_types (id, blockchain_id, node_type) VALUES ('{BLOCKCHAIN_NODE_TYPE_ID}', '{BLOCKCHAIN_ID}', 'validator');"),
-        format!("INSERT INTO blockchain_versions (id, blockchain_id, blockchain_node_type_id, version) VALUES ('{BLOCKCHAIN_VERSION_ID}', '{BLOCKCHAIN_ID}', '{BLOCKCHAIN_NODE_TYPE_ID}', '3.3.0');"),
+        format!("INSERT INTO blockchain_node_types (id, blockchain_id, node_type) VALUES ('{BLOCKCHAIN_NODE_TYPE_ID}', '{BLOCKCHAIN_ID}', '{BLOCKCHAIN_NODE_TYPE}');"),
+        format!("INSERT INTO blockchain_versions (id, blockchain_id, blockchain_node_type_id, version) VALUES ('{BLOCKCHAIN_VERSION_ID}', '{BLOCKCHAIN_ID}', '{BLOCKCHAIN_NODE_TYPE_ID}', '{BLOCKCHAIN_VERSION}');"),
         format!("INSERT INTO blockchain_properties VALUES ('{BLOCKCHAIN_PROPERTY_KEYSTORE}', '{BLOCKCHAIN_ID}', 'keystore-file', NULL, 'file_upload', FALSE, FALSE, '{BLOCKCHAIN_NODE_TYPE_ID}', '{BLOCKCHAIN_VERSION_ID}', 'Keystore file contents');"),
         format!("INSERT INTO blockchain_properties VALUES ('{BLOCKCHAIN_PROPERTY_SELF_HOSTED}', '{BLOCKCHAIN_ID}', 'self-hosted', NULL, 'switch', FALSE, FALSE, '{BLOCKCHAIN_NODE_TYPE_ID}', '{BLOCKCHAIN_VERSION_ID}', 'Is this noderoni self hosted?');"),
     ];
@@ -293,7 +295,10 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         insert into role_permissions (role, permission)
         values
         ('blockjoy-admin', 'auth-admin-list-permissions'),
+        ('blockjoy-admin', 'blockchain-admin-get'),
         ('blockjoy-admin', 'blockchain-admin-list'),
+        ('blockjoy-admin', 'blockchain-admin-add-node-type'),
+        ('blockjoy-admin', 'blockchain-admin-add-version'),
         ('blockjoy-admin', 'node-admin-create'),
         ('blockjoy-admin', 'node-admin-delete'),
         ('blockjoy-admin', 'node-admin-get'),

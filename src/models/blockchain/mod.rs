@@ -1,11 +1,11 @@
 pub mod node_type;
-pub use node_type::{BlockchainNodeType, BlockchainNodeTypeId};
+pub use node_type::{BlockchainNodeType, BlockchainNodeTypeId, NewBlockchainNodeType};
 
 pub mod property;
-pub use property::{BlockchainProperty, BlockchainPropertyId, UiType};
+pub use property::{BlockchainProperty, BlockchainPropertyId, NewProperty, UiType};
 
 pub mod version;
-pub use version::{BlockchainVersion, BlockchainVersionId};
+pub use version::{BlockchainVersion, BlockchainVersionId, NewVersion};
 
 use std::collections::HashSet;
 

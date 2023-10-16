@@ -74,6 +74,8 @@ define_perms! {
     }
 
     BlockchainAdmin => {
+        AddNodeType,
+        AddVersion,
         Get,
         List,
     }
