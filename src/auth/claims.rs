@@ -316,6 +316,14 @@ impl Granted {
         self.contains(&perm.into())
     }
 
+    pub fn has_any_perm<I, P>(&self, perms: I) -> bool
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<Perm>,
+    {
+        perms.into_iter().any(|perm| self.contains(&perm.into()))
+    }
+
     pub fn ensure_perm<P>(&self, perm: P) -> Result<(), Error>
     where
         P: Into<Perm>,
