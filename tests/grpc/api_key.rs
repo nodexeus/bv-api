@@ -90,7 +90,8 @@ async fn user_can_update_scope() {
     let keys = list_api_keys(&test, &key1.token).await.unwrap().api_keys;
     let key_id = keys[0].id.clone().unwrap();
     let scope = keys[0].scope.clone().unwrap();
-    assert_eq!(scope.resource, ApiResource::User as i32);
+    let resource = api::ApiResource::try_from(scope.resource).unwrap();
+    assert_eq!(resource, api::ApiResource::User);
 
     // key2.token cannot update key_id resource
     let org_id = Uuid::new_v4().into();
@@ -105,7 +106,8 @@ async fn user_can_update_scope() {
     let updated_at: NanosUtc = updated.updated_at.unwrap().try_into().unwrap();
 
     // key1.token can no longer list api keys
-    assert!(list_api_keys(&test, &key1.token).await.is_err());
+    let result = list_api_keys(&test, &key1.token).await;
+    assert!(result.is_err());
 
     // resource is now org
     let conn = &mut test.conn().await;

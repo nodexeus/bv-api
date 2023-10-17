@@ -11,6 +11,7 @@ use tonic::Status;
 use crate::auth::resource::{Resource, ResourceEntry, ResourceId, ResourceType, UserId};
 use crate::auth::token::api_key::{BearerSecret, KeyHash, KeyId, Salt, Secret};
 use crate::database::{Conn, WriteConn};
+use crate::grpc::api;
 
 use super::schema::{api_keys, sql_types};
 
@@ -32,8 +33,6 @@ pub enum Error {
     NoKeysDeleted,
     /// Failed to regenerate a new api key: {0}
     Regenerate(diesel::result::Error),
-    /// Unknown ApiResource value: {0}
-    UnknownApiResource(i32),
     /// Failed to update api key label: {0}
     UpdateLabel(diesel::result::Error),
 }
@@ -245,12 +244,11 @@ impl UpdateScope {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumApiResource"]
-#[repr(i32)]
 pub enum ApiResource {
-    User = 1,
-    Org = 2,
-    Node = 3,
-    Host = 4,
+    User,
+    Org,
+    Node,
+    Host,
 }
 
 impl From<ResourceType> for ApiResource {
@@ -265,8 +263,8 @@ impl From<ResourceType> for ApiResource {
 }
 
 impl From<ApiResource> for ResourceType {
-    fn from(api: ApiResource) -> Self {
-        match api {
+    fn from(resource: ApiResource) -> Self {
+        match resource {
             ApiResource::User => ResourceType::User,
             ApiResource::Org => ResourceType::Org,
             ApiResource::Host => ResourceType::Host,
@@ -275,16 +273,25 @@ impl From<ApiResource> for ResourceType {
     }
 }
 
-impl TryFrom<i32> for ApiResource {
-    type Error = Error;
+impl From<ApiResource> for api::ApiResource {
+    fn from(resource: ApiResource) -> Self {
+        match resource {
+            ApiResource::User => api::ApiResource::User,
+            ApiResource::Org => api::ApiResource::Org,
+            ApiResource::Host => api::ApiResource::Host,
+            ApiResource::Node => api::ApiResource::Node,
+        }
+    }
+}
 
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
-        match value {
-            1 => Ok(ApiResource::User),
-            2 => Ok(ApiResource::Org),
-            3 => Ok(ApiResource::Node),
-            4 => Ok(ApiResource::Host),
-            n => Err(Error::UnknownApiResource(n)),
+impl From<api::ApiResource> for Option<ApiResource> {
+    fn from(api: api::ApiResource) -> Self {
+        match api {
+            api::ApiResource::Unspecified => None,
+            api::ApiResource::User => Some(ApiResource::User),
+            api::ApiResource::Org => Some(ApiResource::Org),
+            api::ApiResource::Node => Some(ApiResource::Node),
+            api::ApiResource::Host => Some(ApiResource::Host),
         }
     }
 }

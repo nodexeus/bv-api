@@ -33,10 +33,11 @@ use thiserror::Error;
 use tonic::Status;
 use tracing::warn;
 
-use crate::auth::resource::{HostId, NodeId, OrgId, UserId};
+use crate::auth::resource::{HostId, NodeId, OrgId, ResourceId};
 use crate::cookbook::image::Image;
 use crate::database::{Conn, WriteConn};
 
+use super::api_key::ApiResource;
 use super::blockchain::{Blockchain, BlockchainId};
 use super::host::{Host, HostRequirements, HostType};
 use super::schema::nodes;
@@ -147,7 +148,7 @@ pub struct Node {
     pub disk_size_bytes: i64,
     pub host_name: String,
     pub network: String,
-    pub created_by: Option<UserId>,
+    pub created_by: Option<ResourceId>,
     pub dns_record_id: String,
     allow_ips: serde_json::Value,
     deny_ips: serde_json::Value,
@@ -157,6 +158,7 @@ pub struct Node {
     pub scheduler_region: Option<RegionId>,
     pub data_directory_mountpoint: Option<String>,
     pub jobs: serde_json::Value,
+    pub created_by_resource: Option<ApiResource>,
 }
 
 #[derive(Clone, Debug)]
@@ -423,7 +425,8 @@ pub struct NewNode {
     pub allow_ips: serde_json::Value,
     pub deny_ips: serde_json::Value,
     pub node_type: NodeType,
-    pub created_by: UserId,
+    pub created_by: ResourceId,
+    pub created_by_resource: ApiResource,
     /// Controls whether to run the node on hosts that contain nodes similar to this one.
     pub scheduler_similarity: Option<SimilarNodeAffinity>,
     /// Controls whether to run the node on hosts that are full or empty.
@@ -631,7 +634,8 @@ mod tests {
             disk_size_bytes: 0,
             network: "some network".to_string().into(),
             node_type: NodeType::Validator,
-            created_by: user_id,
+            created_by: user_id.into(),
+            created_by_resource: ApiResource::User,
             scheduler_similarity: None,
             scheduler_resource: Some(ResourceAffinity::MostResources),
             scheduler_region: None,

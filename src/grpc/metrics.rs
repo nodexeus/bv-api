@@ -46,8 +46,10 @@ pub enum Error {
     ParseHostId(uuid::Error),
     /// Failed to parse NodeId: {0}
     ParseNodeId(uuid::Error),
-    /// Metrics node error: {0}
+    /// Node metrics error: {0}
     Node(#[from] crate::models::node::Error),
+    /// Grpc node metrics error: {0}
+    NodeGrpc(#[from] crate::grpc::node::Error),
     /// Failed to parse current data sync progress: {0}
     SyncCurrent(std::num::TryFromIntError),
     /// Failed to parse total data sync progress: {0}
@@ -90,6 +92,7 @@ impl From<Error> for Status {
             Claims(err) => err.into(),
             Host(err) => err.into(),
             Node(err) => err.into(),
+            NodeGrpc(err) => err.into(),
             MetricsForMissingNode { .. } => Status::not_found("Not found."),
             MetricsForMissingHost { .. } => Status::not_found("Not found."),
         }
@@ -149,17 +152,20 @@ async fn node(
         .into_iter()
         .map(|id| id.parse().map_err(Error::ParseNodeId))
         .collect::<Result<_, Error>>()?;
+
     // Now we find the list of nodes that actually exist in the database. If there are any missing
     // node ids, we continue on with our update, since this is a common error case that needs to be
     // handled by performing the update for all nodes that do exist, and then reporting any issues.
     let node_ids = Node::existing_ids(all_node_ids.iter().copied().collect(), &mut write).await?;
     // Check that the user has metrics-access to all nodes that do exist.
-    write.auth(&meta, MetricsPerm::Node, &node_ids).await?;
+    let authz = write.auth(&meta, MetricsPerm::Node, &node_ids).await?;
+
     // Query all the nodes from the database. We need the info from the `node.jobs` field to perform
     // a patch-sort-of-update on that field.
     let nodes = Node::find_by_ids(node_ids.clone(), &mut write).await?;
     // Now we can create the UpdateNodeMetrics models using our existing, queried nodes.
     let nodes_map = nodes.iter().to_map_keep_last(|n| (n.id, n));
+
     let updates = updates
         .into_iter()
         .zip(all_node_ids.iter())
@@ -167,11 +173,13 @@ async fn node(
         .map(|(node, update)| update.as_metrics_update(node))
         .collect::<Result<_, _>>()?;
     let nodes = UpdateNodeMetrics::update_metrics(updates, &mut write).await?;
-    api::NodeMessage::updated_many(nodes, &mut write)
-        .await
-        .map_err(|err| Error::Message(Box::new(err)))?
+    let nodes = api::Node::from_models(nodes, &mut write).await?;
+
+    let updated_by = api::NodeResource::from_resource(authz.resource(), &mut write).await?;
+    api::NodeMessage::updated_many(nodes, &updated_by)
         .into_iter()
         .for_each(|msg| write.mqtt(msg));
+
     // We find the difference between the user-provided node ids and the ones that actually exist.
     // If there is such a difference, we use it to provide a nice error message to the user.
     let missing: Vec<NodeId> = all_node_ids
