@@ -19,7 +19,7 @@ argon2 = "0.5.0"
 axum = { version = "0.6.20", features = ["macros"] }
 axum-extra = "0.8.0"
 axum-tracing-opentelemetry = "0.14.1"
-aws-sdk-s3 = "0.31.2"
+aws-sdk-s3 = "0.33.0"
 base64 = "0.21.2"
 blake3 = "1.4.0"
 chrono = { version = "0.4.26", features = ["serde"] }
@@ -40,7 +40,7 @@ hyper = "0.14.26"
 ipnet = "2.7.2"
 ipnetwork = "0.20"
 itertools = "0.11.0"
-jsonwebtoken = "8.3.0"
+jsonwebtoken = "9.0.0"
 maplit = "1.0.2"
 mockall = { version = "0.11.4", features = [] }
 mockito = "1.1.0"
@@ -57,7 +57,7 @@ prost-types = "0.12.1"
 rand = "0.8.5"
 reqwest = { version = "0.11.18", features = ["json"] }
 rhai = { version = "1.15.0", features = ["serde", "sync"] }
-rumqttc = "0.22.0"
+rumqttc = "0.23.0"
 rustls = { version = "0.21.2", features = ["dangerous_configuration"] }
 rustls-native-certs = "0.6.3"
 semver = "1.0.17"
