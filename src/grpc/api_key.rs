@@ -25,6 +25,8 @@ pub enum Error {
     ClaimsNotUser,
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
+    /// Missing ApiResource.
+    MissingApiResource,
     /// Create API key request missing scope.
     MissingCreateScope,
     /// ApiKeyScope missing `resource_id`.
@@ -35,12 +37,12 @@ pub enum Error {
     Model(#[from] crate::models::api_key::Error),
     /// Nothing is set to be updated in the request.
     NothingToUpdate,
-    /// Parse ApiResource: {0}
-    ParseApiResource(crate::models::api_key::Error),
     /// Failed to parse KeyId: {0}
     ParseKeyId(crate::auth::token::api_key::Error),
     /// Failed to parse ResourceId: {0}
     ParseResourceId(uuid::Error),
+    /// Unknown ApiResource `{0}`: `{1}`
+    UnknownApiResource(i32, prost::DecodeError),
 }
 
 impl From<Error> for Status {
@@ -50,11 +52,11 @@ impl From<Error> for Status {
         match err {
             ClaimsNotUser => Status::permission_denied("Access denied."),
             Diesel(_) | MissingUpdatedAt => Status::internal("Internal error."),
-            ParseKeyId(_) => Status::invalid_argument("id"),
+            MissingApiResource | UnknownApiResource(..) => Status::invalid_argument("resource"),
             MissingCreateScope => Status::invalid_argument("scope"),
-            ParseApiResource(_) => Status::invalid_argument("resource"),
             MissingScopeResourceId | ParseResourceId(_) => Status::invalid_argument("resource_id"),
             NothingToUpdate => Status::failed_precondition("Nothing to update."),
+            ParseKeyId(_) => Status::invalid_argument("id"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Model(err) => err.into(),
@@ -232,16 +234,17 @@ impl api::ListApiKey {
 impl api::ApiKeyScope {
     fn from_model(api_key: &ApiKey) -> Self {
         api::ApiKeyScope {
-            resource: api_key.resource as i32,
-            resource_id: Some(format!("{}", *api_key.resource_id)),
+            resource: api::ApiResource::from(api_key.resource).into(),
+            resource_id: Some(api_key.resource_id.to_string()),
         }
     }
 
     #[cfg(any(test, feature = "integration-test"))]
     pub fn from_entry(entry: ResourceEntry) -> Self {
+        let resource = ApiResource::from(entry.resource_type);
         api::ApiKeyScope {
-            resource: ApiResource::from(entry.resource_type) as i32,
-            resource_id: Some(format!("{}", *entry.resource_id)),
+            resource: api::ApiResource::from(resource).into(),
+            resource_id: Some(entry.resource_id.to_string()),
         }
     }
 }
@@ -250,10 +253,12 @@ impl TryFrom<api::ApiKeyScope> for ResourceEntry {
     type Error = Error;
 
     fn try_from(scope: api::ApiKeyScope) -> Result<Self, Self::Error> {
-        let api_resource =
-            ApiResource::try_from(scope.resource).map_err(Error::ParseApiResource)?;
-        let resource_type = api_resource.into();
+        let api_resource = api::ApiResource::try_from(scope.resource)
+            .map_err(|err| Error::UnknownApiResource(scope.resource, err))
+            .map(Option::<ApiResource>::from)?
+            .ok_or(Error::MissingApiResource)?;
 
+        let resource_type = api_resource.into();
         let resource_id = scope
             .resource_id
             .ok_or(Error::MissingScopeResourceId)?

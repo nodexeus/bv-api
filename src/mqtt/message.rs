@@ -301,61 +301,43 @@ impl api::NodeMessage {
         }
     }
 
-    pub fn created(node: api::Node, user: User) -> Self {
+    pub const fn created(node: api::Node, created_by: api::NodeResource) -> Self {
         Self {
             message: Some(api::node_message::Message::Created(api::NodeCreated {
                 node: Some(node),
-                created_by: user.id.to_string(),
-                created_by_name: user.name(),
-                created_by_email: user.email,
+                created_by: Some(created_by),
             })),
         }
     }
 
-    pub async fn updated(
-        node: Node,
-        user: Option<User>,
-        conn: &mut Conn<'_>,
-    ) -> Result<Self, Error> {
-        let node = api::Node::from_model(node, conn).await?;
-
-        Ok(Self {
+    pub const fn updated(node: api::Node, updated_by: api::NodeResource) -> Self {
+        Self {
             message: Some(api::node_message::Message::Updated(api::NodeUpdated {
                 node: Some(node),
-                updated_by: user.as_ref().map(|u| u.id.to_string()),
-                updated_by_name: user.as_ref().map(User::name),
-                updated_by_email: user.map(|u| u.email),
+                updated_by: Some(updated_by),
             })),
-        })
+        }
     }
 
-    pub async fn updated_many(models: Vec<Node>, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
-        api::Node::from_models(models, conn)
-            .await?
+    pub fn updated_many(nodes: Vec<api::Node>, updated_by: &api::NodeResource) -> Vec<Self> {
+        nodes
             .into_iter()
-            .map(|node| {
-                Ok(Self {
-                    message: Some(api::node_message::Message::Updated(api::NodeUpdated {
-                        node: Some(node),
-                        updated_by: None,
-                        updated_by_name: None,
-                        updated_by_email: None,
-                    })),
-                })
+            .map(|node| Self {
+                message: Some(api::node_message::Message::Updated(api::NodeUpdated {
+                    node: Some(node),
+                    updated_by: Some(updated_by.clone()),
+                })),
             })
             .collect()
     }
 
-    pub fn deleted(node: &Node, user: impl Into<Option<User>>) -> Self {
-        let user = user.into();
+    pub fn deleted(node: &Node, deleted_by: Option<api::NodeResource>) -> Self {
         Self {
             message: Some(api::node_message::Message::Deleted(api::NodeDeleted {
                 node_id: node.id.to_string(),
                 host_id: node.host_id.to_string(),
                 org_id: node.org_id.to_string(),
-                deleted_by: user.as_ref().map(|u| u.id.to_string()).unwrap_or_default(),
-                deleted_by_name: user.as_ref().map(User::name).unwrap_or_default(),
-                deleted_by_email: user.map(|u| u.email).unwrap_or_default(),
+                deleted_by,
             })),
         }
     }
@@ -366,6 +348,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::config::Context;
+    use crate::models::api_key::ApiResource;
     use crate::models::{Command, CommandType};
 
     use super::*;
@@ -422,18 +405,24 @@ mod tests {
         let node = db.seed.node.clone();
         let user = db.seed.user.clone();
 
-        let node_model = api::Node::from_model(node.clone(), &mut conn)
+        let api_node = api::Node::from_model(node.clone(), &mut conn)
             .await
             .unwrap();
-        let msg = api::NodeMessage::created(node_model.clone(), user.clone());
+
+        let resource = api::NodeResource {
+            resource: Some(api::ApiResource::from(ApiResource::User).into()),
+            resource_id: Some(user.id.to_string()),
+            name: Some(user.name()),
+            email: Some(user.email),
+        };
+
+        let msg = api::NodeMessage::created(api_node.clone(), resource.clone());
         ctx.notifier.send(msg).await.unwrap();
 
-        let msg = api::NodeMessage::updated(node.clone(), Some(user.clone()), &mut conn)
-            .await
-            .unwrap();
+        let msg = api::NodeMessage::updated(api_node, resource.clone());
         ctx.notifier.send(msg).await.unwrap();
 
-        let msg = api::NodeMessage::deleted(&node, user);
+        let msg = api::NodeMessage::deleted(&node, Some(resource));
         ctx.notifier.send(msg).await.unwrap();
     }
 }

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use diesel::result::Error::NotFound;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use futures_util::future::OptionFuture;
@@ -12,11 +11,12 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::auth::rbac::{NodeAdminPerm, NodePerm};
-use crate::auth::resource::{HostId, NodeId, UserId};
+use crate::auth::resource::{HostId, NodeId, Resource, ResourceEntry};
 use crate::auth::Authorize;
 use crate::cookbook::image::Image;
 use crate::cookbook::script::HardwareRequirements;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
+use crate::models::api_key::ApiResource;
 use crate::models::blockchain::{BlockchainProperty, BlockchainPropertyId, BlockchainVersion};
 use crate::models::command::NewCommand;
 use crate::models::node::{
@@ -46,8 +46,6 @@ pub enum Error {
     BlockHeight(std::num::TryFromIntError),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
-    /// Claims Resource is not a user.
-    ClaimsNotUser,
     /// Node command error: {0}
     Command(#[from] crate::models::command::Error),
     /// Node grpc command error: {0}
@@ -68,8 +66,6 @@ pub enum Error {
     IpAddress(#[from] crate::models::ip_address::Error),
     /// Failed to parse mem size bytes: {0}
     MemSize(std::num::TryFromIntError),
-    /// Node MQTT message error: {0}
-    Message(#[from] Box<crate::mqtt::message::Error>),
     /// Missing placement.
     MissingPlacement,
     /// Missing blockchain property id: {0}.
@@ -111,8 +107,7 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            ClaimsNotUser => Status::permission_denied("Access denied."),
-            Cookbook(_) | Diesel(_) | GeneratePetnames | Message(_) | MissingPropertyId(_)
+            Cookbook(_) | Diesel(_) | GeneratePetnames | MissingPropertyId(_)
             | ModelProperty(_) | ParseIpAddr(_) | PropertyNotFound(_) => {
                 Status::internal("Internal error.")
             }
@@ -281,9 +276,6 @@ async fn create(
         (None, authz)
     };
 
-    let user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
-    let user = User::find_by_id(user_id, &mut write).await?;
-
     let blockchain_id = req
         .blockchain_id
         .parse()
@@ -297,7 +289,8 @@ async fn create(
     BlockchainVersion::find(&blockchain, &version, node_type, &mut write).await?;
 
     let requirements = write.ctx.cookbook.rhai_metadata(&image).await?.requirements;
-    let new_node = req.as_new(user.id, requirements, &mut write).await?;
+    let created_by = authz.resource();
+    let new_node = req.as_new(requirements, created_by, &mut write).await?;
     let node = new_node.create(host, &mut write).await?;
 
     // The user sends in the properties in a key-value style, that is,
@@ -320,7 +313,9 @@ async fn create(
     let start_notif = create_node_command(&node, CommandType::RestartNode, &mut write).await?;
     let start_cmd = api::Command::from_model(&start_notif, &mut write).await?;
     let node_api = api::Node::from_model(node, &mut write).await?;
-    let created = api::NodeMessage::created(node_api.clone(), user.clone());
+
+    let created_by = api::NodeResource::from_resource(created_by, &mut write).await?;
+    let created = api::NodeMessage::created(node_api.clone(), created_by);
 
     write.mqtt(create_cmd);
     write.mqtt(created);
@@ -347,22 +342,17 @@ async fn update_config(
             node_id,
         )
         .await?;
-    let user = match authz.resource().user() {
-        Some(user_id) => Some(User::find_by_id(user_id, &mut write).await?),
-        None => None,
-    };
 
-    let update = req.as_update()?;
-    let node = update.update(&mut write).await?;
+    let node = req.as_update()?.update(&mut write).await?;
+    let updated = create_node_command(&node, CommandType::UpdateNode, &mut write).await?;
+    let cmd = api::Command::from_model(&updated, &mut write).await?;
 
-    let create_notif = create_node_command(&node, CommandType::UpdateNode, &mut write).await?;
-    let cmd = api::Command::from_model(&create_notif, &mut write).await?;
-    let msg = api::NodeMessage::updated(node, user, &mut write)
-        .await
-        .map_err(|err| Error::Message(Box::new(err)))?;
+    let node = api::Node::from_model(node, &mut write).await?;
+    let updated_by = api::NodeResource::from_resource(authz.resource(), &mut write).await?;
+    let updated = api::NodeMessage::updated(node, updated_by);
 
     write.mqtt(cmd);
-    write.mqtt(msg);
+    write.mqtt(updated);
 
     Ok(api::NodeServiceUpdateConfigResponse {})
 }
@@ -383,19 +373,13 @@ async fn update_status(
             node_id,
         )
         .await?;
-    let user = if let Some(user_id) = authz.resource().user() {
-        Some(User::find_by_id(user_id, &mut write).await?)
-    } else {
-        None
-    };
 
-    let update = req.as_update()?;
-    let node = update.update(&mut write).await?;
-    let message = api::NodeMessage::updated(node, user, &mut write)
-        .await
-        .map_err(|err| Error::Message(Box::new(err)))?;
+    let node = req.as_update()?.update(&mut write).await?;
+    let node = api::Node::from_model(node, &mut write).await?;
 
-    write.mqtt(message);
+    let updated_by = api::NodeResource::from_resource(authz.resource(), &mut write).await?;
+    let updated = api::NodeMessage::updated(node, updated_by);
+    write.mqtt(updated);
 
     Ok(api::NodeServiceUpdateStatusResponse {})
 }
@@ -411,8 +395,6 @@ async fn delete(
     let authz = write
         .auth_or_all(&meta, NodeAdminPerm::Delete, NodePerm::Delete, node_id)
         .await?;
-    let user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
-    let user = User::find_by_id(user_id, &mut write).await?;
 
     // 1. Delete node, if the node belongs to the current user
     // Key files are deleted automatically because of 'on delete cascade' in tables DDL
@@ -441,7 +423,8 @@ async fn delete(
     let cmd = new_command.create(&mut write).await?;
     let cmd = api::Command::from_model(&cmd, &mut write).await?;
 
-    let deleted = api::NodeMessage::deleted(&node, user);
+    let deleted_by = api::NodeResource::from_resource(authz.resource(), &mut write).await?;
+    let deleted = api::NodeMessage::deleted(&node, Some(deleted_by));
 
     write.mqtt(cmd);
     write.mqtt(deleted);
@@ -529,14 +512,6 @@ impl api::Node {
     /// perform a seperate query to the blockchains table.
     pub async fn from_model(node: Node, conn: &mut Conn<'_>) -> Result<Self, Error> {
         let blockchain = Blockchain::find_by_id(node.blockchain_id, conn).await?;
-        let user = match node.created_by {
-            Some(id) => match User::find_by_id(id, conn).await {
-                Ok(user) => Some(user),
-                Err(crate::models::user::Error::FindById(_, NotFound)) => None,
-                Err(err) => return Err(err.into()),
-            },
-            None => None,
-        };
 
         // We need to get both the node properties and the blockchain properties to construct the
         // final dto. First we query both, and then we zip them together.
@@ -548,27 +523,28 @@ impl api::Node {
         let block_props = BlockchainProperty::by_property_ids(property_ids, conn)
             .await?
             .to_map_keep_last(|prop| (prop.id, prop));
-        let props = node_props
+        let properties = node_props
             .into_iter()
             .map(|node_prop| {
                 let id = node_prop.blockchain_property_id;
                 let block_prop = block_props.get(&id).ok_or(Error::MissingPropertyId(id))?;
-                Ok::<_, Error>((node_prop, block_prop.clone()))
+                Ok::<_, Error>(api::NodeProperty::from_model(node_prop, block_prop.clone()))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         let host = Host::find_by_id(node.host_id, conn).await?;
         let org = Org::find_by_id(node.org_id, conn).await?;
         let region = node.region(conn).await?;
+        let created_by = api::NodeResource::from_model(&node, conn).await?;
 
-        Self::new(
+        api::Node::new(
             node,
-            &blockchain,
-            user.as_ref(),
-            props,
             &org,
             &host,
+            &blockchain,
+            properties,
             region.as_ref(),
+            created_by,
         )
     }
 
@@ -587,17 +563,15 @@ impl api::Node {
         let blockchains = Blockchain::find_by_ids(blockchain_ids, conn)
             .await?
             .to_map_keep_last(|b| (b.id, b));
-        let user_ids = nodes.iter().filter_map(|n| n.created_by).collect();
-        let users = User::find_by_ids(user_ids, conn)
-            .await?
-            .to_map_keep_last(|u| (u.id, u));
 
         let block_props = BlockchainProperty::by_property_ids(property_ids, conn)
             .await?
             .to_map_keep_last(|prop| (prop.id, prop));
-        let props_map = node_props.to_map_keep_all(|p| {
-            let prop_id = p.blockchain_property_id;
-            (p.node_id, (p, block_props[&prop_id].clone()))
+        let mut properties = node_props.to_map_keep_all(|node_prop| {
+            let node_id = node_prop.node_id;
+            let prop_id = node_prop.blockchain_property_id;
+            let property = api::NodeProperty::from_model(node_prop, block_props[&prop_id].clone());
+            (node_id, property)
         });
 
         let org_ids = nodes.iter().map(|n| n.org_id).collect();
@@ -615,37 +589,44 @@ impl api::Node {
             .await?
             .to_map_keep_last(|region| (region.id, region));
 
+        let user_ids = nodes
+            .iter()
+            .filter_map(|node| match node.created_by_resource {
+                Some(ApiResource::User) => node.created_by.map(|id| (*id).into()),
+                _ => None,
+            })
+            .collect();
+        let users = User::find_by_ids(user_ids, conn)
+            .await?
+            .to_map_keep_last(|user| (user.id, user));
+
         nodes
             .into_iter()
-            .map(|node| {
-                Self::new(
-                    node.clone(),
-                    &blockchains[&node.blockchain_id],
-                    node.created_by.and_then(|u_id| users.get(&u_id)),
-                    props_map.get(&node.id).cloned().unwrap_or_default(),
-                    &orgs[&node.org_id],
-                    &hosts[&node.host_id],
-                    node.scheduler_region.map(|id| &regions[&id]),
-                )
+            .filter_map(|node| {
+                let org = orgs.get(&node.org_id)?;
+                let host = hosts.get(&node.host_id)?;
+                let blockchain = blockchains.get(&node.blockchain_id)?;
+                let properties = properties.remove(&node.id).unwrap_or_default();
+                let region = node.scheduler_region.map(|id| &regions[&id]);
+                let user = node.created_by.and_then(|id| users.get(&(*id).into()));
+                let created_by = api::NodeResource::from_model_user(&node, user);
+
+                Some(api::Node::new(
+                    node, org, host, blockchain, properties, region, created_by,
+                ))
             })
             .collect()
     }
 
-    /// Construct a new ui node from the queried parts.
-    fn new(
+    pub fn new(
         node: Node,
-        blockchain: &Blockchain,
-        user: Option<&User>,
-        properties: Vec<(NodeProperty, BlockchainProperty)>,
         org: &Org,
         host: &Host,
+        blockchain: &Blockchain,
+        properties: Vec<api::NodeProperty>,
         region: Option<&Region>,
+        created_by: Option<api::NodeResource>,
     ) -> Result<Self, Error> {
-        let properties = properties
-            .into_iter()
-            .map(|(nprop, bprop)| api::NodeProperty::from_model(nprop, bprop))
-            .collect();
-
         let scheduler = node
             .scheduler_resource
             .zip(region)
@@ -655,15 +636,22 @@ impl api::Node {
                 region: Some(region.clone()),
             });
 
-        // If there is a scheduler, we return the scheduler variant of node placement.
-        // If there isn't one, we return the host id variant.
+        // If there is a scheduler we return the node placement variant,
+        // otherwise we return the host id variant.
         let placement = scheduler.map(api::NodeScheduler::new).map_or_else(
             || api::node_placement::Placement::HostId(node.host_id.to_string()),
             api::node_placement::Placement::Scheduler,
         );
-        let placement = api::NodePlacement {
-            placement: Some(placement),
-        };
+
+        let block_height = node
+            .block_height
+            .map(u64::try_from)
+            .transpose()
+            .map_err(Error::BlockHeight)?;
+        let staking_status = node
+            .staking_status
+            .map(api::StakingStatus::from_model)
+            .map(Into::into);
 
         let allow_ips = node
             .allow_ips()?
@@ -676,9 +664,10 @@ impl api::Node {
             .map(api::FilteredIpAddr::from_model)
             .collect();
 
-        let jobs = Self::jobs(&node)?;
+        let jobs = node.jobs()?;
+        let jobs = jobs.into_iter().map(api::NodeJob::from_model).collect();
 
-        let mut out = api::Node {
+        Ok(api::Node {
             id: node.id.to_string(),
             org_id: node.org_id.to_string(),
             host_id: node.host_id.to_string(),
@@ -689,55 +678,88 @@ impl api::Node {
             version: node.version.into(),
             ip: node.ip_addr,
             ip_gateway: node.ip_gateway,
-            node_type: 0, // We use the setter to set this field for type-safety
+            node_type: api::NodeType::from_model(node.node_type).into(),
             properties,
-            block_height: node
-                .block_height
-                .map(u64::try_from)
-                .transpose()
-                .map_err(Error::BlockHeight)?,
+            block_height,
             created_at: Some(NanosUtc::from(node.created_at).into()),
             updated_at: Some(NanosUtc::from(node.updated_at).into()),
-            status: 0,            // We use the setter to set this field for type-safety
-            staking_status: None, // We use the setter to set this field for type-safety
-            container_status: 0,  // We use the setter to set this field for type-safety
-            sync_status: 0,       // We use the setter to set this field for type-safety
+            status: api::NodeStatus::from_model(node.chain_status).into(),
+            staking_status,
+            container_status: api::ContainerStatus::from_model(node.container_status).into(),
+            sync_status: api::SyncStatus::from_model(node.sync_status).into(),
             self_update: node.self_update,
             network: node.network,
             blockchain_name: blockchain.name.clone(),
-            created_by: user.map(|u| u.id.to_string()),
-            created_by_name: user.map(User::name),
-            created_by_email: user.map(|u| u.email.clone()),
+            created_by,
             allow_ips,
             deny_ips,
-            placement: Some(placement),
+            placement: Some(api::NodePlacement {
+                placement: Some(placement),
+            }),
             org_name: org.name.clone(),
             host_org_id: host.org_id.to_string(),
             data_directory_mountpoint: node.data_directory_mountpoint,
             jobs,
-        };
-        out.set_node_type(api::NodeType::from_model(node.node_type));
-        out.set_status(api::NodeStatus::from_model(node.chain_status));
-        if let Some(ss) = node.staking_status {
-            out.set_staking_status(api::StakingStatus::from_model(ss));
-        }
-        out.set_container_status(api::ContainerStatus::from_model(node.container_status));
-        out.set_sync_status(api::SyncStatus::from_model(node.sync_status));
+        })
+    }
+}
 
-        Ok(out)
+impl api::NodeResource {
+    pub async fn from_resource(resource: Resource, conn: &mut Conn<'_>) -> Result<Self, Error> {
+        let entry = ResourceEntry::from(resource);
+        let resource = ApiResource::from(entry.resource_type);
+        let user = if resource == ApiResource::User {
+            Some(User::find_by_id((*entry.resource_id).into(), conn).await?)
+        } else {
+            None
+        };
+
+        Ok(api::NodeResource {
+            resource: Some(api::ApiResource::from(resource).into()),
+            resource_id: Some(entry.resource_id.to_string()),
+            name: user.as_ref().map(User::name),
+            email: user.as_ref().map(|u| u.email.clone()),
+        })
     }
 
-    fn jobs(node: &Node) -> Result<Vec<api::NodeJob>, Error> {
-        let jobs = node.jobs()?;
-        Ok(jobs.into_iter().map(api::NodeJob::from_model).collect())
+    pub async fn from_model(node: &Node, conn: &mut Conn<'_>) -> Result<Option<Self>, Error> {
+        let (Some(created_by), Some(resource)) = (node.created_by, node.created_by_resource) else {
+            return Ok(None);
+        };
+
+        let user = if resource == ApiResource::User {
+            Some(User::find_by_id((*created_by).into(), conn).await?)
+        } else {
+            None
+        };
+
+        Ok(Some(api::NodeResource {
+            resource: Some(api::ApiResource::from(resource).into()),
+            resource_id: Some(created_by.to_string()),
+            name: user.as_ref().map(User::name),
+            email: user.as_ref().map(|u| u.email.clone()),
+        }))
+    }
+
+    pub fn from_model_user(node: &Node, user: Option<&User>) -> Option<Self> {
+        let (Some(created_by), Some(resource)) = (node.created_by, node.created_by_resource) else {
+            return None;
+        };
+
+        Some(api::NodeResource {
+            resource: Some(api::ApiResource::from(resource).into()),
+            resource_id: Some(created_by.to_string()),
+            name: user.map(User::name),
+            email: user.map(|u| u.email.clone()),
+        })
     }
 }
 
 impl api::NodeServiceCreateRequest {
     pub async fn as_new(
         &self,
-        user_id: UserId,
         req: HardwareRequirements,
+        created_by: Resource,
         conn: &mut Conn<'_>,
     ) -> Result<NewNode, Error> {
         let inner = self.placement.as_ref().ok_or(Error::MissingPlacement)?;
@@ -761,6 +783,8 @@ impl api::NodeServiceCreateRequest {
         let region = scheduler.map(|s| &s.region);
         let region = region.map(|id| Region::by_name(id, conn));
         let region = OptionFuture::from(region).await.transpose()?;
+
+        let entry = ResourceEntry::from(created_by);
 
         Ok(NewNode {
             id: Uuid::new_v4().into(),
@@ -791,7 +815,8 @@ impl api::NodeServiceCreateRequest {
             node_type: self.node_type().into_model(),
             allow_ips: serde_json::to_value(allow_ips).map_err(Error::AllowIps)?,
             deny_ips: serde_json::to_value(deny_ips).map_err(Error::DenyIps)?,
-            created_by: user_id,
+            created_by: entry.resource_id,
+            created_by_resource: entry.resource_type.into(),
             // We use and_then here to coalesce the scheduler being None and the similarity being
             // None. This is because both the scheduler and the similarity are optional.
             scheduler_similarity: scheduler.and_then(|s| s.similarity().into_model()),

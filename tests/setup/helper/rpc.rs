@@ -123,7 +123,7 @@ pub async fn create_api_key<R: Into<ResourceId>>(
     resource_id: R,
 ) -> Result<api::ApiKeyServiceCreateResponse, tonic::Status> {
     let scope = api::ApiKeyScope {
-        resource: resource as i32,
+        resource: api::ApiResource::from(resource).into(),
         resource_id: Some(resource_id.into().to_string()),
     };
 

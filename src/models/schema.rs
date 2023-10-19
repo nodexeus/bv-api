@@ -254,6 +254,7 @@ diesel::table! {
     use super::sql_types::EnumNodeType;
     use super::sql_types::EnumNodeSimilarityAffinity;
     use super::sql_types::EnumNodeResourceAffinity;
+    use super::sql_types::EnumApiResource;
 
     nodes (id) {
         id -> Uuid,
@@ -293,6 +294,7 @@ diesel::table! {
         scheduler_region -> Nullable<Uuid>,
         data_directory_mountpoint -> Nullable<Text>,
         jobs -> Jsonb,
+        created_by_resource -> Nullable<EnumApiResource>,
     }
 }
 
