@@ -192,7 +192,7 @@ async fn list_babel_versions(
         .auth_all(&meta, CookbookPerm::ListBabelVersions)
         .await?;
 
-    let node_type = req.node_type().into_model();
+    let node_type = req.node_type().into();
     let identifiers = read.ctx.cookbook.list(&req.protocol, node_type).await?;
 
     Ok(api::CookbookServiceListBabelVersionsResponse { identifiers })

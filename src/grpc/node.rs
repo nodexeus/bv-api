@@ -22,7 +22,7 @@ use crate::models::command::NewCommand;
 use crate::models::node::{
     ContainerStatus, FilteredIpAddr, NewNode, Node, NodeChainStatus, NodeFilter, NodeJob,
     NodeJobProgress, NodeJobStatus, NodeProperty, NodeScheduler, NodeStakingStatus, NodeSyncStatus,
-    UpdateNode,
+    NodeType, UpdateNode,
 };
 use crate::models::{Blockchain, Command, CommandType, Host, IpAddress, Org, Region, User};
 use crate::timestamp::NanosUtc;
@@ -282,11 +282,10 @@ async fn create(
         .map_err(Error::ParseBlockchainId)?;
     let blockchain = Blockchain::find_by_id(blockchain_id, &mut write).await?;
 
-    let node_type = req.node_type().into_model();
+    let node_type = req.node_type().into();
     let image = Image::new(&blockchain.name, node_type, req.version.clone().into());
-    let version = image.node_version();
-
-    BlockchainVersion::find(&blockchain, &version, node_type, &mut write).await?;
+    let version =
+        BlockchainVersion::find(blockchain_id, node_type, &image.node_version, &mut write).await?;
 
     let requirements = write.ctx.cookbook.rhai_metadata(&image).await?.requirements;
     let created_by = authz.resource();
@@ -298,8 +297,6 @@ async fn create(
     // { property id: property value }. In order to map property names to property ids we can use
     // the id to name map, and then flip the keys and values to create an id to name map. Note that
     // this requires the names to be unique, but we expect this to be the case.
-    let version =
-        BlockchainVersion::find(&blockchain, &node.version, node.node_type, &mut write).await?;
     let name_to_id_map = BlockchainProperty::id_to_name_map(version.id, &mut write)
         .await?
         .into_iter()
@@ -678,7 +675,7 @@ impl api::Node {
             version: node.version.into(),
             ip: node.ip_addr,
             ip_gateway: node.ip_gateway,
-            node_type: api::NodeType::from_model(node.node_type).into(),
+            node_type: api::NodeType::from(node.node_type).into(),
             properties,
             block_height,
             created_at: Some(NanosUtc::from(node.created_at).into()),
@@ -758,7 +755,7 @@ impl api::NodeResource {
 impl api::NodeServiceCreateRequest {
     pub async fn as_new(
         &self,
-        req: HardwareRequirements,
+        requirements: HardwareRequirements,
         created_by: Resource,
         conn: &mut Conn<'_>,
     ) -> Result<NewNode, Error> {
@@ -804,15 +801,15 @@ impl api::NodeServiceCreateRequest {
             staking_status: NodeStakingStatus::Unknown,
             container_status: ContainerStatus::Unknown,
             self_update: true,
-            vcpu_count: req.vcpu_count.try_into().map_err(Error::Vcpu)?,
-            mem_size_bytes: (req.mem_size_mb * 1000 * 1000)
+            vcpu_count: requirements.vcpu_count.try_into().map_err(Error::Vcpu)?,
+            mem_size_bytes: (requirements.mem_size_mb * 1000 * 1000)
                 .try_into()
                 .map_err(Error::MemSize)?,
-            disk_size_bytes: (req.disk_size_gb * 1000 * 1000 * 1000)
+            disk_size_bytes: (requirements.disk_size_gb * 1000 * 1000 * 1000)
                 .try_into()
                 .map_err(Error::DiskSize)?,
             network: self.network.clone().into(),
-            node_type: self.node_type().into_model(),
+            node_type: self.node_type().into(),
             allow_ips: serde_json::to_value(allow_ips).map_err(Error::AllowIps)?,
             deny_ips: serde_json::to_value(deny_ips).map_err(Error::DenyIps)?,
             created_by: entry.resource_id,
@@ -874,7 +871,7 @@ impl api::NodeServiceListRequest {
             offset: self.offset,
             limit: self.limit,
             status: self.statuses().map(api::NodeStatus::into_model).collect(),
-            node_types: self.node_types().map(api::NodeType::into_model).collect(),
+            node_types: self.node_types().map(NodeType::from).collect(),
             blockchains: self
                 .blockchain_ids
                 .iter()

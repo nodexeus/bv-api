@@ -243,7 +243,7 @@ impl api::Command {
                     node_version: node.version.as_ref().to_lowercase(),
                     node_type: 0, // We use the setter to set this field for type-safety
                 };
-                image.set_node_type(api::NodeType::from_model(node.node_type));
+                image.set_node_type(node.node_type.into());
                 let cmd = Command::Upgrade(api::NodeUpgrade { image: Some(image) });
                 node_cmd_default_id(cmd)
             }
@@ -255,7 +255,7 @@ impl api::Command {
                 let node = Node::find_by_id(node_id()?, conn).await?;
                 let blockchain = Blockchain::find_by_id(node.blockchain_id, conn).await?;
                 let version =
-                    BlockchainVersion::find(&blockchain, &node.version, node.node_type, conn)
+                    BlockchainVersion::find(blockchain.id, node.node_type, &node.version, conn)
                         .await?;
                 let id_to_name_map = BlockchainProperty::id_to_name_map(version.id, conn).await?;
                 let mut image = api::ContainerImage {
@@ -263,7 +263,7 @@ impl api::Command {
                     node_version: node.version.as_ref().to_lowercase(),
                     node_type: 0, // We use the setter to set this field for type-safety
                 };
-                image.set_node_type(api::NodeType::from_model(node.node_type));
+                image.set_node_type(node.node_type.into());
                 let properties = node
                     .properties(conn)
                     .await?
@@ -282,7 +282,7 @@ impl api::Command {
                     rules: Self::rules(&node)?,
                     network: node.network,
                 };
-                node_create.set_node_type(api::NodeType::from_model(node.node_type));
+                node_create.set_node_type(node.node_type.into());
                 let cmd = Command::Create(node_create);
 
                 node_cmd_default_id(cmd)

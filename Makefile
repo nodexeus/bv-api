@@ -16,7 +16,7 @@ help: ## Print this message and exit.
 
 setup: ## Install the prerequistes for running tests.
 	@git submodule update --init --recursive --remote
-	@cargo install diesel_cli --no-default-features --features postgres
+	@cargo install --force diesel_cli --no-default-features --features postgres
 
 start: ## Start required docker services for integration tests.
 	@docker-compose up --detach --wait ${TEST_SERVICES}

@@ -17,11 +17,11 @@
     clippy::missing_panics_doc,
     clippy::module_name_repetitions,
     clippy::must_use_candidate,
+    clippy::needless_pass_by_ref_mut,
     clippy::option_if_let_else,
     clippy::similar_names,
     clippy::too_many_lines,
-    clippy::use_self,
-    clippy::needless_pass_by_ref_mut
+    clippy::use_self
 )]
 
 #[macro_use]

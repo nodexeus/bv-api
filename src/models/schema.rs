@@ -417,7 +417,6 @@ diesel::joinable!(nodes -> blockchains (blockchain_id));
 diesel::joinable!(nodes -> hosts (host_id));
 diesel::joinable!(nodes -> orgs (org_id));
 diesel::joinable!(nodes -> regions (scheduler_region));
-diesel::joinable!(nodes -> users (created_by));
 diesel::joinable!(orgs_users -> orgs (org_id));
 diesel::joinable!(orgs_users -> users (user_id));
 diesel::joinable!(role_permissions -> permissions (permission));

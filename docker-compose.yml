@@ -11,7 +11,7 @@ services:
     ports:
       - 25432:5432
     healthcheck:
-      test: ["CMD-SHELL", "sh -c 'pg_isready -U blockvisor_db -d blockvisor'"]
+      test: ["CMD-SHELL", "sh -c 'pg_isready -U blockvisor -d blockvisor_db'"]
       interval: 3s
       timeout: 1s
       retries: 3
