@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use chrono::Utc;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use futures_util::future::join_all;
@@ -20,7 +21,7 @@ use crate::models::blockchain::{
     NodeStats,
 };
 use crate::models::command::NewCommand;
-use crate::models::node::{Node, NodeType, NodeVersion};
+use crate::models::node::{NewNodeLog, Node, NodeLogEvent, NodeType, NodeVersion};
 use crate::models::{Command, CommandType};
 use crate::timestamp::NanosUtc;
 
@@ -67,6 +68,8 @@ pub enum Error {
     NodeCountProvisioning(std::num::TryFromIntError),
     /// Unable to cast failed node count from i64 to u64: {0}
     NodeCountFailed(std::num::TryFromIntError),
+    /// Blockchain node log error: {0}
+    NodeLog(#[from] crate::models::node::log::Error),
     /// The node type already exists.
     NodeTypeExists,
     /// Blockchain node type error: {0}
@@ -109,6 +112,7 @@ impl From<Error> for Status {
             Command(err) => err.into(),
             CommandGrpc(err) => err.into(),
             Node(err) => err.into(),
+            NodeLog(err) => err.into(),
             NodeType(err) => err.into(),
             Property(err) => err.into(),
         }
@@ -276,10 +280,16 @@ async fn add_version(
         .collect::<Result<Vec<_>, _>>()?;
     NewProperty::bulk_create(properties, &mut write).await?;
 
-    let nodes = Node::find_by_type(id, node_type, &mut write).await?;
-    for node in nodes {
-        if let Some(new_command) = upgrade_node(&node, &node_version)? {
+    let nodes = Node::upgradeable_by_type(id, node_type, &mut write).await?;
+    for mut node in nodes {
+        let upgrade = upgrade_node(&node, &node_version, &blockchain.name)?;
+        if let Some((new_command, new_log)) = upgrade {
+            node.version = node_version.clone();
+            let node = node.update(&mut write).await?;
+
+            new_log.create(&mut write).await?;
             let command = new_command.create(&mut write).await?;
+
             write.mqtt(upgrade_command(node.id, command, image.clone()));
         }
     }
@@ -295,20 +305,33 @@ async fn add_version(
     })
 }
 
-fn upgrade_node<'n>(
+fn upgrade_node<'b, 'n>(
     node: &'n Node,
     node_version: &'n NodeVersion,
-) -> Result<Option<NewCommand<'n>>, Error> {
+    blockchain_name: &'b str,
+) -> Result<Option<(NewCommand<'b>, NewNodeLog<'b>)>, Error> {
     if node_version.semver()? <= node.version.semver()? {
         return Ok(None);
     }
 
-    Ok(Some(NewCommand {
+    let command = NewCommand {
         host_id: node.host_id,
         cmd: CommandType::UpgradeNode,
         sub_cmd: None,
         node_id: Some(node.id),
-    }))
+    };
+
+    let log = NewNodeLog {
+        host_id: node.host_id,
+        node_id: node.id,
+        event: NodeLogEvent::Upgraded,
+        blockchain_name,
+        node_type: node.node_type,
+        version: node_version.clone(),
+        created_at: Utc::now(),
+    };
+
+    Ok(Some((command, log)))
 }
 
 fn upgrade_command(node_id: NodeId, command: Command, image: Image) -> api::Command {

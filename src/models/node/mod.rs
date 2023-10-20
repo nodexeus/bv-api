@@ -65,8 +65,6 @@ pub enum Error {
     FindByIds(HashSet<NodeId>, diesel::result::Error),
     /// Failed to find nodes by org id {0}: {1}
     FindByOrgId(OrgId, diesel::result::Error),
-    /// Failed to find nodes for blockchain id `{0}` and node type `{1}`: {2}
-    FindByType(BlockchainId, NodeType, diesel::result::Error),
     /// Failed to find node ids `{0:?}`: {1}
     FindExistingIds(HashSet<NodeId>, diesel::result::Error),
     /// Host error for node: {0}
@@ -101,6 +99,8 @@ pub enum Error {
     UpdateById(NodeId, diesel::result::Error),
     /// Failed to update node {1}'s metrics: {0}
     UpdateMetrics(diesel::result::Error, NodeId),
+    /// Failed to find upgradeable nodes for blockchain id `{0}` and node type `{1}`: {2}
+    UpgradeableByType(BlockchainId, NodeType, diesel::result::Error),
     /// Failed to parse the jobs column of the node table: {0}
     UnparsableJobs(serde_json::Error),
 }
@@ -113,7 +113,7 @@ impl From<Error> for Status {
             Delete(_, NotFound)
             | FindById(_, NotFound)
             | FindByIds(_, NotFound)
-            | FindByType(_, _, NotFound) => Status::not_found("Not found."),
+            | UpgradeableByType(_, _, NotFound) => Status::not_found("Not found."),
             NoMatchingHost => Status::resource_exhausted("No matching host."),
             _ => Status::internal("Internal error."),
         }
@@ -200,7 +200,7 @@ impl Node {
             .map_err(|err| Error::FindByOrgId(org_id, err))
     }
 
-    pub async fn find_by_type(
+    pub async fn upgradeable_by_type(
         blockchain_id: BlockchainId,
         node_type: NodeType,
         conn: &mut Conn<'_>,
@@ -211,7 +211,7 @@ impl Node {
             .filter(nodes::self_update)
             .get_results(conn)
             .await
-            .map_err(|err| Error::FindByType(blockchain_id, node_type, err))
+            .map_err(|err| Error::UpgradeableByType(blockchain_id, node_type, err))
     }
 
     /// Filters out any node ids that do no exist.
