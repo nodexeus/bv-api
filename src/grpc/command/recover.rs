@@ -89,7 +89,7 @@ async fn recover_created(
     let new_log = NewNodeLog {
         host_id: node.host_id,
         node_id,
-        event: NodeLogEvent::Failed,
+        event: NodeLogEvent::CreateFailed,
         blockchain_name: &blockchain.name,
         node_type: node.node_type,
         version: node.version.clone(),

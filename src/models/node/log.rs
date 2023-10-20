@@ -47,15 +47,22 @@ pub enum NodeLogEvent {
     Created,
     /// This variant is used to note that node was successfully created, and that the create was
     /// confirmed to be successful by blockvisord.
-    Succeeded,
+    CreateSucceeded,
     /// This variant is used to note that a node was not created. When we receive this variant, we
     /// will send a `NodeDelete` message to blockvisord to clean up, and this message should either
     /// be followed by a `Created` or a `Canceled` log entry, depending on whether we dediced to
     /// retry or to abort.
-    Failed,
+    CreateFailed,
     /// This variant is used to note that we aborted from creating the node, because the failure we
     /// ran into was endemic.
     Canceled,
+    /// Log that an `UpgradeNode` message has been sent to blockvisord. This
+    /// should be followed by `UpgradeSucceeded` or `UpgradeFailed` afterwards.
+    Upgraded,
+    /// Confirmation that a node was successfully upgraded.
+    UpgradeSucceeded,
+    /// Notification that an attempt to upgrade a node failed.
+    UpgradeFailed,
 }
 
 /// Records of this table indicate that some event related to node deployments has happened. Note
