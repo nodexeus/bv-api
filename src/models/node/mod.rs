@@ -45,6 +45,8 @@ use super::{IpAddress, Paginate, Region, RegionId};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
+    /// Failed to assign ip address to node: {0},
+    AssignIpAddr(#[from] super::ip_address::Error),
     /// Blockchain error for node: {0}
     Blockchain(#[from] super::blockchain::Error),
     /// Cookbook error for node: {0}
@@ -450,19 +452,15 @@ impl NewNode {
 
         let ip_addr = IpAddress::next_for_host(host.id, write)
             .await
-            .map_err(Error::NextHostIp)?
-            .ip
-            .ip()
-            .to_string();
+            .map_err(Error::NextHostIp)?;
+        IpAddress::assign(ip_addr.id, host.id, write)
+            .await
+            .map_err(Error::AssignIpAddr)?;
 
         let ip_gateway = host.ip_gateway.ip().to_string();
 
         let blockchain = Blockchain::find_by_id(self.blockchain_id, write).await?;
-        let dns_record_id = write
-            .ctx
-            .dns
-            .get_node_dns(&self.name, ip_addr.clone())
-            .await?;
+        let dns_record_id = write.ctx.dns.get_node_dns(&self.name, ip_addr.ip()).await?;
 
         let image = Image::new(blockchain.name, self.node_type, self.version.clone());
         let meta = write.ctx.cookbook.rhai_metadata(&image).await?;
@@ -475,12 +473,12 @@ impl NewNode {
                 self,
                 nodes::host_id.eq(host.id),
                 nodes::ip_gateway.eq(ip_gateway),
-                nodes::ip_addr.eq(ip_addr),
+                nodes::ip_addr.eq(ip_addr.ip()),
                 nodes::host_name.eq(&host.name),
                 nodes::dns_record_id.eq(dns_record_id),
                 nodes::data_directory_mountpoint.eq(data_directory_mountpoint),
             ))
-            .get_result::<Node>(&mut write)
+            .get_result(&mut write)
             .await
             .map_err(Error::Create)
     }
