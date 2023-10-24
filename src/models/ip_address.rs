@@ -159,6 +159,10 @@ impl IpAddress {
         from < ip && to > ip
     }
 
+    pub fn ip(&self) -> String {
+        self.ip.ip().to_string()
+    }
+
     pub async fn assigned(ip: IpAddr, conn: &mut Conn<'_>) -> Result<bool, Error> {
         let ip = IpNetwork::new(ip, 32).map_err(Error::NewIpNetwork)?;
         let row = ip_addresses::table.filter(ip_addresses::ip.eq(ip));
