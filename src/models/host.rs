@@ -19,6 +19,7 @@ use crate::auth::AuthZ;
 use crate::cookbook::script::HardwareRequirements;
 use crate::database::Conn;
 use crate::grpc::common;
+use crate::util::SearchOperator;
 
 use super::blockchain::{Blockchain, BlockchainId};
 use super::ip_address::NewIpAddressRange;
@@ -166,7 +167,7 @@ pub struct HostFilter {
 
 #[derive(Debug)]
 pub struct HostSearch {
-    pub operator: super::SearchOperator,
+    pub operator: SearchOperator,
     pub id: Option<String>,
     pub name: Option<String>,
     pub version: Option<String>,
@@ -242,7 +243,7 @@ impl Host {
                 ip,
             } = search;
             match operator {
-                super::SearchOperator::Or => {
+                SearchOperator::Or => {
                     if let Some(id) = id {
                         query = query.filter(super::text(hosts::id).like(id));
                     }
@@ -259,7 +260,7 @@ impl Host {
                         query = query.or_filter(hosts::ip_addr.like(ip));
                     }
                 }
-                super::SearchOperator::And => {
+                SearchOperator::And => {
                     if let Some(id) = id {
                         query = query.filter(super::text(hosts::id).like(id));
                     }

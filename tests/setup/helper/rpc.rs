@@ -3,11 +3,10 @@
 use tonic::transport::Channel;
 
 use blockvisor_api::auth::claims::Claims;
-use blockvisor_api::auth::resource::{OrgId, ResourceId, UserId};
+use blockvisor_api::auth::resource::{OrgId, ResourceId, ResourceType, UserId};
 use blockvisor_api::auth::token::jwt::Jwt;
 use blockvisor_api::database::seed;
-use blockvisor_api::grpc::api;
-use blockvisor_api::models::api_key::ApiResource;
+use blockvisor_api::grpc::{api, common};
 use blockvisor_api::models::org::NewOrg;
 use blockvisor_api::models::user::{NewUser, User};
 
@@ -91,7 +90,7 @@ pub async fn login(test: &TestServer, email: &str) -> Claims {
 pub async fn new_seed_api_key(test: &mut TestServer) -> SeedApiKey {
     let user = new_seed_user(test).await;
     let user_id = user.user_id;
-    let token = new_api_key(test, &user.jwt, ApiResource::User, user_id).await;
+    let token = new_api_key(test, &user.jwt, ResourceType::User, user_id).await;
     SeedApiKey { user_id, token }
 }
 
@@ -103,7 +102,7 @@ pub struct SeedApiKey {
 pub async fn new_api_key<R: Into<ResourceId>>(
     test: &mut TestServer,
     jwt: &Jwt,
-    resource: ApiResource,
+    resource: ResourceType,
     resource_id: R,
 ) -> String {
     let label = &test.rand_string(8).await;
@@ -119,11 +118,11 @@ pub async fn create_api_key<R: Into<ResourceId>>(
     test: &TestServer,
     token: &str,
     label: &str,
-    resource: ApiResource,
+    resource: ResourceType,
     resource_id: R,
 ) -> Result<api::ApiKeyServiceCreateResponse, tonic::Status> {
     let scope = api::ApiKeyScope {
-        resource: api::ApiResource::from(resource).into(),
+        resource: common::Resource::from(resource).into(),
         resource_id: Some(resource_id.into().to_string()),
     };
 

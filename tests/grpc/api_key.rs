@@ -1,8 +1,8 @@
-use blockvisor_api::auth::resource::ResourceEntry;
-use blockvisor_api::grpc::api;
-use blockvisor_api::models::api_key::{ApiKey, ApiResource};
+use blockvisor_api::auth::resource::{ResourceEntry, ResourceType};
+use blockvisor_api::grpc::{api, common};
+use blockvisor_api::models::api_key::ApiKey;
 use blockvisor_api::models::org::Org;
-use blockvisor_api::timestamp::NanosUtc;
+use blockvisor_api::util::NanosUtc;
 use tonic::transport::Channel;
 use uuid::Uuid;
 
@@ -21,21 +21,23 @@ async fn user_can_create_and_list_api_keys() {
 
     // user1.jwt can create keys for user1.user_id
     let label1 = &test.rand_string(8).await;
-    let created1 = rpc::create_api_key(&test, &user1.jwt, label1, ApiResource::User, user1.user_id)
-        .await
-        .unwrap();
+    let created1 =
+        rpc::create_api_key(&test, &user1.jwt, label1, ResourceType::User, user1.user_id)
+            .await
+            .unwrap();
     let token1 = created1.api_key.unwrap();
 
     // user1.jwt cannot create keys for user2
     let result =
-        rpc::create_api_key(&test, &user1.jwt, label1, ApiResource::User, user2.user_id).await;
+        rpc::create_api_key(&test, &user1.jwt, label1, ResourceType::User, user2.user_id).await;
     assert!(result.is_err());
 
     // user2.jwt can create keys for user2
     let label2 = &test.rand_string(8).await;
-    let created2 = rpc::create_api_key(&test, &user2.jwt, label2, ApiResource::User, user2.user_id)
-        .await
-        .unwrap();
+    let created2 =
+        rpc::create_api_key(&test, &user2.jwt, label2, ResourceType::User, user2.user_id)
+            .await
+            .unwrap();
     let token2 = created2.api_key.unwrap();
     assert!(token1 != token2);
     assert!(label1 != label2);
@@ -90,8 +92,7 @@ async fn user_can_update_scope() {
     let keys = list_api_keys(&test, &key1.token).await.unwrap().api_keys;
     let key_id = keys[0].id.clone().unwrap();
     let scope = keys[0].scope.clone().unwrap();
-    let resource = api::ApiResource::try_from(scope.resource).unwrap();
-    assert_eq!(resource, api::ApiResource::User);
+    assert_eq!(scope.resource(), common::Resource::User);
 
     // key2.token cannot update key_id resource
     let org_id = Uuid::new_v4().into();
@@ -115,7 +116,7 @@ async fn user_can_update_scope() {
         .await
         .unwrap();
     assert_eq!(NanosUtc::from(key.updated_at.unwrap()), updated_at);
-    assert_eq!(key.resource, ApiResource::Org);
+    assert_eq!(key.resource, ResourceType::Org);
     assert_eq!(*key.resource_id, *org_id);
 }
 

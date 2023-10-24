@@ -13,7 +13,7 @@ use thiserror::Error;
 use tonic::Status;
 use uuid::Uuid;
 
-use crate::auth::resource::{OrgId, UserId};
+use crate::auth::resource::{OrgId, Resource, ResourceEntry, ResourceId, ResourceType};
 use crate::database::Conn;
 
 use super::schema::invitations;
@@ -66,12 +66,13 @@ pub struct InvitationId(Uuid);
 #[derive(Clone, Debug, Queryable)]
 pub struct Invitation {
     pub id: InvitationId,
-    pub created_by: UserId,
+    pub invited_by: ResourceId,
     pub org_id: OrgId,
     pub invitee_email: String,
     pub created_at: DateTime<Utc>,
     pub accepted_at: Option<DateTime<Utc>>,
     pub declined_at: Option<DateTime<Utc>>,
+    pub invited_by_resource: ResourceType,
 }
 
 impl Invitation {
@@ -114,8 +115,10 @@ impl Invitation {
         if let Some(invitee_email) = filter.invitee_email {
             query = query.filter(invitations::invitee_email.eq(invitee_email));
         }
-        if let Some(created_by) = filter.created_by {
-            query = query.filter(invitations::created_by.eq(created_by));
+        if let Some(resource) = filter.invited_by {
+            let entry = ResourceEntry::from(resource);
+            query = query.filter(invitations::invited_by.eq(entry.resource_id));
+            query = query.filter(invitations::invited_by_resource.eq(entry.resource_type));
         }
 
         let query = match filter.accepted {
@@ -204,30 +207,42 @@ impl Invitation {
     }
 }
 
+pub struct InvitationFilter<'a> {
+    pub org_id: Option<OrgId>,
+    pub invitee_email: Option<&'a str>,
+    pub invited_by: Option<Resource>,
+    pub accepted: Option<bool>,
+    pub declined: Option<bool>,
+}
+
 #[derive(Debug, Insertable)]
 #[diesel(table_name = invitations)]
 pub struct NewInvitation {
-    pub created_by: UserId,
     pub org_id: OrgId,
     pub invitee_email: String,
+    pub invited_by: ResourceId,
+    pub invited_by_resource: ResourceType,
 }
 
 impl NewInvitation {
-    pub async fn create(mut self, conn: &mut Conn<'_>) -> Result<Invitation, Error> {
-        self.invitee_email = self.invitee_email.trim().to_lowercase();
+    pub fn new<R>(org_id: OrgId, invitee_email: &str, invited_by: R) -> Self
+    where
+        R: Into<Resource>,
+    {
+        let entry = ResourceEntry::from(invited_by.into());
+        NewInvitation {
+            org_id,
+            invitee_email: invitee_email.trim().to_lowercase(),
+            invited_by: entry.resource_id,
+            invited_by_resource: entry.resource_type,
+        }
+    }
 
+    pub async fn create(self, conn: &mut Conn<'_>) -> Result<Invitation, Error> {
         diesel::insert_into(invitations::table)
             .values(self)
             .get_result(conn)
             .await
             .map_err(Error::Create)
     }
-}
-
-pub struct InvitationFilter<'a> {
-    pub org_id: Option<OrgId>,
-    pub invitee_email: Option<&'a str>,
-    pub created_by: Option<UserId>,
-    pub accepted: Option<bool>,
-    pub declined: Option<bool>,
 }

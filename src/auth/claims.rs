@@ -10,7 +10,7 @@ use tonic::Status;
 use crate::database::Conn;
 use crate::models::rbac::{RbacPerm, RbacUser};
 use crate::models::{Host, Node};
-use crate::timestamp::SecondsUtc;
+use crate::util::SecondsUtc;
 
 use super::endpoint::Endpoints;
 use super::rbac::{Access, Perm, Perms, Roles};

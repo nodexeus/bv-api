@@ -14,11 +14,11 @@ type Service = api::invitation_service_client::InvitationServiceClient<Channel>;
 
 async fn create_invitation(test: &TestServer) -> Invitation {
     let mut conn = test.conn().await;
-    let new_invitation = NewInvitation {
-        created_by: test.seed().user.id,
-        org_id: test.seed().org.id,
-        invitee_email: seed::UNCONFIRMED_EMAIL.to_string(),
-    };
+
+    let user_id = test.seed().user.id;
+    let org_id = test.seed().org.id;
+
+    let new_invitation = NewInvitation::new(org_id, seed::UNCONFIRMED_EMAIL, user_id);
     new_invitation.create(&mut conn).await.unwrap()
 }
 
@@ -44,7 +44,7 @@ async fn responds_ok_for_list_pending() {
     let invitation = create_invitation(&test).await;
     let req = api::InvitationServiceListRequest {
         org_id: Some(test.seed().org.id.to_string()),
-        status: Some(api::InvitationStatus::Open.into()),
+        status: api::InvitationStatus::Open.into(),
         ..Default::default()
     };
 

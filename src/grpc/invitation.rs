@@ -1,3 +1,4 @@
+use diesel::result::Error::NotFound;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
@@ -6,17 +7,17 @@ use tonic::{Request, Response, Status};
 use tracing::error;
 
 use crate::auth::rbac::InvitationPerm;
-use crate::auth::resource::{OrgId, Resource, UserId};
+use crate::auth::resource::{OrgId, Resource, ResourceType};
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::email::Recipient;
 use crate::models::invitation::{Invitation, InvitationFilter, NewInvitation};
 use crate::models::org::Org;
 use crate::models::user::User;
-use crate::timestamp::NanosUtc;
+use crate::util::{HashVec, NanosUtc};
 
 use super::api::invitation_service_server::InvitationService;
-use super::{api, Grpc, HashVec};
+use super::{api, common, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -34,6 +35,8 @@ pub enum Error {
     Claims(#[from] crate::auth::claims::Error),
     /// Claims Resource is not a user.
     ClaimsNotUser,
+    /// Claims Resource is not a user or org.
+    ClaimsNotUserOrOrg,
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
     /// Invitation email error: {0}
@@ -43,7 +46,7 @@ pub enum Error {
     /// List invitations is missing a Resource.
     ListResource,
     /// Invitation MQTT message error: {0}
-    Message(Box<crate::mqtt::message::Error>),
+    Message(#[from] crate::mqtt::message::Error),
     /// Claims data is missing email address.
     MissingEmail,
     /// Invitation model error: {0}
@@ -52,12 +55,14 @@ pub enum Error {
     NodeClaims,
     /// Invitation org error: {0}
     Org(#[from] crate::models::org::Error),
-    /// Failed to parse created_by user: {0}
-    ParseCreatedBy(uuid::Error),
     /// Failed to parse InvitationId: {0}
     ParseId(uuid::Error),
+    /// Failed to parse `invited_by`: {0}
+    ParseInvitedBy(crate::auth::resource::Error),
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
+    /// Invitation resource error: {0}
+    Resource(#[from] crate::auth::resource::Error),
     /// Invitation user error: {0}
     User(#[from] crate::models::user::Error),
     /// Wrong email for invitation.
@@ -71,20 +76,21 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            ClaimsNotUser | HostClaims | ListResource | MissingEmail | NodeClaims | WrongEmail
-            | WrongOrg => Status::permission_denied("Access denied."),
+            Diesel(_) | Email(_) | Message(_) => Status::internal("Internal error."),
+            ClaimsNotUser | ClaimsNotUserOrOrg | HostClaims | ListResource | MissingEmail
+            | NodeClaims | WrongEmail | WrongOrg => Status::permission_denied("Access denied."),
             AlreadyAccepted => Status::failed_precondition("Already accepted."),
             AlreadyDeclined => Status::failed_precondition("Already declined."),
             AlreadyInvited => Status::failed_precondition("Already invited."),
             AlreadyMember => Status::failed_precondition("Already member."),
-            Diesel(_) | Email(_) | Message(_) => Status::internal("Internal error."),
-            ParseCreatedBy(_) => Status::invalid_argument("created_by"),
             ParseId(_) => Status::invalid_argument("invitation_id"),
+            ParseInvitedBy(_) => Status::invalid_argument("invited_by"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Model(err) => err.into(),
             Org(err) => err.into(),
+            Resource(err) => err.into(),
             User(err) => err.into(),
         }
     }
@@ -149,45 +155,60 @@ async fn create(
         return Err(Error::AlreadyInvited);
     }
 
-    let user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
-    let invitor = User::find_by_id(user_id, &mut write).await?;
-    let invitee = User::find_by_email(&req.invitee_email, &mut write).await;
+    let new_invitation = NewInvitation::new(org_id, &req.invitee_email, &authz);
+    let invitation = new_invitation.create(&mut write).await?;
 
-    let invitation = req.into_new(invitor.id)?.create(&mut write).await?;
+    let invitor = match authz.resource() {
+        Resource::User(user_id) => {
+            let user = User::find_by_id(user_id, &mut write).await?;
+            Ok(format!("{} ({})", user.name(), user.email))
+        }
+        Resource::Org(org_id) => {
+            let org = Org::find_by_id(org_id, &mut write).await?;
+            Ok(format!("Org: {}", org.name))
+        }
+        _ => Err(Error::ClaimsNotUserOrOrg),
+    }?;
 
-    if let Ok(invitee) = invitee {
-        if Org::has_user(org_id, invitee.id, &mut write).await? {
-            return Err(Error::AlreadyMember);
+    match User::find_by_email(&req.invitee_email, &mut write).await {
+        Ok(invitee) => {
+            if Org::has_user(org_id, invitee.id, &mut write).await? {
+                return Err(Error::AlreadyMember);
+            }
+
+            write
+                .ctx
+                .email
+                .invitation_for_registered(&invitation, invitor, &invitee, "1 week")
+                .await?;
         }
 
-        write
-            .ctx
-            .email
-            .invitation_for_registered(&invitation, &invitor, &invitee, "1 week")
-            .await?;
-    } else {
-        let invitee = Recipient {
-            email: &invitation.invitee_email,
-            first_name: "",
-            last_name: "",
-            preferred_language: None,
-        };
+        Err(crate::models::user::Error::FindByEmail(_, NotFound)) => {
+            let recipient = Recipient {
+                email: &invitation.invitee_email,
+                first_name: "",
+                last_name: "",
+                preferred_language: None,
+            };
 
-        write
-            .ctx
-            .email
-            .invitation(&invitation, &invitor, invitee, "1 week")
-            .await?;
+            write
+                .ctx
+                .email
+                .invitation(&invitation, invitor, recipient, "1 week")
+                .await?;
+        }
+
+        Err(err) => return Err(err.into()),
     }
 
     let org = Org::find_by_id(invitation.org_id, &mut write).await?;
-    let msg = api::OrgMessage::invitation_created(invitation.clone(), org, &mut write)
-        .await
-        .map_err(|err| Error::Message(Box::new(err)))?;
-    write.mqtt(msg);
+    let invitation = api::Invitation::from_model(invitation, &org, &mut write).await?;
+
+    let created = api::OrgMessage::invitation_created(invitation.clone(), &org);
+    write.mqtt(created);
 
     Ok(api::InvitationServiceCreateResponse {
-        invitation: Some(api::Invitation::from_model(invitation, &mut write).await?),
+        invitation: Some(invitation),
     })
 }
 
@@ -201,11 +222,8 @@ async fn list(
             .parse::<OrgId>()
             .map(Into::into)
             .map_err(Error::ParseOrgId)?
-    } else if let Some(created_by) = &req.created_by {
-        created_by
-            .parse::<UserId>()
-            .map(Into::into)
-            .map_err(Error::ParseCreatedBy)?
+    } else if let Some(invited_by) = &req.invited_by {
+        invited_by.try_into().map_err(Error::ParseInvitedBy)?
     } else if let Some(email) = &req.invitee_email {
         User::find_by_email(email, &mut read)
             .await
@@ -261,10 +279,9 @@ async fn accept(
     let org = Org::find_by_id(invitation.org_id, &mut write).await?;
     org.add_member(user.id, &mut write).await?;
 
-    let msg = api::OrgMessage::invitation_accepted(invitation, org, user, &mut write)
-        .await
-        .map_err(|err| Error::Message(Box::new(err)))?;
-    write.mqtt(msg);
+    let invitation = api::Invitation::from_model(invitation, &org, &mut write).await?;
+    let accepted = api::OrgMessage::invitation_accepted(invitation, &org, user);
+    write.mqtt(accepted);
 
     Ok(api::InvitationServiceAcceptResponse {})
 }
@@ -303,13 +320,12 @@ async fn decline(
         return Err(Error::AlreadyDeclined);
     }
 
-    let invitation = invitation.decline(&mut write).await?;
-
     let org = Org::find_by_id(invitation.org_id, &mut write).await?;
-    let msg = api::OrgMessage::invitation_declined(invitation, org, &mut write)
-        .await
-        .map_err(|err| Error::Message(Box::new(err)))?;
-    write.mqtt(msg);
+    let invitation = invitation.decline(&mut write).await?;
+    let invitation = api::Invitation::from_model(invitation, &org, &mut write).await?;
+
+    let declined = api::OrgMessage::invitation_declined(invitation, &org);
+    write.mqtt(declined);
 
     Ok(api::InvitationServiceDeclineResponse {})
 }
@@ -336,79 +352,64 @@ async fn revoke(
     invitation.revoke(&mut write).await?;
 
     let org = Org::find_by_id(invitation.org_id, &mut write).await?;
-    let msg = api::OrgMessage::invitation_declined(invitation, org, &mut write)
-        .await
-        .map_err(|err| Error::Message(Box::new(err)))?;
-    write.mqtt(msg);
+    let invitation = api::Invitation::from_model(invitation, &org, &mut write).await?;
+    let declined = api::OrgMessage::invitation_declined(invitation, &org);
+    write.mqtt(declined);
 
     Ok(api::InvitationServiceRevokeResponse {})
 }
 
-impl api::InvitationServiceCreateRequest {
-    pub fn into_new(self, created_by: UserId) -> Result<NewInvitation, Error> {
-        Ok(NewInvitation {
-            created_by,
-            org_id: self.org_id.parse().map_err(Error::ParseOrgId)?,
-            invitee_email: self.invitee_email,
-        })
-    }
-}
-
 impl api::Invitation {
     async fn from_models(models: Vec<Invitation>, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
-        let creator_ids = models.iter().map(|i| i.created_by).collect();
-        let creators = User::find_by_ids(creator_ids, conn)
-            .await?
-            .to_map_keep_last(|u| (u.id, u));
-
         let org_ids = models.iter().map(|i| i.org_id).collect();
         let orgs = Org::find_by_ids(org_ids, conn)
             .await?
             .to_map_keep_last(|o| (o.id, o));
 
-        let invitations = models
-            .into_iter()
-            .filter_map(|invitation| {
-                orgs.get(&invitation.org_id).and_then(|org| {
-                    let creator = creators.get(&invitation.created_by)?;
-                    Some(Self::new(invitation, creator, org))
-                })
-            })
-            .collect();
+        let mut invitations = Vec::with_capacity(models.len());
+        for model in models {
+            if let Some(org) = orgs.get(&model.org_id) {
+                invitations.push(Self::from_model(model, org, conn).await?);
+            }
+        }
 
         Ok(invitations)
     }
 
-    pub async fn from_model(model: Invitation, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        let creator = User::find_by_id(model.created_by, conn).await?;
-        let org = Org::find_by_id(model.org_id, conn).await?;
-
-        Ok(Self::new(model, &creator, &org))
-    }
-
-    fn new(model: Invitation, creator: &User, org: &Org) -> Self {
-        let mut invitation = Self {
-            id: model.id.to_string(),
-            created_by: model.created_by.to_string(),
-            created_by_name: creator.name(),
-            org_id: model.org_id.to_string(),
-            org_name: org.name.clone(),
-            invitee_email: model.invitee_email,
-            created_at: Some(NanosUtc::from(model.created_at).into()),
-            status: 0, // We use the setter to set this field for type-safety
-            accepted_at: model.accepted_at.map(NanosUtc::from).map(Into::into),
-            declined_at: model.declined_at.map(NanosUtc::from).map(Into::into),
-        };
-
-        let status = match (model.accepted_at, model.declined_at) {
+    async fn from_model(
+        invitation: Invitation,
+        org: &Org,
+        conn: &mut Conn<'_>,
+    ) -> Result<Self, Error> {
+        let status = match (invitation.accepted_at, invitation.declined_at) {
             (None, None) => api::InvitationStatus::Open,
             (Some(_), None) => api::InvitationStatus::Accepted,
             (None, Some(_)) => api::InvitationStatus::Declined,
             (Some(_), Some(_)) => api::InvitationStatus::Unspecified,
         };
 
-        invitation.set_status(status);
-        invitation
+        let invited_by = match invitation.invited_by_resource {
+            ResourceType::User => {
+                let user = User::find_by_id((*invitation.invited_by).into(), conn).await?;
+                Some(common::EntityUpdate::from_user(&user))
+            }
+            ResourceType::Org => Some(common::EntityUpdate::from_org(
+                (*invitation.invited_by).into(),
+            )),
+            _ => None,
+        };
+
+        Ok(api::Invitation {
+            id: invitation.id.to_string(),
+            org_id: invitation.org_id.to_string(),
+            org_name: org.name.clone(),
+            invitee_email: invitation.invitee_email,
+            invited_by,
+            created_at: Some(NanosUtc::from(invitation.created_at).into()),
+            status: status.into(),
+            accepted_at: invitation.accepted_at.map(NanosUtc::from).map(Into::into),
+            declined_at: invitation.declined_at.map(NanosUtc::from).map(Into::into),
+        })
     }
 }
 
@@ -416,6 +417,13 @@ impl api::InvitationServiceListRequest {
     fn as_filter(&self) -> Result<InvitationFilter<'_>, Error> {
         let status = self.status();
         let status = (status != api::InvitationStatus::Unspecified).then_some(status);
+
+        let invited_by = self
+            .invited_by
+            .as_ref()
+            .map(|entity| entity.try_into().map_err(Error::ParseInvitedBy))
+            .transpose()?;
+
         Ok(InvitationFilter {
             org_id: self
                 .org_id
@@ -423,11 +431,7 @@ impl api::InvitationServiceListRequest {
                 .map(|id| id.parse().map_err(Error::ParseOrgId))
                 .transpose()?,
             invitee_email: self.invitee_email.as_deref(),
-            created_by: self
-                .created_by
-                .as_ref()
-                .map(|id| id.parse().map_err(Error::ParseCreatedBy))
-                .transpose()?,
+            invited_by,
             accepted: status.map(|s| s == api::InvitationStatus::Accepted),
             declined: status.map(|s| s == api::InvitationStatus::Declined),
         })

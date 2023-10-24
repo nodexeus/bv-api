@@ -14,10 +14,10 @@ use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::org::{NewOrg, OrgFilter, OrgSearch, UpdateOrg};
 use crate::models::rbac::{OrgUsers, RbacUser};
 use crate::models::{Invitation, Org, OrgUser, User};
-use crate::timestamp::NanosUtc;
+use crate::util::{HashVec, NanosUtc};
 
 use super::api::org_service_server::OrgService;
-use super::{api, Grpc, HashVec};
+use super::{api, common, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -37,8 +37,8 @@ pub enum Error {
     Invitation(#[from] crate::models::invitation::Error),
     /// Failed to parse member count: {0}
     MemberCount(std::num::TryFromIntError),
-    /// Missing permission: org-remove-member
-    MissingRemoveMember,
+    /// Missing permission: org-remove-self
+    MissingRemoveSelf,
     /// Org model error: {0}
     Model(#[from] crate::models::org::Error),
     /// Org not found: {0}
@@ -51,10 +51,12 @@ pub enum Error {
     ParseUserId(uuid::Error),
     /// Org rbac error: {0}
     Rbac(#[from] crate::models::rbac::Error),
+    /// Org resource error: {0}
+    Resource(#[from] crate::auth::resource::Error),
     /// Cannot remove last owner from an org.
     RemoveLastOwner,
-    /// Failure processing search operator: {0}
-    SearchOperator(&'static str),
+    /// Org search failed: {0}
+    SearchOperator(crate::util::search::Error),
     /// Org user error: {0}
     User(#[from] crate::models::user::Error),
 }
@@ -64,7 +66,7 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            ClaimsNotUser | DeletePersonal | MissingRemoveMember => {
+            ClaimsNotUser | DeletePersonal | MissingRemoveSelf => {
                 Status::permission_denied("Access denied.")
             }
             ConvertNoOrg | Diesel(_) | MemberCount(_) => Status::internal("Internal error."),
@@ -79,6 +81,7 @@ impl From<Error> for Status {
             Invitation(err) => err.into(),
             Model(err) => err.into(),
             Rbac(err) => err.into(),
+            Resource(err) => err.into(),
             User(err) => err.into(),
         }
     }
@@ -173,7 +176,8 @@ async fn create(
     let org = new_org.create(user.id, &mut write).await?;
     let org = api::Org::from_model(&org, &mut write).await?;
 
-    let msg = api::OrgMessage::created(org.clone(), user);
+    let created_by = common::EntityUpdate::from_user(&user);
+    let msg = api::OrgMessage::created(org.clone(), created_by);
     write.mqtt(msg);
 
     Ok(api::OrgServiceCreateResponse { org: Some(org) })
@@ -220,9 +224,6 @@ async fn update(
     let org_id: OrgId = req.id.parse().map_err(Error::ParseId)?;
     let authz = write.auth(&meta, OrgPerm::Update, org_id).await?;
 
-    let user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
-    let user = User::find_by_id(user_id, &mut write).await?;
-
     let update = UpdateOrg {
         id: org_id,
         name: req.name.as_deref(),
@@ -230,7 +231,8 @@ async fn update(
     let org = update.update(&mut write).await?;
     let org = api::Org::from_model(&org, &mut write).await?;
 
-    let msg = api::OrgMessage::updated(org, user);
+    let updated_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
+    let msg = api::OrgMessage::updated(org, updated_by);
     write.mqtt(msg);
 
     Ok(api::OrgServiceUpdateResponse {})
@@ -244,9 +246,6 @@ async fn delete(
     let org_id: OrgId = req.id.parse().map_err(Error::ParseId)?;
     let authz = write.auth(&meta, OrgPerm::Delete, org_id).await?;
 
-    let user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
-    let user = User::find_by_id(user_id, &mut write).await?;
-
     let org = Org::find_by_id(org_id, &mut write).await?;
     if org.is_personal {
         return Err(Error::DeletePersonal);
@@ -259,7 +258,8 @@ async fn delete(
     let invitation_ids = invitations.into_iter().map(|i| i.id).collect();
     Invitation::bulk_delete(invitation_ids, &mut write).await?;
 
-    let msg = api::OrgMessage::deleted(&org, user);
+    let deleted_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
+    let msg = api::OrgMessage::deleted(&org, deleted_by);
     write.mqtt(msg);
 
     Ok(api::OrgServiceDeleteResponse {})
@@ -271,24 +271,25 @@ async fn remove_member(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::OrgServiceRemoveMemberResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
-    let authz = write.auth(&meta, OrgPerm::RemoveSelf, org_id).await?;
+    let authz = write.auth(&meta, OrgPerm::RemoveMember, org_id).await?;
 
-    let self_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
     let user_id = req.user_id.parse().map_err(Error::ParseUserId)?;
+    let user = User::find_by_id(user_id, &mut write).await?;
 
-    let remover = User::find_by_id(self_id, &mut write).await?;
-    let removee = User::find_by_id(user_id, &mut write).await?;
+    if let Some(self_id) = authz.resource().user() {
+        if user_id == self_id && !authz.has_perm(OrgPerm::RemoveSelf) {
+            return Err(Error::MissingRemoveSelf);
+        }
+    }
 
     let org = Org::find_by_id(org_id, &mut write).await?;
+    if org.is_personal {
+        return Err(Error::DeletePersonal);
+    }
+
     let owners = RbacUser::org_owners(org_id, &mut write).await?;
     if owners.len() == 1 && owners[0] == user_id {
         return Err(Error::RemoveLastOwner);
-    }
-
-    if user_id != self_id && !authz.has_perm(OrgPerm::RemoveMember) {
-        return Err(Error::MissingRemoveMember);
-    } else if org.is_personal {
-        return Err(Error::DeletePersonal);
     }
 
     org.remove_user(user_id, &mut write).await?;
@@ -296,10 +297,11 @@ async fn remove_member(
     // In case a user needs to be re-invited later, we also remove the (already accepted) invites
     // from the database. This is to prevent them from running into a unique constraint when they
     // are invited again.
-    Invitation::remove_by_org_user(&removee.email, org_id, &mut write).await?;
+    Invitation::remove_by_org_user(&user.email, org_id, &mut write).await?;
 
     let org = api::Org::from_model(&org, &mut write).await?;
-    let msg = api::OrgMessage::updated(org, remover);
+    let updated_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
+    let msg = api::OrgMessage::updated(org, updated_by);
     write.mqtt(msg);
 
     Ok(api::OrgServiceRemoveMemberResponse {})

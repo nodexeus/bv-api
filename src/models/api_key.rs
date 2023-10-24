@@ -3,7 +3,6 @@ use diesel::prelude::*;
 use diesel::result::DatabaseErrorKind::UniqueViolation;
 use diesel::result::Error::{DatabaseError, NotFound};
 use diesel_async::RunQueryDsl;
-use diesel_derive_enum::DbEnum;
 use displaydoc::Display;
 use thiserror::Error;
 use tonic::Status;
@@ -11,9 +10,8 @@ use tonic::Status;
 use crate::auth::resource::{Resource, ResourceEntry, ResourceId, ResourceType, UserId};
 use crate::auth::token::api_key::{BearerSecret, KeyHash, KeyId, Salt, Secret};
 use crate::database::{Conn, WriteConn};
-use crate::grpc::api;
 
-use super::schema::{api_keys, sql_types};
+use super::schema::api_keys;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -59,7 +57,7 @@ pub struct ApiKey {
     pub label: String,
     pub key_hash: KeyHash,
     pub key_salt: Salt,
-    pub resource: ApiResource,
+    pub resource: ResourceType,
     pub resource_id: ResourceId,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -113,7 +111,7 @@ impl ApiKey {
 
 impl From<&ApiKey> for ResourceEntry {
     fn from(key: &ApiKey) -> Self {
-        ResourceEntry::new(key.resource.into(), key.resource_id)
+        ResourceEntry::new(key.resource, key.resource_id)
     }
 }
 
@@ -130,7 +128,7 @@ pub struct NewApiKey {
     label: String,
     key_hash: KeyHash,
     key_salt: Salt,
-    resource: ApiResource,
+    resource: ResourceType,
     resource_id: ResourceId,
 }
 
@@ -152,7 +150,7 @@ impl NewApiKey {
             label,
             key_hash,
             key_salt: salt,
-            resource: entry.resource_type.into(),
+            resource: entry.resource_type,
             resource_id: entry.resource_id,
         };
 
@@ -218,15 +216,15 @@ impl UpdateLabel {
 #[diesel(table_name = api_keys)]
 pub struct UpdateScope {
     id: KeyId,
-    resource: ApiResource,
+    resource: ResourceType,
     resource_id: ResourceId,
 }
 
 impl UpdateScope {
-    pub fn new(id: KeyId, entry: ResourceEntry) -> Self {
+    pub const fn new(id: KeyId, entry: ResourceEntry) -> Self {
         UpdateScope {
             id,
-            resource: entry.resource_type.into(),
+            resource: entry.resource_type,
             resource_id: entry.resource_id,
         }
     }
@@ -239,59 +237,5 @@ impl UpdateScope {
             .map_err(Error::UpdateLabel)?;
 
         updated.updated_at.ok_or(Error::MissingUpdatedAt)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
-#[ExistingTypePath = "sql_types::EnumApiResource"]
-pub enum ApiResource {
-    User,
-    Org,
-    Node,
-    Host,
-}
-
-impl From<ResourceType> for ApiResource {
-    fn from(ty: ResourceType) -> Self {
-        match ty {
-            ResourceType::User => ApiResource::User,
-            ResourceType::Org => ApiResource::Org,
-            ResourceType::Node => ApiResource::Node,
-            ResourceType::Host => ApiResource::Host,
-        }
-    }
-}
-
-impl From<ApiResource> for ResourceType {
-    fn from(resource: ApiResource) -> Self {
-        match resource {
-            ApiResource::User => ResourceType::User,
-            ApiResource::Org => ResourceType::Org,
-            ApiResource::Host => ResourceType::Host,
-            ApiResource::Node => ResourceType::Node,
-        }
-    }
-}
-
-impl From<ApiResource> for api::ApiResource {
-    fn from(resource: ApiResource) -> Self {
-        match resource {
-            ApiResource::User => api::ApiResource::User,
-            ApiResource::Org => api::ApiResource::Org,
-            ApiResource::Host => api::ApiResource::Host,
-            ApiResource::Node => api::ApiResource::Node,
-        }
-    }
-}
-
-impl From<api::ApiResource> for Option<ApiResource> {
-    fn from(api: api::ApiResource) -> Self {
-        match api {
-            api::ApiResource::Unspecified => None,
-            api::ApiResource::User => Some(ApiResource::User),
-            api::ApiResource::Org => Some(ApiResource::Org),
-            api::ApiResource::Node => Some(ApiResource::Node),
-            api::ApiResource::Host => Some(ApiResource::Host),
-        }
     }
 }

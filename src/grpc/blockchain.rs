@@ -23,10 +23,10 @@ use crate::models::blockchain::{
 use crate::models::command::NewCommand;
 use crate::models::node::{NewNodeLog, Node, NodeLogEvent, NodeType, NodeVersion};
 use crate::models::{Command, CommandType};
-use crate::timestamp::NanosUtc;
+use crate::util::{HashVec, NanosUtc};
 
 use super::api::blockchain_service_server::BlockchainService;
-use super::{api, Grpc, HashVec};
+use super::{api, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

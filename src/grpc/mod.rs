@@ -29,7 +29,6 @@ pub mod common {
     }
 }
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Extension;
@@ -43,7 +42,6 @@ use tower_http::trace::TraceLayer;
 
 use crate::config::Context;
 use crate::database::Pool;
-use crate::models::SearchOperator;
 
 use self::api::api_key_service_server::ApiKeyServiceServer;
 use self::api::auth_service_server::AuthServiceServer;
@@ -119,58 +117,4 @@ pub fn server(context: &Arc<Context>) -> Router<CorsServer> {
         .add_service(OrgServiceServer::new(grpc.clone()))
         .add_service(SubscriptionServiceServer::new(grpc.clone()))
         .add_service(UserServiceServer::new(grpc))
-}
-
-trait HashVec {
-    type Elem;
-
-    fn to_map_keep_all<F, K, V>(self, f: F) -> HashMap<K, Vec<V>>
-    where
-        F: Fn(Self::Elem) -> (K, V),
-        K: Eq + std::hash::Hash;
-
-    fn to_map_keep_last<F, K, V>(self, f: F) -> HashMap<K, V>
-    where
-        F: Fn(Self::Elem) -> (K, V),
-        K: Eq + std::hash::Hash;
-}
-
-impl<T, Elem> HashVec for T
-where
-    T: IntoIterator<Item = Elem>,
-{
-    type Elem = Elem;
-
-    fn to_map_keep_all<F, K, V>(self, f: F) -> HashMap<K, Vec<V>>
-    where
-        F: FnMut(Elem) -> (K, V),
-        K: Eq + std::hash::Hash,
-    {
-        let iter = self.into_iter();
-        let mut map: HashMap<_, Vec<_>> = HashMap::with_capacity(iter.size_hint().0);
-        for (k, v) in iter.map(f) {
-            map.entry(k).or_default().push(v);
-        }
-        map
-    }
-
-    fn to_map_keep_last<F, K, V>(self, f: F) -> HashMap<K, V>
-    where
-        F: FnMut(Self::Elem) -> (K, V),
-        K: Eq + std::hash::Hash,
-    {
-        self.into_iter().map(f).collect()
-    }
-}
-
-impl TryInto<SearchOperator> for common::v1::SearchOperator {
-    type Error = &'static str;
-
-    fn try_into(self) -> Result<SearchOperator, Self::Error> {
-        match self {
-            Self::Unspecified => Err("Search operator was unspecified"),
-            Self::Or => Ok(SearchOperator::Or),
-            Self::And => Ok(SearchOperator::And),
-        }
-    }
 }

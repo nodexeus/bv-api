@@ -7,7 +7,6 @@ pub mod token;
 use std::sync::Arc;
 
 use chrono::Duration;
-use derive_more::Deref;
 use displaydoc::Display;
 use thiserror::Error;
 use tonic::metadata::MetadataMap;
@@ -17,7 +16,7 @@ use crate::config::token::Config;
 use crate::database::Conn;
 
 use self::claims::{Claims, Granted};
-use self::rbac::Perms;
+use self::rbac::{Perm, Perms};
 use self::resource::{Resource, Resources};
 use self::token::api_key::Validated;
 use self::token::refresh::{self, Refresh, RequestCookie};
@@ -211,10 +210,9 @@ impl Auth {
 }
 
 /// Authorized `Claims` along with the set of `Granted` permissions.
-#[derive(Debug, Deref)]
+#[derive(Debug)]
 pub struct AuthZ {
     pub claims: Claims,
-    #[deref]
     pub granted: Granted,
 }
 
@@ -226,8 +224,31 @@ impl AuthZ {
         self.claims.resource()
     }
 
+    /// Predicate to check if a specific permission is granted.
+    pub fn has_perm<P>(&self, perm: P) -> bool
+    where
+        P: Into<Perm>,
+    {
+        self.granted.has_perm(perm)
+    }
+
+    /// Predicate to check if any one of the permissions are granted.
+    pub fn has_any_perm<I, P>(&self, perms: I) -> bool
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<Perm>,
+    {
+        self.granted.has_any_perm(perms)
+    }
+
     /// Returns the key value from the authorized `Claims` data.
     pub fn get_data(&self, key: &str) -> Option<&str> {
         self.claims.get(key)
+    }
+}
+
+impl From<&AuthZ> for Resource {
+    fn from(authz: &AuthZ) -> Self {
+        authz.resource()
     }
 }

@@ -11,12 +11,11 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::auth::rbac::{NodeAdminPerm, NodePerm};
-use crate::auth::resource::{HostId, NodeId, Resource, ResourceEntry};
+use crate::auth::resource::{HostId, NodeId, Resource, ResourceEntry, ResourceType};
 use crate::auth::Authorize;
 use crate::cookbook::image::Image;
 use crate::cookbook::script::HardwareRequirements;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
-use crate::models::api_key::ApiResource;
 use crate::models::blockchain::{BlockchainProperty, BlockchainPropertyId, BlockchainVersion};
 use crate::models::command::NewCommand;
 use crate::models::node::{
@@ -25,10 +24,10 @@ use crate::models::node::{
     NodeSyncStatus, NodeType, UpdateNode,
 };
 use crate::models::{Blockchain, Command, CommandType, Host, IpAddress, Org, Region, User};
-use crate::timestamp::NanosUtc;
+use crate::util::{HashVec, NanosUtc};
 
 use super::api::node_service_server::NodeService;
-use super::{api, Grpc, HashVec};
+use super::{api, common, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -92,8 +91,10 @@ pub enum Error {
     PropertyNotFound(String),
     /// Node region error: {0}
     Region(#[from] crate::models::region::Error),
-    /// Failure processing search operator: {0}
-    SearchOperator(&'static str),
+    /// Node resource error: {0}
+    Resource(#[from] crate::auth::resource::Error),
+    /// Node search failed: {0}
+    SearchOperator(crate::util::search::Error),
     /// Failed to parse current data sync progress: {0}
     SyncCurrent(std::num::TryFromIntError),
     /// Failed to parse total data sync progress: {0}
@@ -140,6 +141,7 @@ impl From<Error> for Status {
             Model(err) => err.into(),
             Org(err) => err.into(),
             Region(err) => err.into(),
+            Resource(err) => err.into(),
             User(err) => err.into(),
         }
     }
@@ -314,7 +316,7 @@ async fn create(
     let start_cmd = api::Command::from_model(&start_notif, &mut write).await?;
     let node_api = api::Node::from_model(node, &mut write).await?;
 
-    let created_by = api::NodeResource::from_resource(created_by, &mut write).await?;
+    let created_by = common::EntityUpdate::from_resource(created_by, &mut write).await?;
     let created = api::NodeMessage::created(node_api.clone(), created_by);
 
     write.mqtt(create_cmd);
@@ -348,7 +350,7 @@ async fn update_config(
     let cmd = api::Command::from_model(&updated, &mut write).await?;
 
     let node = api::Node::from_model(node, &mut write).await?;
-    let updated_by = api::NodeResource::from_resource(authz.resource(), &mut write).await?;
+    let updated_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
     let updated = api::NodeMessage::updated(node, updated_by);
 
     write.mqtt(cmd);
@@ -377,7 +379,7 @@ async fn update_status(
     let node = req.as_update()?.update(&mut write).await?;
     let node = api::Node::from_model(node, &mut write).await?;
 
-    let updated_by = api::NodeResource::from_resource(authz.resource(), &mut write).await?;
+    let updated_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
     let updated = api::NodeMessage::updated(node, updated_by);
     write.mqtt(updated);
 
@@ -423,7 +425,7 @@ async fn delete(
     let cmd = new_command.create(&mut write).await?;
     let cmd = api::Command::from_model(&cmd, &mut write).await?;
 
-    let deleted_by = api::NodeResource::from_resource(authz.resource(), &mut write).await?;
+    let deleted_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
     let deleted = api::NodeMessage::deleted(&node, Some(deleted_by));
 
     write.mqtt(cmd);
@@ -535,7 +537,7 @@ impl api::Node {
         let host = Host::find_by_id(node.host_id, conn).await?;
         let org = Org::find_by_id(node.org_id, conn).await?;
         let region = node.region(conn).await?;
-        let created_by = api::NodeResource::from_model(&node, conn).await?;
+        let created_by = common::EntityUpdate::from_node(&node, conn).await?;
 
         api::Node::new(
             node,
@@ -592,7 +594,7 @@ impl api::Node {
         let user_ids = nodes
             .iter()
             .filter_map(|node| match node.created_by_resource {
-                Some(ApiResource::User) => node.created_by.map(|id| (*id).into()),
+                Some(ResourceType::User) => node.created_by.map(|id| (*id).into()),
                 _ => None,
             })
             .collect();
@@ -609,7 +611,7 @@ impl api::Node {
                 let properties = properties.remove(&node.id).unwrap_or_default();
                 let region = node.scheduler_region.map(|id| &regions[&id]);
                 let user = node.created_by.and_then(|id| users.get(&(*id).into()));
-                let created_by = api::NodeResource::from_model_user(&node, user);
+                let created_by = common::EntityUpdate::from_node_user(&node, user);
 
                 Some(api::Node::new(
                     node, org, host, blockchain, properties, region, created_by,
@@ -625,7 +627,7 @@ impl api::Node {
         blockchain: &Blockchain,
         properties: Vec<api::NodeProperty>,
         region: Option<&Region>,
-        created_by: Option<api::NodeResource>,
+        created_by: Option<common::EntityUpdate>,
     ) -> Result<Self, Error> {
         let scheduler = node
             .scheduler_resource
@@ -704,57 +706,6 @@ impl api::Node {
     }
 }
 
-impl api::NodeResource {
-    pub async fn from_resource(resource: Resource, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        let entry = ResourceEntry::from(resource);
-        let resource = ApiResource::from(entry.resource_type);
-        let user = if resource == ApiResource::User {
-            Some(User::find_by_id((*entry.resource_id).into(), conn).await?)
-        } else {
-            None
-        };
-
-        Ok(api::NodeResource {
-            resource: Some(api::ApiResource::from(resource).into()),
-            resource_id: Some(entry.resource_id.to_string()),
-            name: user.as_ref().map(User::name),
-            email: user.as_ref().map(|u| u.email.clone()),
-        })
-    }
-
-    pub async fn from_model(node: &Node, conn: &mut Conn<'_>) -> Result<Option<Self>, Error> {
-        let (Some(created_by), Some(resource)) = (node.created_by, node.created_by_resource) else {
-            return Ok(None);
-        };
-
-        let user = if resource == ApiResource::User {
-            Some(User::find_by_id((*created_by).into(), conn).await?)
-        } else {
-            None
-        };
-
-        Ok(Some(api::NodeResource {
-            resource: Some(api::ApiResource::from(resource).into()),
-            resource_id: Some(created_by.to_string()),
-            name: user.as_ref().map(User::name),
-            email: user.as_ref().map(|u| u.email.clone()),
-        }))
-    }
-
-    pub fn from_model_user(node: &Node, user: Option<&User>) -> Option<Self> {
-        let (Some(created_by), Some(resource)) = (node.created_by, node.created_by_resource) else {
-            return None;
-        };
-
-        Some(api::NodeResource {
-            resource: Some(api::ApiResource::from(resource).into()),
-            resource_id: Some(created_by.to_string()),
-            name: user.map(User::name),
-            email: user.map(|u| u.email.clone()),
-        })
-    }
-}
-
 impl api::NodeServiceCreateRequest {
     pub async fn as_new(
         &self,
@@ -816,7 +767,7 @@ impl api::NodeServiceCreateRequest {
             allow_ips: serde_json::to_value(allow_ips).map_err(Error::AllowIps)?,
             deny_ips: serde_json::to_value(deny_ips).map_err(Error::DenyIps)?,
             created_by: entry.resource_id,
-            created_by_resource: entry.resource_type.into(),
+            created_by_resource: entry.resource_type,
             // We use and_then here to coalesce the scheduler being None and the similarity being
             // None. This is because both the scheduler and the similarity are optional.
             scheduler_similarity: scheduler.and_then(|s| s.similarity().into_model()),
@@ -1073,5 +1024,34 @@ impl api::NodeJobStatus {
             NodeJobStatus::Failed => Self::Failed,
             NodeJobStatus::Stopped => Self::Stopped,
         }
+    }
+}
+
+impl common::EntityUpdate {
+    pub async fn from_node(node: &Node, conn: &mut Conn<'_>) -> Result<Option<Self>, Error> {
+        let (Some(created_by), Some(resource)) = (node.created_by, node.created_by_resource) else {
+            return Ok(None);
+        };
+
+        let user = if resource == ResourceType::User {
+            Some(User::find_by_id((*created_by).into(), conn).await?)
+        } else {
+            None
+        };
+
+        Ok(Self::from_node_user(node, user.as_ref()))
+    }
+
+    pub fn from_node_user(node: &Node, user: Option<&User>) -> Option<Self> {
+        let (Some(created_by), Some(resource)) = (node.created_by, node.created_by_resource) else {
+            return None;
+        };
+
+        Some(common::EntityUpdate {
+            resource: common::Resource::from(resource).into(),
+            resource_id: Some(created_by.to_string()),
+            name: user.map(User::name),
+            email: user.map(|u| u.email.clone()),
+        })
     }
 }

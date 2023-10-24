@@ -6,10 +6,6 @@ pub mod sql_types {
     pub struct BlockchainPropertyUiType;
 
     #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "enum_api_resource"))]
-    pub struct EnumApiResource;
-
-    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "enum_conn_status"))]
     pub struct EnumConnStatus;
 
@@ -54,13 +50,17 @@ pub mod sql_types {
     pub struct EnumNodeType;
 
     #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "enum_resource_type"))]
+    pub struct EnumResourceType;
+
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "token_type"))]
     pub struct TokenType;
 }
 
 diesel::table! {
     use diesel::sql_types::*;
-    use super::sql_types::EnumApiResource;
+    use super::sql_types::EnumResourceType;
 
     api_keys (id) {
         id -> Uuid,
@@ -68,7 +68,7 @@ diesel::table! {
         label -> Text,
         key_hash -> Text,
         key_salt -> Text,
-        resource -> EnumApiResource,
+        resource -> EnumResourceType,
         resource_id -> Uuid,
         created_at -> Timestamptz,
         updated_at -> Nullable<Timestamptz>,
@@ -189,14 +189,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::EnumResourceType;
+
     invitations (id) {
         id -> Uuid,
-        created_by -> Uuid,
+        invited_by -> Uuid,
         org_id -> Uuid,
         invitee_email -> Text,
         created_at -> Timestamptz,
         accepted_at -> Nullable<Timestamptz>,
         declined_at -> Nullable<Timestamptz>,
+        invited_by_resource -> EnumResourceType,
     }
 }
 
@@ -254,7 +258,7 @@ diesel::table! {
     use super::sql_types::EnumNodeType;
     use super::sql_types::EnumNodeSimilarityAffinity;
     use super::sql_types::EnumNodeResourceAffinity;
-    use super::sql_types::EnumApiResource;
+    use super::sql_types::EnumResourceType;
 
     nodes (id) {
         id -> Uuid,
@@ -294,7 +298,7 @@ diesel::table! {
         scheduler_region -> Nullable<Uuid>,
         data_directory_mountpoint -> Nullable<Text>,
         jobs -> Jsonb,
-        created_by_resource -> Nullable<EnumApiResource>,
+        created_by_resource -> Nullable<EnumResourceType>,
     }
 }
 
@@ -408,7 +412,7 @@ diesel::joinable!(hosts -> orgs (org_id));
 diesel::joinable!(hosts -> regions (region_id));
 diesel::joinable!(hosts -> users (created_by));
 diesel::joinable!(invitations -> orgs (org_id));
-diesel::joinable!(invitations -> users (created_by));
+diesel::joinable!(invitations -> users (invited_by));
 diesel::joinable!(ip_addresses -> hosts (host_id));
 diesel::joinable!(node_key_files -> nodes (node_id));
 diesel::joinable!(node_properties -> blockchain_properties (blockchain_property_id));

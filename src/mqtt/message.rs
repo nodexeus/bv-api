@@ -4,26 +4,17 @@ use prost::Message as _;
 use thiserror::Error;
 
 use crate::auth::resource::{HostId, NodeId, OrgId};
-use crate::database::Conn;
-use crate::grpc::api;
-use crate::models::{Host, Invitation, Node, Org, User};
+use crate::grpc::{api, common};
+use crate::models::{Host, Node, Org, User};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to parse Host: {0}
-    Host(#[from] crate::grpc::host::Error),
-    /// Failed to parse Invitation from model: {0}
-    Invitation(#[from] crate::grpc::invitation::Error),
     /// Missing `host_id`. This should not happen.
     MissingHostId,
     /// Missing `node_id`. This should not happen.
     MissingNodeId,
     /// Missing `org_id`. This should not happen.
     MissingOrgId,
-    /// Failed to parse Node: {0}
-    Node(#[from] crate::grpc::node::Error),
-    /// Failed to parse User: {0}
-    User(#[from] crate::grpc::user::Error),
 }
 
 #[derive(From)]
@@ -107,86 +98,65 @@ impl api::OrgMessage {
         }
     }
 
-    pub fn created(org: api::Org, user: User) -> Self {
-        Self {
+    pub const fn created(org: api::Org, created_by: common::EntityUpdate) -> Self {
+        api::OrgMessage {
             message: Some(api::org_message::Message::Created(api::OrgCreated {
                 org: Some(org),
-                created_by: user.id.to_string(),
-                created_by_name: user.name(),
-                created_by_email: user.email,
+                created_by: Some(created_by),
             })),
         }
     }
 
-    pub fn updated(org: api::Org, user: User) -> Self {
-        Self {
+    pub const fn updated(org: api::Org, updated_by: common::EntityUpdate) -> Self {
+        api::OrgMessage {
             message: Some(api::org_message::Message::Updated(api::OrgUpdated {
                 org: Some(org),
-                updated_by: user.id.to_string(),
-                updated_by_name: user.name(),
-                updated_by_email: user.email,
+                updated_by: Some(updated_by),
             })),
         }
     }
 
-    pub fn deleted(org: &Org, user: User) -> Self {
-        Self {
+    pub fn deleted(org: &Org, deleted_by: common::EntityUpdate) -> Self {
+        api::OrgMessage {
             message: Some(api::org_message::Message::Deleted(api::OrgDeleted {
                 org_id: org.id.to_string(),
-                deleted_by: user.id.to_string(),
-                deleted_by_name: user.name(),
-                deleted_by_email: user.email,
+                deleted_by: Some(deleted_by),
             })),
         }
     }
 
-    pub async fn invitation_created(
-        invitation: Invitation,
-        org: Org,
-        conn: &mut Conn<'_>,
-    ) -> Result<Self, Error> {
-        let invitation = api::Invitation::from_model(invitation, conn).await?;
-
-        Ok(Self {
+    pub fn invitation_created(invitation: api::Invitation, org: &Org) -> Self {
+        api::OrgMessage {
             message: Some(api::org_message::Message::InvitationCreated(
                 api::InvitationCreated {
                     org_id: org.id.to_string(),
                     invitation: Some(invitation),
                 },
             )),
-        })
+        }
     }
 
-    pub async fn invitation_accepted(
-        invitation: Invitation,
-        org: Org,
-        user: User,
-        conn: &mut Conn<'_>,
-    ) -> Result<Self, Error> {
-        Ok(Self {
+    pub fn invitation_accepted(invitation: api::Invitation, org: &Org, user: User) -> Self {
+        api::OrgMessage {
             message: Some(api::org_message::Message::InvitationAccepted(
                 api::InvitationAccepted {
                     org_id: org.id.to_string(),
-                    invitation: Some(api::Invitation::from_model(invitation, conn).await?),
+                    invitation: Some(invitation),
                     user: Some(api::User::from_model(user)),
                 },
             )),
-        })
+        }
     }
 
-    pub async fn invitation_declined(
-        invitation: Invitation,
-        org: Org,
-        conn: &mut Conn<'_>,
-    ) -> Result<Self, Error> {
-        Ok(Self {
+    pub fn invitation_declined(invitation: api::Invitation, org: &Org) -> Self {
+        api::OrgMessage {
             message: Some(api::org_message::Message::InvitationDeclined(
                 api::InvitationDeclined {
                     org_id: org.id.to_string(),
-                    invitation: Some(api::Invitation::from_model(invitation, conn).await?),
+                    invitation: Some(invitation),
                 },
             )),
-        })
+        }
     }
 }
 
@@ -206,56 +176,41 @@ impl api::HostMessage {
         }
     }
 
-    pub async fn created(host: Host, user: User, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        let host = api::Host::from_host(host, None, conn).await?;
-
-        Ok(Self {
+    pub const fn created(host: api::Host, created_by: common::EntityUpdate) -> Self {
+        api::HostMessage {
             message: Some(api::host_message::Message::Created(api::HostCreated {
                 host: Some(host),
-                created_by: user.id.to_string(),
-                created_by_name: user.name(),
-                created_by_email: user.email,
+                created_by: Some(created_by),
             })),
-        })
+        }
     }
 
-    pub async fn updated(host: Host, user: User, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        let host = api::Host::from_host(host, None, conn).await?;
-
-        Ok(Self {
+    pub const fn updated(host: api::Host, updated_by: common::EntityUpdate) -> Self {
+        api::HostMessage {
             message: Some(api::host_message::Message::Updated(api::HostUpdated {
                 host: Some(host),
-                updated_by: Some(user.id.to_string()),
-                updated_by_name: Some(user.name()),
-                updated_by_email: Some(user.email),
+                updated_by: Some(updated_by),
             })),
-        })
+        }
     }
 
-    pub async fn updated_many(hosts: Vec<Host>, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
-        api::Host::from_hosts(hosts, None, conn)
-            .await?
+    pub fn updated_many(hosts: Vec<api::Host>, updated_by: &common::EntityUpdate) -> Vec<Self> {
+        hosts
             .into_iter()
-            .map(|host| {
-                Ok(Self {
-                    message: Some(api::host_message::Message::Updated(api::HostUpdated {
-                        host: Some(host),
-                        updated_by: None,
-                        updated_by_name: None,
-                        updated_by_email: None,
-                    })),
-                })
+            .map(|host| api::HostMessage {
+                message: Some(api::host_message::Message::Updated(api::HostUpdated {
+                    host: Some(host),
+                    updated_by: Some(updated_by.clone()),
+                })),
             })
             .collect()
     }
 
-    pub fn deleted(host: &Host, user: User) -> Self {
+    pub fn deleted(host: &Host, deleted_by: common::EntityUpdate) -> Self {
         Self {
             message: Some(api::host_message::Message::Deleted(api::HostDeleted {
                 host_id: host.id.to_string(),
-                deleted_by: user.id.to_string(),
-                deleted_by_name: user.name(),
-                deleted_by_email: user.email,
+                deleted_by: Some(deleted_by),
             })),
         }
     }
@@ -301,8 +256,8 @@ impl api::NodeMessage {
         }
     }
 
-    pub const fn created(node: api::Node, created_by: api::NodeResource) -> Self {
-        Self {
+    pub const fn created(node: api::Node, created_by: common::EntityUpdate) -> Self {
+        api::NodeMessage {
             message: Some(api::node_message::Message::Created(api::NodeCreated {
                 node: Some(node),
                 created_by: Some(created_by),
@@ -310,8 +265,8 @@ impl api::NodeMessage {
         }
     }
 
-    pub const fn updated(node: api::Node, updated_by: api::NodeResource) -> Self {
-        Self {
+    pub const fn updated(node: api::Node, updated_by: common::EntityUpdate) -> Self {
+        api::NodeMessage {
             message: Some(api::node_message::Message::Updated(api::NodeUpdated {
                 node: Some(node),
                 updated_by: Some(updated_by),
@@ -319,10 +274,10 @@ impl api::NodeMessage {
         }
     }
 
-    pub fn updated_many(nodes: Vec<api::Node>, updated_by: &api::NodeResource) -> Vec<Self> {
+    pub fn updated_many(nodes: Vec<api::Node>, updated_by: &common::EntityUpdate) -> Vec<Self> {
         nodes
             .into_iter()
-            .map(|node| Self {
+            .map(|node| api::NodeMessage {
                 message: Some(api::node_message::Message::Updated(api::NodeUpdated {
                     node: Some(node),
                     updated_by: Some(updated_by.clone()),
@@ -331,8 +286,8 @@ impl api::NodeMessage {
             .collect()
     }
 
-    pub fn deleted(node: &Node, deleted_by: Option<api::NodeResource>) -> Self {
-        Self {
+    pub fn deleted(node: &Node, deleted_by: Option<common::EntityUpdate>) -> Self {
+        api::NodeMessage {
             message: Some(api::node_message::Message::Deleted(api::NodeDeleted {
                 node_id: node.id.to_string(),
                 host_id: node.host_id.to_string(),
@@ -348,10 +303,18 @@ mod tests {
     use uuid::Uuid;
 
     use crate::config::Context;
-    use crate::models::api_key::ApiResource;
     use crate::models::{Command, CommandType};
 
     use super::*;
+
+    fn user_update(user: &User) -> common::EntityUpdate {
+        common::EntityUpdate {
+            resource: common::Resource::User.into(),
+            resource_id: Some(user.id.to_string()),
+            name: Some(user.name()),
+            email: Some(user.email.clone()),
+        }
+    }
 
     #[tokio::test]
     async fn test_send_command() {
@@ -383,17 +346,18 @@ mod tests {
         let host = db.seed.host.clone();
         let user = db.seed.user.clone();
 
-        let msg = api::HostMessage::created(host.clone(), user.clone(), &mut conn)
+        let api_host = api::Host::from_host(host.clone(), None, &mut conn)
             .await
             .unwrap();
+        let resource = user_update(&user);
+
+        let msg = api::HostMessage::created(api_host.clone(), resource.clone());
         ctx.notifier.send(msg).await.unwrap();
 
-        let msg = api::HostMessage::updated(host.clone(), user.clone(), &mut conn)
-            .await
-            .unwrap();
+        let msg = api::HostMessage::updated(api_host, resource.clone());
         ctx.notifier.send(msg).await.unwrap();
 
-        let msg = api::HostMessage::deleted(&host, user);
+        let msg = api::HostMessage::deleted(&host, resource);
         ctx.notifier.send(msg).await.unwrap();
     }
 
@@ -408,13 +372,7 @@ mod tests {
         let api_node = api::Node::from_model(node.clone(), &mut conn)
             .await
             .unwrap();
-
-        let resource = api::NodeResource {
-            resource: Some(api::ApiResource::from(ApiResource::User).into()),
-            resource_id: Some(user.id.to_string()),
-            name: Some(user.name()),
-            email: Some(user.email),
-        };
+        let resource = user_update(&user);
 
         let msg = api::NodeMessage::created(api_node.clone(), resource.clone());
         ctx.notifier.send(msg).await.unwrap();
