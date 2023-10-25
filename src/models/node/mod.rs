@@ -163,7 +163,7 @@ pub struct Node {
     pub created_by_resource: Option<ApiResource>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct NodeFilter {
     pub org_id: Option<OrgId>,
     pub offset: u64,
@@ -172,6 +172,15 @@ pub struct NodeFilter {
     pub node_types: Vec<NodeType>,
     pub blockchains: Vec<BlockchainId>,
     pub host_id: Option<HostId>,
+    pub search: Option<NodeSearch>,
+}
+
+#[derive(Debug)]
+pub struct NodeSearch {
+    pub operator: super::SearchOperator,
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub ip: Option<String>,
 }
 
 impl Node {
@@ -248,15 +257,49 @@ impl Node {
             node_types,
             blockchains,
             host_id,
+            search,
         } = filter;
 
         let mut query = nodes::table.into_boxed();
+
+        // search fields
+        if let Some(search) = search {
+            let NodeSearch {
+                operator,
+                id,
+                name,
+                ip,
+            } = search;
+            match operator {
+                super::SearchOperator::Or => {
+                    if let Some(id) = id {
+                        query = query.filter(super::text(nodes::id).like(id));
+                    }
+                    if let Some(name) = name {
+                        query = query.or_filter(super::lower(nodes::name).like(name));
+                    }
+                    if let Some(ip) = ip {
+                        query = query.or_filter(nodes::ip_addr.like(ip));
+                    }
+                }
+                super::SearchOperator::And => {
+                    if let Some(id) = id {
+                        query = query.filter(super::text(nodes::id).like(id));
+                    }
+                    if let Some(name) = name {
+                        query = query.filter(super::lower(nodes::name).like(name));
+                    }
+                    if let Some(ip) = ip {
+                        query = query.filter(nodes::ip_addr.like(ip));
+                    }
+                }
+            }
+        }
 
         if let Some(org_id) = org_id {
             query = query.filter(nodes::org_id.eq(org_id));
         }
 
-        // Apply filters if present
         if !blockchains.is_empty() {
             query = query.filter(nodes::blockchain_id.eq_any(blockchains));
         }
@@ -659,6 +702,7 @@ mod tests {
             offset: 0,
             org_id: Some(org_id),
             host_id: Some(host_id),
+            search: None,
         };
 
         let (_, nodes) = Node::filter(filter, &mut write).await.unwrap();

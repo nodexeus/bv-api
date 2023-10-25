@@ -154,24 +154,56 @@ impl User {
     }
 
     pub async fn filter(
-        filter: UserFilter<'_>,
+        filter: UserFilter,
         conn: &mut Conn<'_>,
     ) -> Result<(u64, Vec<Self>), Error> {
         let UserFilter {
             org_id,
-            email_like,
             offset,
             limit,
+            search,
         } = filter;
         let mut query = Self::not_deleted()
             .left_join(user_roles::table)
             .into_boxed();
 
+        // search fields
+        if let Some(search) = search {
+            let UserSearch {
+                operator,
+                id,
+                name,
+                email,
+            } = search;
+            let user_name = users::first_name.concat(" ").concat(users::last_name);
+            match operator {
+                super::SearchOperator::Or => {
+                    if let Some(id) = id {
+                        query = query.filter(super::text(users::id).like(id));
+                    }
+                    if let Some(name) = name {
+                        query = query.or_filter(super::lower(user_name).like(name));
+                    }
+                    if let Some(email) = email {
+                        query = query.or_filter(super::lower(users::email).like(email));
+                    }
+                }
+                super::SearchOperator::And => {
+                    if let Some(id) = id {
+                        query = query.filter(super::text(users::id).like(id));
+                    }
+                    if let Some(name) = name {
+                        query = query.or_filter(super::lower(user_name).like(name));
+                    }
+                    if let Some(email) = email {
+                        query = query.filter(super::lower(users::email).like(email));
+                    }
+                }
+            }
+        }
+
         if let Some(org_id) = org_id {
             query = query.filter(user_roles::org_id.eq(org_id));
-        }
-        if let Some(email_like) = email_like {
-            query = query.filter(super::lower(users::email).like(email_like.trim().to_lowercase()));
         }
 
         let limit = i64::try_from(limit).map_err(Error::Limit)?;
@@ -307,11 +339,18 @@ impl User {
     }
 }
 
-pub struct UserFilter<'a> {
+pub struct UserFilter {
     pub org_id: Option<OrgId>,
-    pub email_like: Option<&'a str>,
     pub offset: u64,
     pub limit: u64,
+    pub search: Option<UserSearch>,
+}
+
+pub struct UserSearch {
+    pub operator: super::SearchOperator,
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Clone, Validate, Insertable)]

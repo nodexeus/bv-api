@@ -43,6 +43,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::config::Context;
 use crate::database::Pool;
+use crate::models::SearchOperator;
 
 use self::api::api_key_service_server::ApiKeyServiceServer;
 use self::api::auth_service_server::AuthServiceServer;
@@ -159,5 +160,17 @@ where
         K: Eq + std::hash::Hash,
     {
         self.into_iter().map(f).collect()
+    }
+}
+
+impl TryInto<SearchOperator> for common::v1::SearchOperator {
+    type Error = &'static str;
+
+    fn try_into(self) -> Result<SearchOperator, Self::Error> {
+        match self {
+            Self::Unspecified => Err("Search operator was unspecified"),
+            Self::Or => Ok(SearchOperator::Or),
+            Self::And => Ok(SearchOperator::And),
+        }
     }
 }

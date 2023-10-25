@@ -156,11 +156,22 @@ impl AsRef<Host> for Host {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct HostFilter {
     pub org_id: Option<OrgId>,
     pub offset: u64,
     pub limit: u64,
+    pub search: Option<HostSearch>,
+}
+
+#[derive(Debug)]
+pub struct HostSearch {
+    pub operator: super::SearchOperator,
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub os: Option<String>,
+    pub ip: Option<String>,
 }
 
 #[derive(Debug)]
@@ -216,8 +227,57 @@ impl Host {
             org_id,
             offset,
             limit,
+            search,
         } = filter;
         let mut query = hosts::table.into_boxed();
+
+        // search fields
+        if let Some(search) = search {
+            let HostSearch {
+                operator,
+                id,
+                name,
+                version,
+                os,
+                ip,
+            } = search;
+            match operator {
+                super::SearchOperator::Or => {
+                    if let Some(id) = id {
+                        query = query.filter(super::text(hosts::id).like(id));
+                    }
+                    if let Some(name) = name {
+                        query = query.or_filter(super::lower(hosts::name).like(name));
+                    }
+                    if let Some(version) = version {
+                        query = query.or_filter(super::lower(hosts::version).like(version));
+                    }
+                    if let Some(os) = os {
+                        query = query.or_filter(super::lower(hosts::os).like(os));
+                    }
+                    if let Some(ip) = ip {
+                        query = query.or_filter(hosts::ip_addr.like(ip));
+                    }
+                }
+                super::SearchOperator::And => {
+                    if let Some(id) = id {
+                        query = query.filter(super::text(hosts::id).like(id));
+                    }
+                    if let Some(name) = name {
+                        query = query.filter(super::lower(hosts::name).like(name));
+                    }
+                    if let Some(version) = version {
+                        query = query.filter(super::lower(hosts::version).like(version));
+                    }
+                    if let Some(os) = os {
+                        query = query.filter(super::lower(hosts::os).like(os));
+                    }
+                    if let Some(ip) = ip {
+                        query = query.filter(hosts::ip_addr.like(ip));
+                    }
+                }
+            }
+        }
 
         if let Some(org_id) = org_id {
             query = query.filter(hosts::org_id.eq(org_id));

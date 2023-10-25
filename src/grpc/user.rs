@@ -9,7 +9,7 @@ use crate::auth::rbac::{UserAdminPerm, UserBillingPerm, UserPerm};
 use crate::auth::resource::UserId;
 use crate::auth::{self, token, Authorize};
 use crate::database::{ReadConn, Transaction, WriteConn};
-use crate::models::user::{NewUser, UpdateUser, User, UserFilter};
+use crate::models::user::{NewUser, UpdateUser, User, UserFilter, UserSearch};
 use crate::timestamp::NanosUtc;
 
 use super::api::user_service_server::UserService;
@@ -35,6 +35,8 @@ pub enum Error {
     ParseUserId(uuid::Error),
     /// User model error: {0}
     Model(#[from] crate::models::user::Error),
+    /// Failure processing search operator: {0}
+    SearchOperator(&'static str),
 }
 
 impl From<Error> for Status {
@@ -46,6 +48,7 @@ impl From<Error> for Status {
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
+            SearchOperator(_) => Status::invalid_argument("search.operator"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Model(err) => err.into(),
@@ -300,16 +303,28 @@ impl api::UserServiceCreateRequest {
 }
 
 impl api::UserServiceListRequest {
-    fn as_filter(&self) -> Result<UserFilter<'_>, Error> {
+    fn as_filter(&self) -> Result<UserFilter, Error> {
         Ok(UserFilter {
             org_id: self
                 .org_id
                 .as_ref()
                 .map(|id| id.parse().map_err(Error::ParseOrgId))
                 .transpose()?,
-            email_like: self.email_like.as_deref(),
             offset: self.offset,
             limit: self.limit,
+            search: self
+                .search
+                .as_ref()
+                .map(|s| {
+                    s.operator().try_into().map(|operator| UserSearch {
+                        operator,
+                        id: s.id.as_ref().map(|id| id.trim().to_lowercase()),
+                        name: s.name.as_ref().map(|name| name.trim().to_lowercase()),
+                        email: s.email.as_ref().map(|email| email.trim().to_lowercase()),
+                    })
+                })
+                .transpose()
+                .map_err(Error::SearchOperator)?,
         })
     }
 }

@@ -11,7 +11,7 @@ use crate::auth::rbac::{OrgAdminPerm, OrgPerm, OrgProvisionPerm};
 use crate::auth::resource::{OrgId, UserId};
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
-use crate::models::org::{NewOrg, OrgFilter, UpdateOrg};
+use crate::models::org::{NewOrg, OrgFilter, OrgSearch, UpdateOrg};
 use crate::models::rbac::{OrgUsers, RbacUser};
 use crate::models::{Invitation, Org, OrgUser, User};
 use crate::timestamp::NanosUtc;
@@ -53,6 +53,8 @@ pub enum Error {
     Rbac(#[from] crate::models::rbac::Error),
     /// Cannot remove last owner from an org.
     RemoveLastOwner,
+    /// Failure processing search operator: {0}
+    SearchOperator(&'static str),
     /// Org user error: {0}
     User(#[from] crate::models::user::Error),
 }
@@ -70,6 +72,7 @@ impl From<Error> for Status {
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
+            SearchOperator(_) => Status::invalid_argument("search.operator"),
             RemoveLastOwner => Status::failed_precondition("Can't remove last org owner."),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
@@ -413,6 +416,18 @@ impl api::OrgServiceListRequest {
                 .transpose()?,
             offset: self.offset,
             limit: self.limit,
+            search: self
+                .search
+                .as_ref()
+                .map(|s| {
+                    s.operator().try_into().map(|operator| OrgSearch {
+                        operator,
+                        id: s.id.as_ref().map(|id| id.trim().to_lowercase()),
+                        name: s.name.as_ref().map(|name| name.trim().to_lowercase()),
+                    })
+                })
+                .transpose()
+                .map_err(Error::SearchOperator)?,
         })
     }
 }
