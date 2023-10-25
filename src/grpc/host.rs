@@ -19,10 +19,10 @@ use crate::models::host::{
     ConnectionStatus, Host, HostFilter, HostSearch, HostType, MonthlyCostUsd, NewHost, UpdateHost,
 };
 use crate::models::{Blockchain, CommandType, Org, OrgUser, Region, RegionId};
-use crate::timestamp::NanosUtc;
+use crate::util::{HashVec, NanosUtc};
 
 use super::api::host_service_server::HostService;
-use super::{api, common, Grpc, HashVec};
+use super::{api, common, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -66,8 +66,8 @@ pub enum Error {
     ParseOrgId(uuid::Error),
     /// Provision token is for a different organization.
     ProvisionOrg,
-    /// Failure processing search operator: {0}
-    SearchOperator(&'static str),
+    /// Host search failed: {0}
+    SearchOperator(crate::util::search::Error),
     /// Host org error: {0}
     Org(#[from] crate::models::org::Error),
     /// Host Refresh token failure: {0}

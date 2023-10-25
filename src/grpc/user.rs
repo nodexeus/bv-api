@@ -10,7 +10,7 @@ use crate::auth::resource::UserId;
 use crate::auth::{self, token, Authorize};
 use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::models::user::{NewUser, UpdateUser, User, UserFilter, UserSearch};
-use crate::timestamp::NanosUtc;
+use crate::util::NanosUtc;
 
 use super::api::user_service_server::UserService;
 use super::{api, Grpc};
@@ -35,8 +35,8 @@ pub enum Error {
     ParseUserId(uuid::Error),
     /// User model error: {0}
     Model(#[from] crate::models::user::Error),
-    /// Failure processing search operator: {0}
-    SearchOperator(&'static str),
+    /// User search failed: {0}
+    SearchOperator(crate::util::search::Error),
 }
 
 impl From<Error> for Status {

@@ -138,6 +138,7 @@ mod test {
     use chrono::DateTime;
     use uuid::Uuid;
 
+    use crate::auth::resource::ResourceType;
     use crate::auth::Auth;
     use crate::config::Config;
     use crate::email::tests::MockEmail;
@@ -170,31 +171,27 @@ mod test {
             deleted_at: None,
             billing_id: None,
         };
-        let user2 = User {
-            email: "testing@receiver.blockjoy".to_string(),
-            first_name: "Shaun".to_string(),
-            last_name: "Testheri".to_string(),
-            ..user.clone()
-        };
-        let recipient = Recipient::from(&user2);
+        let recipient = Recipient::from(&user);
         let invitation = Invitation {
             id: Uuid::new_v4().into(),
-            created_by: Uuid::new_v4().into(),
             org_id: Uuid::new_v4().into(),
             invitee_email: "testing@receiver.blockjoy".to_string(),
+            invited_by: Uuid::new_v4().into(),
+            invited_by_resource: ResourceType::User,
             created_at: DateTime::default(),
             accepted_at: None,
             declined_at: None,
         };
+        let inviter = "Mahatma Gandhi".to_string();
 
         email.update_password(&user).await.unwrap();
         email.registration_confirmation(&user, None).await.unwrap();
         email
-            .invitation_for_registered(&invitation, &user, &user2, "tomorrow")
+            .invitation_for_registered(&invitation, inviter.clone(), &user, "tomorrow")
             .await
             .unwrap();
         email
-            .invitation(&invitation, &user, recipient, "yesterday")
+            .invitation(&invitation, inviter, recipient, "yesterday")
             .await
             .unwrap();
         email.reset_password(&user).await.unwrap();

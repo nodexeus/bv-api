@@ -86,11 +86,7 @@ async fn member_count_works() {
     let members = resp.org.unwrap().member_count;
 
     // Now we invite someone new.
-    let new_invitation = NewInvitation {
-        created_by: user_id,
-        org_id,
-        invitee_email: seed::UNCONFIRMED_EMAIL.to_string(),
-    };
+    let new_invitation = NewInvitation::new(org_id, seed::UNCONFIRMED_EMAIL, user_id);
     let invitation = new_invitation.create(&mut conn).await.unwrap();
 
     let resource = ResourceEntry::new_org(invitation.org_id).into();

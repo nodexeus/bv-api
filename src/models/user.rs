@@ -18,6 +18,7 @@ use validator::Validate;
 use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
 use crate::email::Language;
+use crate::util::SearchOperator;
 
 use super::org::NewOrg;
 use super::schema::{user_roles, users};
@@ -177,7 +178,7 @@ impl User {
             } = search;
             let user_name = users::first_name.concat(" ").concat(users::last_name);
             match operator {
-                super::SearchOperator::Or => {
+                SearchOperator::Or => {
                     if let Some(id) = id {
                         query = query.filter(super::text(users::id).like(id));
                     }
@@ -188,7 +189,7 @@ impl User {
                         query = query.or_filter(super::lower(users::email).like(email));
                     }
                 }
-                super::SearchOperator::And => {
+                SearchOperator::And => {
                     if let Some(id) = id {
                         query = query.filter(super::text(users::id).like(id));
                     }
@@ -347,7 +348,7 @@ pub struct UserFilter {
 }
 
 pub struct UserSearch {
-    pub operator: super::SearchOperator,
+    pub operator: SearchOperator,
     pub id: Option<String>,
     pub name: Option<String>,
     pub email: Option<String>,

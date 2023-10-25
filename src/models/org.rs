@@ -16,6 +16,7 @@ use crate::auth::rbac::OrgRole;
 use crate::auth::rbac::Role;
 use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
+use crate::util::SearchOperator;
 
 use super::rbac::RbacUser;
 use super::schema::{nodes, orgs, orgs_users, user_roles};
@@ -135,7 +136,7 @@ impl Org {
         if let Some(search) = search {
             let OrgSearch { operator, id, name } = search;
             match operator {
-                super::SearchOperator::Or => {
+                SearchOperator::Or => {
                     if let Some(id) = id {
                         query = query.filter(super::text(orgs::id).like(id));
                     }
@@ -143,7 +144,7 @@ impl Org {
                         query = query.or_filter(super::lower(orgs::name).like(name));
                     }
                 }
-                super::SearchOperator::And => {
+                SearchOperator::And => {
                     if let Some(id) = id {
                         query = query.filter(super::text(orgs::id).like(id));
                     }
@@ -280,7 +281,7 @@ pub struct OrgFilter {
 }
 
 pub struct OrgSearch {
-    pub operator: super::SearchOperator,
+    pub operator: SearchOperator,
     pub id: Option<String>,
     pub name: Option<String>,
 }

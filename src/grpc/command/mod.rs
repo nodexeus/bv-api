@@ -18,7 +18,7 @@ use crate::models::blockchain::{Blockchain, BlockchainProperty, BlockchainVersio
 use crate::models::command::UpdateCommand;
 use crate::models::node::FilteredIpAddr;
 use crate::models::{Command, Host, Node};
-use crate::timestamp::NanosUtc;
+use crate::util::NanosUtc;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

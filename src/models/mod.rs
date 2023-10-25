@@ -51,9 +51,3 @@ pub use user::User;
 diesel::sql_function!(fn lower(x: diesel::sql_types::Text) -> diesel::sql_types::Text);
 diesel::sql_function!(fn string_to_array(version: diesel::sql_types::Text, split: diesel::sql_types::Text) -> diesel::sql_types::Array<diesel::sql_types::Text>);
 diesel::sql_function!(fn text(version: diesel::sql_types::Uuid) -> diesel::sql_types::Text);
-
-#[derive(Debug, Clone, Copy)]
-pub enum SearchOperator {
-    Or,
-    And,
-}

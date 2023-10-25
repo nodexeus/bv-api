@@ -1,3 +1,5 @@
+mod hybrid;
+
 use std::sync::Arc;
 
 use displaydoc::Display;
@@ -8,7 +10,6 @@ use tokio::sync::broadcast::{self, Receiver, Sender};
 use tracing::error;
 
 use crate::config::Context;
-use crate::hybrid_server::hybrid;
 use crate::{grpc, http};
 
 #[derive(Debug, Display, Error)]
@@ -22,7 +23,7 @@ pub enum Error {
 pub async fn start(context: Arc<Context>) -> Result<(), Error> {
     let http = http::router(&context).into_make_service();
     let grpc = grpc::server(&context).into_service();
-    let both = hybrid(http, grpc);
+    let both = hybrid::hybrid(http, grpc);
 
     let server = axum::Server::bind(&context.config.database.bind_addr()).serve(both);
     let mut shutdown_rx = context.alert.shutdown_rx();

@@ -221,7 +221,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::config::Context;
-    use crate::timestamp::SecondsUtc;
+    use crate::util::SecondsUtc;
 
     use super::*;
 

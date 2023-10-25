@@ -18,9 +18,10 @@ use crate::database::{Transaction, WriteConn};
 use crate::models::host::UpdateHostMetrics;
 use crate::models::node::{NodeJob, UpdateNodeMetrics};
 use crate::models::{Host, Node};
+use crate::util::HashVec;
 
 use super::api::metrics_service_server::MetricsService;
-use super::{api, Grpc, HashVec};
+use super::{api, common, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -36,8 +37,8 @@ pub enum Error {
     Diesel(#[from] diesel::result::Error),
     /// Metrics host error: {0}
     Host(#[from] crate::models::host::Error),
-    /// Metrics MQTT message error: {0}
-    Message(Box<crate::mqtt::message::Error>),
+    /// Metrics host grpc error: {0}
+    HostGrpc(#[from] crate::grpc::host::Error),
     /// Failed to parse network received: {0}
     NetworkReceived(std::num::TryFromIntError),
     /// Failed to parse network sent: {0}
@@ -54,6 +55,8 @@ pub enum Error {
     SyncCurrent(std::num::TryFromIntError),
     /// Failed to parse total data sync progress: {0}
     SyncTotal(std::num::TryFromIntError),
+    /// Metrics resource error: {0}
+    Resource(#[from] crate::auth::resource::Error),
     /// Failed to parse uptime: {0}
     Uptime(std::num::TryFromIntError),
     /// Failed to parse used cpu: {0}
@@ -75,9 +78,11 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Diesel(_) | Message(_) | UnserializableJobs(_) => Status::internal("Internal error."),
+            Diesel(_) | UnserializableJobs(_) => Status::internal("Internal error."),
             BlockAge(_) => Status::invalid_argument("block_age"),
             BlockHeight(_) => Status::invalid_argument("height"),
+            MetricsForMissingNode { .. } => Status::not_found("Not found."),
+            MetricsForMissingHost { .. } => Status::not_found("Not found."),
             NetworkReceived(_) => Status::invalid_argument("network_received"),
             NetworkSent(_) => Status::invalid_argument("network_sent"),
             ParseNodeId(_) => Status::invalid_argument("metrics.id"),
@@ -91,10 +96,10 @@ impl From<Error> for Status {
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Host(err) => err.into(),
+            HostGrpc(err) => err.into(),
             Node(err) => err.into(),
             NodeGrpc(err) => err.into(),
-            MetricsForMissingNode { .. } => Status::not_found("Not found."),
-            MetricsForMissingHost { .. } => Status::not_found("Not found."),
+            Resource(err) => err.into(),
         }
     }
 }
@@ -175,7 +180,7 @@ async fn node(
     let nodes = UpdateNodeMetrics::update_metrics(updates, &mut write).await?;
     let nodes = api::Node::from_models(nodes, &mut write).await?;
 
-    let updated_by = api::NodeResource::from_resource(authz.resource(), &mut write).await?;
+    let updated_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
     api::NodeMessage::updated_many(nodes, &updated_by)
         .into_iter()
         .for_each(|msg| write.mqtt(msg));
@@ -207,14 +212,14 @@ async fn host(
 
     let host_ids = updates.iter().map(|update| update.id).collect();
     let host_ids = Host::existing_ids(host_ids, &mut write).await?;
-    write.auth(&meta, MetricsPerm::Host, &host_ids).await?;
+    let authz = write.auth(&meta, MetricsPerm::Host, &host_ids).await?;
 
     let (updates, missing) = updates.into_iter().partition(|u| host_ids.contains(&u.id));
     let hosts = UpdateHostMetrics::update_metrics(updates, &mut write).await?;
+    let hosts = api::Host::from_hosts(hosts, Some(&authz), &mut write).await?;
 
-    api::HostMessage::updated_many(hosts, &mut write)
-        .await
-        .map_err(|err| Error::Message(Box::new(err)))?
+    let updated_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
+    api::HostMessage::updated_many(hosts, &updated_by)
         .into_iter()
         .for_each(|msg| write.mqtt(msg));
 

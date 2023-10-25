@@ -33,11 +33,11 @@ use thiserror::Error;
 use tonic::Status;
 use tracing::warn;
 
-use crate::auth::resource::{HostId, NodeId, OrgId, ResourceId};
+use crate::auth::resource::{HostId, NodeId, OrgId, ResourceId, ResourceType};
 use crate::cookbook::image::Image;
 use crate::database::{Conn, WriteConn};
+use crate::util::SearchOperator;
 
-use super::api_key::ApiResource;
 use super::blockchain::{Blockchain, BlockchainId};
 use super::host::{Host, HostRequirements, HostType};
 use super::schema::nodes;
@@ -160,7 +160,7 @@ pub struct Node {
     pub scheduler_region: Option<RegionId>,
     pub data_directory_mountpoint: Option<String>,
     pub jobs: serde_json::Value,
-    pub created_by_resource: Option<ApiResource>,
+    pub created_by_resource: Option<ResourceType>,
 }
 
 #[derive(Debug)]
@@ -177,7 +177,7 @@ pub struct NodeFilter {
 
 #[derive(Debug)]
 pub struct NodeSearch {
-    pub operator: super::SearchOperator,
+    pub operator: SearchOperator,
     pub id: Option<String>,
     pub name: Option<String>,
     pub ip: Option<String>,
@@ -271,7 +271,7 @@ impl Node {
                 ip,
             } = search;
             match operator {
-                super::SearchOperator::Or => {
+                SearchOperator::Or => {
                     if let Some(id) = id {
                         query = query.filter(super::text(nodes::id).like(id));
                     }
@@ -282,7 +282,7 @@ impl Node {
                         query = query.or_filter(nodes::ip_addr.like(ip));
                     }
                 }
-                super::SearchOperator::And => {
+                SearchOperator::And => {
                     if let Some(id) = id {
                         query = query.filter(super::text(nodes::id).like(id));
                     }
@@ -468,7 +468,7 @@ pub struct NewNode {
     pub deny_ips: serde_json::Value,
     pub node_type: NodeType,
     pub created_by: ResourceId,
-    pub created_by_resource: ApiResource,
+    pub created_by_resource: ResourceType,
     /// Controls whether to run the node on hosts that contain nodes similar to this one.
     pub scheduler_similarity: Option<SimilarNodeAffinity>,
     /// Controls whether to run the node on hosts that are full or empty.
@@ -673,7 +673,7 @@ mod tests {
             network: "some network".to_string().into(),
             node_type: NodeType::Validator,
             created_by: user_id.into(),
-            created_by_resource: ApiResource::User,
+            created_by_resource: ResourceType::User,
             scheduler_similarity: None,
             scheduler_resource: Some(ResourceAffinity::MostResources),
             scheduler_region: None,

@@ -6,14 +6,14 @@ use tonic::{Request, Response, Status};
 use tracing::error;
 
 use crate::auth::rbac::ApiKeyPerm;
-use crate::auth::resource::ResourceEntry;
+use crate::auth::resource::{ResourceEntry, ResourceType};
 use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction, WriteConn};
-use crate::models::api_key::{ApiKey, ApiResource, NewApiKey, UpdateLabel, UpdateScope};
-use crate::timestamp::NanosUtc;
+use crate::models::api_key::{ApiKey, NewApiKey, UpdateLabel, UpdateScope};
+use crate::util::NanosUtc;
 
 use super::api::api_key_service_server::ApiKeyService;
-use super::{api, Grpc};
+use super::{api, common, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -25,8 +25,6 @@ pub enum Error {
     ClaimsNotUser,
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
-    /// Missing ApiResource.
-    MissingApiResource,
     /// Create API key request missing scope.
     MissingCreateScope,
     /// ApiKeyScope missing `resource_id`.
@@ -41,8 +39,8 @@ pub enum Error {
     ParseKeyId(crate::auth::token::api_key::Error),
     /// Failed to parse ResourceId: {0}
     ParseResourceId(uuid::Error),
-    /// Unknown ApiResource `{0}`: `{1}`
-    UnknownApiResource(i32, prost::DecodeError),
+    /// Failed to parse ResourceType: {0}
+    ParseResourceType(crate::auth::resource::Error),
 }
 
 impl From<Error> for Status {
@@ -52,11 +50,11 @@ impl From<Error> for Status {
         match err {
             ClaimsNotUser => Status::permission_denied("Access denied."),
             Diesel(_) | MissingUpdatedAt => Status::internal("Internal error."),
-            MissingApiResource | UnknownApiResource(..) => Status::invalid_argument("resource"),
             MissingCreateScope => Status::invalid_argument("scope"),
             MissingScopeResourceId | ParseResourceId(_) => Status::invalid_argument("resource_id"),
             NothingToUpdate => Status::failed_precondition("Nothing to update."),
             ParseKeyId(_) => Status::invalid_argument("id"),
+            ParseResourceType(_) => Status::invalid_argument("resource"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Model(err) => err.into(),
@@ -222,7 +220,7 @@ impl api::ListApiKey {
         let scope = api::ApiKeyScope::from_model(&api_key);
 
         api::ListApiKey {
-            id: Some(format!("{}", *api_key.id)),
+            id: Some(api_key.id.to_string()),
             label: Some(api_key.label),
             scope: Some(scope),
             created_at: Some(NanosUtc::from(api_key.created_at).into()),
@@ -234,16 +232,15 @@ impl api::ListApiKey {
 impl api::ApiKeyScope {
     fn from_model(api_key: &ApiKey) -> Self {
         api::ApiKeyScope {
-            resource: api::ApiResource::from(api_key.resource).into(),
+            resource: common::Resource::from(api_key.resource).into(),
             resource_id: Some(api_key.resource_id.to_string()),
         }
     }
 
     #[cfg(any(test, feature = "integration-test"))]
     pub fn from_entry(entry: ResourceEntry) -> Self {
-        let resource = ApiResource::from(entry.resource_type);
         api::ApiKeyScope {
-            resource: api::ApiResource::from(resource).into(),
+            resource: common::Resource::from(entry.resource_type).into(),
             resource_id: Some(entry.resource_id.to_string()),
         }
     }
@@ -253,12 +250,10 @@ impl TryFrom<api::ApiKeyScope> for ResourceEntry {
     type Error = Error;
 
     fn try_from(scope: api::ApiKeyScope) -> Result<Self, Self::Error> {
-        let api_resource = api::ApiResource::try_from(scope.resource)
-            .map_err(|err| Error::UnknownApiResource(scope.resource, err))
-            .map(Option::<ApiResource>::from)?
-            .ok_or(Error::MissingApiResource)?;
-
-        let resource_type = api_resource.into();
+        let resource_type: ResourceType = scope
+            .resource()
+            .try_into()
+            .map_err(Error::ParseResourceType)?;
         let resource_id = scope
             .resource_id
             .ok_or(Error::MissingScopeResourceId)?

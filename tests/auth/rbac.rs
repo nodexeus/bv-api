@@ -1,12 +1,10 @@
 use std::collections::HashSet;
 
-use blockvisor_api::auth::resource::OrgId;
-use tonic::transport::Channel;
-
 use blockvisor_api::auth::rbac::OrgRole;
+use blockvisor_api::auth::resource::{OrgId, ResourceType};
 use blockvisor_api::grpc::api;
-use blockvisor_api::models::api_key::ApiResource;
 use blockvisor_api::models::rbac::RbacUser;
+use tonic::transport::Channel;
 
 use crate::setup::helper::rpc;
 use crate::setup::helper::traits::SocketRpc;
@@ -23,7 +21,7 @@ async fn grpc_login_role_can_create_api_key() {
         &test,
         &org_user.jwt,
         "label",
-        ApiResource::User,
+        ResourceType::User,
         org_user.user_id,
     )
     .await;

@@ -106,7 +106,7 @@ impl Email {
     pub async fn invitation_for_registered<S>(
         &self,
         invitation: &Invitation,
-        inviter: &User,
+        inviter: String,
         invitee: &User,
         expiration: S,
     ) -> Result<(), Error>
@@ -115,7 +115,7 @@ impl Email {
     {
         let base = &self.base_url;
         let context = hashmap! {
-            "inviter" => format!("{} ({})", inviter.name(), inviter.email),
+            "inviter" => inviter,
             "link" => format!("{base}/invite-registered?invitation_id={}", invitation.id),
             "decline_link" => format!("{base}/decline-registered?invitation_id={}", invitation.id),
             "expiration" => expiration.to_string()
@@ -128,7 +128,7 @@ impl Email {
     pub async fn invitation<S>(
         &self,
         invitation: &Invitation,
-        inviter: &User,
+        inviter: String,
         invitee: Recipient<'_>,
         expiration: S,
     ) -> Result<(), Error>
@@ -146,7 +146,7 @@ impl Email {
 
         let base = &self.base_url;
         let context = hashmap! {
-            "inviter" => format!("{} ({})", inviter.name(), inviter.email),
+            "inviter" => inviter,
             "accept_link" => format!("{base}/accept-invite?token={}", *token),
             "decline_link" => format!("{base}/decline-invite?token={}", *token),
             "expiration" => expiration.to_string(),
