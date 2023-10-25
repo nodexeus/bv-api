@@ -21,8 +21,8 @@ use crate::models::blockchain::{BlockchainProperty, BlockchainPropertyId, Blockc
 use crate::models::command::NewCommand;
 use crate::models::node::{
     ContainerStatus, FilteredIpAddr, NewNode, Node, NodeChainStatus, NodeFilter, NodeJob,
-    NodeJobProgress, NodeJobStatus, NodeProperty, NodeScheduler, NodeStakingStatus, NodeSyncStatus,
-    NodeType, UpdateNode,
+    NodeJobProgress, NodeJobStatus, NodeProperty, NodeScheduler, NodeSearch, NodeStakingStatus,
+    NodeSyncStatus, NodeType, UpdateNode,
 };
 use crate::models::{Blockchain, Command, CommandType, Host, IpAddress, Org, Region, User};
 use crate::timestamp::NanosUtc;
@@ -92,6 +92,8 @@ pub enum Error {
     PropertyNotFound(String),
     /// Node region error: {0}
     Region(#[from] crate::models::region::Error),
+    /// Failure processing search operator: {0}
+    SearchOperator(&'static str),
     /// Failed to parse current data sync progress: {0}
     SyncCurrent(std::num::TryFromIntError),
     /// Failed to parse total data sync progress: {0}
@@ -122,6 +124,7 @@ impl From<Error> for Status {
             ParseHostId(_) => Status::invalid_argument("host_id"),
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
+            SearchOperator(_) => Status::invalid_argument("search.operator"),
             SyncCurrent(_) => Status::invalid_argument("data_sync_progress_current"),
             SyncTotal(_) => Status::invalid_argument("data_sync_progress_total"),
             Vcpu(_) => Status::invalid_argument("vcpu_count"),
@@ -882,6 +885,19 @@ impl api::NodeServiceListRequest {
                 .as_ref()
                 .map(|id| id.parse().map_err(Error::ParseHostId))
                 .transpose()?,
+            search: self
+                .search
+                .as_ref()
+                .map(|s| {
+                    s.operator().try_into().map(|operator| NodeSearch {
+                        operator,
+                        id: s.id.as_ref().map(|id| id.trim().to_lowercase()),
+                        name: s.name.as_ref().map(|name| name.trim().to_lowercase()),
+                        ip: s.ip.as_ref().map(|ip| ip.trim().to_lowercase()),
+                    })
+                })
+                .transpose()
+                .map_err(Error::SearchOperator)?,
         })
     }
 }

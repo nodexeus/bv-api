@@ -125,10 +125,34 @@ impl Org {
             member_id,
             offset,
             limit,
+            search,
         } = filter;
         let mut query = Self::not_deleted()
             .left_join(user_roles::table)
             .into_boxed();
+
+        // search fields
+        if let Some(search) = search {
+            let OrgSearch { operator, id, name } = search;
+            match operator {
+                super::SearchOperator::Or => {
+                    if let Some(id) = id {
+                        query = query.filter(super::text(orgs::id).like(id));
+                    }
+                    if let Some(name) = name {
+                        query = query.or_filter(super::lower(orgs::name).like(name));
+                    }
+                }
+                super::SearchOperator::And => {
+                    if let Some(id) = id {
+                        query = query.filter(super::text(orgs::id).like(id));
+                    }
+                    if let Some(name) = name {
+                        query = query.or_filter(super::lower(orgs::name).like(name));
+                    }
+                }
+            }
+        }
 
         if let Some(member_id) = member_id {
             query = query.filter(user_roles::user_id.eq(member_id));
@@ -252,6 +276,13 @@ pub struct OrgFilter {
     pub member_id: Option<UserId>,
     pub offset: u64,
     pub limit: u64,
+    pub search: Option<OrgSearch>,
+}
+
+pub struct OrgSearch {
+    pub operator: super::SearchOperator,
+    pub id: Option<String>,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Insertable)]

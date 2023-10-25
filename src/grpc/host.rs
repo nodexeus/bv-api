@@ -16,7 +16,7 @@ use crate::cookbook::image::Image;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::command::NewCommand;
 use crate::models::host::{
-    ConnectionStatus, Host, HostFilter, HostType, MonthlyCostUsd, NewHost, UpdateHost,
+    ConnectionStatus, Host, HostFilter, HostSearch, HostType, MonthlyCostUsd, NewHost, UpdateHost,
 };
 use crate::models::{Blockchain, CommandType, Org, OrgUser, Region, RegionId};
 use crate::timestamp::NanosUtc;
@@ -66,6 +66,8 @@ pub enum Error {
     ParseOrgId(uuid::Error),
     /// Provision token is for a different organization.
     ProvisionOrg,
+    /// Failure processing search operator: {0}
+    SearchOperator(&'static str),
     /// Host org error: {0}
     Org(#[from] crate::models::org::Error),
     /// Host Refresh token failure: {0}
@@ -90,6 +92,7 @@ impl From<Error> for Status {
             ParseIpTo(_) => Status::invalid_argument("ip_range_to"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ProvisionOrg => Status::failed_precondition("Wrong org."),
+            SearchOperator(_) => Status::invalid_argument("search.operator"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Blockchain(err) => err.into(),
@@ -537,6 +540,21 @@ impl api::HostServiceListRequest {
                 .transpose()?,
             offset: self.offset,
             limit: self.limit,
+            search: self
+                .search
+                .as_ref()
+                .map(|s| {
+                    s.operator().try_into().map(|operator| HostSearch {
+                        operator,
+                        id: s.id.as_ref().map(|id| id.trim().to_lowercase()),
+                        name: s.name.as_ref().map(|name| name.trim().to_lowercase()),
+                        version: s.version.as_ref().map(|v| v.trim().to_lowercase()),
+                        os: s.os.as_ref().map(|os| os.trim().to_lowercase()),
+                        ip: s.ip.as_ref().map(|ip| ip.trim().to_lowercase()),
+                    })
+                })
+                .transpose()
+                .map_err(Error::SearchOperator)?,
         })
     }
 }

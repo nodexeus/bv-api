@@ -120,6 +120,7 @@ async fn member_count_works() {
         member_id: Some(user_id.to_string()),
         offset: 0,
         limit: 10,
+        search: None,
     };
     let resp = test.send_admin(Service::list, req).await.unwrap();
     let org_resp = resp

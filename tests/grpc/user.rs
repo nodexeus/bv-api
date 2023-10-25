@@ -1,4 +1,4 @@
-use blockvisor_api::grpc::api;
+use blockvisor_api::grpc::{api, common};
 use blockvisor_api::models::User;
 use tonic::transport::Channel;
 use uuid::Uuid;
@@ -185,9 +185,13 @@ async fn test_list() {
     let fake_org_id = Uuid::new_v4().to_string();
     let req = |org_id, email_like| api::UserServiceListRequest {
         org_id,
-        email_like,
         offset: 0,
         limit: 10,
+        search: Some(api::UserSearch {
+            operator: common::v1::SearchOperator::And.into(),
+            email: email_like,
+            ..Default::default()
+        }),
     };
 
     // Test that an org member can list our own org.
