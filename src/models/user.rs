@@ -193,7 +193,7 @@ impl User {
                         query = query.filter(super::text(users::id).like(id));
                     }
                     if let Some(name) = name {
-                        query = query.or_filter(super::lower(user_name).like(name));
+                        query = query.filter(super::lower(user_name).like(name));
                     }
                     if let Some(email) = email {
                         query = query.filter(super::lower(users::email).like(email));

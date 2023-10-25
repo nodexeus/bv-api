@@ -148,7 +148,7 @@ impl Org {
                         query = query.filter(super::text(orgs::id).like(id));
                     }
                     if let Some(name) = name {
-                        query = query.or_filter(super::lower(orgs::name).like(name));
+                        query = query.filter(super::lower(orgs::name).like(name));
                     }
                 }
             }
