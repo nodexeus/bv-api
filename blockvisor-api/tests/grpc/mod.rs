@@ -5,7 +5,6 @@ mod command;
 mod discovery;
 mod host;
 mod invitation;
-mod key_files;
 mod metrics;
 mod node;
 mod org;

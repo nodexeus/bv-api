@@ -1,9 +1,6 @@
 pub mod job;
 pub use job::{NodeJob, NodeJobProgress, NodeJobStatus};
 
-pub mod key_file;
-pub use key_file::NodeKeyFile;
-
 pub mod log;
 pub use log::{NewNodeLog, NodeLog, NodeLogEvent};
 

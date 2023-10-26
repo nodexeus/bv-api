@@ -7,10 +7,12 @@ use url::Url;
 use super::provider::{self, Provider};
 use super::Redacted;
 
+const TEMPLATE_DIR_VAR: &str = "EMAIL_TEMPLATE_DIR";
+const TEMPLATE_DIR_ENTRY: &str = "email.template_dir";
 const SENDGRID_API_KEY_VAR: &str = "SENDGRID_API_KEY";
-const SENDGRID_API_KEY_ENTRY: &str = "mail.sendgrid_api_key";
+const SENDGRID_API_KEY_ENTRY: &str = "email.sendgrid_api_key";
 const UI_BASE_URL_VAR: &str = "UI_BASE_URL";
-const UI_BASE_URL_ENTRY: &str = "mail.ui_base_url";
+const UI_BASE_URL_ENTRY: &str = "email.ui_base_url";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -27,6 +29,7 @@ pub struct SendgridApiKey(Redacted<String>);
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    pub template_dir: String,
     pub sendgrid_api_key: SendgridApiKey,
     pub ui_base_url: Url,
 }
@@ -36,6 +39,9 @@ impl TryFrom<&Provider> for Config {
 
     fn try_from(provider: &Provider) -> Result<Self, Self::Error> {
         Ok(Config {
+            template_dir: provider
+                .read_or_default(TEMPLATE_DIR_VAR, TEMPLATE_DIR_ENTRY)
+                .map_err(Error::ParseSendgridApiKey)?,
             sendgrid_api_key: provider
                 .read_or_default(SENDGRID_API_KEY_VAR, SENDGRID_API_KEY_ENTRY)
                 .map_err(Error::ParseSendgridApiKey)?,

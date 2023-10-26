@@ -46,9 +46,9 @@ pub struct Email {
 
 impl Email {
     pub fn new(config: &Config, cipher: Arc<Cipher>) -> Result<Self, Error> {
-        let sender = Box::new(SGClient::new(&*config.mail.sendgrid_api_key));
-        let templates = Templates::new()?;
-        let base_url = config.mail.ui_base_url.clone();
+        let sender = Box::new(SGClient::new(&*config.email.sendgrid_api_key));
+        let templates = Templates::new(&config.email.template_dir)?;
+        let base_url = config.email.ui_base_url.clone();
         let expires = config.token.expire;
 
         Ok(Email {
@@ -63,8 +63,8 @@ impl Email {
     #[cfg(any(test, feature = "integration-test"))]
     pub fn new_mocked(config: &Config, cipher: Arc<Cipher>) -> Result<Self, Error> {
         let sender = Box::new(tests::MockEmail {});
-        let templates = Templates::new()?;
-        let base_url = config.mail.ui_base_url.clone();
+        let templates = Templates::new(&config.email.template_dir)?;
+        let base_url = config.email.ui_base_url.clone();
         let expires = config.token.expire;
 
         Ok(Email {

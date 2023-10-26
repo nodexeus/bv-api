@@ -1,10 +1,10 @@
-
 **/.env*
 **/.git
 **/.gitignore
-**/docker-compose.yml
 
+docker/*
+!docker/builder.toml
+
+api.yaml
 target
 Makefile
-api.yaml
-Dockerfile

@@ -14,7 +14,7 @@ jobs:
     name: Tests
     runs-on: self-hosted
     env:
-      CONFIG_FILE: "${{ github.workspace }}/config.toml"
+      CONFIG_FILE: "${{ github.workspace }}/blockvisor-api/config.toml"
     services:
       postgres:
         image: postgres:13-bookworm
