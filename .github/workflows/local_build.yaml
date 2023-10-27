@@ -24,4 +24,4 @@ jobs:
           image_name: blockvisor-api/dev-blockvisor-api
           image_tag: ${{ github.sha }},latest
           dockerfile: ./docker/Dockerfile
-          context: ..
+          context: .
