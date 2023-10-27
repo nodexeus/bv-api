@@ -41,8 +41,6 @@ pub enum Error {
     MissingRemoveSelf,
     /// Org model error: {0}
     Model(#[from] crate::models::org::Error),
-    /// Org not found: {0}
-    OrgNotFound(OrgId),
     /// Failed to parse `id` as OrgId: {0}
     ParseId(uuid::Error),
     /// Failed to parse OrgId: {0}
@@ -70,7 +68,6 @@ impl From<Error> for Status {
                 Status::permission_denied("Access denied.")
             }
             ConvertNoOrg | Diesel(_) | MemberCount(_) => Status::internal("Internal error."),
-            OrgNotFound(_) => Status::not_found("Not found."),
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
@@ -353,7 +350,7 @@ impl api::Org {
             .map(|org| org.as_ref().id)
             .collect::<HashSet<_>>();
         let node_counts = Org::node_counts(&org_ids, conn).await?;
-        let org_users = OrgUsers::for_org_ids(org_ids, conn).await?;
+        let mut org_users = OrgUsers::for_org_ids(org_ids, conn).await?;
 
         let user_ids = org_users
             .values()
@@ -366,7 +363,9 @@ impl api::Org {
         orgs.iter()
             .map(|org| {
                 let org = org.as_ref();
-                let org_users = org_users.get(&org.id).ok_or(Error::OrgNotFound(org.id))?;
+                let org_users = org_users
+                    .remove(&org.id)
+                    .unwrap_or_else(|| OrgUsers::empty(org.id));
                 let members: Vec<_> = org_users
                     .user_roles
                     .iter()

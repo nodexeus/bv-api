@@ -447,10 +447,9 @@ impl OrgUsers {
         let mut orgs_users: HashMap<OrgId, OrgUsers> = HashMap::with_capacity(rows.len());
 
         for row in rows {
-            let org_users = orgs_users.entry(row.org_id).or_insert_with(|| OrgUsers {
-                org_id: row.org_id,
-                user_roles: HashMap::new(),
-            });
+            let org_users = orgs_users
+                .entry(row.org_id)
+                .or_insert_with(|| OrgUsers::empty(row.org_id));
 
             let role = row.role.parse().map_err(Error::ParseRole)?;
             org_users
@@ -461,5 +460,12 @@ impl OrgUsers {
         }
 
         Ok(orgs_users)
+    }
+
+    pub fn empty(org_id: OrgId) -> Self {
+        Self {
+            org_id,
+            user_roles: HashMap::new(),
+        }
     }
 }
