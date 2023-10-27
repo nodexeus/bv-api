@@ -9,7 +9,7 @@ steps:
       - "us-docker.pkg.dev/blockjoy-deployer/blockvisor-api/blockvisor-api-builder:latest"
       - "--file"
       - "./docker/Dockerfile.builder"
-      - ".."
+      - "."
 
 images:
   - "us-docker.pkg.dev/blockjoy-deployer/blockvisor-api/blockvisor-api-builder:latest"
