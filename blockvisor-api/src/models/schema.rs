@@ -214,15 +214,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    node_key_files (id) {
-        id -> Uuid,
-        name -> Text,
-        content -> Text,
-        node_id -> Uuid,
-    }
-}
-
-diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::EnumNodeLogEvent;
     use super::sql_types::EnumNodeType;
@@ -414,7 +405,6 @@ diesel::joinable!(hosts -> users (created_by));
 diesel::joinable!(invitations -> orgs (org_id));
 diesel::joinable!(invitations -> users (invited_by));
 diesel::joinable!(ip_addresses -> hosts (host_id));
-diesel::joinable!(node_key_files -> nodes (node_id));
 diesel::joinable!(node_properties -> blockchain_properties (blockchain_property_id));
 diesel::joinable!(node_properties -> nodes (node_id));
 diesel::joinable!(nodes -> blockchains (blockchain_id));
@@ -441,7 +431,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     hosts,
     invitations,
     ip_addresses,
-    node_key_files,
     node_logs,
     node_properties,
     nodes,

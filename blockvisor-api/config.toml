@@ -35,6 +35,11 @@ min_conns = 2
 max_lifetime = "1d"
 idle_timeout = "2m"
 
+[email]
+template_dir = "emails"
+sendgrid_api_key = "123"
+ui_base_url = "https://app.alpha.blockvisor.dev"
+
 [grpc]
 request_concurrency_limit = 128
 
@@ -47,10 +52,6 @@ filter = "info,grpc_tests=debug,tower_http=off"
 
 [log.opentelemetry]
 endpoint = "http://localhost:4317"
-
-[mail]
-sendgrid_api_key = "123"
-ui_base_url = "https://app.alpha.blockvisor.dev"
 
 [mqtt]
 server_address = "127.0.0.1"

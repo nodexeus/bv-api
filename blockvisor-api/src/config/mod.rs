@@ -2,10 +2,9 @@ pub mod chargebee;
 pub mod cloudflare;
 pub mod cookbook;
 pub mod database;
+pub mod email;
 pub mod grpc;
-pub mod key_service;
 pub mod log;
-pub mod mail;
 pub mod mqtt;
 pub mod token;
 
@@ -43,16 +42,14 @@ pub enum Error {
     Cookbook(cookbook::Error),
     /// Failed to parse database Config: {0}
     Database(database::Error),
+    /// Failed to parse email Config: {0}
+    Email(email::Error),
     /// Failed to parse gRPC Config: {0}
     Grpc(grpc::Error),
     /// Failed to parse HumanTime: {0}
     HumanTime(serde_json::Error),
-    /// Failed to parse key service Config: {0}
-    KeyService(key_service::Error),
     /// Failed to parse Log Config: {0}
     Log(log::Error),
-    /// Failed to parse mail Config: {0}
-    Mail(mail::Error),
     /// Failed to parse MQTT Config: {0}
     Mqtt(mqtt::Error),
     /// No config file at path: {0}
@@ -75,10 +72,9 @@ pub struct Config {
     pub cloudflare: Arc<cloudflare::Config>,
     pub cookbook: Arc<cookbook::Config>,
     pub database: Arc<database::Config>,
+    pub email: Arc<email::Config>,
     pub grpc: Arc<grpc::Config>,
-    pub key_service: Arc<key_service::Config>,
     pub log: Arc<log::Config>,
-    pub mail: Arc<mail::Config>,
     pub mqtt: Arc<mqtt::Config>,
     pub token: Arc<token::Config>,
 }
@@ -128,18 +124,15 @@ impl TryFrom<&Provider> for Config {
         let database = database::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Database)?;
+        let email = email::Config::try_from(provider)
+            .map(Arc::new)
+            .map_err(Error::Email)?;
         let grpc = grpc::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Grpc)?;
-        let key_service = key_service::Config::try_from(provider)
-            .map(Arc::new)
-            .map_err(Error::KeyService)?;
         let log = log::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Log)?;
-        let mail = mail::Config::try_from(provider)
-            .map(Arc::new)
-            .map_err(Error::Mail)?;
         let mqtt = mqtt::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Mqtt)?;
@@ -152,10 +145,9 @@ impl TryFrom<&Provider> for Config {
             cloudflare,
             cookbook,
             database,
+            email,
             grpc,
-            key_service,
             log,
-            mail,
             mqtt,
             token,
         })

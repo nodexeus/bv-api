@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use derive_more::Deref;
 use displaydoc::Display;
@@ -6,11 +8,11 @@ use handlebars::{Context, Handlebars};
 use serde::Deserialize;
 use thiserror::Error;
 
-const INVITE_USER: &str = include_str!("../../mails/invite_user.toml");
-const INVITE_REGISTERED: &str = include_str!("../../mails/invite_registered_user.toml");
-const REGISTRATION_CONFIRMATION: &str = include_str!("../../mails/register.toml");
-const RESET_PASSWORD: &str = include_str!("../../mails/reset_password.toml");
-const UPDATE_PASSWORD: &str = include_str!("../../mails/update_password.toml");
+const INVITE_USER: &str = "invite_user.toml";
+const INVITE_REGISTERED: &str = "invite_registered_user.toml";
+const REGISTRATION_CONFIRMATION: &str = "register.toml";
+const RESET_PASSWORD: &str = "reset_password.toml";
+const UPDATE_PASSWORD: &str = "update_password.toml";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -20,8 +22,14 @@ pub enum Error {
     MissingEnglish(Kind),
     /// Template not found: {0:?}
     NoTemplate(Kind),
+    /// Template directory not found: {0:?}
+    NoTemplateDir(PathBuf),
+    /// Template file not found: {0:?}
+    NoTemplateFile(PathBuf),
     /// Failed to parse toml template for {0:?}: {1}
     ParseTemplate(Kind, toml::de::Error),
+    /// Failed to read toml template for {0:?}: {1}
+    ReadTemplate(Kind, std::io::Error),
     /// Failed to render HTML: {0}
     RenderHtml(handlebars::RenderError),
     /// Failed to render text: {0}
@@ -72,7 +80,15 @@ pub struct Templates {
 }
 
 impl Templates {
-    pub fn new() -> Result<Self, Error> {
+    pub fn new<P>(template_dir: P) -> Result<Self, Error>
+    where
+        P: AsRef<Path>,
+    {
+        let path = template_dir.as_ref();
+        if !path.is_dir() {
+            return Err(Error::NoTemplateDir(path.to_path_buf()));
+        }
+
         let kinds = [
             (Kind::InviteUser, INVITE_USER),
             (Kind::InviteRegistered, INVITE_REGISTERED),
@@ -81,16 +97,26 @@ impl Templates {
             (Kind::UpdatePassword, UPDATE_PASSWORD),
         ];
 
-        let mut templates = HashMap::new();
-        for (kind, template) in kinds {
-            let languages: HashMap<Language, Template> =
-                toml::from_str(template).map_err(|err| Error::ParseTemplate(kind, err))?;
-            let _ = languages
-                .get(&Language::En)
-                .ok_or(Error::MissingEnglish(kind))?;
+        let templates = kinds
+            .into_iter()
+            .map(|(kind, file)| {
+                let path = path.join(file);
+                if !path.is_file() {
+                    return Err(Error::NoTemplateFile(path));
+                }
 
-            templates.insert(kind, Languages(languages));
-        }
+                let contents =
+                    fs::read_to_string(path).map_err(|err| Error::ReadTemplate(kind, err))?;
+                let languages: HashMap<Language, Template> =
+                    toml::from_str(&contents).map_err(|err| Error::ParseTemplate(kind, err))?;
+
+                let _ = languages
+                    .get(&Language::En)
+                    .ok_or(Error::MissingEnglish(kind))?;
+
+                Ok((kind, Languages(languages)))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
 
         let mut renderer = Handlebars::new();
         renderer.set_strict_mode(true);
@@ -151,14 +177,14 @@ mod test {
     async fn test_render_emails() {
         let config = Config::new().unwrap();
         let auth = Auth::new(&config.token);
-
         let email = Email {
             sender: Box::new(MockEmail {}),
-            templates: Templates::new().unwrap(),
+            templates: Templates::new(&config.email.template_dir).unwrap(),
             cipher: auth.cipher,
-            base_url: config.mail.ui_base_url.clone(),
+            base_url: config.email.ui_base_url.clone(),
             expires: config.token.expire,
         };
+
         let user = User {
             id: Uuid::new_v4().into(),
             email: "tmp@tmp.tmp".to_string(),
