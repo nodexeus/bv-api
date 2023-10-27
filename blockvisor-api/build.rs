@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-const PROTO_DIR: &str = "proto";
+// multiple paths lets Dockerfile.builder find them
+const PROTO_DIRS: &[&str] = &["./proto", "../proto"];
 
 fn main() -> Result<()> {
     #[cfg(any(test, feature = "integration-test"))]
@@ -14,26 +15,31 @@ fn main() -> Result<()> {
     builder
         .build_server(true)
         .enum_attribute("command", "#[allow(clippy::large_enum_variant)]")
-        .compile(&proto_files()?, &[PROTO_DIR])
+        .compile(&proto_files()?, PROTO_DIRS)
         .context("Failed to compile protos")
 }
 
 fn proto_files() -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
-    find_recursive(Path::new(PROTO_DIR), &mut files)?;
+    for dir in PROTO_DIRS {
+        find_recursive(Path::new(dir), &mut files)?;
+    }
     Ok(files)
 }
 
 fn find_recursive(path: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
-    if path.is_dir() {
-        for entry in fs::read_dir(path)? {
-            let path = entry?.path();
-            if path.is_dir() {
-                find_recursive(&path, files)?;
-            } else if path.extension().map_or(false, |ext| ext == "proto") {
-                files.push(path.strip_prefix(PROTO_DIR)?.to_path_buf());
-            }
+    if !path.is_dir() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(path)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            find_recursive(&path, files)?;
+        } else if path.extension().map_or(false, |ext| ext == "proto") {
+            files.push(path.to_path_buf());
         }
     }
+
     Ok(())
 }

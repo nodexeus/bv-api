@@ -7,7 +7,6 @@ pub mod cookbook;
 pub mod discovery;
 pub mod host;
 pub mod invitation;
-pub mod key_file;
 pub mod metrics;
 pub mod middleware;
 pub mod node;
@@ -54,7 +53,6 @@ use self::api::discovery_service_server::DiscoveryServiceServer;
 use self::api::host_service_server::HostServiceServer;
 use self::api::invitation_service_server::InvitationServiceServer;
 use self::api::kernel_service_server::KernelServiceServer;
-use self::api::key_file_service_server::KeyFileServiceServer;
 use self::api::manifest_service_server::ManifestServiceServer;
 use self::api::metrics_service_server::MetricsServiceServer;
 use self::api::node_service_server::NodeServiceServer;
@@ -110,7 +108,6 @@ pub fn server(context: &Arc<Context>) -> Router<CorsServer> {
         .add_service(HostServiceServer::new(grpc.clone()))
         .add_service(InvitationServiceServer::new(grpc.clone()))
         .add_service(KernelServiceServer::new(grpc.clone()))
-        .add_service(KeyFileServiceServer::new(grpc.clone()))
         .add_service(ManifestServiceServer::new(grpc.clone()))
         .add_service(MetricsServiceServer::new(grpc.clone()))
         .add_service(NodeServiceServer::new(grpc.clone()))
