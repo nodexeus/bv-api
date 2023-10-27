@@ -3,6 +3,8 @@ kind: Config
 metadata:
   name: blockvisor
 build:
+  docker:	
+    dockerfile: ./docker/Dockerfile
   tagPolicy:
     gitCommit: {}
   artifacts:
