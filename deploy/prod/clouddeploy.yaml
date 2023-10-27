@@ -20,7 +20,7 @@ metadata:
   name: prod
   annotations: {}
   labels: {}
-description: production
+description: prod
 requireApproval: true
 gke:
   cluster: projects/blockjoy-prod/locations/us-east1-b/clusters/blockjoy-prod
