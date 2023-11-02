@@ -165,7 +165,6 @@ impl Org {
         let offset = i64::try_from(offset).map_err(Error::Offset)?;
         let (total, orgs) = query
             .filter(orgs::deleted_at.is_null())
-            .filter(dsl::not(orgs::is_personal))
             .order_by(orgs::created_at.desc())
             .select(Self::as_select())
             .distinct()
