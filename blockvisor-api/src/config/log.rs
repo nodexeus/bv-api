@@ -184,3 +184,17 @@ impl TryFrom<&Provider> for OpentelemetryConfig {
         })
     }
 }
+
+#[cfg(any(test, feature = "integration-test"))]
+pub fn test_log(filter: &str) {
+    Registry::default()
+        .with(EnvFilter::new(filter))
+        .with(fmt::Layer::default().with_ansi(true))
+        .with(ErrorLayer::default())
+        .init();
+}
+
+#[cfg(any(test, feature = "integration-test"))]
+pub fn test_debug() {
+    test_log("debug,blockvisor_api::config::provider=info,tower_http=off");
+}

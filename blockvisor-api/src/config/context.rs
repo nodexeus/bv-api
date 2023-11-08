@@ -78,7 +78,7 @@ impl Context {
         let dns = Cloudflare::new(config.cloudflare.clone());
         let email = Email::new(&config, auth.cipher.clone()).map_err(Error::Email)?;
         let pool = Pool::new(&config.database).await.map_err(Error::Pool)?;
-        let notifier = Notifier::new(config.mqtt.options())
+        let notifier = Notifier::new(config.mqtt.options(), pool.clone())
             .await
             .map_err(Error::Notifier)?;
 
@@ -108,10 +108,10 @@ impl Context {
         let cookbook = TestCookbook::new().await.get_cookbook_api();
         let dns = MockDns::new(&mut rng).await;
         let email = Email::new_mocked(&config, auth.cipher.clone()).map_err(Error::Email)?;
-        let notifier = Notifier::new(config.mqtt.options())
+        let pool = db.pool();
+        let notifier = Notifier::new(config.mqtt.options(), pool.clone())
             .await
             .map_err(Error::Notifier)?;
-        let pool = db.pool();
 
         Builder::default()
             .alert(alert)
