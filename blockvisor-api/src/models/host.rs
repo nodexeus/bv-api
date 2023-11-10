@@ -18,7 +18,7 @@ use crate::auth::resource::{HostId, OrgId, UserId};
 use crate::auth::AuthZ;
 use crate::cookbook::script::HardwareRequirements;
 use crate::database::Conn;
-use crate::grpc::common;
+use crate::grpc::{api, common};
 use crate::util::SearchOperator;
 
 use super::blockchain::{Blockchain, BlockchainId};
@@ -91,13 +91,6 @@ impl From<Error> for Status {
             _ => Status::internal("Internal error."),
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
-#[ExistingTypePath = "sql_types::EnumConnStatus"]
-pub enum ConnectionStatus {
-    Online,
-    Offline,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
@@ -579,13 +572,6 @@ impl UpdateHostMetrics {
     }
 }
 
-#[derive(Debug, Clone, AsChangeset)]
-#[diesel(table_name = hosts)]
-pub struct HostStatusRequest {
-    pub version: Option<String>,
-    pub status: ConnectionStatus,
-}
-
 /// The billing cost per month in USD for this host.
 ///
 /// The inner cost is extracted via `Host::monthly_cost_in_usd`.
@@ -610,5 +596,23 @@ impl MonthlyCostUsd {
         }?;
 
         Ok(MonthlyCostUsd(amount.value))
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
+#[ExistingTypePath = "sql_types::EnumConnStatus"]
+pub enum ConnectionStatus {
+    Online,
+    Offline,
+}
+
+impl From<api::HostConnectionStatus> for ConnectionStatus {
+    fn from(status: api::HostConnectionStatus) -> Self {
+        match status {
+            api::HostConnectionStatus::Unspecified | api::HostConnectionStatus::Offline => {
+                ConnectionStatus::Offline
+            }
+            api::HostConnectionStatus::Online => ConnectionStatus::Online,
+        }
     }
 }
