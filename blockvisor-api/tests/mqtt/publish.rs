@@ -75,6 +75,6 @@ async fn mqtt_shared_topic() {
 }
 
 fn last_will<P: Into<Vec<u8>>>(topic: &str, payload: P) -> LastWill {
-    use blockvisor_api::mqtt::{CLIENT_QOS, CLIENT_RETAIN};
-    LastWill::new(topic, payload, CLIENT_QOS, CLIENT_RETAIN, None)
+    use blockvisor_api::mqtt::CLIENT_QOS;
+    LastWill::new(topic, payload, CLIENT_QOS, true, None)
 }
