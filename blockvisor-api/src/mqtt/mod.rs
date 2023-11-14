@@ -33,7 +33,7 @@ use thiserror::Error;
 
 pub const CLIENT_CAPACITY: usize = 10;
 pub const CLIENT_QOS: QoS = QoS::AtLeastOnce;
-pub const CLIENT_RETAIN: bool = true;
+pub const CLIENT_RETAIN: bool = false;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
