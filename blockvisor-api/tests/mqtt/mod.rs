@@ -14,7 +14,7 @@ use rumqttc::v5::{AsyncClient, Event, EventLoop, MqttOptions};
 use tracing::debug;
 
 use blockvisor_api::config::Config;
-use blockvisor_api::mqtt::{CLIENT_CAPACITY, CLIENT_QOS, CLIENT_RETAIN};
+use blockvisor_api::mqtt::{CLIENT_CAPACITY, CLIENT_QOS};
 
 const PACKET_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -61,7 +61,7 @@ impl TestMqtt {
         P: Into<Vec<u8>>,
     {
         self.client
-            .publish(topic, CLIENT_QOS, CLIENT_RETAIN, payload.into())
+            .publish(topic, CLIENT_QOS, true, payload.into())
             .await
             .unwrap();
 
