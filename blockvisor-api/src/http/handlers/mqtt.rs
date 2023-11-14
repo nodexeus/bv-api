@@ -10,7 +10,7 @@ use serde_json::Value;
 use thiserror::Error;
 use tracing::{debug, error};
 
-use crate::auth::rbac::MqttPerm;
+use crate::auth::rbac::{MqttAdminPerm, MqttPerm};
 use crate::auth::resource::Resource;
 use crate::config::Context;
 use crate::database::Database;
@@ -75,15 +75,23 @@ async fn acl(
     };
 
     let mut conn = ctx.pool.conn().await?;
-    let _ = ctx
+    if ctx
         .auth
+        .authorize_token(&token, MqttAdminPerm::Acl.into(), None, &mut conn)
+        .await
+        .is_ok()
+    {
+        return Ok(response::ok());
+    }
+
+    ctx.auth
         .authorize_token(
             &token,
             MqttPerm::Acl.into(),
             Some(resource.into()),
             &mut conn,
         )
-        .await?;
-
-    Ok(response::ok())
+        .await
+        .map(|_authz| response::ok())
+        .map_err(Into::into)
 }

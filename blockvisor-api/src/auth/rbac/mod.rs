@@ -159,6 +159,10 @@ define_perms! {
         Acl,
     }
 
+    MqttAdmin => {
+        Acl,
+    }
+
     Node => {
         Create,
         Delete,
