@@ -1,11 +1,11 @@
 pub mod chargebee;
 pub mod cloudflare;
-pub mod cookbook;
 pub mod database;
 pub mod email;
 pub mod grpc;
 pub mod log;
 pub mod mqtt;
+pub mod storage;
 pub mod token;
 
 pub mod context;
@@ -38,8 +38,6 @@ pub enum Error {
     ChronoDuration(chrono::OutOfRangeError),
     /// Failed to parse Cloudflare Config: {0}
     Cloudflare(cloudflare::Error),
-    /// Failed to parse cookbook Config: {0}
-    Cookbook(cookbook::Error),
     /// Failed to parse database Config: {0}
     Database(database::Error),
     /// Failed to parse email Config: {0}
@@ -61,6 +59,8 @@ pub enum Error {
         &'static str,
         Box<dyn std::error::Error + Send + Sync + 'static>,
     ),
+    /// Failed to parse storage Config: {0}
+    Storage(storage::Error),
     /// Failed to parse token Config: {0}
     Token(token::Error),
 }
@@ -70,12 +70,12 @@ pub enum Error {
 pub struct Config {
     pub chargebee: Arc<chargebee::Config>,
     pub cloudflare: Arc<cloudflare::Config>,
-    pub cookbook: Arc<cookbook::Config>,
     pub database: Arc<database::Config>,
     pub email: Arc<email::Config>,
     pub grpc: Arc<grpc::Config>,
     pub log: Arc<log::Config>,
     pub mqtt: Arc<mqtt::Config>,
+    pub storage: Arc<storage::Config>,
     pub token: Arc<token::Config>,
 }
 
@@ -118,9 +118,6 @@ impl TryFrom<&Provider> for Config {
         let cloudflare = cloudflare::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Cloudflare)?;
-        let cookbook = cookbook::Config::try_from(provider)
-            .map(Arc::new)
-            .map_err(Error::Cookbook)?;
         let database = database::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Database)?;
@@ -136,6 +133,9 @@ impl TryFrom<&Provider> for Config {
         let mqtt = mqtt::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Mqtt)?;
+        let storage = storage::Config::try_from(provider)
+            .map(Arc::new)
+            .map_err(Error::Storage)?;
         let token = token::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Token)?;
@@ -143,12 +143,12 @@ impl TryFrom<&Provider> for Config {
         Ok(Config {
             chargebee,
             cloudflare,
-            cookbook,
             database,
             email,
             grpc,
             log,
             mqtt,
+            storage,
             token,
         })
     }

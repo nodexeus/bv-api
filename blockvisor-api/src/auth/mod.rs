@@ -1,5 +1,4 @@
 pub mod claims;
-pub mod endpoint;
 pub mod rbac;
 pub mod resource;
 pub mod token;

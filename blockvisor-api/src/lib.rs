@@ -29,7 +29,6 @@ extern crate maplit;
 
 pub mod auth;
 pub mod config;
-pub mod cookbook;
 pub mod database;
 pub mod dns;
 pub mod email;
@@ -38,4 +37,5 @@ pub mod http;
 pub mod models;
 pub mod mqtt;
 pub mod server;
+pub mod storage;
 pub mod util;

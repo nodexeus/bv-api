@@ -13,17 +13,17 @@ use uuid::Uuid;
 use crate::auth::rbac::{NodeAdminPerm, NodePerm};
 use crate::auth::resource::{HostId, NodeId, Resource, ResourceEntry, ResourceType};
 use crate::auth::Authorize;
-use crate::cookbook::image::Image;
-use crate::cookbook::script::HardwareRequirements;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::blockchain::{BlockchainProperty, BlockchainPropertyId, BlockchainVersion};
 use crate::models::command::NewCommand;
 use crate::models::node::{
     ContainerStatus, FilteredIpAddr, NewNode, Node, NodeFilter, NodeJob, NodeJobProgress,
-    NodeJobStatus, NodeProperty, NodeScheduler, NodeSearch, NodeStakingStatus, NodeStatus,
-    NodeSyncStatus, NodeType, UpdateNode,
+    NodeJobStatus, NodeProperty, NodeScheduler, NodeSearch, NodeStatus, NodeType, StakingStatus,
+    SyncStatus, UpdateNode,
 };
 use crate::models::{Blockchain, CommandType, Host, Org, Region, User};
+use crate::storage::image::ImageId;
+use crate::storage::metadata::HardwareRequirements;
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::node_service_server::NodeService;
@@ -49,8 +49,6 @@ pub enum Error {
     Command(#[from] crate::models::command::Error),
     /// Node grpc command error: {0}
     CommandGrpc(#[from] crate::grpc::command::Error),
-    /// Node cookbook error: {0}
-    Cookbook(#[from] crate::cookbook::Error),
     /// Failed to parse deny ips: {0}
     DenyIps(serde_json::Error),
     /// Diesel failure: {0}
@@ -97,14 +95,14 @@ pub enum Error {
     Resource(#[from] crate::auth::resource::Error),
     /// Node search failed: {0}
     SearchOperator(crate::util::search::Error),
+    /// Node storage error: {0}
+    Storage(#[from] crate::storage::Error),
     /// Failed to parse current data sync progress: {0}
     SyncCurrent(std::num::TryFromIntError),
     /// Failed to parse total data sync progress: {0}
     SyncTotal(std::num::TryFromIntError),
     /// Node user error: {0}
     User(#[from] crate::models::user::Error),
-    /// Failed to parse virtual cpu count: {0}
-    Vcpu(std::num::TryFromIntError),
 }
 
 impl From<Error> for Status {
@@ -112,8 +110,8 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Cookbook(_) | Diesel(_) | GeneratePetnames | MissingPropertyId(_)
-            | ModelProperty(_) | ParseIpAddr(_) | PropertyNotFound(_) => {
+            Diesel(_) | GeneratePetnames | MissingPropertyId(_) | ModelProperty(_)
+            | ParseIpAddr(_) | PropertyNotFound(_) | Storage(_) => {
                 Status::internal("Internal error.")
             }
             AllowIps(_) => Status::invalid_argument("allow_ips"),
@@ -131,7 +129,6 @@ impl From<Error> for Status {
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SyncCurrent(_) => Status::invalid_argument("data_sync_progress_current"),
             SyncTotal(_) => Status::invalid_argument("data_sync_progress_total"),
-            Vcpu(_) => Status::invalid_argument("vcpu_count"),
             Auth(err) => err.into(),
             Blockchain(err) => err.into(),
             BlockchainProperty(err) => err.into(),
@@ -291,11 +288,11 @@ async fn create(
     let blockchain = Blockchain::find_by_id(blockchain_id, &mut write).await?;
 
     let node_type = req.node_type().into();
-    let image = Image::new(&blockchain.name, node_type, req.version.clone().into());
+    let image = ImageId::new(&blockchain.name, node_type, req.version.clone().into());
     let version =
         BlockchainVersion::find(blockchain_id, node_type, &image.node_version, &mut write).await?;
 
-    let requirements = write.ctx.cookbook.rhai_metadata(&image).await?.requirements;
+    let requirements = write.ctx.storage.rhai_metadata(&image).await?.requirements;
     let created_by = authz.resource();
     let new_node = req.as_new(requirements, created_by, &mut write).await?;
     let node = new_node.create(host, &mut write).await?;
@@ -634,7 +631,7 @@ impl api::Node {
             .map_err(Error::BlockHeight)?;
         let staking_status = node
             .staking_status
-            .map(api::StakingStatus::from_model)
+            .map(common::StakingStatus::from)
             .map(Into::into);
 
         let allow_ips = node
@@ -662,15 +659,15 @@ impl api::Node {
             version: node.version.into(),
             ip: node.ip_addr,
             ip_gateway: node.ip_gateway,
-            node_type: api::NodeType::from(node.node_type).into(),
+            node_type: common::NodeType::from(node.node_type).into(),
             properties,
             block_height,
             created_at: Some(NanosUtc::from(node.created_at).into()),
             updated_at: Some(NanosUtc::from(node.updated_at).into()),
-            status: api::NodeStatus::from_model(node.node_status).into(),
+            status: common::NodeStatus::from(node.node_status).into(),
             staking_status,
-            container_status: api::ContainerStatus::from_model(node.container_status).into(),
-            sync_status: api::SyncStatus::from_model(node.sync_status).into(),
+            container_status: common::ContainerStatus::from(node.container_status).into(),
+            sync_status: common::SyncStatus::from(node.sync_status).into(),
             self_update: node.self_update,
             network: node.network,
             blockchain_name: blockchain.name.clone(),
@@ -733,11 +730,11 @@ impl api::NodeServiceCreateRequest {
             block_height: None,
             node_data: None,
             node_status: NodeStatus::ProvisioningPending,
-            sync_status: NodeSyncStatus::Unknown,
-            staking_status: NodeStakingStatus::Unknown,
+            sync_status: SyncStatus::Unknown,
+            staking_status: StakingStatus::Unknown,
             container_status: ContainerStatus::Unknown,
             self_update: true,
-            vcpu_count: requirements.vcpu_count.try_into().map_err(Error::Vcpu)?,
+            vcpu_count: requirements.vcpu_count.into(),
             mem_size_bytes: (requirements.mem_size_mb * 1000 * 1000)
                 .try_into()
                 .map_err(Error::MemSize)?,
@@ -782,13 +779,15 @@ impl api::NodeServiceCreateRequest {
         self.properties
             .iter()
             .map(|prop| {
+                let blockchain_property_id = name_to_id_map
+                    .get(&prop.name)
+                    .copied()
+                    .ok_or_else(|| Error::PropertyNotFound(prop.name.clone()))?;
+
                 Ok(NodeProperty {
                     id: Uuid::new_v4().into(),
                     node_id: node.id,
-                    blockchain_property_id: name_to_id_map
-                        .get(&prop.name)
-                        .copied()
-                        .ok_or_else(|| Error::PropertyNotFound(prop.name.clone()))?,
+                    blockchain_property_id,
                     value: prop.value.clone(),
                 })
             })
@@ -808,7 +807,7 @@ impl api::NodeServiceListRequest {
             limit: self.limit,
             status: self
                 .statuses()
-                .map(|status| status.into_model().ok_or(Error::NodeStatusUnspecified))
+                .map(|status| Option::from(status).ok_or(Error::NodeStatusUnspecified))
                 .collect::<Result<_, _>>()?,
             node_types: self.node_types().map(NodeType::from).collect(),
             blockchains: self
@@ -883,7 +882,7 @@ impl api::NodeServiceUpdateStatusRequest {
             node_status: None,
             sync_status: None,
             staking_status: None,
-            container_status: Some(self.container_status().into_model()),
+            container_status: Some(self.container_status().into()),
             self_update: None,
             address: self.address.as_deref(),
             allow_ips: None,
@@ -893,17 +892,15 @@ impl api::NodeServiceUpdateStatusRequest {
 }
 
 impl api::NodeProperty {
-    fn from_model(model: NodeProperty, bprop: BlockchainProperty) -> Self {
-        let mut prop = api::NodeProperty {
-            name: bprop.name,
-            display_name: bprop.display_name,
-            ui_type: 0,
-            disabled: bprop.disabled,
-            required: bprop.required,
-            value: model.value,
-        };
-        prop.set_ui_type(api::UiType::from(bprop.ui_type));
-        prop
+    fn from_model(node_prop: NodeProperty, blockchain_prop: BlockchainProperty) -> Self {
+        api::NodeProperty {
+            name: blockchain_prop.name,
+            display_name: blockchain_prop.display_name,
+            ui_type: common::UiType::from(blockchain_prop.ui_type).into(),
+            disabled: blockchain_prop.disabled,
+            required: blockchain_prop.required,
+            value: node_prop.value,
+        }
     }
 }
 
