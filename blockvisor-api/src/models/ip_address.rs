@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use diesel::dsl;
@@ -23,10 +22,8 @@ pub enum Error {
     Assigned(diesel::result::Error),
     /// Failed to create new ip address range: {0}
     Create(diesel::result::Error),
-    /// Failed to find ip address for hosts `{0:?}`: {1}
-    FindByHosts(HashSet<HostId>, diesel::result::Error),
-    /// Failed to find ip address for ip `{0}`: {1}
-    FindByIp(IpAddr, diesel::result::Error),
+    /// Failed to find ip address range for node `{0}`: {1}
+    FindByNode(IpAddr, diesel::result::Error),
     /// Failed to get next IP for host: {0}
     NextForHost(diesel::result::Error),
     /// Failed to create new IP network: {0}
@@ -44,7 +41,7 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             Create(DatabaseError(UniqueViolation, _)) => Status::already_exists("Already exists."),
-            FindByIp(_, NotFound) => Status::not_found("Not found."),
+            FindByNode(_, NotFound) => Status::not_found("Not found."),
             _ => Status::internal("Internal error."),
         }
     }
@@ -176,24 +173,13 @@ impl IpAddress {
             .map_err(Error::Assigned)
     }
 
-    pub async fn find_by_ip(ip: IpAddr, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        let ip = IpNetwork::new(ip, 32).map_err(Error::NewIpNetwork)?;
+    pub async fn find_by_node(node_ip: IpAddr, conn: &mut Conn<'_>) -> Result<Self, Error> {
+        let ip = IpNetwork::new(node_ip, 32).map_err(Error::NewIpNetwork)?;
         ip_addresses::table
             .filter(ip_addresses::ip.eq(ip))
             .get_result(conn)
             .await
-            .map_err(|err| Error::FindByIp(ip, err))
-    }
-
-    pub async fn find_by_hosts(
-        host_ids: HashSet<HostId>,
-        conn: &mut Conn<'_>,
-    ) -> Result<Vec<Self>, Error> {
-        ip_addresses::table
-            .filter(ip_addresses::host_id.eq_any(&host_ids))
-            .get_results(conn)
-            .await
-            .map_err(|err| Error::FindByHosts(host_ids, err))
+            .map_err(|err| Error::FindByNode(node_ip, err))
     }
 }
 

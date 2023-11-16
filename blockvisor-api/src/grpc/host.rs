@@ -18,7 +18,7 @@ use crate::models::command::NewCommand;
 use crate::models::host::{
     ConnectionStatus, Host, HostFilter, HostSearch, HostType, MonthlyCostUsd, NewHost, UpdateHost,
 };
-use crate::models::{Blockchain, CommandType, IpAddress, Node, Org, OrgUser, Region, RegionId};
+use crate::models::{Blockchain, CommandType, Node, Org, OrgUser, Region, RegionId};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::host_service_server::HostService;
@@ -454,7 +454,6 @@ impl api::Host {
                 .and_then(|id| lookup.regions.get(&id).map(|region| region.name.clone())),
             billing_amount,
             vmm_mountpoint: host.vmm_mountpoint,
-            ip_addresses,
         })
     }
 }
@@ -463,7 +462,6 @@ struct Lookup {
     nodes: HashMap<HostId, u64>,
     orgs: HashMap<OrgId, Org>,
     regions: HashMap<RegionId, Region>,
-    ip_addresses: HashMap<HostId, Vec<IpAddress>>,
 }
 
 impl Lookup {
@@ -488,15 +486,10 @@ impl Lookup {
             .await?
             .to_map_keep_last(|region| (region.id, region));
 
-        let ip_addresses = IpAddress::find_by_hosts(host_ids, conn)
-            .await?
-            .to_map_keep_all(|ip| (ip.host_id, ip));
-
         Ok(Lookup {
             nodes,
             orgs,
             regions,
-            ip_addresses,
         })
     }
 }
