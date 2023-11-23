@@ -23,7 +23,7 @@ use crate::models::node::{
     NodeJobStatus, NodeProperty, NodeScheduler, NodeSearch, NodeStakingStatus, NodeStatus,
     NodeSyncStatus, NodeType, UpdateNode,
 };
-use crate::models::{Blockchain, Command, CommandType, Host, Org, Region, User};
+use crate::models::{Blockchain, CommandType, Host, Org, Region, User};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::node_service_server::NodeService;
@@ -313,10 +313,10 @@ async fn create(
     let properties = req.properties(&node, &name_to_id_map)?;
     NodeProperty::bulk_create(properties, &mut write).await?;
 
-    let create_notif = create_node_command(&node, CommandType::CreateNode, &mut write).await?;
+    let create_notif = NewCommand::node(&node, CommandType::CreateNode)
+        .create(&mut write)
+        .await?;
     let create_cmd = api::Command::from_model(&create_notif, &mut write).await?;
-    let start_notif = create_node_command(&node, CommandType::RestartNode, &mut write).await?;
-    let start_cmd = api::Command::from_model(&start_notif, &mut write).await?;
     let node_api = api::Node::from_model(node, &mut write).await?;
 
     let created_by = common::EntityUpdate::from_resource(created_by, &mut write).await?;
@@ -324,7 +324,6 @@ async fn create(
 
     write.mqtt(create_cmd);
     write.mqtt(created);
-    write.mqtt(start_cmd);
 
     Ok(api::NodeServiceCreateResponse {
         node: Some(node_api),
@@ -349,7 +348,9 @@ async fn update_config(
         .await?;
 
     let node = req.as_update()?.update(&mut write).await?;
-    let updated = create_node_command(&node, CommandType::UpdateNode, &mut write).await?;
+    let updated = NewCommand::node(&node, CommandType::UpdateNode)
+        .create(&mut write)
+        .await?;
     let cmd = api::Command::from_model(&updated, &mut write).await?;
 
     let node = api::Node::from_model(node, &mut write).await?;
@@ -435,7 +436,9 @@ async fn start(
         .auth_or_all(&meta, NodeAdminPerm::Start, NodePerm::Start, node_id)
         .await?;
 
-    let cmd = create_node_command(&node, CommandType::RestartNode, &mut write).await?;
+    let cmd = NewCommand::node(&node, CommandType::RestartNode)
+        .create(&mut write)
+        .await?;
     let cmd = api::Command::from_model(&cmd, &mut write).await?;
 
     write.mqtt(cmd);
@@ -455,7 +458,9 @@ async fn stop(
         .auth_or_all(&meta, NodeAdminPerm::Stop, NodePerm::Stop, node_id)
         .await?;
 
-    let cmd = create_node_command(&node, CommandType::KillNode, &mut write).await?;
+    let cmd = NewCommand::node(&node, CommandType::KillNode)
+        .create(&mut write)
+        .await?;
     let cmd = api::Command::from_model(&cmd, &mut write).await?;
 
     write.mqtt(cmd);
@@ -475,25 +480,14 @@ async fn restart(
         .auth_or_all(&meta, NodeAdminPerm::Restart, NodePerm::Restart, node_id)
         .await?;
 
-    let cmd = create_node_command(&node, CommandType::RestartNode, &mut write).await?;
+    let cmd = NewCommand::node(&node, CommandType::RestartNode)
+        .create(&mut write)
+        .await?;
     let cmd = api::Command::from_model(&cmd, &mut write).await?;
 
     write.mqtt(cmd);
 
     Ok(api::NodeServiceRestartResponse {})
-}
-
-pub(super) async fn create_node_command(
-    node: &Node,
-    cmd_type: CommandType,
-    conn: &mut Conn<'_>,
-) -> Result<Command, Error> {
-    let new_command = NewCommand {
-        host_id: node.host_id,
-        cmd: cmd_type,
-        node_id: Some(node.id),
-    };
-    new_command.create(conn).await.map_err(Into::into)
 }
 
 impl api::Node {
