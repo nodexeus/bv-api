@@ -290,7 +290,7 @@ async fn add_version(
             new_log.create(&mut write).await?;
             let command = new_command.create(&mut write).await?;
 
-            write.mqtt(upgrade_command(node.id, command, image.clone()));
+            write.mqtt(upgrade_command(node.id, &command, image.clone()));
         }
     }
 
@@ -333,12 +333,14 @@ fn upgrade_node<'b, 'n>(
     Ok(Some((command, log)))
 }
 
-fn upgrade_command(node_id: NodeId, command: Command, image: Image) -> api::Command {
+/// Take our new Command and turn it into a `gRPC` message
+fn upgrade_command(node_id: NodeId, command: &Command, image: Image) -> api::Command {
     api::Command {
         id: command.id.to_string(),
-        response: command.response,
-        exit_code: command.exit_status,
-        acked_at: command.acked_at.map(NanosUtc::from).map(Into::into),
+        exit_code: None,
+        exit_message: None,
+        retry_hint_seconds: None,
+        acked_at: None,
         command: Some(api::command::Command::Node(api::NodeCommand {
             node_id: node_id.to_string(),
             host_id: command.host_id.to_string(),

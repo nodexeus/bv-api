@@ -18,7 +18,7 @@ use crate::database::Conn;
 use super::schema::{commands, sql_types};
 use super::{Host, Node};
 
-type Pending = dsl::Filter<commands::table, dsl::IsNull<commands::exit_status>>;
+type Pending = dsl::Filter<commands::table, dsl::IsNull<commands::exit_code>>;
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
@@ -97,12 +97,13 @@ pub struct Command {
     pub id: CommandId,
     pub host_id: HostId,
     pub cmd: CommandType,
-    pub response: Option<String>,
-    pub exit_status: Option<i32>,
+    pub exit_message: Option<String>,
     pub created_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
     pub node_id: Option<NodeId>,
     pub acked_at: Option<DateTime<Utc>>,
+    pub retry_hint_seconds: Option<i64>,
+    pub exit_code: Option<CommandExitCode>,
 }
 
 impl Command {
@@ -157,7 +158,7 @@ impl Command {
     }
 
     fn pending() -> Pending {
-        commands::table.filter(commands::exit_status.is_null())
+        commands::table.filter(commands::exit_code.is_null())
     }
 }
 
@@ -199,9 +200,22 @@ impl NewCommand {
 #[diesel(table_name = commands)]
 pub struct UpdateCommand<'a> {
     pub id: CommandId,
-    pub response: Option<&'a str>,
-    pub exit_status: Option<i32>,
+    pub exit_code: Option<CommandExitCode>,
+    pub exit_message: Option<&'a str>,
+    pub retry_hint_seconds: Option<i64>,
     pub completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
+#[ExistingTypePath = "sql_types::EnumCommandExitCode"]
+pub enum CommandExitCode {
+    Ok,
+    InternalError,
+    NodeNotFound,
+    BlockingJobRunning,
+    ServiceNotReady,
+    ServiceBroken,
+    NotSupported,
 }
 
 impl UpdateCommand<'_> {
