@@ -99,9 +99,12 @@ impl Cipher {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Duration;
     use uuid::Uuid;
 
-    use crate::auth::claims::tests::claims_none;
+    use crate::auth::claims::{Claims, Expirable};
+    use crate::auth::rbac::{Access, HostPerm, Perms};
+    use crate::auth::resource::ResourceEntry;
     use crate::auth::token::RequestToken;
     use crate::config::Context;
 
@@ -109,7 +112,14 @@ mod tests {
     async fn test_encode_decode_preserves_token() {
         let ctx = Context::from_default_toml().await.unwrap();
 
-        let claims = claims_none(Uuid::new_v4().into());
+        let expires = Duration::minutes(15);
+        let claims = Claims {
+            resource_entry: ResourceEntry::new_user(Uuid::new_v4().into()),
+            expirable: Expirable::from_now(expires),
+            access: Access::Perms(Perms::One(HostPerm::Create.into())),
+            data: None,
+        };
+
         let encoded = ctx.auth.cipher.jwt.encode(&claims).unwrap();
         let RequestToken::Bearer(token) = encoded.parse().unwrap() else {
             panic!("Unexpected RequestToken type")

@@ -1,14 +1,14 @@
 use std::time::Duration;
 
 use displaydoc::Display;
-use opentelemetry::runtime::Tokio;
-use opentelemetry::sdk::propagation::{
-    BaggagePropagator, TextMapCompositePropagator, TraceContextPropagator,
-};
-use opentelemetry::sdk::trace::{BatchConfig, Sampler};
-use opentelemetry::sdk::{trace, Resource};
 use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::propagation::{
+    BaggagePropagator, TextMapCompositePropagator, TraceContextPropagator,
+};
+use opentelemetry_sdk::runtime::Tokio;
+use opentelemetry_sdk::trace::{BatchConfig, Sampler};
+use opentelemetry_sdk::{trace, Resource};
 use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
 use serde::Deserialize;
 use strum::{EnumString, IntoStaticStr};

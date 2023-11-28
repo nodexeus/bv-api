@@ -12,13 +12,13 @@ use crate::auth::rbac::{GrpcRole, HostAdminPerm, HostPerm};
 use crate::auth::resource::{HostId, OrgId};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::{AuthZ, Authorize};
-use crate::cookbook::image::Image;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::command::NewCommand;
 use crate::models::host::{
     ConnectionStatus, Host, HostFilter, HostSearch, HostType, MonthlyCostUsd, NewHost, UpdateHost,
 };
 use crate::models::{Blockchain, CommandType, IpAddress, Node, Org, OrgUser, Region, RegionId};
+use crate::storage::image::ImageId;
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::host_service_server::HostService;
@@ -36,8 +36,6 @@ pub enum Error {
     Command(#[from] crate::models::command::Error),
     /// Host command API error: {0}
     CommandApi(#[from] crate::grpc::command::Error),
-    /// Host cookbook error: {0}
-    Cookbook(#[from] crate::cookbook::Error),
     /// Failed to parse cpu count: {0}
     CpuCount(std::num::TryFromIntError),
     /// Diesel failure: {0}
@@ -80,6 +78,8 @@ pub enum Error {
     Refresh(#[from] crate::auth::token::refresh::Error),
     /// Host region error: {0}
     Region(#[from] crate::models::region::Error),
+    /// Host storage error: {0}
+    Storage(#[from] crate::storage::Error),
 }
 
 impl From<Error> for Status {
@@ -87,7 +87,7 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Cookbook(_) | Diesel(_) | Jwt(_) | LookupMissingOrg(_) | Refresh(_) => {
+            Diesel(_) | Jwt(_) | LookupMissingOrg(_) | Refresh(_) | Storage(_) => {
                 Status::internal("Internal error.")
             }
             CpuCount(_) | DiskSize(_) | MemSize(_) => Status::out_of_range("Host resource."),
@@ -379,8 +379,8 @@ async fn regions(
     let node_type = req.node_type().into();
     let host_type = req.host_type().into_model();
 
-    let image = Image::new(&blockchain.name, node_type, req.version.into());
-    let requirements = read.ctx.cookbook.rhai_metadata(&image).await?.requirements;
+    let image = ImageId::new(&blockchain.name, node_type, req.version.into());
+    let requirements = read.ctx.storage.rhai_metadata(&image).await?.requirements;
 
     let mut regions = Host::regions_for(
         org_id,

@@ -13,10 +13,11 @@ use crate::auth::rbac::CommandPerm;
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::grpc::api::command_service_server::CommandService;
-use crate::grpc::{api, Grpc};
+use crate::grpc::common::{FirewallAction, FirewallDirection, FirewallProtocol, FirewallRule};
+use crate::grpc::{api, common, Grpc};
 use crate::models::blockchain::{Blockchain, BlockchainProperty, BlockchainVersion};
 use crate::models::command::{CommandExitCode, UpdateCommand};
-use crate::models::node::{FilteredIpAddr, NodeStatus};
+use crate::models::node::NodeStatus;
 use crate::models::{Command, CommandType, Host, Node};
 use crate::util::NanosUtc;
 
@@ -266,27 +267,8 @@ impl api::Command {
             RestartNode => node_cmd(Command::Restart(api::NodeRestart {})),
             KillNode => node_cmd(Command::Stop(api::NodeStop {})),
             ShutdownNode => node_cmd(Command::Stop(api::NodeStop {})),
-            UpdateNode => {
-                let node = Node::find_by_id(node_id()?, conn).await?;
-                let cmd = Command::Update(api::NodeUpdate {
-                    rules: Self::rules(&node)?,
-                });
-                node_cmd(cmd)
-            }
-            UpgradeNode => {
-                let node = Node::find_by_id(node_id()?, conn).await?;
-                let blockchain = Blockchain::find_by_id(node.blockchain_id, conn).await?;
-                let mut image = api::ContainerImage {
-                    protocol: blockchain.name,
-                    node_version: node.version.as_ref().to_lowercase(),
-                    node_type: 0, // We use the setter to set this field for type-safety
-                };
-                image.set_node_type(node.node_type.into());
-                let cmd = Command::Upgrade(api::NodeUpgrade { image: Some(image) });
-                node_cmd(cmd)
-            }
-            MigrateNode => Err(Error::NotImplemented),
             GetNodeVersion => node_cmd(Command::InfoGet(api::NodeGet {})),
+
             CreateNode => {
                 let node = Node::find_by_id(node_id()?, conn).await?;
                 let blockchain = Blockchain::find_by_id(node.blockchain_id, conn).await?;
@@ -294,12 +276,6 @@ impl api::Command {
                     BlockchainVersion::find(blockchain.id, node.node_type, &node.version, conn)
                         .await?;
                 let id_to_name_map = BlockchainProperty::id_to_name_map(version.id, conn).await?;
-                let mut image = api::ContainerImage {
-                    protocol: blockchain.name,
-                    node_version: node.version.as_ref().to_lowercase(),
-                    node_type: 0, // We use the setter to set this field for type-safety
-                };
-                image.set_node_type(node.node_type.into());
                 let properties = node
                     .properties(conn)
                     .await?
@@ -307,22 +283,34 @@ impl api::Command {
                     .map(|p| (&id_to_name_map[&p.blockchain_property_id], p.value))
                     .map(|(name, value)| api::Parameter::new(name, &value))
                     .collect();
-                let mut node_create = api::NodeCreate {
+
+                let cmd = Command::Create(api::NodeCreate {
                     name: node.name.clone(),
                     blockchain: node.blockchain_id.to_string(),
-                    image: Some(image),
-                    node_type: 0, // We use the setter to set this field for type-safety
+                    image: Some(common::ImageIdentifier {
+                        protocol: blockchain.name,
+                        node_version: node.version.as_ref().to_lowercase(),
+                        node_type: common::NodeType::from(node.node_type).into(),
+                    }),
+                    node_type: common::NodeType::from(node.node_type).into(),
                     ip: node.ip_addr.clone(),
                     gateway: node.ip_gateway.clone(),
                     properties,
                     rules: Self::rules(&node)?,
                     network: node.network,
-                };
-                node_create.set_node_type(node.node_type.into());
-                let cmd = Command::Create(node_create);
+                });
 
                 node_cmd(cmd)
             }
+
+            UpdateNode => {
+                let node = Node::find_by_id(node_id()?, conn).await?;
+                let cmd = Command::Update(api::NodeUpdate {
+                    rules: Self::rules(&node)?,
+                });
+                node_cmd(cmd)
+            }
+
             DeleteNode => {
                 let cmd = Command::Delete(api::NodeDelete {});
                 node_cmd(cmd)
@@ -334,39 +322,45 @@ impl api::Command {
             RemoveBVS => host_cmd(model.host_id.to_string()),
             CreateBVS => host_cmd(model.host_id.to_string()),
             StopBVS => host_cmd(model.host_id.to_string()),
+
+            MigrateNode | UpgradeNode => Err(Error::NotImplemented),
         }
     }
 
-    pub fn rules(node: &Node) -> Result<Vec<api::Rule>, Error> {
-        fn firewall_rules(
-            // I'll leave the Vec for now, maybe we need it later
-            denied_or_allowed_ips: Vec<FilteredIpAddr>,
-            action: api::Action,
-        ) -> Result<Vec<api::Rule>, Error> {
-            let mut rules = vec![];
-            for ip in denied_or_allowed_ips {
-                // TODO: newtype validation
-                if !IpCidr::is_ip_cidr(&ip.ip) {
-                    return Err(Error::IpNotCidr);
-                }
+    pub fn rules(node: &Node) -> Result<Vec<FirewallRule>, Error> {
+        let mut rules = vec![];
 
-                rules.push(api::Rule {
-                    name: String::new(),
-                    action: action as i32,
-                    direction: api::Direction::In as i32,
-                    protocol: api::Protocol::Both as i32,
-                    ips: Some(ip.ip),
-                    ports: vec![],
-                });
+        // TODO: newtype with cidr checks for FilteredIpAddr
+        for ip in node.allow_ips()? {
+            if !IpCidr::is_ip_cidr(&ip.ip) {
+                return Err(Error::IpNotCidr);
             }
 
-            Ok(rules)
+            rules.push(FirewallRule {
+                name: format!("allow: {}", ip.ip),
+                action: FirewallAction::Allow.into(),
+                direction: FirewallDirection::Inbound.into(),
+                protocol: Some(FirewallProtocol::Both.into()),
+                ips: Some(ip.ip),
+                ports: vec![],
+            });
         }
 
-        let rules = firewall_rules(node.allow_ips()?, api::Action::Allow)?
-            .into_iter()
-            .chain(firewall_rules(node.deny_ips()?, api::Action::Deny)?)
-            .collect();
+        for ip in node.deny_ips()? {
+            if !IpCidr::is_ip_cidr(&ip.ip) {
+                return Err(Error::IpNotCidr);
+            }
+
+            rules.push(FirewallRule {
+                name: format!("deny: {}", ip.ip),
+                action: FirewallAction::Deny.into(),
+                direction: FirewallDirection::Inbound.into(),
+                protocol: Some(FirewallProtocol::Both.into()),
+                ips: Some(ip.ip),
+                ports: vec![],
+            });
+        }
+
         Ok(rules)
     }
 }

@@ -12,7 +12,6 @@ use crate::models::rbac::{RbacPerm, RbacUser};
 use crate::models::{Host, Node};
 use crate::util::SecondsUtc;
 
-use super::endpoint::Endpoints;
 use super::rbac::{Access, Perm, Perms, Roles};
 use super::resource::{HostId, NodeId, OrgId, Resource, ResourceEntry, Resources, UserId};
 
@@ -266,19 +265,6 @@ impl Granted {
             Access::Roles(Roles::Many(roles)) => {
                 granted.join(&RbacPerm::for_roles(roles, conn).await?);
             }
-
-            Access::Endpoints(Endpoints::Single(endpoint)) => match (*endpoint).into() {
-                Perms::One(perm) => granted.push(perm),
-                Perms::Many(perms) => granted.join(&perms),
-            },
-            Access::Endpoints(Endpoints::Multiple(endpoints)) => {
-                for endpoint in endpoints {
-                    match (*endpoint).into() {
-                        Perms::One(perm) => granted.push(perm),
-                        Perms::Many(perms) => granted.join(&perms),
-                    }
-                }
-            }
         }
 
         Ok(granted)
@@ -382,61 +368,47 @@ impl Expirable {
     }
 }
 
-#[cfg(any(test, feature = "integration-test"))]
-pub mod tests {
-    #[cfg(test)]
-    use crate::auth::endpoint::Endpoint;
+#[cfg(test)]
+mod tests {
+    use crate::auth::rbac::{HostPerm, NodePerm};
 
     use super::*;
 
-    pub fn claims_none(user_id: UserId) -> Claims {
-        let expires = Duration::minutes(15);
-
-        Claims {
-            resource_entry: ResourceEntry::new_user(user_id),
-            expirable: Expirable::from_now(expires),
-            access: Access::Endpoints(Endpoints::Multiple(vec![])),
-            data: None,
-        }
-    }
-
     #[test]
-    fn can_parse_one_endpoint() {
-        let json = r#"
-            {
-                "resource_type": "User",
-                "resource_id": "5a606a36-d530-4c1b-95a9-342ad4d66686",
-                "iat": 1690300850,
-                "exp": 1690301750,
-                "endpoints": "NodeCreate"
-            }"#;
+    fn can_parse_one_perm() {
+        let json = r#"{
+            "resource_type": "User",
+            "resource_id": "5a606a36-d530-4c1b-95a9-342ad4d66686",
+            "iat": 1690300850,
+            "exp": 1690301750,
+            "perms": "node-create"
+        }"#;
 
         let claims: Claims = serde_json::from_str(json).unwrap();
         assert_eq!(
             claims.access,
-            Access::Endpoints(Endpoints::Single(Endpoint::NodeCreate))
+            Access::Perms(Perms::One(NodePerm::Create.into()))
         );
         assert!(claims.data.is_none());
     }
 
     #[test]
-    fn can_parse_multiple_endpoints() {
-        let json = r#"
-            {
-                "resource_type": "User",
-                "resource_id": "5a606a36-d530-4c1b-95a9-342ad4d66686",
-                "iat": 1690300850,
-                "exp": 1690301750,
-                "endpoints": ["HostStart", "HostStop"]
-            }"#;
+    fn can_parse_many_perms() {
+        let json = r#"{
+            "resource_type": "User",
+            "resource_id": "5a606a36-d530-4c1b-95a9-342ad4d66686",
+            "iat": 1690300850,
+            "exp": 1690301750,
+            "perms": ["host-start", "host-stop"]
+        }"#;
 
         let claims: Claims = serde_json::from_str(json).unwrap();
         assert_eq!(
             claims.access,
-            Access::Endpoints(Endpoints::Multiple(vec![
-                Endpoint::HostStart,
-                Endpoint::HostStop
-            ]))
+            Access::Perms(Perms::Many(hashset! {
+                HostPerm::Start.into(),
+                HostPerm::Stop.into()
+            }))
         );
     }
 }

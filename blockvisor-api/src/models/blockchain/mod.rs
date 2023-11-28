@@ -25,7 +25,7 @@ use crate::auth::rbac::{BlockchainAdminPerm, BlockchainPerm};
 use crate::auth::resource::OrgId;
 use crate::auth::AuthZ;
 use crate::database::Conn;
-use crate::models::node::{ContainerStatus, NodeStatus, NodeSyncStatus};
+use crate::models::node::{ContainerStatus, NodeStatus, SyncStatus};
 
 use super::schema::{blockchains, nodes};
 use super::Node;
@@ -141,7 +141,7 @@ pub struct NodeStats {
 
 impl NodeStats {
     const ACTIVE_STATES: [ContainerStatus; 1] = [ContainerStatus::Running];
-    const SYNCING_STATES: [NodeSyncStatus; 1] = [NodeSyncStatus::Syncing];
+    const SYNCING_STATES: [SyncStatus; 1] = [SyncStatus::Syncing];
     const PROVISIONING_STATES: [NodeStatus; 1] = [NodeStatus::Provisioning];
 
     /// Compute stats about nodes across all orgs and their blockchain states.

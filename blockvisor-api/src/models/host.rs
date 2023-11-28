@@ -16,9 +16,9 @@ use tonic::Status;
 use crate::auth::rbac::HostBillingPerm;
 use crate::auth::resource::{HostId, OrgId, UserId};
 use crate::auth::AuthZ;
-use crate::cookbook::script::HardwareRequirements;
 use crate::database::Conn;
 use crate::grpc::{api, common};
+use crate::storage::metadata::HardwareRequirements;
 use crate::util::SearchOperator;
 
 use super::blockchain::{Blockchain, BlockchainId};
@@ -387,7 +387,7 @@ impl Host {
 
         #[allow(clippy::cast_possible_wrap)]
         let hosts: Vec<HostCandidate> = diesel::sql_query(query)
-            .bind::<BigInt, _>(requirements.vcpu_count as i64)
+            .bind::<BigInt, _>(i64::from(requirements.vcpu_count))
             .bind::<BigInt, _>(requirements.mem_size_mb as i64 * 1000 * 1000)
             .bind::<BigInt, _>(requirements.disk_size_gb as i64 * 1000 * 1000 * 1000)
             .bind::<Uuid, _>(blockchain_id)

@@ -11,7 +11,7 @@ pub mod scheduler;
 pub use scheduler::{NodeScheduler, ResourceAffinity, SimilarNodeAffinity};
 
 pub mod status;
-pub use status::{ContainerStatus, NodeStakingStatus, NodeStatus, NodeSyncStatus};
+pub use status::{ContainerStatus, NodeStatus, StakingStatus, SyncStatus};
 
 pub mod node_type;
 pub use node_type::{NodeNetwork, NodeType, NodeVersion};
@@ -31,8 +31,8 @@ use tonic::Status;
 use tracing::warn;
 
 use crate::auth::resource::{HostId, NodeId, OrgId, ResourceId, ResourceType};
-use crate::cookbook::image::Image;
 use crate::database::{Conn, WriteConn};
+use crate::storage::image::ImageId;
 use crate::util::SearchOperator;
 
 use super::blockchain::{Blockchain, BlockchainId};
@@ -42,6 +42,12 @@ use super::{IpAddress, Paginate, Region, RegionId};
 
 type NotDeleted = dsl::Filter<nodes::table, dsl::IsNull<nodes::deleted_at>>;
 
+const DELETED_STATUSES: [NodeStatus; 3] = [
+    NodeStatus::DeletePending,
+    NodeStatus::Deleting,
+    NodeStatus::Deleted,
+];
+
 #[derive(Debug, Display, Error)]
 pub enum Error {
     /// Failed to assign ip address to node: {0},
@@ -50,8 +56,6 @@ pub enum Error {
     Blockchain(#[from] super::blockchain::Error),
     /// Command error: {0}
     Command(Box<super::command::Error>),
-    /// Cookbook error for node: {0}
-    Cookbook(#[from] crate::cookbook::Error),
     /// Failed to create node: {0}
     Create(diesel::result::Error),
     /// Failed to delete node `{0}`: {1}
@@ -98,6 +102,8 @@ pub enum Error {
     ParseIpAddr(std::net::AddrParseError),
     /// Node region error: {0}
     Region(crate::models::region::Error),
+    /// Storage error for node: {0}
+    Storage(#[from] crate::storage::Error),
     /// Failed to parse node total as i64: {0}
     Total(std::num::TryFromIntError),
     /// Failed to update node: {0}
@@ -142,9 +148,9 @@ pub struct Node {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub blockchain_id: BlockchainId,
-    pub sync_status: NodeSyncStatus,
+    pub sync_status: SyncStatus,
     pub node_status: NodeStatus,
-    pub staking_status: Option<NodeStakingStatus>,
+    pub staking_status: Option<StakingStatus>,
     pub container_status: ContainerStatus,
     pub ip_gateway: String,
     pub self_update: bool,
@@ -188,13 +194,6 @@ pub struct NodeSearch {
     pub name: Option<String>,
     pub ip: Option<String>,
 }
-
-// These statuses imply that a node is deleted.
-const DELETED_STATUSES: [NodeStatus; 3] = [
-    NodeStatus::DeletePending,
-    NodeStatus::Deleting,
-    NodeStatus::Deleted,
-];
 
 impl Node {
     pub async fn find_by_id(id: NodeId, conn: &mut Conn<'_>) -> Result<Self, Error> {
@@ -398,8 +397,8 @@ impl Node {
     pub async fn find_host(&self, write: &mut WriteConn<'_, '_>) -> Result<Host, Error> {
         let chain = Blockchain::find_by_id(self.blockchain_id, write).await?;
 
-        let image = Image::new(chain.name, self.node_type, self.version.clone());
-        let meta = write.ctx.cookbook.rhai_metadata(&image).await?;
+        let image = ImageId::new(chain.name, self.node_type, self.version.clone());
+        let meta = write.ctx.storage.rhai_metadata(&image).await?;
 
         let candidates = match self.scheduler(write).await? {
             Some(scheduler) => {
@@ -497,8 +496,8 @@ pub struct NewNode {
     pub block_height: Option<i64>,
     pub node_data: Option<serde_json::Value>,
     pub node_status: NodeStatus,
-    pub sync_status: NodeSyncStatus,
-    pub staking_status: NodeStakingStatus,
+    pub sync_status: SyncStatus,
+    pub staking_status: StakingStatus,
     pub container_status: ContainerStatus,
     pub self_update: bool,
     pub vcpu_count: i64,
@@ -546,8 +545,8 @@ impl NewNode {
         let blockchain = Blockchain::find_by_id(self.blockchain_id, write).await?;
         let dns_record_id = write.ctx.dns.get_node_dns(&self.name, ip_addr.ip()).await?;
 
-        let image = Image::new(blockchain.name, self.node_type, self.version.clone());
-        let meta = write.ctx.cookbook.rhai_metadata(&image).await?;
+        let image = ImageId::new(blockchain.name, self.node_type, self.version.clone());
+        let meta = write.ctx.storage.rhai_metadata(&image).await?;
         let data_directory_mountpoint = meta
             .babel_config
             .and_then(|cfg| cfg.data_directory_mount_point);
@@ -579,8 +578,8 @@ impl NewNode {
     ) -> Result<Host, Error> {
         let chain = Blockchain::find_by_id(self.blockchain_id, write).await?;
 
-        let image = Image::new(chain.name, self.node_type, self.version.clone());
-        let metadata = write.ctx.cookbook.rhai_metadata(&image).await?;
+        let image = ImageId::new(chain.name, self.node_type, self.version.clone());
+        let metadata = write.ctx.storage.rhai_metadata(&image).await?;
 
         let requirements = HostRequirements {
             requirements: metadata.requirements,
@@ -623,8 +622,8 @@ pub struct UpdateNode<'a> {
     pub block_height: Option<i64>,
     pub node_data: Option<serde_json::Value>,
     pub node_status: Option<NodeStatus>,
-    pub sync_status: Option<NodeSyncStatus>,
-    pub staking_status: Option<NodeStakingStatus>,
+    pub sync_status: Option<SyncStatus>,
+    pub staking_status: Option<StakingStatus>,
     pub container_status: Option<ContainerStatus>,
     pub self_update: Option<bool>,
     pub address: Option<&'a str>,
@@ -649,10 +648,10 @@ pub struct UpdateNodeMetrics {
     pub id: NodeId,
     pub block_height: Option<i64>,
     pub block_age: Option<i64>,
-    pub staking_status: Option<NodeStakingStatus>,
+    pub staking_status: Option<StakingStatus>,
     pub consensus: Option<bool>,
     pub node_status: Option<NodeStatus>,
-    pub sync_status: Option<NodeSyncStatus>,
+    pub sync_status: Option<SyncStatus>,
     pub jobs: Option<serde_json::Value>,
 }
 
@@ -700,13 +699,13 @@ mod tests {
             org_id,
             blockchain_id,
             node_status: NodeStatus::Ingesting,
-            sync_status: NodeSyncStatus::Syncing,
+            sync_status: SyncStatus::Syncing,
             container_status: ContainerStatus::Installing,
             block_height: None,
             node_data: None,
             name,
             version: "3.3.0".to_string().into(),
-            staking_status: NodeStakingStatus::Staked,
+            staking_status: StakingStatus::Staked,
             self_update: false,
             vcpu_count: 0,
             mem_size_bytes: 0,

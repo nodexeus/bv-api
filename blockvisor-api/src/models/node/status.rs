@@ -1,49 +1,7 @@
 use diesel_derive_enum::DbEnum;
 
-use crate::grpc::api;
+use crate::grpc::common;
 use crate::models::schema::sql_types;
-
-/// `ContainerStatus` reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
-#[ExistingTypePath = "sql_types::EnumContainerStatus"]
-pub enum ContainerStatus {
-    Unknown,
-    Creating,
-    Running,
-    Starting,
-    Stopping,
-    Stopped,
-    Upgrading,
-    Upgraded,
-    Deleting,
-    Deleted,
-    Installing,
-    Snapshotting,
-    Failed,
-    Busy,
-}
-
-/// `NodeSyncStatus` reflects blockjoy.api.v1.node.NodeInfo.SyncStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
-#[ExistingTypePath = "sql_types::EnumNodeSyncStatus"]
-pub enum NodeSyncStatus {
-    Unknown,
-    Syncing,
-    Synced,
-}
-
-/// `NodeStakingStatus` reflects blockjoy.api.v1.node.NodeInfo.StakingStatus in node.proto
-#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
-#[ExistingTypePath = "sql_types::EnumNodeStakingStatus"]
-pub enum NodeStakingStatus {
-    Unknown,
-    Follower,
-    Staked,
-    Staking,
-    Validating,
-    Consensus,
-    Unstaked,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumNodeStatus"]
@@ -71,49 +29,9 @@ pub enum NodeStatus {
     Updating,
 }
 
-impl api::ContainerStatus {
-    pub const fn from_model(model: ContainerStatus) -> Self {
-        match model {
-            ContainerStatus::Unknown => Self::Unspecified,
-            ContainerStatus::Creating => Self::Creating,
-            ContainerStatus::Running => Self::Running,
-            ContainerStatus::Starting => Self::Starting,
-            ContainerStatus::Stopping => Self::Stopping,
-            ContainerStatus::Stopped => Self::Stopped,
-            ContainerStatus::Upgrading => Self::Upgrading,
-            ContainerStatus::Upgraded => Self::Upgraded,
-            ContainerStatus::Deleting => Self::Deleting,
-            ContainerStatus::Deleted => Self::Deleted,
-            ContainerStatus::Installing => Self::Installing,
-            ContainerStatus::Snapshotting => Self::Snapshotting,
-            ContainerStatus::Failed => Self::Failed,
-            ContainerStatus::Busy => Self::Busy,
-        }
-    }
-
-    pub const fn into_model(self) -> ContainerStatus {
-        match self {
-            Self::Unspecified => ContainerStatus::Unknown,
-            Self::Creating => ContainerStatus::Creating,
-            Self::Running => ContainerStatus::Running,
-            Self::Starting => ContainerStatus::Starting,
-            Self::Stopping => ContainerStatus::Stopping,
-            Self::Stopped => ContainerStatus::Stopped,
-            Self::Upgrading => ContainerStatus::Upgrading,
-            Self::Upgraded => ContainerStatus::Upgraded,
-            Self::Deleting => ContainerStatus::Deleting,
-            Self::Deleted => ContainerStatus::Deleted,
-            Self::Installing => ContainerStatus::Installing,
-            Self::Snapshotting => ContainerStatus::Snapshotting,
-            Self::Failed => ContainerStatus::Failed,
-            Self::Busy => ContainerStatus::Busy,
-        }
-    }
-}
-
-impl api::NodeStatus {
-    pub const fn from_model(model: NodeStatus) -> Self {
-        match model {
+impl From<NodeStatus> for common::NodeStatus {
+    fn from(status: NodeStatus) -> Self {
+        match status {
             NodeStatus::ProvisioningPending => Self::ProvisioningPending,
             NodeStatus::Provisioning => Self::Provisioning,
             NodeStatus::Broadcasting => Self::Broadcasting,
@@ -137,76 +55,162 @@ impl api::NodeStatus {
             NodeStatus::Updating => Self::Updating,
         }
     }
+}
 
-    pub const fn into_model(self) -> Option<NodeStatus> {
-        match self {
-            Self::Unspecified => None,
-            Self::ProvisioningPending => Some(NodeStatus::ProvisioningPending),
-            Self::Provisioning => Some(NodeStatus::Provisioning),
-            Self::Broadcasting => Some(NodeStatus::Broadcasting),
-            Self::Cancelled => Some(NodeStatus::Cancelled),
-            Self::Delegating => Some(NodeStatus::Delegating),
-            Self::Delinquent => Some(NodeStatus::Delinquent),
-            Self::Disabled => Some(NodeStatus::Disabled),
-            Self::Earning => Some(NodeStatus::Earning),
-            Self::Electing => Some(NodeStatus::Electing),
-            Self::Elected => Some(NodeStatus::Elected),
-            Self::Exported => Some(NodeStatus::Exported),
-            Self::Ingesting => Some(NodeStatus::Ingesting),
-            Self::Mining => Some(NodeStatus::Mining),
-            Self::Minting => Some(NodeStatus::Minting),
-            Self::Processing => Some(NodeStatus::Processing),
-            Self::Relaying => Some(NodeStatus::Relaying),
-            Self::DeletePending => Some(NodeStatus::DeletePending),
-            Self::Deleting => Some(NodeStatus::Deleting),
-            Self::Deleted => Some(NodeStatus::Deleted),
-            Self::UpdatePending => Some(NodeStatus::UpdatePending),
-            Self::Updating => Some(NodeStatus::Updating),
+impl From<common::NodeStatus> for Option<NodeStatus> {
+    fn from(status: common::NodeStatus) -> Self {
+        match status {
+            common::NodeStatus::Unspecified => None,
+            common::NodeStatus::ProvisioningPending => Some(NodeStatus::ProvisioningPending),
+            common::NodeStatus::Provisioning => Some(NodeStatus::Provisioning),
+            common::NodeStatus::Broadcasting => Some(NodeStatus::Broadcasting),
+            common::NodeStatus::Cancelled => Some(NodeStatus::Cancelled),
+            common::NodeStatus::Delegating => Some(NodeStatus::Delegating),
+            common::NodeStatus::Delinquent => Some(NodeStatus::Delinquent),
+            common::NodeStatus::Disabled => Some(NodeStatus::Disabled),
+            common::NodeStatus::Earning => Some(NodeStatus::Earning),
+            common::NodeStatus::Electing => Some(NodeStatus::Electing),
+            common::NodeStatus::Elected => Some(NodeStatus::Elected),
+            common::NodeStatus::Exported => Some(NodeStatus::Exported),
+            common::NodeStatus::Ingesting => Some(NodeStatus::Ingesting),
+            common::NodeStatus::Mining => Some(NodeStatus::Mining),
+            common::NodeStatus::Minting => Some(NodeStatus::Minting),
+            common::NodeStatus::Processing => Some(NodeStatus::Processing),
+            common::NodeStatus::Relaying => Some(NodeStatus::Relaying),
+            common::NodeStatus::DeletePending => Some(NodeStatus::DeletePending),
+            common::NodeStatus::Deleting => Some(NodeStatus::Deleting),
+            common::NodeStatus::Deleted => Some(NodeStatus::Deleted),
+            common::NodeStatus::UpdatePending => Some(NodeStatus::UpdatePending),
+            common::NodeStatus::Updating => Some(NodeStatus::Updating),
         }
     }
 }
 
-impl api::StakingStatus {
-    pub const fn from_model(model: NodeStakingStatus) -> Self {
-        match model {
-            NodeStakingStatus::Unknown => Self::Unspecified,
-            NodeStakingStatus::Follower => Self::Follower,
-            NodeStakingStatus::Staked => Self::Staked,
-            NodeStakingStatus::Staking => Self::Staking,
-            NodeStakingStatus::Validating => Self::Validating,
-            NodeStakingStatus::Consensus => Self::Consensus,
-            NodeStakingStatus::Unstaked => Self::Unstaked,
-        }
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
+#[ExistingTypePath = "sql_types::EnumContainerStatus"]
+pub enum ContainerStatus {
+    Unknown,
+    Creating,
+    Running,
+    Starting,
+    Stopping,
+    Stopped,
+    Upgrading,
+    Upgraded,
+    Deleting,
+    Deleted,
+    Installing,
+    Snapshotting,
+    Failed,
+    Busy,
+}
 
-    pub const fn into_model(self) -> NodeStakingStatus {
-        match self {
-            Self::Unspecified => NodeStakingStatus::Unknown,
-            Self::Follower => NodeStakingStatus::Follower,
-            Self::Staked => NodeStakingStatus::Staked,
-            Self::Staking => NodeStakingStatus::Staking,
-            Self::Validating => NodeStakingStatus::Validating,
-            Self::Consensus => NodeStakingStatus::Consensus,
-            Self::Unstaked => NodeStakingStatus::Unstaked,
+impl From<ContainerStatus> for common::ContainerStatus {
+    fn from(status: ContainerStatus) -> Self {
+        match status {
+            ContainerStatus::Unknown => Self::Unspecified,
+            ContainerStatus::Creating => Self::Creating,
+            ContainerStatus::Running => Self::Running,
+            ContainerStatus::Starting => Self::Starting,
+            ContainerStatus::Stopping => Self::Stopping,
+            ContainerStatus::Stopped => Self::Stopped,
+            ContainerStatus::Upgrading => Self::Upgrading,
+            ContainerStatus::Upgraded => Self::Upgraded,
+            ContainerStatus::Deleting => Self::Deleting,
+            ContainerStatus::Deleted => Self::Deleted,
+            ContainerStatus::Installing => Self::Installing,
+            ContainerStatus::Snapshotting => Self::Snapshotting,
+            ContainerStatus::Failed => Self::Failed,
+            ContainerStatus::Busy => Self::Busy,
         }
     }
 }
 
-impl api::SyncStatus {
-    pub const fn from_model(model: NodeSyncStatus) -> Self {
-        match model {
-            NodeSyncStatus::Unknown => Self::Unspecified,
-            NodeSyncStatus::Syncing => Self::Syncing,
-            NodeSyncStatus::Synced => Self::Synced,
+impl From<common::ContainerStatus> for ContainerStatus {
+    fn from(status: common::ContainerStatus) -> Self {
+        match status {
+            common::ContainerStatus::Unspecified => ContainerStatus::Unknown,
+            common::ContainerStatus::Creating => ContainerStatus::Creating,
+            common::ContainerStatus::Running => ContainerStatus::Running,
+            common::ContainerStatus::Starting => ContainerStatus::Starting,
+            common::ContainerStatus::Stopping => ContainerStatus::Stopping,
+            common::ContainerStatus::Stopped => ContainerStatus::Stopped,
+            common::ContainerStatus::Upgrading => ContainerStatus::Upgrading,
+            common::ContainerStatus::Upgraded => ContainerStatus::Upgraded,
+            common::ContainerStatus::Deleting => ContainerStatus::Deleting,
+            common::ContainerStatus::Deleted => ContainerStatus::Deleted,
+            common::ContainerStatus::Installing => ContainerStatus::Installing,
+            common::ContainerStatus::Snapshotting => ContainerStatus::Snapshotting,
+            common::ContainerStatus::Failed => ContainerStatus::Failed,
+            common::ContainerStatus::Busy => ContainerStatus::Busy,
         }
     }
+}
 
-    #[must_use]
-    pub const fn into_model(self) -> NodeSyncStatus {
-        match self {
-            Self::Unspecified => NodeSyncStatus::Unknown,
-            Self::Syncing => NodeSyncStatus::Syncing,
-            Self::Synced => NodeSyncStatus::Synced,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
+#[ExistingTypePath = "sql_types::EnumNodeSyncStatus"]
+pub enum SyncStatus {
+    Unknown,
+    Syncing,
+    Synced,
+}
+
+impl From<SyncStatus> for common::SyncStatus {
+    fn from(status: SyncStatus) -> Self {
+        match status {
+            SyncStatus::Unknown => Self::Unspecified,
+            SyncStatus::Syncing => Self::Syncing,
+            SyncStatus::Synced => Self::Synced,
+        }
+    }
+}
+
+impl From<common::SyncStatus> for SyncStatus {
+    fn from(status: common::SyncStatus) -> Self {
+        match status {
+            common::SyncStatus::Unspecified => SyncStatus::Unknown,
+            common::SyncStatus::Syncing => SyncStatus::Syncing,
+            common::SyncStatus::Synced => SyncStatus::Synced,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
+#[ExistingTypePath = "sql_types::EnumNodeStakingStatus"]
+pub enum StakingStatus {
+    Unknown,
+    Follower,
+    Staked,
+    Staking,
+    Validating,
+    Consensus,
+    Unstaked,
+}
+
+impl From<StakingStatus> for common::StakingStatus {
+    fn from(status: StakingStatus) -> Self {
+        match status {
+            StakingStatus::Unknown => Self::Unspecified,
+            StakingStatus::Follower => Self::Follower,
+            StakingStatus::Staked => Self::Staked,
+            StakingStatus::Staking => Self::Staking,
+            StakingStatus::Validating => Self::Validating,
+            StakingStatus::Consensus => Self::Consensus,
+            StakingStatus::Unstaked => Self::Unstaked,
+        }
+    }
+}
+
+impl From<common::StakingStatus> for StakingStatus {
+    fn from(status: common::StakingStatus) -> StakingStatus {
+        match status {
+            common::StakingStatus::Unspecified => StakingStatus::Unknown,
+            common::StakingStatus::Follower => StakingStatus::Follower,
+            common::StakingStatus::Staked => StakingStatus::Staked,
+            common::StakingStatus::Staking => StakingStatus::Staking,
+            common::StakingStatus::Validating => StakingStatus::Validating,
+            common::StakingStatus::Consensus => StakingStatus::Consensus,
+            common::StakingStatus::Unstaked => StakingStatus::Unstaked,
         }
     }
 }
