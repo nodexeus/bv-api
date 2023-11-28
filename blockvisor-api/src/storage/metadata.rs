@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use displaydoc::Display;
 use rhai::Engine;
 use thiserror::Error;
-use url::Url;
 
 use crate::grpc::common;
 
@@ -20,8 +19,6 @@ pub enum Error {
     NetTypeUnspecified,
     /// No metadata in rhai script.
     NoMetadata,
-    /// Failed to parse NetworkConfig URL: {0}
-    ParseNetworkUrl(url::ParseError),
 }
 
 #[derive(Debug, Deserialize)]
@@ -76,7 +73,7 @@ impl From<HardwareRequirements> for common::HardwareRequirements {
 pub struct NetworkConfig {
     #[serde(default)]
     pub name: String,
-    pub url: Url,
+    pub url: String,
     pub net_type: NetType,
     #[serde(flatten)]
     pub metadata: HashMap<String, String>,
@@ -90,7 +87,7 @@ impl TryFrom<common::NetworkConfig> for NetworkConfig {
 
         Ok(NetworkConfig {
             name: config.name,
-            url: config.url.parse().map_err(Error::ParseNetworkUrl)?,
+            url: config.url,
             net_type,
             metadata: config.metadata,
         })
@@ -249,9 +246,9 @@ pub mod tests {
         assert_eq!(sepolia.net_type, NetType::Test);
         assert_eq!(goerli.net_type, NetType::Test);
 
-        assert_eq!(mainnet.url, "https://rpc.ankr.com/eth".parse().unwrap());
-        assert_eq!(sepolia.url, "https://rpc.sepolia.dev".parse().unwrap());
-        assert_eq!(goerli.url, "https://goerli.prylabs.net".parse().unwrap());
+        assert_eq!(mainnet.url, "https://rpc.ankr.com/eth");
+        assert_eq!(sepolia.url, "https://rpc.sepolia.dev");
+        assert_eq!(goerli.url, "https://goerli.prylabs.net");
 
         assert_eq!(
             mainnet.metadata.get("beacon_nodes_csv").unwrap(),
