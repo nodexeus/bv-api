@@ -11,13 +11,7 @@ RUN apk update && apk add \
 ENV RUSTFLAGS -Ctarget-feature=-crt-static
 
 WORKDIR /src
-
-RUN cargo init
-
-COPY blockvisor-api/build.rs /src
-COPY docker/builder.toml /src/Cargo.toml
-COPY proto /src/proto
-COPY rust-toolchain.toml /src
+COPY . /src
 
 RUN cargo build --release
 RUN strip /src/target/release/blockvisor-api
