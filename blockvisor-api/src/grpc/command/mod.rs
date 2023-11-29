@@ -17,7 +17,7 @@ use crate::grpc::api::command_service_server::CommandService;
 use crate::grpc::common::{FirewallAction, FirewallDirection, FirewallProtocol, FirewallRule};
 use crate::grpc::{api, common, Grpc};
 use crate::models::blockchain::{Blockchain, BlockchainProperty, BlockchainVersion};
-use crate::models::command::{CommandExitCode, UpdateCommand};
+use crate::models::command::{ExitCode, UpdateCommand};
 use crate::models::node::NodeStatus;
 use crate::models::{Command, CommandType, Host, Node};
 use crate::util::NanosUtc;
@@ -128,7 +128,7 @@ async fn update(
 
     let updated = UpdateCommand::from_request(req)?.update(&mut write).await?;
     match updated.exit_code {
-        Some(CommandExitCode::Ok) => success::register(&updated, &mut write).await,
+        Some(ExitCode::Ok) => success::register(&updated, &mut write).await,
         Some(_) => recover::recover(&updated, &mut write)
             .await
             .unwrap_or_default()

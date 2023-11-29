@@ -110,7 +110,7 @@ pub struct Command {
     pub node_id: Option<NodeId>,
     pub acked_at: Option<DateTime<Utc>>,
     pub retry_hint_seconds: Option<i64>,
-    pub exit_code: Option<CommandExitCode>,
+    pub exit_code: Option<ExitCode>,
 }
 
 impl Command {
@@ -207,7 +207,7 @@ impl NewCommand {
 #[diesel(table_name = commands)]
 pub struct UpdateCommand {
     pub id: CommandId,
-    pub exit_code: Option<CommandExitCode>,
+    pub exit_code: Option<ExitCode>,
     pub exit_message: Option<String>,
     pub retry_hint_seconds: Option<i64>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -238,7 +238,7 @@ impl UpdateCommand {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumCommandExitCode"]
-pub enum CommandExitCode {
+pub enum ExitCode {
     Ok,
     InternalError,
     NodeNotFound,
@@ -248,31 +248,31 @@ pub enum CommandExitCode {
     NotSupported,
 }
 
-impl From<api::CommandExitCode> for Option<CommandExitCode> {
+impl From<api::CommandExitCode> for Option<ExitCode> {
     fn from(code: api::CommandExitCode) -> Self {
         match code {
             api::CommandExitCode::Unspecified => None,
-            api::CommandExitCode::Ok => Some(CommandExitCode::Ok),
-            api::CommandExitCode::InternalError => Some(CommandExitCode::InternalError),
-            api::CommandExitCode::NodeNotFound => Some(CommandExitCode::NodeNotFound),
-            api::CommandExitCode::BlockingJobRunning => Some(CommandExitCode::BlockingJobRunning),
-            api::CommandExitCode::ServiceNotReady => Some(CommandExitCode::ServiceNotReady),
-            api::CommandExitCode::ServiceBroken => Some(CommandExitCode::ServiceBroken),
-            api::CommandExitCode::NotSupported => Some(CommandExitCode::NotSupported),
+            api::CommandExitCode::Ok => Some(ExitCode::Ok),
+            api::CommandExitCode::InternalError => Some(ExitCode::InternalError),
+            api::CommandExitCode::NodeNotFound => Some(ExitCode::NodeNotFound),
+            api::CommandExitCode::BlockingJobRunning => Some(ExitCode::BlockingJobRunning),
+            api::CommandExitCode::ServiceNotReady => Some(ExitCode::ServiceNotReady),
+            api::CommandExitCode::ServiceBroken => Some(ExitCode::ServiceBroken),
+            api::CommandExitCode::NotSupported => Some(ExitCode::NotSupported),
         }
     }
 }
 
-impl From<CommandExitCode> for api::CommandExitCode {
-    fn from(code: CommandExitCode) -> Self {
+impl From<ExitCode> for api::CommandExitCode {
+    fn from(code: ExitCode) -> Self {
         match code {
-            CommandExitCode::Ok => api::CommandExitCode::Ok,
-            CommandExitCode::InternalError => api::CommandExitCode::InternalError,
-            CommandExitCode::NodeNotFound => api::CommandExitCode::NodeNotFound,
-            CommandExitCode::BlockingJobRunning => api::CommandExitCode::BlockingJobRunning,
-            CommandExitCode::ServiceNotReady => api::CommandExitCode::ServiceNotReady,
-            CommandExitCode::ServiceBroken => api::CommandExitCode::ServiceBroken,
-            CommandExitCode::NotSupported => api::CommandExitCode::NotSupported,
+            ExitCode::Ok => api::CommandExitCode::Ok,
+            ExitCode::InternalError => api::CommandExitCode::InternalError,
+            ExitCode::NodeNotFound => api::CommandExitCode::NodeNotFound,
+            ExitCode::BlockingJobRunning => api::CommandExitCode::BlockingJobRunning,
+            ExitCode::ServiceNotReady => api::CommandExitCode::ServiceNotReady,
+            ExitCode::ServiceBroken => api::CommandExitCode::ServiceBroken,
+            ExitCode::NotSupported => api::CommandExitCode::NotSupported,
         }
     }
 }
