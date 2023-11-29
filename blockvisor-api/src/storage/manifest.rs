@@ -168,6 +168,7 @@ impl From<&Checksum> for api::Checksum {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Compression {
     ZStd(i32),
 }
