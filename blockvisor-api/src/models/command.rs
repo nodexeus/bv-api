@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use crate::auth::resource::{HostId, NodeId};
 use crate::database::Conn;
+use crate::grpc::api;
 
 use super::schema::{commands, sql_types};
 use super::{Host, Node};
@@ -36,6 +37,10 @@ pub enum Error {
     Host(#[from] super::host::Error),
     /// Command Node error: {0}
     Node(#[from] super::node::Error),
+    /// Failed to parse CommandId: {0}
+    ParseId(uuid::Error),
+    /// Failed to parse `retry_hint_seconds` as u64: {0}
+    RetryHint(std::num::TryFromIntError),
     /// Failed to update command: {0}
     Update(diesel::result::Error),
 }
@@ -48,6 +53,8 @@ impl From<Error> for Status {
             DeletePending(NotFound) | FindById(_, NotFound) | FindPending(NotFound) => {
                 Status::not_found("Not found.")
             }
+            ParseId(_) => Status::invalid_argument("id"),
+            RetryHint(_) => Status::invalid_argument("retry_hint_seconds"),
             Host(err) => err.into(),
             Node(err) => err.into(),
             _ => Status::internal("Internal error."),
@@ -198,12 +205,35 @@ impl NewCommand {
 
 #[derive(Debug, AsChangeset)]
 #[diesel(table_name = commands)]
-pub struct UpdateCommand<'a> {
+pub struct UpdateCommand {
     pub id: CommandId,
     pub exit_code: Option<CommandExitCode>,
-    pub exit_message: Option<&'a str>,
+    pub exit_message: Option<String>,
     pub retry_hint_seconds: Option<i64>,
     pub completed_at: Option<DateTime<Utc>>,
+}
+
+impl UpdateCommand {
+    pub fn from_request(request: api::CommandServiceUpdateRequest) -> Result<Self, Error> {
+        Ok(UpdateCommand {
+            id: request.id.parse().map_err(Error::ParseId)?,
+            exit_code: request.exit_code().into(),
+            exit_message: request.exit_message,
+            retry_hint_seconds: request
+                .retry_hint_seconds
+                .map(|secs| secs.try_into().map_err(Error::RetryHint))
+                .transpose()?,
+            completed_at: request.exit_code.map(|_| chrono::Utc::now()),
+        })
+    }
+
+    pub async fn update(self, conn: &mut Conn<'_>) -> Result<Command, Error> {
+        diesel::update(commands::table.find(self.id))
+            .set(self)
+            .get_result(conn)
+            .await
+            .map_err(Error::Update)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
@@ -218,12 +248,31 @@ pub enum CommandExitCode {
     NotSupported,
 }
 
-impl UpdateCommand<'_> {
-    pub async fn update(self, conn: &mut Conn<'_>) -> Result<Command, Error> {
-        diesel::update(commands::table.find(self.id))
-            .set(self)
-            .get_result::<Command>(conn)
-            .await
-            .map_err(Error::Update)
+impl From<api::CommandExitCode> for Option<CommandExitCode> {
+    fn from(code: api::CommandExitCode) -> Self {
+        match code {
+            api::CommandExitCode::Unspecified => None,
+            api::CommandExitCode::Ok => Some(CommandExitCode::Ok),
+            api::CommandExitCode::InternalError => Some(CommandExitCode::InternalError),
+            api::CommandExitCode::NodeNotFound => Some(CommandExitCode::NodeNotFound),
+            api::CommandExitCode::BlockingJobRunning => Some(CommandExitCode::BlockingJobRunning),
+            api::CommandExitCode::ServiceNotReady => Some(CommandExitCode::ServiceNotReady),
+            api::CommandExitCode::ServiceBroken => Some(CommandExitCode::ServiceBroken),
+            api::CommandExitCode::NotSupported => Some(CommandExitCode::NotSupported),
+        }
+    }
+}
+
+impl From<CommandExitCode> for api::CommandExitCode {
+    fn from(code: CommandExitCode) -> Self {
+        match code {
+            CommandExitCode::Ok => api::CommandExitCode::Ok,
+            CommandExitCode::InternalError => api::CommandExitCode::InternalError,
+            CommandExitCode::NodeNotFound => api::CommandExitCode::NodeNotFound,
+            CommandExitCode::BlockingJobRunning => api::CommandExitCode::BlockingJobRunning,
+            CommandExitCode::ServiceNotReady => api::CommandExitCode::ServiceNotReady,
+            CommandExitCode::ServiceBroken => api::CommandExitCode::ServiceBroken,
+            CommandExitCode::NotSupported => api::CommandExitCode::NotSupported,
+        }
     }
 }
