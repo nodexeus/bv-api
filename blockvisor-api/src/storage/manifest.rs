@@ -31,9 +31,8 @@ pub enum Error {
 pub struct DownloadManifest {
     pub total_size: u64,
     pub compression: Option<Compression>,
-    pub chunks: Vec<ArchiveChunk>,
+    pub chunks: Vec<Chunk>,
 }
-
 impl TryFrom<api::DownloadManifest> for DownloadManifest {
     type Error = Error;
 
@@ -61,21 +60,21 @@ impl From<DownloadManifest> for api::DownloadManifest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ArchiveChunk {
+pub struct Chunk {
     pub key: String,
-    pub url: Url,
+    pub url: String,
     pub checksum: Checksum,
     pub size: u64,
-    pub destinations: Vec<ChunkTarget>,
+    pub destinations: Vec<FileLocation>,
 }
 
-impl TryFrom<api::ArchiveChunk> for ArchiveChunk {
+impl TryFrom<api::ArchiveChunk> for Chunk {
     type Error = Error;
 
     fn try_from(chunk: api::ArchiveChunk) -> Result<Self, Self::Error> {
-        Ok(ArchiveChunk {
+        Ok(Chunk {
             key: chunk.key,
-            url: chunk.url.parse().map_err(Error::ParseArchiveUrl)?,
+            url: chunk.url,
             checksum: chunk.checksum.ok_or(Error::MissingChecksum)?.try_into()?,
             size: chunk.size,
             destinations: chunk.destinations.into_iter().map(Into::into).collect(),
@@ -83,11 +82,11 @@ impl TryFrom<api::ArchiveChunk> for ArchiveChunk {
     }
 }
 
-impl From<ArchiveChunk> for api::ArchiveChunk {
-    fn from(chunk: ArchiveChunk) -> Self {
+impl From<Chunk> for api::ArchiveChunk {
+    fn from(chunk: Chunk) -> Self {
         api::ArchiveChunk {
             key: chunk.key,
-            url: chunk.url.to_string(),
+            url: chunk.url,
             checksum: Some((&chunk.checksum).into()),
             size: chunk.size,
             destinations: chunk.destinations.into_iter().map(Into::into).collect(),
@@ -96,27 +95,27 @@ impl From<ArchiveChunk> for api::ArchiveChunk {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChunkTarget {
+pub struct FileLocation {
     pub path: PathBuf,
-    pub position: u64,
+    pub pos: u64,
     pub size: u64,
 }
 
-impl From<api::ChunkTarget> for ChunkTarget {
+impl From<api::ChunkTarget> for FileLocation {
     fn from(target: api::ChunkTarget) -> Self {
-        ChunkTarget {
+        FileLocation {
             path: target.path.into(),
-            position: target.position_bytes,
+            pos: target.position_bytes,
             size: target.size_bytes,
         }
     }
 }
 
-impl From<ChunkTarget> for api::ChunkTarget {
-    fn from(target: ChunkTarget) -> Self {
+impl From<FileLocation> for api::ChunkTarget {
+    fn from(target: FileLocation) -> Self {
         api::ChunkTarget {
             path: target.path.to_string_lossy().to_string(),
-            position_bytes: target.position,
+            position_bytes: target.pos,
             size_bytes: target.size,
         }
     }
@@ -168,9 +167,8 @@ impl From<&Checksum> for api::Checksum {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
 pub enum Compression {
-    ZStd(i32),
+    ZSTD(i32),
 }
 
 impl TryFrom<api::Compression> for Compression {
@@ -178,7 +176,7 @@ impl TryFrom<api::Compression> for Compression {
 
     fn try_from(compression: api::Compression) -> Result<Self, Self::Error> {
         match compression.compression.ok_or(Error::MissingCompression)? {
-            api::compression::Compression::Zstd(level) => Ok(Compression::ZStd(level)),
+            api::compression::Compression::Zstd(level) => Ok(Compression::ZSTD(level)),
         }
     }
 }
@@ -186,7 +184,7 @@ impl TryFrom<api::Compression> for Compression {
 impl From<Compression> for api::Compression {
     fn from(compression: Compression) -> Self {
         let inner = match compression {
-            Compression::ZStd(level) => api::compression::Compression::Zstd(level),
+            Compression::ZSTD(level) => api::compression::Compression::Zstd(level),
         };
 
         api::Compression {
