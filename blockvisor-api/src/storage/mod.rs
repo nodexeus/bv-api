@@ -214,10 +214,11 @@ impl Storage {
         };
 
         for chunk in &mut manifest.chunks {
-            chunk.url = self
+            let url = self
                 .client
                 .download_url(&self.bucket.archive, &chunk.key, self.expiration)
                 .await?;
+            chunk.url = Some(url);
         }
 
         Ok(manifest)

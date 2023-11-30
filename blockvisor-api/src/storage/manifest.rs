@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use displaydoc::Display;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
 
@@ -63,7 +63,8 @@ impl From<DownloadManifest> for api::DownloadManifest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArchiveChunk {
     pub key: String,
-    pub url: Url,
+    #[serde(deserialize_with = "deserialize_option_url")]
+    pub url: Option<Url>,
     pub checksum: Checksum,
     pub size: u64,
     pub destinations: Vec<ChunkTarget>,
@@ -75,7 +76,7 @@ impl TryFrom<api::ArchiveChunk> for ArchiveChunk {
     fn try_from(chunk: api::ArchiveChunk) -> Result<Self, Self::Error> {
         Ok(ArchiveChunk {
             key: chunk.key,
-            url: chunk.url.parse().map_err(Error::ParseArchiveUrl)?,
+            url: Some(chunk.url.parse().map_err(Error::ParseArchiveUrl)?),
             checksum: chunk.checksum.ok_or(Error::MissingChecksum)?.try_into()?,
             size: chunk.size,
             destinations: chunk.destinations.into_iter().map(Into::into).collect(),
@@ -87,7 +88,7 @@ impl From<ArchiveChunk> for api::ArchiveChunk {
     fn from(chunk: ArchiveChunk) -> Self {
         api::ArchiveChunk {
             key: chunk.key,
-            url: chunk.url.to_string(),
+            url: chunk.url.map(|url| url.to_string()).unwrap_or_default(),
             checksum: Some((&chunk.checksum).into()),
             size: chunk.size,
             destinations: chunk.destinations.into_iter().map(Into::into).collect(),
@@ -98,6 +99,7 @@ impl From<ArchiveChunk> for api::ArchiveChunk {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChunkTarget {
     pub path: PathBuf,
+    #[serde(alias = "pos")]
     pub position: u64,
     pub size: u64,
 }
@@ -245,5 +247,52 @@ impl From<UploadSlot> for api::UploadSlot {
             key: slot.key,
             url: slot.url.to_string(),
         }
+    }
+}
+
+fn deserialize_option_url<'de, D>(deserializer: D) -> Result<Option<Url>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+    match s {
+        Some(ref s) if s.is_empty() => Ok(None),
+        Some(s) => s.parse().map(Some).map_err(serde::de::Error::custom),
+        None => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_archive_chunk() {
+        let json = r#"{
+            "key": "some_chunk",
+            "url": "http://some.url",
+            "checksum": {
+                "sha256": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            },
+            "size": 123,
+            "destinations": []
+        }"#;
+
+        let _: ArchiveChunk = serde_json::from_str(json).unwrap();
+    }
+
+    #[test]
+    fn parse_chunk_empty_url() {
+        let json = r#"{
+            "key": "some_chunk",
+            "url": "",
+            "checksum": {
+                "sha256": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            },
+            "size": 123,
+            "destinations": []
+        }"#;
+
+        let _: ArchiveChunk = serde_json::from_str(json).unwrap();
     }
 }
