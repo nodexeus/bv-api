@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use displaydoc::Display;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
 
@@ -31,8 +31,9 @@ pub enum Error {
 pub struct DownloadManifest {
     pub total_size: u64,
     pub compression: Option<Compression>,
-    pub chunks: Vec<Chunk>,
+    pub chunks: Vec<ArchiveChunk>,
 }
+
 impl TryFrom<api::DownloadManifest> for DownloadManifest {
     type Error = Error;
 
@@ -60,21 +61,22 @@ impl From<DownloadManifest> for api::DownloadManifest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Chunk {
+pub struct ArchiveChunk {
     pub key: String,
-    pub url: String,
+    #[serde(deserialize_with = "deserialize_option_url")]
+    pub url: Option<Url>,
     pub checksum: Checksum,
     pub size: u64,
-    pub destinations: Vec<FileLocation>,
+    pub destinations: Vec<ChunkTarget>,
 }
 
-impl TryFrom<api::ArchiveChunk> for Chunk {
+impl TryFrom<api::ArchiveChunk> for ArchiveChunk {
     type Error = Error;
 
     fn try_from(chunk: api::ArchiveChunk) -> Result<Self, Self::Error> {
-        Ok(Chunk {
+        Ok(ArchiveChunk {
             key: chunk.key,
-            url: chunk.url,
+            url: Some(chunk.url.parse().map_err(Error::ParseArchiveUrl)?),
             checksum: chunk.checksum.ok_or(Error::MissingChecksum)?.try_into()?,
             size: chunk.size,
             destinations: chunk.destinations.into_iter().map(Into::into).collect(),
@@ -82,11 +84,11 @@ impl TryFrom<api::ArchiveChunk> for Chunk {
     }
 }
 
-impl From<Chunk> for api::ArchiveChunk {
-    fn from(chunk: Chunk) -> Self {
+impl From<ArchiveChunk> for api::ArchiveChunk {
+    fn from(chunk: ArchiveChunk) -> Self {
         api::ArchiveChunk {
             key: chunk.key,
-            url: chunk.url,
+            url: chunk.url.map(|url| url.to_string()).unwrap_or_default(),
             checksum: Some((&chunk.checksum).into()),
             size: chunk.size,
             destinations: chunk.destinations.into_iter().map(Into::into).collect(),
@@ -95,27 +97,28 @@ impl From<Chunk> for api::ArchiveChunk {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FileLocation {
+pub struct ChunkTarget {
     pub path: PathBuf,
-    pub pos: u64,
+    #[serde(alias = "pos")]
+    pub position: u64,
     pub size: u64,
 }
 
-impl From<api::ChunkTarget> for FileLocation {
+impl From<api::ChunkTarget> for ChunkTarget {
     fn from(target: api::ChunkTarget) -> Self {
-        FileLocation {
+        ChunkTarget {
             path: target.path.into(),
-            pos: target.position_bytes,
+            position: target.position_bytes,
             size: target.size_bytes,
         }
     }
 }
 
-impl From<FileLocation> for api::ChunkTarget {
-    fn from(target: FileLocation) -> Self {
+impl From<ChunkTarget> for api::ChunkTarget {
+    fn from(target: ChunkTarget) -> Self {
         api::ChunkTarget {
             path: target.path.to_string_lossy().to_string(),
-            position_bytes: target.pos,
+            position_bytes: target.position,
             size_bytes: target.size,
         }
     }
@@ -167,8 +170,9 @@ impl From<&Checksum> for api::Checksum {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
 pub enum Compression {
-    ZSTD(i32),
+    ZStd(i32),
 }
 
 impl TryFrom<api::Compression> for Compression {
@@ -176,7 +180,7 @@ impl TryFrom<api::Compression> for Compression {
 
     fn try_from(compression: api::Compression) -> Result<Self, Self::Error> {
         match compression.compression.ok_or(Error::MissingCompression)? {
-            api::compression::Compression::Zstd(level) => Ok(Compression::ZSTD(level)),
+            api::compression::Compression::Zstd(level) => Ok(Compression::ZStd(level)),
         }
     }
 }
@@ -184,7 +188,7 @@ impl TryFrom<api::Compression> for Compression {
 impl From<Compression> for api::Compression {
     fn from(compression: Compression) -> Self {
         let inner = match compression {
-            Compression::ZSTD(level) => api::compression::Compression::Zstd(level),
+            Compression::ZStd(level) => api::compression::Compression::Zstd(level),
         };
 
         api::Compression {
@@ -243,5 +247,52 @@ impl From<UploadSlot> for api::UploadSlot {
             key: slot.key,
             url: slot.url.to_string(),
         }
+    }
+}
+
+fn deserialize_option_url<'de, D>(deserializer: D) -> Result<Option<Url>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+    match s {
+        Some(ref s) if s.is_empty() => Ok(None),
+        Some(s) => s.parse().map(Some).map_err(serde::de::Error::custom),
+        None => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_archive_chunk() {
+        let json = r#"{
+            "key": "some_chunk",
+            "url": "http://some.url",
+            "checksum": {
+                "sha256": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            },
+            "size": 123,
+            "destinations": []
+        }"#;
+
+        let _: ArchiveChunk = serde_json::from_str(json).unwrap();
+    }
+
+    #[test]
+    fn parse_chunk_empty_url() {
+        let json = r#"{
+            "key": "some_chunk",
+            "url": "",
+            "checksum": {
+                "sha256": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            },
+            "size": 123,
+            "destinations": []
+        }"#;
+
+        let _: ArchiveChunk = serde_json::from_str(json).unwrap();
     }
 }
