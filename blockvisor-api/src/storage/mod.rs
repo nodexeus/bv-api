@@ -217,8 +217,7 @@ impl Storage {
             chunk.url = self
                 .client
                 .download_url(&self.bucket.archive, &chunk.key, self.expiration)
-                .await?
-                .to_string();
+                .await?;
         }
 
         Ok(manifest)
