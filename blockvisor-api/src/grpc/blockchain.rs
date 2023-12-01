@@ -84,7 +84,7 @@ pub enum Error {
     Property(#[from] crate::models::blockchain::property::Error),
     /// Storage failed: {0}
     Storage(#[from] crate::storage::Error),
-    /// Blockchain failed to get storage networks for `{0:#?}`: {1}
+    /// Blockchain failed to get storage networks for `{0:?}`: {1}
     StorageNetworks(ImageId, crate::storage::Error),
 }
 

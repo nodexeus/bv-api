@@ -18,8 +18,8 @@ use crate::models::blockchain::{BlockchainProperty, BlockchainPropertyId, Blockc
 use crate::models::command::NewCommand;
 use crate::models::node::{
     ContainerStatus, FilteredIpAddr, NewNode, Node, NodeFilter, NodeJob, NodeJobProgress,
-    NodeJobStatus, NodeProperty, NodeScheduler, NodeSearch, NodeStatus, NodeType, StakingStatus,
-    SyncStatus, UpdateNode,
+    NodeJobStatus, NodeProperty, NodeScheduler, NodeSearch, NodeSort, NodeStatus, NodeType,
+    StakingStatus, SyncStatus, UpdateNode,
 };
 use crate::models::{Blockchain, CommandType, Host, Org, Region, User};
 use crate::storage::image::ImageId;
@@ -95,12 +95,16 @@ pub enum Error {
     Resource(#[from] crate::auth::resource::Error),
     /// Node search failed: {0}
     SearchOperator(crate::util::search::Error),
+    /// Sort order: {0}
+    SortOrder(crate::util::search::Error),
     /// Node storage error: {0}
     Storage(#[from] crate::storage::Error),
     /// Failed to parse current data sync progress: {0}
     SyncCurrent(std::num::TryFromIntError),
     /// Failed to parse total data sync progress: {0}
     SyncTotal(std::num::TryFromIntError),
+    /// The requested sort field is unknown.
+    UnknownSortField,
     /// Node user error: {0}
     User(#[from] crate::models::user::Error),
 }
@@ -127,8 +131,10 @@ impl From<Error> for Status {
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             SearchOperator(_) => Status::invalid_argument("search.operator"),
+            SortOrder(_) => Status::invalid_argument("sort.order"),
             SyncCurrent(_) => Status::invalid_argument("data_sync_progress_current"),
             SyncTotal(_) => Status::invalid_argument("data_sync_progress_total"),
+            UnknownSortField => Status::invalid_argument("sort.field"),
             Auth(err) => err.into(),
             Blockchain(err) => err.into(),
             BlockchainProperty(err) => err.into(),
@@ -250,7 +256,7 @@ async fn list(
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::NodeServiceListResponse, Error> {
-    let filter = req.as_filter()?;
+    let filter = req.into_filter()?;
     if let Some(org_id) = filter.org_id {
         read.auth_or_all(&meta, NodeAdminPerm::List, NodePerm::List, org_id)
             .await?
@@ -258,7 +264,7 @@ async fn list(
         read.auth_all(&meta, NodeAdminPerm::List).await?
     };
 
-    let (node_count, nodes) = Node::filter(filter, &mut read).await?;
+    let (node_count, nodes) = filter.query(&mut read).await?;
     let nodes = api::Node::from_models(nodes, &mut read).await?;
 
     Ok(api::NodeServiceListResponse { nodes, node_count })
@@ -796,43 +802,70 @@ impl api::NodeServiceCreateRequest {
 }
 
 impl api::NodeServiceListRequest {
-    fn as_filter(&self) -> Result<NodeFilter, Error> {
+    fn into_filter(self) -> Result<NodeFilter, Error> {
+        let org_id = self
+            .org_id
+            .as_ref()
+            .map(|id| id.parse().map_err(Error::ParseOrgId))
+            .transpose()?;
+        let status = self
+            .statuses()
+            .map(|status| Option::from(status).ok_or(Error::NodeStatusUnspecified))
+            .collect::<Result<_, _>>()?;
+        let node_types = self.node_types().map(NodeType::from).collect();
+        let blockchains = self
+            .blockchain_ids
+            .iter()
+            .map(|id| id.parse().map_err(Error::ParseBlockchainId))
+            .collect::<Result<_, _>>()?;
+        let host_id = self
+            .host_id
+            .map(|id| id.parse().map_err(Error::ParseHostId))
+            .transpose()?;
+        let search = self
+            .search
+            .map(|search| {
+                Ok::<_, Error>(NodeSearch {
+                    operator: search
+                        .operator()
+                        .try_into()
+                        .map_err(Error::SearchOperator)?,
+                    id: search.id.map(|id| id.trim().to_lowercase()),
+                    name: search.name.map(|name| name.trim().to_lowercase()),
+                    ip: search.ip.map(|ip| ip.trim().to_lowercase()),
+                })
+            })
+            .transpose()?;
+        let sort = self
+            .sort
+            .into_iter()
+            .map(|sort| {
+                let order = sort.order().try_into().map_err(Error::SortOrder)?;
+                match sort.field() {
+                    api::NodeSortField::Unspecified => Err(Error::UnknownSortField),
+                    api::NodeSortField::HostName => Ok(NodeSort::HostName(order)),
+                    api::NodeSortField::NodeName => Ok(NodeSort::NodeName(order)),
+                    api::NodeSortField::NodeType => Ok(NodeSort::NodeType(order)),
+                    api::NodeSortField::CreatedAt => Ok(NodeSort::CreatedAt(order)),
+                    api::NodeSortField::UpdatedAt => Ok(NodeSort::UpdatedAt(order)),
+                    api::NodeSortField::NodeStatus => Ok(NodeSort::NodeStatus(order)),
+                    api::NodeSortField::SyncStatus => Ok(NodeSort::SyncStatus(order)),
+                    api::NodeSortField::ContainerStatus => Ok(NodeSort::ContainerStatus(order)),
+                    api::NodeSortField::StakingStatus => Ok(NodeSort::StakingStatus(order)),
+                }
+            })
+            .collect::<Result<_, _>>()?;
+
         Ok(NodeFilter {
-            org_id: self
-                .org_id
-                .as_ref()
-                .map(|id| id.parse().map_err(Error::ParseOrgId))
-                .transpose()?,
+            org_id,
             offset: self.offset,
             limit: self.limit,
-            status: self
-                .statuses()
-                .map(|status| Option::from(status).ok_or(Error::NodeStatusUnspecified))
-                .collect::<Result<_, _>>()?,
-            node_types: self.node_types().map(NodeType::from).collect(),
-            blockchains: self
-                .blockchain_ids
-                .iter()
-                .map(|id| id.parse().map_err(Error::ParseBlockchainId))
-                .collect::<Result<_, _>>()?,
-            host_id: self
-                .host_id
-                .as_ref()
-                .map(|id| id.parse().map_err(Error::ParseHostId))
-                .transpose()?,
-            search: self
-                .search
-                .as_ref()
-                .map(|s| {
-                    s.operator().try_into().map(|operator| NodeSearch {
-                        operator,
-                        id: s.id.as_ref().map(|id| id.trim().to_lowercase()),
-                        name: s.name.as_ref().map(|name| name.trim().to_lowercase()),
-                        ip: s.ip.as_ref().map(|ip| ip.trim().to_lowercase()),
-                    })
-                })
-                .transpose()
-                .map_err(Error::SearchOperator)?,
+            status,
+            node_types,
+            blockchains,
+            host_id,
+            search,
+            sort,
         })
     }
 }

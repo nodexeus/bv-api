@@ -1,9 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 use argon2::password_hash::{PasswordHasher, SaltString};
 use argon2::{Algorithm, Argon2, PasswordHash};
 use chrono::{DateTime, Utc};
 use diesel::dsl;
+use diesel::expression::expression_types::NotSelectable;
+use diesel::pg::Pg;
 use diesel::prelude::*;
 use diesel::result::DatabaseErrorKind::UniqueViolation;
 use diesel::result::Error::{DatabaseError, NotFound};
@@ -18,7 +20,7 @@ use validator::Validate;
 use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
 use crate::email::Language;
-use crate::util::SearchOperator;
+use crate::util::{SearchOperator, SortOrder};
 
 use super::org::NewOrg;
 use super::schema::{user_roles, users};
@@ -154,71 +156,6 @@ impl User {
             .map_err(|err| Error::FindByEmail(email.to_lowercase(), err))
     }
 
-    pub async fn filter(
-        filter: UserFilter,
-        conn: &mut Conn<'_>,
-    ) -> Result<(u64, Vec<Self>), Error> {
-        let UserFilter {
-            org_id,
-            offset,
-            limit,
-            search,
-        } = filter;
-        let mut query = users::table.left_join(user_roles::table).into_boxed();
-
-        // search fields
-        if let Some(search) = search {
-            let UserSearch {
-                operator,
-                id,
-                name,
-                email,
-            } = search;
-            let user_name = users::first_name.concat(" ").concat(users::last_name);
-            match operator {
-                SearchOperator::Or => {
-                    if let Some(id) = id {
-                        query = query.filter(super::text(users::id).like(id));
-                    }
-                    if let Some(name) = name {
-                        query = query.or_filter(super::lower(user_name).like(name));
-                    }
-                    if let Some(email) = email {
-                        query = query.or_filter(super::lower(users::email).like(email));
-                    }
-                }
-                SearchOperator::And => {
-                    if let Some(id) = id {
-                        query = query.filter(super::text(users::id).like(id));
-                    }
-                    if let Some(name) = name {
-                        query = query.filter(super::lower(user_name).like(name));
-                    }
-                    if let Some(email) = email {
-                        query = query.filter(super::lower(users::email).like(email));
-                    }
-                }
-            }
-        }
-
-        if let Some(org_id) = org_id {
-            query = query.filter(user_roles::org_id.eq(org_id));
-        }
-
-        let limit = i64::try_from(limit).map_err(Error::Limit)?;
-        let offset = i64::try_from(offset).map_err(Error::Offset)?;
-        let (total, users) = query
-            .filter(users::deleted_at.is_null())
-            .select(Self::as_select())
-            .distinct()
-            .paginate(limit, offset)
-            .get_results_counted(conn)
-            .await
-            .map_err(Error::Filter)?;
-        let total = u64::try_from(total).map_err(Error::Total)?;
-        Ok((total, users))
-    }
-
     pub fn verify_password(&self, password: &str) -> Result<(), Error> {
         let hash = PasswordHash {
             algorithm: Algorithm::default().ident(),
@@ -339,18 +276,117 @@ impl User {
     }
 }
 
-pub struct UserFilter {
-    pub org_id: Option<OrgId>,
-    pub offset: u64,
-    pub limit: u64,
-    pub search: Option<UserSearch>,
-}
-
 pub struct UserSearch {
     pub operator: SearchOperator,
     pub id: Option<String>,
     pub name: Option<String>,
     pub email: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum UserSort {
+    Email(SortOrder),
+    FirstName(SortOrder),
+    LastName(SortOrder),
+    CreatedAt(SortOrder),
+}
+
+impl UserSort {
+    fn into_expr<T>(self) -> Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>
+    where
+        users::email: SelectableExpression<T>,
+        users::first_name: SelectableExpression<T>,
+        users::last_name: SelectableExpression<T>,
+        users::created_at: SelectableExpression<T>,
+    {
+        use SortOrder::*;
+        use UserSort::*;
+
+        match self {
+            Email(Asc) => Box::new(users::email.asc()),
+            Email(Desc) => Box::new(users::email.desc()),
+
+            FirstName(Asc) => Box::new(users::first_name.asc()),
+            FirstName(Desc) => Box::new(users::first_name.desc()),
+
+            LastName(Asc) => Box::new(users::last_name.asc()),
+            LastName(Desc) => Box::new(users::last_name.desc()),
+
+            CreatedAt(Asc) => Box::new(users::created_at.asc()),
+            CreatedAt(Desc) => Box::new(users::created_at.desc()),
+        }
+    }
+}
+
+pub struct UserFilter {
+    pub org_id: Option<OrgId>,
+    pub offset: u64,
+    pub limit: u64,
+    pub search: Option<UserSearch>,
+    pub sort: VecDeque<UserSort>,
+}
+
+impl UserFilter {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(u64, Vec<User>), Error> {
+        let mut query = users::table.left_join(user_roles::table).into_boxed();
+
+        if let Some(search) = self.search {
+            let user_name = users::first_name.concat(" ").concat(users::last_name);
+            match search.operator {
+                SearchOperator::Or => {
+                    if let Some(id) = search.id {
+                        query = query.filter(super::text(users::id).like(id));
+                    }
+                    if let Some(name) = search.name {
+                        query = query.or_filter(super::lower(user_name).like(name));
+                    }
+                    if let Some(email) = search.email {
+                        query = query.or_filter(super::lower(users::email).like(email));
+                    }
+                }
+                SearchOperator::And => {
+                    if let Some(id) = search.id {
+                        query = query.filter(super::text(users::id).like(id));
+                    }
+                    if let Some(name) = search.name {
+                        query = query.filter(super::lower(user_name).like(name));
+                    }
+                    if let Some(email) = search.email {
+                        query = query.filter(super::lower(users::email).like(email));
+                    }
+                }
+            }
+        }
+
+        if let Some(org_id) = self.org_id {
+            query = query.filter(user_roles::org_id.eq(org_id));
+        }
+
+        if let Some(sort) = self.sort.pop_front() {
+            query = query.order_by(sort.into_expr());
+        } else {
+            query = query.order_by(users::created_at.desc());
+        }
+
+        while let Some(sort) = self.sort.pop_front() {
+            query = query.then_order_by(sort.into_expr());
+        }
+
+        let limit = i64::try_from(self.limit).map_err(Error::Limit)?;
+        let offset = i64::try_from(self.offset).map_err(Error::Offset)?;
+
+        let (total, users) = query
+            .filter(users::deleted_at.is_null())
+            .select(User::as_select())
+            .distinct()
+            .paginate(limit, offset)
+            .get_results_counted(conn)
+            .await
+            .map_err(Error::Filter)?;
+
+        let total = u64::try_from(total).map_err(Error::Total)?;
+        Ok((total, users))
+    }
 }
 
 #[derive(Debug, Clone, Validate, Insertable)]

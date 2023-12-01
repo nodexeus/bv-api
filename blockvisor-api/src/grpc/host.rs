@@ -15,7 +15,8 @@ use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::command::NewCommand;
 use crate::models::host::{
-    ConnectionStatus, Host, HostFilter, HostSearch, HostType, MonthlyCostUsd, NewHost, UpdateHost,
+    ConnectionStatus, Host, HostFilter, HostSearch, HostSort, HostType, MonthlyCostUsd, NewHost,
+    UpdateHost,
 };
 use crate::models::{Blockchain, CommandType, IpAddress, Node, Org, OrgUser, Region, RegionId};
 use crate::storage::image::ImageId;
@@ -56,6 +57,8 @@ pub enum Error {
     MemSize(std::num::TryFromIntError),
     /// Node model error: {0}
     Node(#[from] crate::models::node::Error),
+    /// Host org error: {0}
+    Org(#[from] crate::models::org::Error),
     /// Failed to parse BlockchainId: {0}
     ParseBlockchainId(uuid::Error),
     /// Failed to parse HostId: {0}
@@ -70,16 +73,18 @@ pub enum Error {
     ParseOrgId(uuid::Error),
     /// Provision token is for a different organization.
     ProvisionOrg,
-    /// Host search failed: {0}
-    SearchOperator(crate::util::search::Error),
-    /// Host org error: {0}
-    Org(#[from] crate::models::org::Error),
     /// Host Refresh token failure: {0}
     Refresh(#[from] crate::auth::token::refresh::Error),
     /// Host region error: {0}
     Region(#[from] crate::models::region::Error),
+    /// Host search failed: {0}
+    SearchOperator(crate::util::search::Error),
+    /// Sort order: {0}
+    SortOrder(crate::util::search::Error),
     /// Host storage error: {0}
     Storage(#[from] crate::storage::Error),
+    /// The requested sort field is unknown.
+    UnknownSortField,
 }
 
 impl From<Error> for Status {
@@ -91,6 +96,7 @@ impl From<Error> for Status {
                 Status::internal("Internal error.")
             }
             CpuCount(_) | DiskSize(_) | MemSize(_) => Status::out_of_range("Host resource."),
+            HasNodes => Status::failed_precondition("This host still has nodes."),
             ParseBlockchainId(_) => Status::invalid_argument("blockchain_id"),
             ParseId(_) => Status::invalid_argument("id"),
             ParseIpFrom(_) => Status::invalid_argument("ip_range_from"),
@@ -99,7 +105,8 @@ impl From<Error> for Status {
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ProvisionOrg => Status::failed_precondition("Wrong org."),
             SearchOperator(_) => Status::invalid_argument("search.operator"),
-            HasNodes => Status::failed_precondition("This host still has nodes."),
+            SortOrder(_) => Status::invalid_argument("sort.order"),
+            UnknownSortField => Status::invalid_argument("sort.field"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Blockchain(err) => err.into(),
@@ -259,7 +266,7 @@ async fn list(
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::HostServiceListResponse, Error> {
-    let filter = req.as_filter()?;
+    let filter = req.into_filter()?;
     let authz = if let Some(org_id) = filter.org_id {
         read.auth_or_all(&meta, HostAdminPerm::List, HostPerm::List, org_id)
             .await?
@@ -267,7 +274,7 @@ async fn list(
         read.auth_all(&meta, HostAdminPerm::List).await?
     };
 
-    let (host_count, hosts) = Host::filter(filter, &mut read).await?;
+    let (host_count, hosts) = filter.query(&mut read).await?;
     let hosts = api::Host::from_hosts(hosts, Some(&authz), &mut read).await?;
 
     Ok(api::HostServiceListResponse { hosts, host_count })
@@ -570,30 +577,49 @@ impl api::HostServiceCreateRequest {
 }
 
 impl api::HostServiceListRequest {
-    fn as_filter(&self) -> Result<HostFilter, Error> {
+    fn into_filter(self) -> Result<HostFilter, Error> {
+        let org_id = self
+            .org_id
+            .map(|id| id.parse().map_err(Error::ParseOrgId))
+            .transpose()?;
+        let search = self
+            .search
+            .map(|search| {
+                Ok::<_, Error>(HostSearch {
+                    operator: search
+                        .operator()
+                        .try_into()
+                        .map_err(Error::SearchOperator)?,
+                    id: search.id.map(|id| id.trim().to_lowercase()),
+                    name: search.name.map(|name| name.trim().to_lowercase()),
+                    version: search.version.map(|version| version.trim().to_lowercase()),
+                    os: search.os.map(|os| os.trim().to_lowercase()),
+                    ip: search.ip.map(|ip| ip.trim().to_lowercase()),
+                })
+            })
+            .transpose()?;
+        let sort = self
+            .sort
+            .into_iter()
+            .map(|sort| {
+                let order = sort.order().try_into().map_err(Error::SortOrder)?;
+                match sort.field() {
+                    api::HostSortField::Unspecified => Err(Error::UnknownSortField),
+                    api::HostSortField::HostName => Ok(HostSort::HostName(order)),
+                    api::HostSortField::CreatedAt => Ok(HostSort::CreatedAt(order)),
+                    api::HostSortField::Version => Ok(HostSort::Version(order)),
+                    api::HostSortField::Os => Ok(HostSort::Os(order)),
+                    api::HostSortField::OsVersion => Ok(HostSort::OsVersion(order)),
+                }
+            })
+            .collect::<Result<_, _>>()?;
+
         Ok(HostFilter {
-            org_id: self
-                .org_id
-                .as_ref()
-                .map(|id| id.parse().map_err(Error::ParseOrgId))
-                .transpose()?,
+            org_id,
             offset: self.offset,
             limit: self.limit,
-            search: self
-                .search
-                .as_ref()
-                .map(|s| {
-                    s.operator().try_into().map(|operator| HostSearch {
-                        operator,
-                        id: s.id.as_ref().map(|id| id.trim().to_lowercase()),
-                        name: s.name.as_ref().map(|name| name.trim().to_lowercase()),
-                        version: s.version.as_ref().map(|v| v.trim().to_lowercase()),
-                        os: s.os.as_ref().map(|os| os.trim().to_lowercase()),
-                        ip: s.ip.as_ref().map(|ip| ip.trim().to_lowercase()),
-                    })
-                })
-                .transpose()
-                .map_err(Error::SearchOperator)?,
+            search,
+            sort,
         })
     }
 }

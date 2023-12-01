@@ -1,7 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
 use diesel::dsl;
+use diesel::expression::expression_types::NotSelectable;
+use diesel::pg::Pg;
 use diesel::prelude::*;
 use diesel::result::DatabaseErrorKind::UniqueViolation;
 use diesel::result::Error::{DatabaseError, NotFound};
@@ -19,7 +21,7 @@ use crate::auth::AuthZ;
 use crate::database::Conn;
 use crate::grpc::{api, common};
 use crate::storage::metadata::HardwareRequirements;
-use crate::util::SearchOperator;
+use crate::util::{SearchOperator, SortOrder};
 
 use super::blockchain::{Blockchain, BlockchainId};
 use super::ip_address::NewIpAddressRange;
@@ -155,24 +157,6 @@ impl AsRef<Host> for Host {
 }
 
 #[derive(Debug)]
-pub struct HostFilter {
-    pub org_id: Option<OrgId>,
-    pub offset: u64,
-    pub limit: u64,
-    pub search: Option<HostSearch>,
-}
-
-#[derive(Debug)]
-pub struct HostSearch {
-    pub operator: SearchOperator,
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub version: Option<String>,
-    pub os: Option<String>,
-    pub ip: Option<String>,
-}
-
-#[derive(Debug)]
 pub struct HostRequirements {
     pub requirements: HardwareRequirements,
     pub blockchain_id: BlockchainId,
@@ -214,86 +198,6 @@ impl Host {
             .await
             .map_err(|err| Error::FindExistingIds(ids, err))?;
         Ok(ids.into_iter().collect())
-    }
-
-    /// For each provided argument, filters the hosts by that argument.
-    pub async fn filter(
-        filter: HostFilter,
-        conn: &mut Conn<'_>,
-    ) -> Result<(u64, Vec<Self>), Error> {
-        let HostFilter {
-            org_id,
-            offset,
-            limit,
-            search,
-        } = filter;
-        let mut query = Self::not_deleted().into_boxed();
-
-        // search fields
-        if let Some(search) = search {
-            let HostSearch {
-                operator,
-                id,
-                name,
-                version,
-                os,
-                ip,
-            } = search;
-            match operator {
-                SearchOperator::Or => {
-                    if let Some(id) = id {
-                        query = query.filter(super::text(hosts::id).like(id));
-                    }
-                    if let Some(name) = name {
-                        query = query.or_filter(super::lower(hosts::name).like(name));
-                    }
-                    if let Some(version) = version {
-                        query = query.or_filter(super::lower(hosts::version).like(version));
-                    }
-                    if let Some(os) = os {
-                        query = query.or_filter(super::lower(hosts::os).like(os));
-                    }
-                    if let Some(ip) = ip {
-                        query = query.or_filter(hosts::ip_addr.like(ip));
-                    }
-                }
-                SearchOperator::And => {
-                    if let Some(id) = id {
-                        query = query.filter(super::text(hosts::id).like(id));
-                    }
-                    if let Some(name) = name {
-                        query = query.filter(super::lower(hosts::name).like(name));
-                    }
-                    if let Some(version) = version {
-                        query = query.filter(super::lower(hosts::version).like(version));
-                    }
-                    if let Some(os) = os {
-                        query = query.filter(super::lower(hosts::os).like(os));
-                    }
-                    if let Some(ip) = ip {
-                        query = query.filter(hosts::ip_addr.like(ip));
-                    }
-                }
-            }
-        }
-
-        if let Some(org_id) = org_id {
-            query = query.filter(hosts::org_id.eq(org_id));
-        }
-
-        let limit = i64::try_from(limit).map_err(Error::Limit)?;
-        let offset = i64::try_from(offset).map_err(Error::Offset)?;
-
-        let (total, hosts) = query
-            .order_by(hosts::created_at)
-            .paginate(limit, offset)
-            .get_results_counted(conn)
-            .await
-            .map_err(Error::Filter)?;
-
-        let total = u64::try_from(total).map_err(Error::Total)?;
-
-        Ok((total, hosts))
     }
 
     pub async fn find_by_name(name: &str, conn: &mut Conn<'_>) -> Result<Self, Error> {
@@ -464,6 +368,137 @@ impl Host {
 
     pub fn not_deleted() -> NotDeleted {
         hosts::table.filter(hosts::deleted_at.is_null())
+    }
+}
+
+#[derive(Debug)]
+pub struct HostSearch {
+    pub operator: SearchOperator,
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub os: Option<String>,
+    pub ip: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum HostSort {
+    HostName(SortOrder),
+    CreatedAt(SortOrder),
+    Version(SortOrder),
+    Os(SortOrder),
+    OsVersion(SortOrder),
+}
+
+impl HostSort {
+    fn into_expr<T>(self) -> Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>
+    where
+        hosts::name: SelectableExpression<T>,
+        hosts::created_at: SelectableExpression<T>,
+        hosts::version: SelectableExpression<T>,
+        hosts::os: SelectableExpression<T>,
+        hosts::os_version: SelectableExpression<T>,
+    {
+        use HostSort::*;
+        use SortOrder::*;
+
+        match self {
+            HostName(Asc) => Box::new(hosts::name.asc()),
+            HostName(Desc) => Box::new(hosts::name.desc()),
+
+            CreatedAt(Asc) => Box::new(hosts::created_at.asc()),
+            CreatedAt(Desc) => Box::new(hosts::created_at.desc()),
+
+            Version(Asc) => Box::new(hosts::version.asc()),
+            Version(Desc) => Box::new(hosts::version.desc()),
+
+            Os(Asc) => Box::new(hosts::os.asc()),
+            Os(Desc) => Box::new(hosts::os.desc()),
+
+            OsVersion(Asc) => Box::new(hosts::os_version.asc()),
+            OsVersion(Desc) => Box::new(hosts::os_version.desc()),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct HostFilter {
+    pub org_id: Option<OrgId>,
+    pub offset: u64,
+    pub limit: u64,
+    pub search: Option<HostSearch>,
+    pub sort: VecDeque<HostSort>,
+}
+
+impl HostFilter {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(u64, Vec<Host>), Error> {
+        let mut query = Host::not_deleted().into_boxed();
+
+        if let Some(search) = self.search {
+            match search.operator {
+                SearchOperator::Or => {
+                    if let Some(id) = search.id {
+                        query = query.filter(super::text(hosts::id).like(id));
+                    }
+                    if let Some(name) = search.name {
+                        query = query.or_filter(super::lower(hosts::name).like(name));
+                    }
+                    if let Some(version) = search.version {
+                        query = query.or_filter(super::lower(hosts::version).like(version));
+                    }
+                    if let Some(os) = search.os {
+                        query = query.or_filter(super::lower(hosts::os).like(os));
+                    }
+                    if let Some(ip) = search.ip {
+                        query = query.or_filter(hosts::ip_addr.like(ip));
+                    }
+                }
+                SearchOperator::And => {
+                    if let Some(id) = search.id {
+                        query = query.filter(super::text(hosts::id).like(id));
+                    }
+                    if let Some(name) = search.name {
+                        query = query.filter(super::lower(hosts::name).like(name));
+                    }
+                    if let Some(version) = search.version {
+                        query = query.filter(super::lower(hosts::version).like(version));
+                    }
+                    if let Some(os) = search.os {
+                        query = query.filter(super::lower(hosts::os).like(os));
+                    }
+                    if let Some(ip) = search.ip {
+                        query = query.filter(hosts::ip_addr.like(ip));
+                    }
+                }
+            }
+        }
+
+        if let Some(org_id) = self.org_id {
+            query = query.filter(hosts::org_id.eq(org_id));
+        }
+
+        if let Some(sort) = self.sort.pop_front() {
+            query = query.order_by(sort.into_expr());
+        } else {
+            query = query.order_by(hosts::created_at.desc());
+        }
+
+        while let Some(sort) = self.sort.pop_front() {
+            query = query.then_order_by(sort.into_expr());
+        }
+
+        let limit = i64::try_from(self.limit).map_err(Error::Limit)?;
+        let offset = i64::try_from(self.offset).map_err(Error::Offset)?;
+
+        let (total, hosts) = query
+            .order_by(hosts::created_at)
+            .paginate(limit, offset)
+            .get_results_counted(conn)
+            .await
+            .map_err(Error::Filter)?;
+
+        let total = u64::try_from(total).map_err(Error::Total)?;
+        Ok((total, hosts))
     }
 }
 
