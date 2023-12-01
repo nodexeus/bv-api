@@ -63,16 +63,18 @@ impl Cloudflare {
         debug!("Sending payload to cloudflare: {payload:?}");
         let url = format!("{}/{}", self.config.api.base_url, endpoint);
 
-        self.client
+        let s = self
+            .client
             .post(url)
             .bearer_auth(self.config.api.token.as_str())
             .json(&payload)
             .send()
             .await
             .map_err(Error::PostRequest)?
-            .json()
+            .text()
             .await
-            .map_err(Error::PostResponse)
+            .unwrap();
+        Ok(serde_json::from_str(dbg!(&s)).unwrap())
     }
 
     async fn delete(&self, endpoint: &str) -> Result<StatusCode, Error> {
