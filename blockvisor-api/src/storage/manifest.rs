@@ -76,7 +76,10 @@ impl TryFrom<api::ArchiveChunk> for ArchiveChunk {
     fn try_from(chunk: api::ArchiveChunk) -> Result<Self, Self::Error> {
         Ok(ArchiveChunk {
             key: chunk.key,
-            url: Some(chunk.url.parse().map_err(Error::ParseArchiveUrl)?),
+            url: chunk
+                .url
+                .map(|url| url.parse().map_err(Error::ParseArchiveUrl))
+                .transpose()?,
             checksum: chunk.checksum.ok_or(Error::MissingChecksum)?.try_into()?,
             size: chunk.size,
             destinations: chunk.destinations.into_iter().map(Into::into).collect(),
@@ -88,7 +91,7 @@ impl From<ArchiveChunk> for api::ArchiveChunk {
     fn from(chunk: ArchiveChunk) -> Self {
         api::ArchiveChunk {
             key: chunk.key,
-            url: chunk.url.map(|url| url.to_string()).unwrap_or_default(),
+            url: chunk.url.map(|url| url.to_string()),
             checksum: Some((&chunk.checksum).into()),
             size: chunk.size,
             destinations: chunk.destinations.into_iter().map(Into::into).collect(),
