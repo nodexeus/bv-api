@@ -6,8 +6,8 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 
 use crate::auth::Auth;
+use crate::cloudflare::{Cloudflare, Dns};
 use crate::database::Pool;
-use crate::dns::{Cloudflare, Dns};
 use crate::email::Email;
 use crate::mqtt::Notifier;
 use crate::storage::Storage;
@@ -18,6 +18,8 @@ use super::Config;
 pub enum Error {
     /// Failed to build Config: {0}
     Config(super::Error),
+    /// Failed to create Cloudflare: {0}
+    Cloudflare(crate::cloudflare::Error),
     /// Failed to create Email: {0}
     Email(crate::email::Error),
     /// Builder is missing Auth.
@@ -69,7 +71,7 @@ impl Context {
 
     pub async fn builder_from(config: Config) -> Result<Builder, Error> {
         let auth = Auth::new(&config.token);
-        let dns = Cloudflare::new(config.cloudflare.clone());
+        let dns = Cloudflare::new(config.cloudflare.clone()).map_err(Error::Cloudflare)?;
         let email = Email::new(&config, auth.cipher.clone()).map_err(Error::Email)?;
         let pool = Pool::new(&config.database).await.map_err(Error::Pool)?;
         let notifier = Notifier::new(config.mqtt.options(), pool.clone())
@@ -89,8 +91,8 @@ impl Context {
 
     #[cfg(any(test, feature = "integration-test"))]
     pub async fn with_mocked() -> Result<(Arc<Self>, crate::database::tests::TestDb), Error> {
+        use crate::cloudflare::tests::MockCloudflare;
         use crate::database::tests::TestDb;
-        use crate::dns::tests::MockDns;
         use crate::storage::tests::TestStorage;
 
         let config = Config::from_default_toml().map_err(Error::Config)?;
@@ -98,7 +100,7 @@ impl Context {
         let db = TestDb::new(&config.database, &mut rng).await;
 
         let auth = Auth::new(&config.token);
-        let dns = MockDns::new(&mut rng).await;
+        let dns = MockCloudflare::new(&mut rng).await;
         let email = Email::new_mocked(&config, auth.cipher.clone()).map_err(Error::Email)?;
         let pool = db.pool();
         let notifier = Notifier::new(config.mqtt.options(), pool.clone())

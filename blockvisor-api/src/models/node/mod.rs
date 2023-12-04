@@ -56,12 +56,12 @@ pub enum Error {
     Blockchain(#[from] super::blockchain::Error),
     /// Command error: {0}
     Command(Box<super::command::Error>),
+    /// Node Cloudflare error: {0}
+    Cloudflare(#[from] crate::cloudflare::Error),
     /// Failed to create node: {0}
     Create(diesel::result::Error),
     /// Failed to delete node `{0}`: {1}
     Delete(NodeId, diesel::result::Error),
-    /// Node DNS error: {0}
-    Dns(#[from] crate::dns::Error),
     /// Failed to filter nodes: {0}
     Filter(diesel::result::Error),
     /// Failed to parse filtered IP addresses: {0}
@@ -386,7 +386,7 @@ impl Node {
             .await
             .map_err(|err| Error::Command(Box::new(err)))?;
 
-        if let Err(err) = write.ctx.dns.remove_node_dns(&node.dns_record_id).await {
+        if let Err(err) = write.ctx.dns.delete(&node.dns_record_id).await {
             warn!("Failed to remove node dns: {err}");
         }
 
@@ -533,17 +533,16 @@ impl NewNode {
             self.find_host(scheduler, write).await?
         };
 
-        let ip_addr = IpAddress::next_for_host(host.id, write)
+        let ip_gateway = host.ip_gateway.ip().to_string();
+        let host_ip = IpAddress::next_for_host(host.id, write)
             .await
             .map_err(Error::NextHostIp)?;
-        IpAddress::assign(ip_addr.id, host.id, write)
+        IpAddress::assign(host_ip.id, host.id, write)
             .await
             .map_err(Error::AssignIpAddr)?;
 
-        let ip_gateway = host.ip_gateway.ip().to_string();
-
         let blockchain = Blockchain::find_by_id(self.blockchain_id, write).await?;
-        let dns_record_id = write.ctx.dns.get_node_dns(&self.name, ip_addr.ip()).await?;
+        let dns_record = write.ctx.dns.create(&self.name, host_ip.ip()).await?;
 
         let image = ImageId::new(blockchain.name, self.node_type, self.version.clone());
         let meta = write.ctx.storage.rhai_metadata(&image).await?;
@@ -556,9 +555,9 @@ impl NewNode {
                 self,
                 nodes::host_id.eq(host.id),
                 nodes::ip_gateway.eq(ip_gateway),
-                nodes::ip_addr.eq(ip_addr.ip()),
+                nodes::ip_addr.eq(host_ip.ip().to_string()),
                 nodes::host_name.eq(&host.name),
-                nodes::dns_record_id.eq(dns_record_id),
+                nodes::dns_record_id.eq(dns_record.id),
                 nodes::data_directory_mountpoint.eq(data_directory_mountpoint),
             ))
             .get_result(&mut write)

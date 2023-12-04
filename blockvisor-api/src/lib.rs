@@ -28,9 +28,9 @@
 extern crate maplit;
 
 pub mod auth;
+pub mod cloudflare;
 pub mod config;
 pub mod database;
-pub mod dns;
 pub mod email;
 pub mod grpc;
 pub mod http;

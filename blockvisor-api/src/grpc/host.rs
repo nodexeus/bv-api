@@ -517,7 +517,7 @@ impl api::HostIpAddress {
         models
             .iter()
             .map(|ip| Self {
-                ip: ip.ip(),
+                ip: ip.ip().to_string(),
                 assigned: ip.is_assigned,
             })
             .collect()
