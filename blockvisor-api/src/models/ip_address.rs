@@ -162,8 +162,8 @@ impl IpAddress {
         from < ip && to > ip
     }
 
-    pub fn ip(&self) -> String {
-        self.ip.ip().to_string()
+    pub fn ip(&self) -> IpAddr {
+        self.ip.ip()
     }
 
     pub async fn assigned(ip: IpAddr, conn: &mut Conn<'_>) -> Result<bool, Error> {
