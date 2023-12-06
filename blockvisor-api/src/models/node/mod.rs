@@ -1,4 +1,6 @@
 pub mod job;
+use diesel::expression::expression_types::NotSelectable;
+use diesel::pg::Pg;
 pub use job::{NodeJob, NodeJobProgress, NodeJobStatus};
 
 pub mod log;
@@ -16,7 +18,7 @@ pub use status::{ContainerStatus, NodeStatus, StakingStatus, SyncStatus};
 pub mod node_type;
 pub use node_type::{NodeNetwork, NodeType, NodeVersion};
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
 use diesel::result::DatabaseErrorKind::UniqueViolation;
@@ -33,7 +35,7 @@ use tracing::warn;
 use crate::auth::resource::{HostId, NodeId, OrgId, ResourceId, ResourceType};
 use crate::database::{Conn, WriteConn};
 use crate::storage::image::ImageId;
-use crate::util::SearchOperator;
+use crate::util::{SearchOperator, SortOrder};
 
 use super::blockchain::{Blockchain, BlockchainId};
 use super::host::{Host, HostRequirements, HostType};
@@ -175,26 +177,6 @@ pub struct Node {
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug)]
-pub struct NodeFilter {
-    pub org_id: Option<OrgId>,
-    pub offset: u64,
-    pub limit: u64,
-    pub status: Vec<NodeStatus>,
-    pub node_types: Vec<NodeType>,
-    pub blockchains: Vec<BlockchainId>,
-    pub host_id: Option<HostId>,
-    pub search: Option<NodeSearch>,
-}
-
-#[derive(Debug)]
-pub struct NodeSearch {
-    pub operator: SearchOperator,
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub ip: Option<String>,
-}
-
 impl Node {
     pub async fn find_by_id(id: NodeId, conn: &mut Conn<'_>) -> Result<Self, Error> {
         nodes::table
@@ -265,106 +247,15 @@ impl Node {
             .map_err(Error::NodeProperty)
     }
 
-    pub async fn filter(
-        filter: NodeFilter,
-        conn: &mut Conn<'_>,
-    ) -> Result<(u64, Vec<Self>), Error> {
-        let NodeFilter {
-            org_id,
-            offset,
-            limit,
-            status,
-            node_types,
-            blockchains,
-            host_id,
-            search,
-        } = filter;
+    pub async fn update(mut self, conn: &mut Conn<'_>) -> Result<Self, Error> {
+        let id = self.id;
+        self.updated_at = Utc::now();
 
-        let mut query = nodes::table.into_boxed();
-
-        // search fields
-        if let Some(search) = search {
-            let NodeSearch {
-                operator,
-                id,
-                name,
-                ip,
-            } = search;
-            match operator {
-                SearchOperator::Or => {
-                    if let Some(id) = id {
-                        query = query.filter(super::text(nodes::id).like(id));
-                    }
-                    if let Some(name) = name {
-                        query = query.or_filter(super::lower(nodes::name).like(name));
-                    }
-                    if let Some(ip) = ip {
-                        query = query.or_filter(nodes::ip_addr.like(ip));
-                    }
-                }
-                SearchOperator::And => {
-                    if let Some(id) = id {
-                        query = query.filter(super::text(nodes::id).like(id));
-                    }
-                    if let Some(name) = name {
-                        query = query.filter(super::lower(nodes::name).like(name));
-                    }
-                    if let Some(ip) = ip {
-                        query = query.filter(nodes::ip_addr.like(ip));
-                    }
-                }
-            }
-        }
-
-        if let Some(org_id) = org_id {
-            query = query.filter(nodes::org_id.eq(org_id));
-        }
-
-        if !blockchains.is_empty() {
-            query = query.filter(nodes::blockchain_id.eq_any(blockchains));
-        }
-
-        // If the user requested a deleted status, we include deleted records with the response.
-        // Conversely, if no such request is made, we exlude all deleted rows.
-        if !status.iter().any(|s| DELETED_STATUSES.contains(s)) {
-            query = query.filter(nodes::deleted_at.is_null());
-        }
-        if !status.is_empty() {
-            query = query.filter(nodes::node_status.eq_any(status));
-        }
-
-        if !node_types.is_empty() {
-            query = query.filter(nodes::node_type.eq_any(node_types));
-        }
-
-        if let Some(host_id) = host_id {
-            query = query.filter(nodes::host_id.eq(host_id));
-        }
-
-        let limit = i64::try_from(limit).map_err(Error::Limit)?;
-        let offset = i64::try_from(offset).map_err(Error::Offset)?;
-
-        let (total, nodes) = query
-            .order_by(nodes::created_at.desc())
-            .paginate(limit, offset)
-            .get_results_counted(conn)
-            .await
-            .map_err(Error::Filter)?;
-
-        let total = u64::try_from(total).map_err(Error::Total)?;
-
-        Ok((total, nodes))
-    }
-
-    pub async fn update(self, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        let mut updated = self.clone();
-        updated.updated_at = Utc::now();
-
-        diesel::update(nodes::table.find(updated.id))
-            .set(updated)
+        diesel::update(nodes::table.find(id))
+            .set(self)
             .get_result(conn)
             .await
-            .map_err(|err| Error::UpdateById(self.id, err))
+            .map_err(|err| Error::UpdateById(id, err))
     }
 
     pub async fn delete(id: NodeId, write: &mut WriteConn<'_, '_>) -> Result<(), Error> {
@@ -476,6 +367,168 @@ impl Node {
 
     pub fn not_deleted() -> NotDeleted {
         nodes::table.filter(nodes::deleted_at.is_null())
+    }
+}
+
+#[derive(Debug)]
+pub struct NodeSearch {
+    pub operator: SearchOperator,
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub ip: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum NodeSort {
+    HostName(SortOrder),
+    NodeName(SortOrder),
+    NodeType(SortOrder),
+    CreatedAt(SortOrder),
+    UpdatedAt(SortOrder),
+    NodeStatus(SortOrder),
+    SyncStatus(SortOrder),
+    ContainerStatus(SortOrder),
+    StakingStatus(SortOrder),
+}
+
+impl NodeSort {
+    fn into_expr<T>(self) -> Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>
+    where
+        nodes::host_name: SelectableExpression<T>,
+        nodes::name: SelectableExpression<T>,
+        nodes::node_type: SelectableExpression<T>,
+        nodes::created_at: SelectableExpression<T>,
+        nodes::updated_at: SelectableExpression<T>,
+        nodes::node_status: SelectableExpression<T>,
+        nodes::sync_status: SelectableExpression<T>,
+        nodes::container_status: SelectableExpression<T>,
+        nodes::staking_status: SelectableExpression<T>,
+    {
+        use NodeSort::*;
+        use SortOrder::*;
+
+        match self {
+            HostName(Asc) => Box::new(nodes::host_name.asc()),
+            HostName(Desc) => Box::new(nodes::host_name.desc()),
+
+            NodeName(Asc) => Box::new(nodes::name.asc()),
+            NodeName(Desc) => Box::new(nodes::name.desc()),
+
+            NodeType(Asc) => Box::new(nodes::node_type.asc()),
+            NodeType(Desc) => Box::new(nodes::node_type.desc()),
+
+            CreatedAt(Asc) => Box::new(nodes::created_at.asc()),
+            CreatedAt(Desc) => Box::new(nodes::created_at.desc()),
+
+            UpdatedAt(Asc) => Box::new(nodes::updated_at.asc()),
+            UpdatedAt(Desc) => Box::new(nodes::updated_at.desc()),
+
+            NodeStatus(Asc) => Box::new(nodes::node_status.asc()),
+            NodeStatus(Desc) => Box::new(nodes::node_status.desc()),
+
+            SyncStatus(Asc) => Box::new(nodes::sync_status.asc()),
+            SyncStatus(Desc) => Box::new(nodes::sync_status.desc()),
+
+            ContainerStatus(Asc) => Box::new(nodes::container_status.asc()),
+            ContainerStatus(Desc) => Box::new(nodes::container_status.desc()),
+
+            StakingStatus(Asc) => Box::new(nodes::staking_status.asc()),
+            StakingStatus(Desc) => Box::new(nodes::staking_status.desc()),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct NodeFilter {
+    pub org_id: Option<OrgId>,
+    pub offset: u64,
+    pub limit: u64,
+    pub status: Vec<NodeStatus>,
+    pub node_types: Vec<NodeType>,
+    pub blockchains: Vec<BlockchainId>,
+    pub host_id: Option<HostId>,
+    pub search: Option<NodeSearch>,
+    pub sort: VecDeque<NodeSort>,
+}
+
+impl NodeFilter {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(u64, Vec<Node>), Error> {
+        let mut query = nodes::table.into_boxed();
+
+        if let Some(search) = self.search {
+            match search.operator {
+                SearchOperator::Or => {
+                    if let Some(id) = search.id {
+                        query = query.filter(super::text(nodes::id).like(id));
+                    }
+                    if let Some(name) = search.name {
+                        query = query.or_filter(super::lower(nodes::name).like(name));
+                    }
+                    if let Some(ip) = search.ip {
+                        query = query.or_filter(nodes::ip_addr.like(ip));
+                    }
+                }
+                SearchOperator::And => {
+                    if let Some(id) = search.id {
+                        query = query.filter(super::text(nodes::id).like(id));
+                    }
+                    if let Some(name) = search.name {
+                        query = query.filter(super::lower(nodes::name).like(name));
+                    }
+                    if let Some(ip) = search.ip {
+                        query = query.filter(nodes::ip_addr.like(ip));
+                    }
+                }
+            }
+        }
+
+        if let Some(org_id) = self.org_id {
+            query = query.filter(nodes::org_id.eq(org_id));
+        }
+
+        if !self.blockchains.is_empty() {
+            query = query.filter(nodes::blockchain_id.eq_any(self.blockchains));
+        }
+
+        // If the user requested a deleted status, we include deleted records with the response.
+        // Conversely, if no such request is made, we exlude all deleted rows.
+        if !self.status.iter().any(|s| DELETED_STATUSES.contains(s)) {
+            query = query.filter(nodes::deleted_at.is_null());
+        }
+        if !self.status.is_empty() {
+            query = query.filter(nodes::node_status.eq_any(self.status));
+        }
+
+        if !self.node_types.is_empty() {
+            query = query.filter(nodes::node_type.eq_any(self.node_types));
+        }
+
+        if let Some(host_id) = self.host_id {
+            query = query.filter(nodes::host_id.eq(host_id));
+        }
+
+        if let Some(sort) = self.sort.pop_front() {
+            query = query.order_by(sort.into_expr());
+        } else {
+            query = query.order_by(nodes::created_at.desc());
+        }
+
+        while let Some(sort) = self.sort.pop_front() {
+            query = query.then_order_by(sort.into_expr());
+        }
+
+        let limit = i64::try_from(self.limit).map_err(Error::Limit)?;
+        let offset = i64::try_from(self.offset).map_err(Error::Offset)?;
+
+        let (total, nodes) = query
+            .order_by(nodes::created_at.desc())
+            .paginate(limit, offset)
+            .get_results_counted(conn)
+            .await
+            .map_err(Error::Filter)?;
+
+        let total = u64::try_from(total).map_err(Error::Total)?;
+        Ok((total, nodes))
     }
 }
 
@@ -742,9 +795,10 @@ mod tests {
             org_id: Some(org_id),
             host_id: Some(host_id),
             search: None,
+            sort: VecDeque::new(),
         };
 
-        let (_, nodes) = Node::filter(filter, &mut write).await.unwrap();
+        let (_, nodes) = filter.query(&mut write).await.unwrap();
 
         assert_eq!(nodes.len(), 1);
     }

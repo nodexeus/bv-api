@@ -11,7 +11,7 @@ use super::image::ImageId;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to compile script from ImageId `{0:#?}`: {1}
+    /// Failed to compile script from ImageId `{0:?}`: {1}
     CompileScript(ImageId, rhai::ParseError),
     /// Invalid rhai script: {0}
     InvalidScript(Box<rhai::EvalAltResult>),
