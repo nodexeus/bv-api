@@ -491,7 +491,6 @@ impl HostFilter {
         let offset = i64::try_from(self.offset).map_err(Error::Offset)?;
 
         let (total, hosts) = query
-            .order_by(hosts::created_at)
             .paginate(limit, offset)
             .get_results_counted(conn)
             .await

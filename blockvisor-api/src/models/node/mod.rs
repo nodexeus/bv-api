@@ -521,7 +521,6 @@ impl NodeFilter {
         let offset = i64::try_from(self.offset).map_err(Error::Offset)?;
 
         let (total, nodes) = query
-            .order_by(nodes::created_at.desc())
             .paginate(limit, offset)
             .get_results_counted(conn)
             .await

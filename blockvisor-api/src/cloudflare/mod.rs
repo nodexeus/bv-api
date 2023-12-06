@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use displaydoc::Display;
 use thiserror::Error;
-use url::Url;
 
 use crate::config::cloudflare::Config;
 
@@ -46,7 +45,7 @@ impl Cloudflare {
     }
 
     #[cfg(any(test, feature = "integration-test"))]
-    pub fn new_mock(config: Arc<Config>, server_url: Url) -> Result<Self, Error> {
+    pub fn new_mock(config: Arc<Config>, server_url: url::Url) -> Result<Self, Error> {
         let client = Client::new_mock(server_url).map_err(Error::CreateClient)?;
 
         Ok(Cloudflare { config, client })
