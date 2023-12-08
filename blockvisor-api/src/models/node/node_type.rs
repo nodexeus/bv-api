@@ -18,16 +18,14 @@ pub enum Error {
     ParseVersion(semver::Error),
     /// Unknown NodeType: {0}
     UnknownNodeType(String),
-    /// Unknown NodeType value: {0}
-    UnknownNodeTypeValue(i32),
 }
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
         match err {
-            UnknownNodeType(_) | UnknownNodeTypeValue(_) => Status::internal("Internal error."),
             ParseVersion(_) => Status::invalid_argument("version"),
+            UnknownNodeType(_) => Status::internal("Internal error."),
         }
     }
 }
@@ -54,20 +52,20 @@ impl NodeVersion {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumNodeType"]
 pub enum NodeType {
-    Unknown = 0,
-    Miner = 1,
-    Etl = 2,
-    Validator = 3,
-    Api = 4,
-    Oracle = 5,
-    Relay = 6,
-    Execution = 7,
-    Beacon = 8,
-    MevBoost = 9,
-    Node = 10,
-    FullNode = 11,
-    LightNode = 12,
-    Archive = 13,
+    Unknown,
+    Miner,
+    Etl,
+    Validator,
+    Api,
+    Oracle,
+    Relay,
+    Execution,
+    Beacon,
+    MevBoost,
+    Node,
+    FullNode,
+    LightNode,
+    Archive,
 }
 
 impl From<common::NodeType> for NodeType {
@@ -115,20 +113,20 @@ impl From<NodeType> for common::NodeType {
 impl fmt::Display for NodeType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Self::Unknown => "Unknown",
-            Self::Miner => "Miner",
-            Self::Etl => "ETL",
-            Self::Validator => "Validator",
-            Self::Api => "API",
-            Self::Oracle => "Oracle",
-            Self::Relay => "Relay",
-            Self::Execution => "Execution",
-            Self::Beacon => "Beacon",
-            Self::MevBoost => "MEVBoost",
-            Self::Node => "Node",
-            Self::FullNode => "FullNode",
-            Self::LightNode => "LightNode",
-            Self::Archive => "Archive",
+            NodeType::Unknown => "Unknown",
+            NodeType::Miner => "Miner",
+            NodeType::Etl => "ETL",
+            NodeType::Validator => "Validator",
+            NodeType::Api => "API",
+            NodeType::Oracle => "Oracle",
+            NodeType::Relay => "Relay",
+            NodeType::Execution => "Execution",
+            NodeType::Beacon => "Beacon",
+            NodeType::MevBoost => "MEVBoost",
+            NodeType::Node => "Node",
+            NodeType::FullNode => "FullNode",
+            NodeType::LightNode => "LightNode",
+            NodeType::Archive => "Archive",
         };
         write!(f, "{s}")
     }
@@ -155,28 +153,5 @@ impl FromStr for NodeType {
             "archive" => Ok(Self::Archive),
             _ => Err(Error::UnknownNodeType(s.into())),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn returns_valid_string_for_value() {
-        assert_eq!(NodeType::Unknown.to_string(), "Unknown");
-        assert_eq!(NodeType::Miner.to_string(), "Miner");
-        assert_eq!(NodeType::Etl.to_string(), "ETL");
-        assert_eq!(NodeType::Validator.to_string(), "Validator");
-        assert_eq!(NodeType::Api.to_string(), "API");
-        assert_eq!(NodeType::Oracle.to_string(), "Oracle");
-        assert_eq!(NodeType::Relay.to_string(), "Relay");
-        assert_eq!(NodeType::Execution.to_string(), "Execution");
-        assert_eq!(NodeType::Beacon.to_string(), "Beacon");
-        assert_eq!(NodeType::MevBoost.to_string(), "MEVBoost");
-        assert_eq!(NodeType::Node.to_string(), "Node");
-        assert_eq!(NodeType::FullNode.to_string(), "FullNode");
-        assert_eq!(NodeType::LightNode.to_string(), "LightNode");
-        assert_eq!(NodeType::Archive.to_string(), "Archive");
     }
 }

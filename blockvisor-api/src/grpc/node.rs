@@ -264,8 +264,9 @@ async fn list(
         read.auth_all(&meta, NodeAdminPerm::List).await?
     };
 
-    let (node_count, nodes) = filter.query(&mut read).await?;
-    let nodes = api::Node::from_models(nodes, &mut read).await?;
+    let filtered = filter.query(&mut read).await?;
+    let nodes = api::Node::from_models(filtered.nodes, &mut read).await?;
+    let node_count = filtered.count;
 
     Ok(api::NodeServiceListResponse { nodes, node_count })
 }

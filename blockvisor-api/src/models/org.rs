@@ -22,9 +22,8 @@ use crate::database::Conn;
 use crate::util::{SearchOperator, SortOrder};
 
 use super::rbac::RbacUser;
-use super::schema::{nodes, orgs, orgs_users, user_roles};
-use super::Node;
-use super::Paginate;
+use super::schema::{hosts, nodes, orgs, orgs_users, user_roles};
+use super::{Host, Node, Paginate};
 
 const PERSONAL_ORG_NAME: &str = "Personal";
 
@@ -38,8 +37,6 @@ pub enum Error {
     CreateOrgUser(diesel::result::Error),
     /// Failed to delete org `{0}`: {1}
     Delete(OrgId, diesel::result::Error),
-    /// Failed to filter orgs: {0}
-    Filter(diesel::result::Error),
     /// Failed to find org by id `{0}`: {1}
     FindById(OrgId, diesel::result::Error),
     /// Failed to find org by ids `{0:?}`: {1}
@@ -52,24 +49,24 @@ pub enum Error {
     FindPersonal(UserId, diesel::result::Error),
     /// Failed to check if org `{0}` has user `{1}`: {2}
     HasUser(OrgId, UserId, diesel::result::Error),
-    /// Failed to parse org limit as i64: {0}
-    Limit(std::num::TryFromIntError),
+    /// Failed to parse host count for org: {0}
+    HostCount(std::num::TryFromIntError),
+    /// Failed to get host counts for org: {0}
+    HostCounts(diesel::result::Error),
     /// Failed to find org memberships for user `{0}`: {1}
     Memberships(UserId, diesel::result::Error),
     /// Failed to parse node count for org: {0}
     NodeCount(std::num::TryFromIntError),
     /// Failed to get node counts for org: {0}
     NodeCounts(diesel::result::Error),
-    /// Failed to parse org offset as i64: {0}
-    Offset(std::num::TryFromIntError),
+    /// Org pagination: {0}
+    Paginate(#[from] crate::models::paginate::Error),
     /// Org model RBAC error: {0}
     Rbac(#[from] crate::models::rbac::Error),
     /// Failed to remove org user: {0}
     RemoveUser(diesel::result::Error),
     /// Failed to reset token: {0}
     ResetToken(diesel::result::Error),
-    /// Failed to parse org total as i64: {0}
-    Total(std::num::TryFromIntError),
     /// Failed to update org: {0}
     Update(diesel::result::Error),
 }
@@ -194,6 +191,24 @@ impl Org {
             .map_err(|err| Error::Delete(org_id, err))
     }
 
+    pub async fn host_counts(
+        org_ids: &HashSet<OrgId>,
+        conn: &mut Conn<'_>,
+    ) -> Result<HashMap<OrgId, u64>, Error> {
+        let counts: Vec<(OrgId, i64)> = Host::not_deleted()
+            .filter(hosts::org_id.eq_any(org_ids))
+            .group_by(hosts::org_id)
+            .select((hosts::org_id, dsl::count(hosts::id)))
+            .get_results(conn)
+            .await
+            .map_err(Error::HostCounts)?;
+
+        counts
+            .into_iter()
+            .map(|(id, count)| Ok((id, count.try_into().map_err(Error::HostCount)?)))
+            .collect()
+    }
+
     pub async fn node_counts(
         org_ids: &HashSet<OrgId>,
         conn: &mut Conn<'_>,
@@ -234,29 +249,40 @@ pub enum OrgSort {
     Name(SortOrder),
     CreatedAt(SortOrder),
     UpdatedAt(SortOrder),
+    MemberCount(SortOrder),
+    HostCount(SortOrder),
+    NodeCount(SortOrder),
 }
 
 impl OrgSort {
-    fn into_expr<T>(self) -> Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>
+    fn sort_by<T>(self) -> SortBy<T>
     where
         orgs::name: SelectableExpression<T>,
         orgs::created_at: SelectableExpression<T>,
         orgs::updated_at: SelectableExpression<T>,
     {
         use OrgSort::*;
+        use SortBy::*;
         use SortOrder::*;
 
         match self {
-            Name(Asc) => Box::new(orgs::name.asc()),
-            Name(Desc) => Box::new(orgs::name.desc()),
+            Name(Asc) => Sql(Box::new(orgs::name.asc())),
+            Name(Desc) => Sql(Box::new(orgs::name.desc())),
 
-            CreatedAt(Asc) => Box::new(orgs::created_at.asc()),
-            CreatedAt(Desc) => Box::new(orgs::created_at.desc()),
+            CreatedAt(Asc) => Sql(Box::new(orgs::created_at.asc())),
+            CreatedAt(Desc) => Sql(Box::new(orgs::created_at.desc())),
 
-            UpdatedAt(Asc) => Box::new(orgs::updated_at.asc()),
-            UpdatedAt(Desc) => Box::new(orgs::updated_at.desc()),
+            UpdatedAt(Asc) => Sql(Box::new(orgs::updated_at.asc())),
+            UpdatedAt(Desc) => Sql(Box::new(orgs::updated_at.desc())),
+
+            MemberCount(_) | HostCount(_) | NodeCount(_) => Rust(self),
         }
     }
+}
+
+enum SortBy<T> {
+    Sql(Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>),
+    Rust(OrgSort),
 }
 
 pub struct OrgFilter {
@@ -269,7 +295,7 @@ pub struct OrgFilter {
 }
 
 impl OrgFilter {
-    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(u64, Vec<Org>), Error> {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<OrgFiltered, Error> {
         let mut query = orgs::table.left_join(user_roles::table).into_boxed();
 
         if let Some(search) = self.search {
@@ -301,31 +327,45 @@ impl OrgFilter {
             query = query.filter(orgs::is_personal.eq(personal));
         }
 
-        if let Some(sort) = self.sort.pop_front() {
-            query = query.order_by(sort.into_expr());
+        let mut sort = vec![];
+        if let Some(field) = self.sort.pop_front() {
+            query = match field.sort_by() {
+                SortBy::Sql(expr) => query.order_by(expr),
+                SortBy::Rust(field) => {
+                    sort.push(field);
+                    query
+                }
+            };
         } else {
             query = query.order_by(orgs::created_at.desc());
         }
 
-        while let Some(sort) = self.sort.pop_front() {
-            query = query.then_order_by(sort.into_expr());
+        while let Some(field) = self.sort.pop_front() {
+            query = match field.sort_by() {
+                SortBy::Sql(expr) => query.then_order_by(expr),
+                SortBy::Rust(field) => {
+                    sort.push(field);
+                    query
+                }
+            };
         }
 
-        let limit = i64::try_from(self.limit).map_err(Error::Limit)?;
-        let offset = i64::try_from(self.offset).map_err(Error::Offset)?;
-
-        let (total, orgs) = query
+        let (orgs, count) = query
             .filter(orgs::deleted_at.is_null())
             .select(Org::as_select())
             .distinct()
-            .paginate(limit, offset)
-            .get_results_counted(conn)
-            .await
-            .map_err(Error::Filter)?;
+            .paginate(self.limit, self.offset)?
+            .count_results(conn)
+            .await?;
 
-        let total = u64::try_from(total).map_err(Error::Total)?;
-        Ok((total, orgs))
+        Ok(OrgFiltered { orgs, count, sort })
     }
+}
+
+pub struct OrgFiltered {
+    pub orgs: Vec<Org>,
+    pub count: u64,
+    pub sort: Vec<OrgSort>,
 }
 
 #[derive(Debug, Insertable)]

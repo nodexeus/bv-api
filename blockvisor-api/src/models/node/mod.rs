@@ -64,8 +64,6 @@ pub enum Error {
     Create(diesel::result::Error),
     /// Failed to delete node `{0}`: {1}
     Delete(NodeId, diesel::result::Error),
-    /// Failed to filter nodes: {0}
-    Filter(diesel::result::Error),
     /// Failed to parse filtered IP addresses: {0}
     FilteredIps(serde_json::Error),
     /// Failed to find nodes by host id {0}: {1}
@@ -82,8 +80,6 @@ pub enum Error {
     Host(#[from] super::host::Error),
     /// Only available host candidate failed.
     HostCandidateFailed,
-    /// Failed to parse node limit as i64: {0}
-    Limit(std::num::TryFromIntError),
     /// Failed to get next host ip for node: {0}
     NextHostIp(crate::models::ip_address::Error),
     /// Node log error: {0}
@@ -98,16 +94,14 @@ pub enum Error {
     NoHostOrScheduler,
     /// Failed to find a matching host.
     NoMatchingHost,
-    /// Failed to parse node offset as i64: {0}
-    Offset(std::num::TryFromIntError),
+    /// Node pagination: {0}
+    Paginate(#[from] crate::models::paginate::Error),
     /// Failed to parse IpAddr: {0}
     ParseIpAddr(std::net::AddrParseError),
     /// Node region error: {0}
     Region(crate::models::region::Error),
     /// Storage error for node: {0}
     Storage(#[from] crate::storage::Error),
-    /// Failed to parse node total as i64: {0}
-    Total(std::num::TryFromIntError),
     /// Failed to update node: {0}
     Update(diesel::result::Error),
     /// Failed to update node `{0}`: {1}
@@ -370,6 +364,12 @@ impl Node {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FilteredIpAddr {
+    pub ip: String,
+    pub description: Option<String>,
+}
+
 #[derive(Debug)]
 pub struct NodeSearch {
     pub operator: SearchOperator,
@@ -452,7 +452,7 @@ pub struct NodeFilter {
 }
 
 impl NodeFilter {
-    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(u64, Vec<Node>), Error> {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<NodeFiltered, Error> {
         let mut query = nodes::table.into_boxed();
 
         if let Some(search) = self.search {
@@ -517,24 +517,18 @@ impl NodeFilter {
             query = query.then_order_by(sort.into_expr());
         }
 
-        let limit = i64::try_from(self.limit).map_err(Error::Limit)?;
-        let offset = i64::try_from(self.offset).map_err(Error::Offset)?;
+        let (nodes, count) = query
+            .paginate(self.limit, self.offset)?
+            .count_results(conn)
+            .await?;
 
-        let (total, nodes) = query
-            .paginate(limit, offset)
-            .get_results_counted(conn)
-            .await
-            .map_err(Error::Filter)?;
-
-        let total = u64::try_from(total).map_err(Error::Total)?;
-        Ok((total, nodes))
+        Ok(NodeFiltered { nodes, count })
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FilteredIpAddr {
-    pub ip: String,
-    pub description: Option<String>,
+pub struct NodeFiltered {
+    pub nodes: Vec<Node>,
+    pub count: u64,
 }
 
 #[derive(Debug, Insertable)]
@@ -797,8 +791,7 @@ mod tests {
             sort: VecDeque::new(),
         };
 
-        let (_, nodes) = filter.query(&mut write).await.unwrap();
-
-        assert_eq!(nodes.len(), 1);
+        let filtered = filter.query(&mut write).await.unwrap();
+        assert_eq!(filtered.nodes.len(), 1);
     }
 }
