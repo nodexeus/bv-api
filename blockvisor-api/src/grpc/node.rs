@@ -24,7 +24,7 @@ use crate::models::node::{
 use crate::models::{Blockchain, CommandType, Host, Org, Region, User};
 use crate::storage::image::ImageId;
 use crate::storage::metadata::HardwareRequirements;
-use crate::util::{HashVec, NanosUtc};
+use crate::util::{HashVec, NanosUtc, SortOrder};
 
 use super::api::node_service_server::NodeService;
 use super::{api, common, Grpc};
@@ -264,9 +264,35 @@ async fn list(
         read.auth_all(&meta, NodeAdminPerm::List).await?
     };
 
-    let filtered = filter.query(&mut read).await?;
-    let nodes = api::Node::from_models(filtered.nodes, &mut read).await?;
+    let mut filtered = filter.query(&mut read).await?;
+    let mut nodes = api::Node::from_models(filtered.nodes, &mut read).await?;
     let node_count = filtered.count;
+
+    while let Some(sort) = filtered.sort.pop() {
+        match sort {
+            NodeSort::NodeStatus(SortOrder::Asc) => nodes.sort_by_key(|n| n.status),
+            NodeSort::NodeStatus(SortOrder::Desc) => {
+                nodes.sort_by(|a, b| b.status.cmp(&a.status));
+            }
+
+            NodeSort::SyncStatus(SortOrder::Asc) => nodes.sort_by_key(|n| n.sync_status),
+            NodeSort::SyncStatus(SortOrder::Desc) => {
+                nodes.sort_by(|a, b| b.sync_status.cmp(&a.sync_status));
+            }
+
+            NodeSort::ContainerStatus(SortOrder::Asc) => nodes.sort_by_key(|n| n.container_status),
+            NodeSort::ContainerStatus(SortOrder::Desc) => {
+                nodes.sort_by(|a, b| b.container_status.cmp(&a.container_status));
+            }
+
+            NodeSort::StakingStatus(SortOrder::Asc) => nodes.sort_by_key(|n| n.staking_status),
+            NodeSort::StakingStatus(SortOrder::Desc) => {
+                nodes.sort_by(|a, b| b.staking_status.cmp(&a.staking_status));
+            }
+
+            _ => (),
+        }
+    }
 
     Ok(api::NodeServiceListResponse { nodes, node_count })
 }

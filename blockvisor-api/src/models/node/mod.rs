@@ -391,49 +391,41 @@ pub enum NodeSort {
     StakingStatus(SortOrder),
 }
 
+enum SortBy<T> {
+    Sql(Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>),
+    Rust(NodeSort),
+}
+
 impl NodeSort {
-    fn into_expr<T>(self) -> Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>
+    fn sort_by<T>(self) -> SortBy<T>
     where
         nodes::host_name: SelectableExpression<T>,
         nodes::name: SelectableExpression<T>,
         nodes::node_type: SelectableExpression<T>,
         nodes::created_at: SelectableExpression<T>,
         nodes::updated_at: SelectableExpression<T>,
-        nodes::node_status: SelectableExpression<T>,
-        nodes::sync_status: SelectableExpression<T>,
-        nodes::container_status: SelectableExpression<T>,
-        nodes::staking_status: SelectableExpression<T>,
     {
         use NodeSort::*;
+        use SortBy::*;
         use SortOrder::*;
 
         match self {
-            HostName(Asc) => Box::new(nodes::host_name.asc()),
-            HostName(Desc) => Box::new(nodes::host_name.desc()),
+            HostName(Asc) => Sql(Box::new(nodes::host_name.asc())),
+            HostName(Desc) => Sql(Box::new(nodes::host_name.desc())),
 
-            NodeName(Asc) => Box::new(nodes::name.asc()),
-            NodeName(Desc) => Box::new(nodes::name.desc()),
+            NodeName(Asc) => Sql(Box::new(nodes::name.asc())),
+            NodeName(Desc) => Sql(Box::new(nodes::name.desc())),
 
-            NodeType(Asc) => Box::new(nodes::node_type.asc()),
-            NodeType(Desc) => Box::new(nodes::node_type.desc()),
+            NodeType(Asc) => Sql(Box::new(nodes::node_type.asc())),
+            NodeType(Desc) => Sql(Box::new(nodes::node_type.desc())),
 
-            CreatedAt(Asc) => Box::new(nodes::created_at.asc()),
-            CreatedAt(Desc) => Box::new(nodes::created_at.desc()),
+            CreatedAt(Asc) => Sql(Box::new(nodes::created_at.asc())),
+            CreatedAt(Desc) => Sql(Box::new(nodes::created_at.desc())),
 
-            UpdatedAt(Asc) => Box::new(nodes::updated_at.asc()),
-            UpdatedAt(Desc) => Box::new(nodes::updated_at.desc()),
+            UpdatedAt(Asc) => Sql(Box::new(nodes::updated_at.asc())),
+            UpdatedAt(Desc) => Sql(Box::new(nodes::updated_at.desc())),
 
-            NodeStatus(Asc) => Box::new(nodes::node_status.asc()),
-            NodeStatus(Desc) => Box::new(nodes::node_status.desc()),
-
-            SyncStatus(Asc) => Box::new(nodes::sync_status.asc()),
-            SyncStatus(Desc) => Box::new(nodes::sync_status.desc()),
-
-            ContainerStatus(Asc) => Box::new(nodes::container_status.asc()),
-            ContainerStatus(Desc) => Box::new(nodes::container_status.desc()),
-
-            StakingStatus(Asc) => Box::new(nodes::staking_status.asc()),
-            StakingStatus(Desc) => Box::new(nodes::staking_status.desc()),
+            NodeStatus(_) | SyncStatus(_) | ContainerStatus(_) | StakingStatus(_) => Rust(self),
         }
     }
 }
@@ -507,14 +499,27 @@ impl NodeFilter {
             query = query.filter(nodes::host_id.eq(host_id));
         }
 
-        if let Some(sort) = self.sort.pop_front() {
-            query = query.order_by(sort.into_expr());
+        let mut sort = vec![];
+        if let Some(field) = self.sort.pop_front() {
+            query = match field.sort_by() {
+                SortBy::Sql(expr) => query.order_by(expr),
+                SortBy::Rust(field) => {
+                    sort.push(field);
+                    query
+                }
+            };
         } else {
             query = query.order_by(nodes::created_at.desc());
         }
 
-        while let Some(sort) = self.sort.pop_front() {
-            query = query.then_order_by(sort.into_expr());
+        while let Some(field) = self.sort.pop_front() {
+            query = match field.sort_by() {
+                SortBy::Sql(expr) => query.then_order_by(expr),
+                SortBy::Rust(field) => {
+                    sort.push(field);
+                    query
+                }
+            };
         }
 
         let (nodes, count) = query
@@ -522,13 +527,14 @@ impl NodeFilter {
             .count_results(conn)
             .await?;
 
-        Ok(NodeFiltered { nodes, count })
+        Ok(NodeFiltered { nodes, count, sort })
     }
 }
 
 pub struct NodeFiltered {
     pub nodes: Vec<Node>,
     pub count: u64,
+    pub sort: Vec<NodeSort>,
 }
 
 #[derive(Debug, Insertable)]
