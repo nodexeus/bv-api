@@ -42,8 +42,6 @@ pub enum Error {
     Delete(diesel::result::Error),
     /// Failed to delete user billing: {0}
     DeleteBilling(diesel::result::Error),
-    /// Failed to filter users: {0}
-    Filter(diesel::result::Error),
     /// Failed to find users: {0}
     FindAll(diesel::result::Error),
     /// Failed to find user for email `{0}`: {1}
@@ -54,26 +52,22 @@ pub enum Error {
     FindByIds(HashSet<UserId>, diesel::result::Error),
     /// Failed to check if user `{0}` is confirmed: {1}
     IsConfirmed(UserId, diesel::result::Error),
-    /// Failed to parse user limit as i64: {0}
-    Limit(std::num::TryFromIntError),
     /// Login failed because no email was found.
     LoginEmail,
     /// Missing password hash.
     MissingHash,
     /// User is not confirmed.
     NotConfirmed,
-    /// Failed to parse user offset as i64: {0}
-    Offset(std::num::TryFromIntError),
     /// User org model error: {0}
     Org(#[from] crate::models::org::Error),
+    /// User pagination: {0}
+    Paginate(#[from] crate::models::paginate::Error),
     /// Failed to parse password hash: {0}
     ParseHash(password_hash::Error),
     /// Failed to parse Salt: {0}
     ParseSalt(password_hash::Error),
     /// User RBAC error: {0}
     Rbac(#[from] crate::models::rbac::Error),
-    /// Failed to parse user total as i64: {0}
-    Total(std::num::TryFromIntError),
     /// Failed to update user: {0}
     Update(diesel::result::Error),
     /// Failed to update user `{0}`: {1}
@@ -94,7 +88,6 @@ impl From<Error> for Status {
             ConfirmNone
             | Delete(NotFound)
             | DeleteBilling(NotFound)
-            | Filter(NotFound)
             | FindAll(NotFound)
             | FindByEmail(_, NotFound)
             | FindById(_, NotFound)
@@ -327,7 +320,7 @@ pub struct UserFilter {
 }
 
 impl UserFilter {
-    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(u64, Vec<User>), Error> {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<UserFiltered, Error> {
         let mut query = users::table.left_join(user_roles::table).into_boxed();
 
         if let Some(search) = self.search {
@@ -372,21 +365,21 @@ impl UserFilter {
             query = query.then_order_by(sort.into_expr());
         }
 
-        let limit = i64::try_from(self.limit).map_err(Error::Limit)?;
-        let offset = i64::try_from(self.offset).map_err(Error::Offset)?;
-
-        let (total, users) = query
+        let (users, count) = query
             .filter(users::deleted_at.is_null())
             .select(User::as_select())
             .distinct()
-            .paginate(limit, offset)
-            .get_results_counted(conn)
-            .await
-            .map_err(Error::Filter)?;
+            .paginate(self.limit, self.offset)?
+            .count_results(conn)
+            .await?;
 
-        let total = u64::try_from(total).map_err(Error::Total)?;
-        Ok((total, users))
+        Ok(UserFiltered { users, count })
     }
+}
+
+pub struct UserFiltered {
+    pub users: Vec<User>,
+    pub count: u64,
 }
 
 #[derive(Debug, Clone, Validate, Insertable)]

@@ -14,7 +14,7 @@ use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::org::{NewOrg, OrgFilter, OrgSearch, OrgSort, UpdateOrg};
 use crate::models::rbac::{OrgUsers, RbacUser};
 use crate::models::{Invitation, Org, OrgUser, User};
-use crate::util::{HashVec, NanosUtc};
+use crate::util::{HashVec, NanosUtc, SortOrder};
 
 use super::api::org_service_server::OrgService;
 use super::{api, common, Grpc};
@@ -213,8 +213,30 @@ async fn list(
         read.auth_all(&meta, OrgAdminPerm::List).await?
     };
 
-    let (org_count, orgs) = filter.query(&mut read).await?;
-    let orgs = api::Org::from_models(&orgs[..], &mut read).await?;
+    let mut filtered = filter.query(&mut read).await?;
+    let mut orgs = api::Org::from_models(&filtered.orgs, &mut read).await?;
+    let org_count = filtered.count;
+
+    while let Some(sort) = filtered.sort.pop() {
+        match sort {
+            OrgSort::MemberCount(SortOrder::Asc) => orgs.sort_by_key(|o| o.member_count),
+            OrgSort::MemberCount(SortOrder::Desc) => {
+                orgs.sort_by(|a, b| b.member_count.cmp(&a.member_count));
+            }
+
+            OrgSort::HostCount(SortOrder::Asc) => orgs.sort_by_key(|o| o.host_count),
+            OrgSort::HostCount(SortOrder::Desc) => {
+                orgs.sort_by(|a, b| b.host_count.cmp(&a.host_count));
+            }
+
+            OrgSort::NodeCount(SortOrder::Asc) => orgs.sort_by_key(|o| o.node_count),
+            OrgSort::NodeCount(SortOrder::Desc) => {
+                orgs.sort_by(|a, b| b.node_count.cmp(&a.node_count));
+            }
+
+            _ => (),
+        }
+    }
 
     Ok(api::OrgServiceListResponse { orgs, org_count })
 }
@@ -355,7 +377,10 @@ impl api::Org {
             .iter()
             .map(|org| org.as_ref().id)
             .collect::<HashSet<_>>();
+
+        let host_counts = Org::host_counts(&org_ids, conn).await?;
         let node_counts = Org::node_counts(&org_ids, conn).await?;
+
         let mut org_users = OrgUsers::for_org_ids(org_ids, conn).await?;
 
         let user_ids = org_users
@@ -395,10 +420,11 @@ impl api::Org {
                     id: org.id.to_string(),
                     name: org.name.clone(),
                     personal: org.is_personal,
-                    member_count: members.len().try_into().map_err(Error::MemberCount)?,
                     created_at: Some(NanosUtc::from(org.created_at).into()),
                     updated_at: Some(NanosUtc::from(org.updated_at).into()),
+                    member_count: members.len().try_into().map_err(Error::MemberCount)?,
                     members,
+                    host_count: host_counts.get(&org.id).copied().unwrap_or(0),
                     node_count: node_counts.get(&org.id).copied().unwrap_or(0),
                 })
             })
@@ -442,6 +468,9 @@ impl api::OrgServiceListRequest {
                     api::OrgSortField::Name => Ok(OrgSort::Name(order)),
                     api::OrgSortField::CreatedAt => Ok(OrgSort::CreatedAt(order)),
                     api::OrgSortField::UpdatedAt => Ok(OrgSort::UpdatedAt(order)),
+                    api::OrgSortField::MemberCount => Ok(OrgSort::MemberCount(order)),
+                    api::OrgSortField::HostCount => Ok(OrgSort::HostCount(order)),
+                    api::OrgSortField::NodeCount => Ok(OrgSort::NodeCount(order)),
                 }
             })
             .collect::<Result<_, _>>()?;

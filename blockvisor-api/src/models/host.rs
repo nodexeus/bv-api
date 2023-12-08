@@ -44,8 +44,6 @@ pub enum Error {
     Create(diesel::result::Error),
     /// Failed to delete host id `{0}`: {1}
     Delete(HostId, diesel::result::Error),
-    /// Failed to filter hosts: {0}
-    Filter(diesel::result::Error),
     /// Failed to find host by id `{0}`: {1}
     FindById(HostId, diesel::result::Error),
     /// Failed to find hosts by id `{0:?}`: {1}
@@ -58,20 +56,16 @@ pub enum Error {
     HostCandidates(diesel::result::Error),
     /// Host ip address error: {0}
     IpAddress(#[from] crate::models::ip_address::Error),
-    /// Failed to parse host limit as i64: {0}
-    Limit(std::num::TryFromIntError),
     /// Failed to parse node count for host as i64: {0}
     NodeCount(std::num::TryFromIntError),
     /// Failed to get node counts for host: {0}
     NodeCounts(diesel::result::Error),
-    /// Failed to parse host offset as i64: {0}
-    Offset(std::num::TryFromIntError),
+    /// Host pagination: {0}
+    Paginate(#[from] crate::models::paginate::Error),
     /// Failed to parse host ip address: {0}
     ParseIp(std::net::AddrParseError),
     /// Host region error: {0}
     Region(super::region::Error),
-    /// Failed to parse host total as i64: {0}
-    Total(std::num::TryFromIntError),
     /// Failed to update host: {0}
     Update(diesel::result::Error),
     /// Failed to update host {1}'s metrics: {0}
@@ -388,37 +382,61 @@ pub enum HostSort {
     Version(SortOrder),
     Os(SortOrder),
     OsVersion(SortOrder),
+    CpuCount(SortOrder),
+    MemSizeBytes(SortOrder),
+    DiskSizeBytes(SortOrder),
+    NodeCount(SortOrder),
 }
 
 impl HostSort {
-    fn into_expr<T>(self) -> Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>
+    fn sort_by<T>(self) -> SortBy<T>
     where
         hosts::name: SelectableExpression<T>,
         hosts::created_at: SelectableExpression<T>,
         hosts::version: SelectableExpression<T>,
         hosts::os: SelectableExpression<T>,
         hosts::os_version: SelectableExpression<T>,
+        hosts::cpu_count: SelectableExpression<T>,
+        hosts::mem_size_bytes: SelectableExpression<T>,
+        hosts::disk_size_bytes: SelectableExpression<T>,
     {
         use HostSort::*;
+        use SortBy::*;
         use SortOrder::*;
 
         match self {
-            HostName(Asc) => Box::new(hosts::name.asc()),
-            HostName(Desc) => Box::new(hosts::name.desc()),
+            HostName(Asc) => Sql(Box::new(hosts::name.asc())),
+            HostName(Desc) => Sql(Box::new(hosts::name.desc())),
 
-            CreatedAt(Asc) => Box::new(hosts::created_at.asc()),
-            CreatedAt(Desc) => Box::new(hosts::created_at.desc()),
+            CreatedAt(Asc) => Sql(Box::new(hosts::created_at.asc())),
+            CreatedAt(Desc) => Sql(Box::new(hosts::created_at.desc())),
 
-            Version(Asc) => Box::new(hosts::version.asc()),
-            Version(Desc) => Box::new(hosts::version.desc()),
+            Version(Asc) => Sql(Box::new(hosts::version.asc())),
+            Version(Desc) => Sql(Box::new(hosts::version.desc())),
 
-            Os(Asc) => Box::new(hosts::os.asc()),
-            Os(Desc) => Box::new(hosts::os.desc()),
+            Os(Asc) => Sql(Box::new(hosts::os.asc())),
+            Os(Desc) => Sql(Box::new(hosts::os.desc())),
 
-            OsVersion(Asc) => Box::new(hosts::os_version.asc()),
-            OsVersion(Desc) => Box::new(hosts::os_version.desc()),
+            OsVersion(Asc) => Sql(Box::new(hosts::os_version.asc())),
+            OsVersion(Desc) => Sql(Box::new(hosts::os_version.desc())),
+
+            CpuCount(Asc) => Sql(Box::new(hosts::cpu_count.asc())),
+            CpuCount(Desc) => Sql(Box::new(hosts::cpu_count.asc())),
+
+            MemSizeBytes(Asc) => Sql(Box::new(hosts::mem_size_bytes.asc())),
+            MemSizeBytes(Desc) => Sql(Box::new(hosts::mem_size_bytes.asc())),
+
+            DiskSizeBytes(Asc) => Sql(Box::new(hosts::disk_size_bytes.asc())),
+            DiskSizeBytes(Desc) => Sql(Box::new(hosts::disk_size_bytes.asc())),
+
+            NodeCount(_) => Rust(self),
         }
     }
+}
+
+enum SortBy<T> {
+    Sql(Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>),
+    Rust(HostSort),
 }
 
 #[derive(Debug)]
@@ -431,7 +449,7 @@ pub struct HostFilter {
 }
 
 impl HostFilter {
-    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(u64, Vec<Host>), Error> {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<HostFiltered, Error> {
         let mut query = Host::not_deleted().into_boxed();
 
         if let Some(search) = self.search {
@@ -477,28 +495,42 @@ impl HostFilter {
             query = query.filter(hosts::org_id.eq(org_id));
         }
 
-        if let Some(sort) = self.sort.pop_front() {
-            query = query.order_by(sort.into_expr());
+        let mut sort = vec![];
+        if let Some(field) = self.sort.pop_front() {
+            query = match field.sort_by() {
+                SortBy::Sql(expr) => query.order_by(expr),
+                SortBy::Rust(field) => {
+                    sort.push(field);
+                    query
+                }
+            };
         } else {
             query = query.order_by(hosts::created_at.desc());
         }
 
-        while let Some(sort) = self.sort.pop_front() {
-            query = query.then_order_by(sort.into_expr());
+        while let Some(field) = self.sort.pop_front() {
+            query = match field.sort_by() {
+                SortBy::Sql(expr) => query.then_order_by(expr),
+                SortBy::Rust(field) => {
+                    sort.push(field);
+                    query
+                }
+            };
         }
 
-        let limit = i64::try_from(self.limit).map_err(Error::Limit)?;
-        let offset = i64::try_from(self.offset).map_err(Error::Offset)?;
+        let (hosts, count) = query
+            .paginate(self.limit, self.offset)?
+            .count_results(conn)
+            .await?;
 
-        let (total, hosts) = query
-            .paginate(limit, offset)
-            .get_results_counted(conn)
-            .await
-            .map_err(Error::Filter)?;
-
-        let total = u64::try_from(total).map_err(Error::Total)?;
-        Ok((total, hosts))
+        Ok(HostFiltered { hosts, count, sort })
     }
+}
+
+pub struct HostFiltered {
+    pub hosts: Vec<Host>,
+    pub count: u64,
+    pub sort: Vec<HostSort>,
 }
 
 #[derive(Debug, Clone, Insertable)]
