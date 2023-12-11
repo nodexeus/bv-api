@@ -14,7 +14,7 @@ use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::org::{NewOrg, OrgFilter, OrgSearch, OrgSort, UpdateOrg};
 use crate::models::rbac::{OrgUsers, RbacUser};
 use crate::models::{Invitation, Org, OrgUser, User};
-use crate::util::{HashVec, NanosUtc, SortOrder};
+use crate::util::{HashVec, NanosUtc};
 
 use super::api::org_service_server::OrgService;
 use super::{api, common, Grpc};
@@ -213,30 +213,8 @@ async fn list(
         read.auth_all(&meta, OrgAdminPerm::List).await?
     };
 
-    let mut filtered = filter.query(&mut read).await?;
-    let mut orgs = api::Org::from_models(&filtered.orgs, &mut read).await?;
-    let org_count = filtered.count;
-
-    while let Some(sort) = filtered.sort.pop() {
-        match sort {
-            OrgSort::MemberCount(SortOrder::Asc) => orgs.sort_by_key(|o| o.member_count),
-            OrgSort::MemberCount(SortOrder::Desc) => {
-                orgs.sort_by(|a, b| b.member_count.cmp(&a.member_count));
-            }
-
-            OrgSort::HostCount(SortOrder::Asc) => orgs.sort_by_key(|o| o.host_count),
-            OrgSort::HostCount(SortOrder::Desc) => {
-                orgs.sort_by(|a, b| b.host_count.cmp(&a.host_count));
-            }
-
-            OrgSort::NodeCount(SortOrder::Asc) => orgs.sort_by_key(|o| o.node_count),
-            OrgSort::NodeCount(SortOrder::Desc) => {
-                orgs.sort_by(|a, b| b.node_count.cmp(&a.node_count));
-            }
-
-            _ => (),
-        }
-    }
+    let (orgs, org_count) = filter.query(&mut read).await?;
+    let orgs = api::Org::from_models(&orgs, &mut read).await?;
 
     Ok(api::OrgServiceListResponse { orgs, org_count })
 }
@@ -468,9 +446,6 @@ impl api::OrgServiceListRequest {
                     api::OrgSortField::Name => Ok(OrgSort::Name(order)),
                     api::OrgSortField::CreatedAt => Ok(OrgSort::CreatedAt(order)),
                     api::OrgSortField::UpdatedAt => Ok(OrgSort::UpdatedAt(order)),
-                    api::OrgSortField::MemberCount => Ok(OrgSort::MemberCount(order)),
-                    api::OrgSortField::HostCount => Ok(OrgSort::HostCount(order)),
-                    api::OrgSortField::NodeCount => Ok(OrgSort::NodeCount(order)),
                 }
             })
             .collect::<Result<_, _>>()?;

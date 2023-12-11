@@ -24,7 +24,7 @@ use crate::models::node::{
 use crate::models::{Blockchain, CommandType, Host, Org, Region, User};
 use crate::storage::image::ImageId;
 use crate::storage::metadata::HardwareRequirements;
-use crate::util::{HashVec, NanosUtc, SortOrder};
+use crate::util::{HashVec, NanosUtc};
 
 use super::api::node_service_server::NodeService;
 use super::{api, common, Grpc};
@@ -73,8 +73,6 @@ pub enum Error {
     ModelProperty(#[from] crate::models::node::property::Error),
     /// No ResourceAffinity.
     NoResourceAffinity,
-    /// The NodeStatus that was received was `Unspecified`
-    NodeStatusUnspecified,
     /// Node org error: {0}
     Org(#[from] crate::models::org::Error),
     /// Failed to parse BlockchainId: {0}
@@ -125,7 +123,6 @@ impl From<Error> for Status {
             MemSize(_) => Status::invalid_argument("mem_size_bytes"),
             MissingPlacement => Status::invalid_argument("placement"),
             NoResourceAffinity => Status::invalid_argument("resource"),
-            NodeStatusUnspecified => Status::invalid_argument("node_status"),
             ParseBlockchainId(_) => Status::invalid_argument("blockchain_id"),
             ParseHostId(_) => Status::invalid_argument("host_id"),
             ParseId(_) => Status::invalid_argument("id"),
@@ -264,47 +261,8 @@ async fn list(
         read.auth_all(&meta, NodeAdminPerm::List).await?
     };
 
-    let mut filtered = filter.query(&mut read).await?;
-    let mut nodes = api::Node::from_models(filtered.nodes, &mut read).await?;
-    let node_count = filtered.count;
-
-    while let Some(sort) = filtered.sort.pop() {
-        match sort {
-            NodeSort::NodeType(SortOrder::Asc) => nodes.sort_by_key(|n| n.node_type),
-            NodeSort::NodeType(SortOrder::Desc) => {
-                nodes.sort_by(|a, b| b.node_type.cmp(&a.node_type));
-            }
-
-            NodeSort::NodeStatus(SortOrder::Asc) => nodes.sort_by_key(|n| n.status),
-            NodeSort::NodeStatus(SortOrder::Desc) => {
-                nodes.sort_by(|a, b| b.status.cmp(&a.status));
-            }
-
-            NodeSort::SyncStatus(SortOrder::Asc) => nodes.sort_by_key(|n| n.sync_status),
-            NodeSort::SyncStatus(SortOrder::Desc) => {
-                nodes.sort_by(|a, b| b.sync_status.cmp(&a.sync_status));
-            }
-
-            NodeSort::ContainerStatus(SortOrder::Asc) => nodes.sort_by_key(|n| n.container_status),
-            NodeSort::ContainerStatus(SortOrder::Desc) => {
-                nodes.sort_by(|a, b| b.container_status.cmp(&a.container_status));
-            }
-
-            NodeSort::StakingStatus(SortOrder::Asc) => nodes.sort_by_key(|n| n.staking_status),
-            NodeSort::StakingStatus(SortOrder::Desc) => {
-                nodes.sort_by(|a, b| b.staking_status.cmp(&a.staking_status));
-            }
-
-            NodeSort::BlockchainName(SortOrder::Asc) => {
-                nodes.sort_by(|a, b| a.blockchain_name.cmp(&b.blockchain_name));
-            }
-            NodeSort::BlockchainName(SortOrder::Desc) => {
-                nodes.sort_by(|a, b| b.blockchain_name.cmp(&a.blockchain_name));
-            }
-
-            _ => (),
-        }
-    }
+    let (nodes, node_count) = filter.query(&mut read).await?;
+    let nodes = api::Node::from_models(nodes, &mut read).await?;
 
     Ok(api::NodeServiceListResponse { nodes, node_count })
 }
@@ -847,10 +805,7 @@ impl api::NodeServiceListRequest {
             .as_ref()
             .map(|id| id.parse().map_err(Error::ParseOrgId))
             .transpose()?;
-        let status = self
-            .statuses()
-            .map(|status| Option::from(status).ok_or(Error::NodeStatusUnspecified))
-            .collect::<Result<_, _>>()?;
+        let status = self.statuses().map(NodeStatus::from).collect();
         let node_types = self.node_types().map(NodeType::from).collect();
         let blockchains = self
             .blockchain_ids
@@ -891,7 +846,6 @@ impl api::NodeServiceListRequest {
                     api::NodeSortField::SyncStatus => Ok(NodeSort::SyncStatus(order)),
                     api::NodeSortField::ContainerStatus => Ok(NodeSort::ContainerStatus(order)),
                     api::NodeSortField::StakingStatus => Ok(NodeSort::StakingStatus(order)),
-                    api::NodeSortField::BlockchainName => Ok(NodeSort::BlockchainName(order)),
                 }
             })
             .collect::<Result<_, _>>()?;

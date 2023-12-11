@@ -385,11 +385,10 @@ pub enum HostSort {
     CpuCount(SortOrder),
     MemSizeBytes(SortOrder),
     DiskSizeBytes(SortOrder),
-    NodeCount(SortOrder),
 }
 
 impl HostSort {
-    fn sort_by<T>(self) -> SortBy<T>
+    fn into_expr<T>(self) -> Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>
     where
         hosts::name: SelectableExpression<T>,
         hosts::created_at: SelectableExpression<T>,
@@ -401,42 +400,34 @@ impl HostSort {
         hosts::disk_size_bytes: SelectableExpression<T>,
     {
         use HostSort::*;
-        use SortBy::*;
         use SortOrder::*;
 
         match self {
-            HostName(Asc) => Sql(Box::new(hosts::name.asc())),
-            HostName(Desc) => Sql(Box::new(hosts::name.desc())),
+            HostName(Asc) => Box::new(hosts::name.asc()),
+            HostName(Desc) => Box::new(hosts::name.desc()),
 
-            CreatedAt(Asc) => Sql(Box::new(hosts::created_at.asc())),
-            CreatedAt(Desc) => Sql(Box::new(hosts::created_at.desc())),
+            CreatedAt(Asc) => Box::new(hosts::created_at.asc()),
+            CreatedAt(Desc) => Box::new(hosts::created_at.desc()),
 
-            Version(Asc) => Sql(Box::new(hosts::version.asc())),
-            Version(Desc) => Sql(Box::new(hosts::version.desc())),
+            Version(Asc) => Box::new(hosts::version.asc()),
+            Version(Desc) => Box::new(hosts::version.desc()),
 
-            Os(Asc) => Sql(Box::new(hosts::os.asc())),
-            Os(Desc) => Sql(Box::new(hosts::os.desc())),
+            Os(Asc) => Box::new(hosts::os.asc()),
+            Os(Desc) => Box::new(hosts::os.desc()),
 
-            OsVersion(Asc) => Sql(Box::new(hosts::os_version.asc())),
-            OsVersion(Desc) => Sql(Box::new(hosts::os_version.desc())),
+            OsVersion(Asc) => Box::new(hosts::os_version.asc()),
+            OsVersion(Desc) => Box::new(hosts::os_version.desc()),
 
-            CpuCount(Asc) => Sql(Box::new(hosts::cpu_count.asc())),
-            CpuCount(Desc) => Sql(Box::new(hosts::cpu_count.desc())),
+            CpuCount(Asc) => Box::new(hosts::cpu_count.asc()),
+            CpuCount(Desc) => Box::new(hosts::cpu_count.desc()),
 
-            MemSizeBytes(Asc) => Sql(Box::new(hosts::mem_size_bytes.asc())),
-            MemSizeBytes(Desc) => Sql(Box::new(hosts::mem_size_bytes.desc())),
+            MemSizeBytes(Asc) => Box::new(hosts::mem_size_bytes.asc()),
+            MemSizeBytes(Desc) => Box::new(hosts::mem_size_bytes.desc()),
 
-            DiskSizeBytes(Asc) => Sql(Box::new(hosts::disk_size_bytes.asc())),
-            DiskSizeBytes(Desc) => Sql(Box::new(hosts::disk_size_bytes.desc())),
-
-            NodeCount(_) => Rust(self),
+            DiskSizeBytes(Asc) => Box::new(hosts::disk_size_bytes.asc()),
+            DiskSizeBytes(Desc) => Box::new(hosts::disk_size_bytes.desc()),
         }
     }
-}
-
-enum SortBy<T> {
-    Sql(Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>),
-    Rust(HostSort),
 }
 
 #[derive(Debug)]
@@ -449,7 +440,7 @@ pub struct HostFilter {
 }
 
 impl HostFilter {
-    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<HostFiltered, Error> {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(Vec<Host>, u64), Error> {
         let mut query = Host::not_deleted().into_boxed();
 
         if let Some(search) = self.search {
@@ -495,42 +486,22 @@ impl HostFilter {
             query = query.filter(hosts::org_id.eq(org_id));
         }
 
-        let mut sort = vec![];
-        if let Some(field) = self.sort.pop_front() {
-            query = match field.sort_by() {
-                SortBy::Sql(expr) => query.order_by(expr),
-                SortBy::Rust(field) => {
-                    sort.push(field);
-                    query
-                }
-            };
+        if let Some(sort) = self.sort.pop_front() {
+            query = query.order_by(sort.into_expr());
         } else {
             query = query.order_by(hosts::created_at.desc());
         }
 
-        while let Some(field) = self.sort.pop_front() {
-            query = match field.sort_by() {
-                SortBy::Sql(expr) => query.then_order_by(expr),
-                SortBy::Rust(field) => {
-                    sort.push(field);
-                    query
-                }
-            };
+        while let Some(sort) = self.sort.pop_front() {
+            query = query.then_order_by(sort.into_expr());
         }
 
-        let (hosts, count) = query
+        query
             .paginate(self.limit, self.offset)?
             .count_results(conn)
-            .await?;
-
-        Ok(HostFiltered { hosts, count, sort })
+            .await
+            .map_err(Into::into)
     }
-}
-
-pub struct HostFiltered {
-    pub hosts: Vec<Host>,
-    pub count: u64,
-    pub sort: Vec<HostSort>,
 }
 
 #[derive(Debug, Clone, Insertable)]

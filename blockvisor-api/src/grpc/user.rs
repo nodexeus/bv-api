@@ -198,9 +198,8 @@ async fn list(
         read.auth_all(&meta, UserAdminPerm::Filter).await?
     };
 
-    let filtered = filter.query(&mut read).await?;
-    let users = api::User::from_models(filtered.users);
-    let user_count = filtered.count;
+    let (users, user_count) = filter.query(&mut read).await?;
+    let users = api::User::from_models(users);
 
     Ok(api::UserServiceListResponse { users, user_count })
 }
