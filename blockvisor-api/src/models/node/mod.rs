@@ -1,6 +1,4 @@
 pub mod job;
-use diesel::expression::expression_types::NotSelectable;
-use diesel::pg::Pg;
 pub use job::{NodeJob, NodeJobProgress, NodeJobStatus};
 
 pub mod log;
@@ -21,6 +19,8 @@ pub use node_type::{NodeNetwork, NodeType, NodeVersion};
 use std::collections::{HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
+use diesel::expression::expression_types::NotSelectable;
+use diesel::pg::Pg;
 use diesel::result::DatabaseErrorKind::UniqueViolation;
 use diesel::result::Error::{DatabaseError, NotFound};
 use diesel::{dsl, prelude::*};
@@ -144,10 +144,6 @@ pub struct Node {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub blockchain_id: BlockchainId,
-    pub sync_status: SyncStatus,
-    pub node_status: NodeStatus,
-    pub staking_status: Option<StakingStatus>,
-    pub container_status: ContainerStatus,
     pub ip_gateway: String,
     pub self_update: bool,
     pub block_age: Option<i64>,
@@ -161,7 +157,6 @@ pub struct Node {
     pub dns_record_id: String,
     allow_ips: serde_json::Value,
     deny_ips: serde_json::Value,
-    pub node_type: NodeType,
     pub scheduler_similarity: Option<SimilarNodeAffinity>,
     pub scheduler_resource: Option<ResourceAffinity>,
     pub scheduler_region: Option<RegionId>,
@@ -169,6 +164,11 @@ pub struct Node {
     pub jobs: serde_json::Value,
     pub created_by_resource: Option<ResourceType>,
     pub deleted_at: Option<DateTime<Utc>>,
+    pub node_type: NodeType,
+    pub node_status: NodeStatus,
+    pub container_status: ContainerStatus,
+    pub sync_status: SyncStatus,
+    pub staking_status: Option<StakingStatus>,
 }
 
 impl Node {
@@ -380,51 +380,60 @@ pub struct NodeSearch {
 
 #[derive(Clone, Copy, Debug)]
 pub enum NodeSort {
-    HostName(SortOrder),
     NodeName(SortOrder),
-    NodeType(SortOrder),
+    HostName(SortOrder),
     CreatedAt(SortOrder),
     UpdatedAt(SortOrder),
+    NodeType(SortOrder),
     NodeStatus(SortOrder),
     SyncStatus(SortOrder),
     ContainerStatus(SortOrder),
     StakingStatus(SortOrder),
-    BlockchainName(SortOrder),
-}
-
-enum SortBy<T> {
-    Sql(Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>),
-    Rust(NodeSort),
 }
 
 impl NodeSort {
-    fn sort_by<T>(self) -> SortBy<T>
+    fn into_expr<T>(self) -> Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>
     where
-        nodes::host_name: SelectableExpression<T>,
         nodes::name: SelectableExpression<T>,
-        nodes::node_type: SelectableExpression<T>,
+        nodes::host_name: SelectableExpression<T>,
         nodes::created_at: SelectableExpression<T>,
         nodes::updated_at: SelectableExpression<T>,
+        nodes::node_type: SelectableExpression<T>,
+        nodes::node_status: SelectableExpression<T>,
+        nodes::container_status: SelectableExpression<T>,
+        nodes::sync_status: SelectableExpression<T>,
+        nodes::staking_status: SelectableExpression<T>,
     {
         use NodeSort::*;
-        use SortBy::*;
         use SortOrder::*;
 
         match self {
-            HostName(Asc) => Sql(Box::new(nodes::host_name.asc())),
-            HostName(Desc) => Sql(Box::new(nodes::host_name.desc())),
+            NodeName(Asc) => Box::new(nodes::name.asc()),
+            NodeName(Desc) => Box::new(nodes::name.desc()),
 
-            NodeName(Asc) => Sql(Box::new(nodes::name.asc())),
-            NodeName(Desc) => Sql(Box::new(nodes::name.desc())),
+            HostName(Asc) => Box::new(nodes::host_name.asc()),
+            HostName(Desc) => Box::new(nodes::host_name.desc()),
 
-            CreatedAt(Asc) => Sql(Box::new(nodes::created_at.asc())),
-            CreatedAt(Desc) => Sql(Box::new(nodes::created_at.desc())),
+            CreatedAt(Asc) => Box::new(nodes::created_at.asc()),
+            CreatedAt(Desc) => Box::new(nodes::created_at.desc()),
 
-            UpdatedAt(Asc) => Sql(Box::new(nodes::updated_at.asc())),
-            UpdatedAt(Desc) => Sql(Box::new(nodes::updated_at.desc())),
+            UpdatedAt(Asc) => Box::new(nodes::updated_at.asc()),
+            UpdatedAt(Desc) => Box::new(nodes::updated_at.desc()),
 
-            NodeType(_) | NodeStatus(_) | SyncStatus(_) | ContainerStatus(_) | StakingStatus(_)
-            | BlockchainName(_) => Rust(self),
+            NodeType(Asc) => Box::new(nodes::node_type.asc()),
+            NodeType(Desc) => Box::new(nodes::node_type.desc()),
+
+            NodeStatus(Asc) => Box::new(nodes::node_status.asc()),
+            NodeStatus(Desc) => Box::new(nodes::node_status.desc()),
+
+            SyncStatus(Asc) => Box::new(nodes::sync_status.asc()),
+            SyncStatus(Desc) => Box::new(nodes::sync_status.desc()),
+
+            ContainerStatus(Asc) => Box::new(nodes::container_status.asc()),
+            ContainerStatus(Desc) => Box::new(nodes::container_status.desc()),
+
+            StakingStatus(Asc) => Box::new(nodes::staking_status.asc()),
+            StakingStatus(Desc) => Box::new(nodes::staking_status.desc()),
         }
     }
 }
@@ -443,7 +452,7 @@ pub struct NodeFilter {
 }
 
 impl NodeFilter {
-    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<NodeFiltered, Error> {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(Vec<Node>, u64), Error> {
         let mut query = nodes::table.into_boxed();
 
         if let Some(search) = self.search {
@@ -498,42 +507,22 @@ impl NodeFilter {
             query = query.filter(nodes::host_id.eq(host_id));
         }
 
-        let mut sort = vec![];
-        if let Some(field) = self.sort.pop_front() {
-            query = match field.sort_by() {
-                SortBy::Sql(expr) => query.order_by(expr),
-                SortBy::Rust(field) => {
-                    sort.push(field);
-                    query
-                }
-            };
+        if let Some(sort) = self.sort.pop_front() {
+            query = query.order_by(sort.into_expr());
         } else {
             query = query.order_by(nodes::created_at.desc());
         }
 
-        while let Some(field) = self.sort.pop_front() {
-            query = match field.sort_by() {
-                SortBy::Sql(expr) => query.then_order_by(expr),
-                SortBy::Rust(field) => {
-                    sort.push(field);
-                    query
-                }
-            };
+        while let Some(sort) = self.sort.pop_front() {
+            query = query.then_order_by(sort.into_expr());
         }
 
-        let (nodes, count) = query
+        query
             .paginate(self.limit, self.offset)?
             .count_results(conn)
-            .await?;
-
-        Ok(NodeFiltered { nodes, count, sort })
+            .await
+            .map_err(Into::into)
     }
-}
-
-pub struct NodeFiltered {
-    pub nodes: Vec<Node>,
-    pub count: u64,
-    pub sort: Vec<NodeSort>,
 }
 
 #[derive(Debug, Insertable)]
@@ -796,7 +785,7 @@ mod tests {
             sort: VecDeque::new(),
         };
 
-        let filtered = filter.query(&mut write).await.unwrap();
-        assert_eq!(filtered.nodes.len(), 1);
+        let (nodes, _count) = filter.query(&mut write).await.unwrap();
+        assert_eq!(nodes.len(), 1);
     }
 }

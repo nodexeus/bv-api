@@ -248,7 +248,7 @@ impl api::NodeMetrics {
                 .map_err(Error::BlockAge)?,
             staking_status: Some(self.staking_status().into()),
             consensus: self.consensus,
-            node_status: self.application_status().into(),
+            node_status: Some(self.application_status().into()),
             sync_status: Some(self.sync_status().into()),
             jobs: jobs
                 .map(serde_json::to_value)

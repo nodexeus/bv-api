@@ -320,7 +320,7 @@ pub struct UserFilter {
 }
 
 impl UserFilter {
-    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<UserFiltered, Error> {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(Vec<User>, u64), Error> {
         let mut query = users::table.left_join(user_roles::table).into_boxed();
 
         if let Some(search) = self.search {
@@ -365,15 +365,14 @@ impl UserFilter {
             query = query.then_order_by(sort.into_expr());
         }
 
-        let (users, count) = query
+        query
             .filter(users::deleted_at.is_null())
             .select(User::as_select())
             .distinct()
             .paginate(self.limit, self.offset)?
             .count_results(conn)
-            .await?;
-
-        Ok(UserFiltered { users, count })
+            .await
+            .map_err(Into::into)
     }
 }
 

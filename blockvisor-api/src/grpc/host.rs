@@ -20,7 +20,7 @@ use crate::models::host::{
 };
 use crate::models::{Blockchain, CommandType, IpAddress, Node, Org, OrgUser, Region, RegionId};
 use crate::storage::image::ImageId;
-use crate::util::{HashVec, NanosUtc, SortOrder};
+use crate::util::{HashVec, NanosUtc};
 
 use super::api::host_service_server::HostService;
 use super::{api, common, Grpc};
@@ -274,19 +274,8 @@ async fn list(
         read.auth_all(&meta, HostAdminPerm::List).await?
     };
 
-    let mut filtered = filter.query(&mut read).await?;
-    let mut hosts = api::Host::from_hosts(filtered.hosts, Some(&authz), &mut read).await?;
-    let host_count = filtered.count;
-
-    while let Some(sort) = filtered.sort.pop() {
-        match sort {
-            HostSort::NodeCount(SortOrder::Asc) => hosts.sort_by_key(|h| h.node_count),
-            HostSort::NodeCount(SortOrder::Desc) => {
-                hosts.sort_by(|a, b| b.node_count.cmp(&a.node_count));
-            }
-            _ => (),
-        }
-    }
+    let (hosts, host_count) = filter.query(&mut read).await?;
+    let hosts = api::Host::from_hosts(hosts, Some(&authz), &mut read).await?;
 
     Ok(api::HostServiceListResponse { hosts, host_count })
 }
@@ -624,7 +613,6 @@ impl api::HostServiceListRequest {
                     api::HostSortField::CpuCount => Ok(HostSort::CpuCount(order)),
                     api::HostSortField::MemSizeBytes => Ok(HostSort::MemSizeBytes(order)),
                     api::HostSortField::DiskSizeBytes => Ok(HostSort::DiskSizeBytes(order)),
-                    api::HostSortField::NodeCount => Ok(HostSort::NodeCount(order)),
                 }
             })
             .collect::<Result<_, _>>()?;

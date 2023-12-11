@@ -249,40 +249,29 @@ pub enum OrgSort {
     Name(SortOrder),
     CreatedAt(SortOrder),
     UpdatedAt(SortOrder),
-    MemberCount(SortOrder),
-    HostCount(SortOrder),
-    NodeCount(SortOrder),
 }
 
 impl OrgSort {
-    fn sort_by<T>(self) -> SortBy<T>
+    fn into_expr<T>(self) -> Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>
     where
         orgs::name: SelectableExpression<T>,
         orgs::created_at: SelectableExpression<T>,
         orgs::updated_at: SelectableExpression<T>,
     {
         use OrgSort::*;
-        use SortBy::*;
         use SortOrder::*;
 
         match self {
-            Name(Asc) => Sql(Box::new(orgs::name.asc())),
-            Name(Desc) => Sql(Box::new(orgs::name.desc())),
+            Name(Asc) => Box::new(orgs::name.asc()),
+            Name(Desc) => Box::new(orgs::name.desc()),
 
-            CreatedAt(Asc) => Sql(Box::new(orgs::created_at.asc())),
-            CreatedAt(Desc) => Sql(Box::new(orgs::created_at.desc())),
+            CreatedAt(Asc) => Box::new(orgs::created_at.asc()),
+            CreatedAt(Desc) => Box::new(orgs::created_at.desc()),
 
-            UpdatedAt(Asc) => Sql(Box::new(orgs::updated_at.asc())),
-            UpdatedAt(Desc) => Sql(Box::new(orgs::updated_at.desc())),
-
-            MemberCount(_) | HostCount(_) | NodeCount(_) => Rust(self),
+            UpdatedAt(Asc) => Box::new(orgs::updated_at.asc()),
+            UpdatedAt(Desc) => Box::new(orgs::updated_at.desc()),
         }
     }
-}
-
-enum SortBy<T> {
-    Sql(Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>),
-    Rust(OrgSort),
 }
 
 pub struct OrgFilter {
@@ -295,7 +284,7 @@ pub struct OrgFilter {
 }
 
 impl OrgFilter {
-    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<OrgFiltered, Error> {
+    pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(Vec<Org>, u64), Error> {
         let mut query = orgs::table.left_join(user_roles::table).into_boxed();
 
         if let Some(search) = self.search {
@@ -327,38 +316,24 @@ impl OrgFilter {
             query = query.filter(orgs::is_personal.eq(personal));
         }
 
-        let mut sort = vec![];
-        if let Some(field) = self.sort.pop_front() {
-            query = match field.sort_by() {
-                SortBy::Sql(expr) => query.order_by(expr),
-                SortBy::Rust(field) => {
-                    sort.push(field);
-                    query
-                }
-            };
+        if let Some(sort) = self.sort.pop_front() {
+            query = query.order_by(sort.into_expr());
         } else {
             query = query.order_by(orgs::created_at.desc());
         }
 
-        while let Some(field) = self.sort.pop_front() {
-            query = match field.sort_by() {
-                SortBy::Sql(expr) => query.then_order_by(expr),
-                SortBy::Rust(field) => {
-                    sort.push(field);
-                    query
-                }
-            };
+        while let Some(sort) = self.sort.pop_front() {
+            query = query.then_order_by(sort.into_expr());
         }
 
-        let (orgs, count) = query
+        query
             .filter(orgs::deleted_at.is_null())
             .select(Org::as_select())
             .distinct()
             .paginate(self.limit, self.offset)?
             .count_results(conn)
-            .await?;
-
-        Ok(OrgFiltered { orgs, count, sort })
+            .await
+            .map_err(Into::into)
     }
 }
 

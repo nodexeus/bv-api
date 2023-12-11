@@ -86,10 +86,10 @@ diesel::table! {
     blockchain_node_types (id) {
         id -> Uuid,
         blockchain_id -> Uuid,
-        node_type -> EnumNodeType,
         description -> Nullable<Text>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        node_type -> EnumNodeType,
     }
 }
 
@@ -230,10 +230,10 @@ diesel::table! {
         node_id -> Uuid,
         event -> EnumNodeLogEvent,
         blockchain_name -> Text,
-        node_type -> EnumNodeType,
         #[max_length = 32]
         version -> Varchar,
         created_at -> Timestamptz,
+        node_type -> EnumNodeType,
     }
 }
 
@@ -248,14 +248,14 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
-    use super::sql_types::EnumNodeSyncStatus;
-    use super::sql_types::EnumNodeStatus;
-    use super::sql_types::EnumNodeStakingStatus;
-    use super::sql_types::EnumContainerStatus;
-    use super::sql_types::EnumNodeType;
     use super::sql_types::EnumNodeSimilarityAffinity;
     use super::sql_types::EnumNodeResourceAffinity;
     use super::sql_types::EnumResourceType;
+    use super::sql_types::EnumNodeType;
+    use super::sql_types::EnumNodeStatus;
+    use super::sql_types::EnumContainerStatus;
+    use super::sql_types::EnumNodeSyncStatus;
+    use super::sql_types::EnumNodeStakingStatus;
 
     nodes (id) {
         id -> Uuid,
@@ -271,10 +271,6 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         blockchain_id -> Uuid,
-        sync_status -> EnumNodeSyncStatus,
-        node_status -> EnumNodeStatus,
-        staking_status -> Nullable<EnumNodeStakingStatus>,
-        container_status -> EnumContainerStatus,
         ip_gateway -> Text,
         self_update -> Bool,
         block_age -> Nullable<Int8>,
@@ -289,7 +285,6 @@ diesel::table! {
         dns_record_id -> Varchar,
         allow_ips -> Jsonb,
         deny_ips -> Jsonb,
-        node_type -> EnumNodeType,
         scheduler_similarity -> Nullable<EnumNodeSimilarityAffinity>,
         scheduler_resource -> Nullable<EnumNodeResourceAffinity>,
         scheduler_region -> Nullable<Uuid>,
@@ -297,6 +292,11 @@ diesel::table! {
         jobs -> Jsonb,
         created_by_resource -> Nullable<EnumResourceType>,
         deleted_at -> Nullable<Timestamptz>,
+        node_type -> EnumNodeType,
+        node_status -> EnumNodeStatus,
+        container_status -> EnumContainerStatus,
+        sync_status -> EnumNodeSyncStatus,
+        staking_status -> Nullable<EnumNodeStakingStatus>,
     }
 }
 

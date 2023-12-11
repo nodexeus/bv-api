@@ -11,7 +11,6 @@ use tonic::Status;
 
 use crate::grpc::common;
 use crate::models::schema::sql_types;
-use crate::util::search::SortIndex;
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
@@ -153,27 +152,6 @@ impl FromStr for NodeType {
             "lightnode" => Ok(Self::LightNode),
             "archive" => Ok(Self::Archive),
             _ => Err(Error::UnknownNodeType(s.into())),
-        }
-    }
-}
-
-impl SortIndex for NodeType {
-    fn index(&self) -> i32 {
-        match self {
-            NodeType::Api => 1,
-            NodeType::Archive => 2,
-            NodeType::Beacon => 3,
-            NodeType::Etl => 4,
-            NodeType::Execution => 5,
-            NodeType::FullNode => 6,
-            NodeType::LightNode => 7,
-            NodeType::MevBoost => 8,
-            NodeType::Miner => 9,
-            NodeType::Node => 10,
-            NodeType::Oracle => 11,
-            NodeType::Relay => 12,
-            NodeType::Unknown => 13,
-            NodeType::Validator => 14,
         }
     }
 }
