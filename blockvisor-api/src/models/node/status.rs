@@ -2,6 +2,7 @@ use diesel_derive_enum::DbEnum;
 
 use crate::grpc::common;
 use crate::models::schema::sql_types;
+use crate::util::search::SortIndex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumNodeStatus"]
@@ -86,6 +87,34 @@ impl From<common::NodeStatus> for Option<NodeStatus> {
     }
 }
 
+impl SortIndex for NodeStatus {
+    fn index(&self) -> i32 {
+        match self {
+            NodeStatus::Broadcasting => 1,
+            NodeStatus::Cancelled => 2,
+            NodeStatus::Delegating => 3,
+            NodeStatus::DeletePending => 4,
+            NodeStatus::Deleted => 5,
+            NodeStatus::Deleting => 6,
+            NodeStatus::Delinquent => 7,
+            NodeStatus::Disabled => 8,
+            NodeStatus::Earning => 9,
+            NodeStatus::Elected => 10,
+            NodeStatus::Electing => 11,
+            NodeStatus::Exported => 12,
+            NodeStatus::Ingesting => 13,
+            NodeStatus::Mining => 14,
+            NodeStatus::Minting => 15,
+            NodeStatus::Processing => 16,
+            NodeStatus::Provisioning => 17,
+            NodeStatus::ProvisioningPending => 18,
+            NodeStatus::Relaying => 19,
+            NodeStatus::UpdatePending => 20,
+            NodeStatus::Updating => 21,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumContainerStatus"]
 pub enum ContainerStatus {
@@ -147,12 +176,43 @@ impl From<common::ContainerStatus> for ContainerStatus {
     }
 }
 
+impl SortIndex for ContainerStatus {
+    fn index(&self) -> i32 {
+        match self {
+            ContainerStatus::Busy => 1,
+            ContainerStatus::Creating => 2,
+            ContainerStatus::Deleted => 3,
+            ContainerStatus::Deleting => 4,
+            ContainerStatus::Failed => 5,
+            ContainerStatus::Installing => 6,
+            ContainerStatus::Running => 7,
+            ContainerStatus::Snapshotting => 8,
+            ContainerStatus::Starting => 9,
+            ContainerStatus::Stopped => 10,
+            ContainerStatus::Stopping => 11,
+            ContainerStatus::Unknown => 12,
+            ContainerStatus::Upgraded => 13,
+            ContainerStatus::Upgrading => 14,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumNodeSyncStatus"]
 pub enum SyncStatus {
     Unknown,
     Syncing,
     Synced,
+}
+
+impl SortIndex for SyncStatus {
+    fn index(&self) -> i32 {
+        match self {
+            SyncStatus::Synced => 1,
+            SyncStatus::Syncing => 2,
+            SyncStatus::Unknown => 3,
+        }
+    }
 }
 
 impl From<SyncStatus> for common::SyncStatus {
@@ -211,6 +271,20 @@ impl From<common::StakingStatus> for StakingStatus {
             common::StakingStatus::Validating => StakingStatus::Validating,
             common::StakingStatus::Consensus => StakingStatus::Consensus,
             common::StakingStatus::Unstaked => StakingStatus::Unstaked,
+        }
+    }
+}
+
+impl SortIndex for StakingStatus {
+    fn index(&self) -> i32 {
+        match self {
+            StakingStatus::Consensus => 1,
+            StakingStatus::Follower => 2,
+            StakingStatus::Staked => 3,
+            StakingStatus::Staking => 4,
+            StakingStatus::Unknown => 5,
+            StakingStatus::Unstaked => 6,
+            StakingStatus::Validating => 7,
         }
     }
 }

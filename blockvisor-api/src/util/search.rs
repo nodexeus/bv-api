@@ -3,6 +3,11 @@ use thiserror::Error;
 
 use crate::grpc::common;
 
+/// Define a sorting order other than the postgres or protobuf type order.
+pub trait SortIndex {
+    fn index(&self) -> i32;
+}
+
 #[derive(Debug, Display, Error)]
 pub enum Error {
     /// Unknown SearchOperator.

@@ -421,13 +421,13 @@ impl HostSort {
             OsVersion(Desc) => Sql(Box::new(hosts::os_version.desc())),
 
             CpuCount(Asc) => Sql(Box::new(hosts::cpu_count.asc())),
-            CpuCount(Desc) => Sql(Box::new(hosts::cpu_count.asc())),
+            CpuCount(Desc) => Sql(Box::new(hosts::cpu_count.desc())),
 
             MemSizeBytes(Asc) => Sql(Box::new(hosts::mem_size_bytes.asc())),
-            MemSizeBytes(Desc) => Sql(Box::new(hosts::mem_size_bytes.asc())),
+            MemSizeBytes(Desc) => Sql(Box::new(hosts::mem_size_bytes.desc())),
 
             DiskSizeBytes(Asc) => Sql(Box::new(hosts::disk_size_bytes.asc())),
-            DiskSizeBytes(Desc) => Sql(Box::new(hosts::disk_size_bytes.asc())),
+            DiskSizeBytes(Desc) => Sql(Box::new(hosts::disk_size_bytes.desc())),
 
             NodeCount(_) => Rust(self),
         }
