@@ -270,6 +270,11 @@ async fn list(
 
     while let Some(sort) = filtered.sort.pop() {
         match sort {
+            NodeSort::NodeType(SortOrder::Asc) => nodes.sort_by_key(|n| n.node_type),
+            NodeSort::NodeType(SortOrder::Desc) => {
+                nodes.sort_by(|a, b| b.node_type.cmp(&a.node_type));
+            }
+
             NodeSort::NodeStatus(SortOrder::Asc) => nodes.sort_by_key(|n| n.status),
             NodeSort::NodeStatus(SortOrder::Desc) => {
                 nodes.sort_by(|a, b| b.status.cmp(&a.status));
@@ -288,6 +293,13 @@ async fn list(
             NodeSort::StakingStatus(SortOrder::Asc) => nodes.sort_by_key(|n| n.staking_status),
             NodeSort::StakingStatus(SortOrder::Desc) => {
                 nodes.sort_by(|a, b| b.staking_status.cmp(&a.staking_status));
+            }
+
+            NodeSort::BlockchainName(SortOrder::Asc) => {
+                nodes.sort_by(|a, b| a.blockchain_name.cmp(&b.blockchain_name));
+            }
+            NodeSort::BlockchainName(SortOrder::Desc) => {
+                nodes.sort_by(|a, b| b.blockchain_name.cmp(&a.blockchain_name));
             }
 
             _ => (),
@@ -879,6 +891,7 @@ impl api::NodeServiceListRequest {
                     api::NodeSortField::SyncStatus => Ok(NodeSort::SyncStatus(order)),
                     api::NodeSortField::ContainerStatus => Ok(NodeSort::ContainerStatus(order)),
                     api::NodeSortField::StakingStatus => Ok(NodeSort::StakingStatus(order)),
+                    api::NodeSortField::BlockchainName => Ok(NodeSort::BlockchainName(order)),
                 }
             })
             .collect::<Result<_, _>>()?;

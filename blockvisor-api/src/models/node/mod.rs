@@ -389,6 +389,7 @@ pub enum NodeSort {
     SyncStatus(SortOrder),
     ContainerStatus(SortOrder),
     StakingStatus(SortOrder),
+    BlockchainName(SortOrder),
 }
 
 enum SortBy<T> {
@@ -416,16 +417,14 @@ impl NodeSort {
             NodeName(Asc) => Sql(Box::new(nodes::name.asc())),
             NodeName(Desc) => Sql(Box::new(nodes::name.desc())),
 
-            NodeType(Asc) => Sql(Box::new(nodes::node_type.asc())),
-            NodeType(Desc) => Sql(Box::new(nodes::node_type.desc())),
-
             CreatedAt(Asc) => Sql(Box::new(nodes::created_at.asc())),
             CreatedAt(Desc) => Sql(Box::new(nodes::created_at.desc())),
 
             UpdatedAt(Asc) => Sql(Box::new(nodes::updated_at.asc())),
             UpdatedAt(Desc) => Sql(Box::new(nodes::updated_at.desc())),
 
-            NodeStatus(_) | SyncStatus(_) | ContainerStatus(_) | StakingStatus(_) => Rust(self),
+            NodeType(_) | NodeStatus(_) | SyncStatus(_) | ContainerStatus(_) | StakingStatus(_)
+            | BlockchainName(_) => Rust(self),
         }
     }
 }
