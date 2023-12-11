@@ -7,6 +7,7 @@ create type enum_command_exit_code as enum (
 'internal_error',
 'node_not_found',
 'not_supported',
+'ok',
 'service_broken',
 'service_not_ready'
 );
