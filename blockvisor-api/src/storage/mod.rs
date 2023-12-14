@@ -349,7 +349,7 @@ impl Storage {
         let mut slots = Vec::with_capacity(upload_slots as usize);
         for index in 0..upload_slots {
             slots.push(UploadSlot {
-                key: format!("{prefix}/data.part_{index}", prefix = self.prefix),
+                key: format!("{key}/data.part_{index}"),
                 url: self
                     .client
                     .upload_url(&self.bucket.archive, &key, expires)
