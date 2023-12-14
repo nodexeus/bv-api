@@ -4,17 +4,20 @@ pub use job::{NodeJob, NodeJobProgress, NodeJobStatus};
 pub mod log;
 pub use log::{NewNodeLog, NodeLog, NodeLogEvent};
 
+pub mod node_type;
+pub use node_type::{NodeNetwork, NodeType, NodeVersion};
+
 pub mod property;
 pub use property::NodeProperty;
+
+pub mod report;
+pub use report::{NewNodeReport, NodeReport, NodeReportId};
 
 pub mod scheduler;
 pub use scheduler::{NodeScheduler, ResourceAffinity, SimilarNodeAffinity};
 
 pub mod status;
 pub use status::{ContainerStatus, NodeStatus, StakingStatus, SyncStatus};
-
-pub mod node_type;
-pub use node_type::{NodeNetwork, NodeType, NodeVersion};
 
 use std::collections::{HashSet, VecDeque};
 
@@ -32,7 +35,9 @@ use thiserror::Error;
 use tonic::Status;
 use tracing::warn;
 
-use crate::auth::resource::{HostId, NodeId, OrgId, ResourceId, ResourceType};
+use crate::auth::resource::{
+    HostId, NodeId, OrgId, Resource, ResourceEntry, ResourceId, ResourceType, UserId,
+};
 use crate::database::{Conn, WriteConn};
 use crate::storage::image::ImageId;
 use crate::util::{SearchOperator, SortOrder};
@@ -100,6 +105,8 @@ pub enum Error {
     ParseIpAddr(std::net::AddrParseError),
     /// Node region error: {0}
     Region(crate::models::region::Error),
+    /// Node report error: {0}
+    Report(report::Error),
     /// Storage error for node: {0}
     Storage(#[from] crate::storage::Error),
     /// Failed to update node: {0}
@@ -361,6 +368,29 @@ impl Node {
 
     pub fn not_deleted() -> NotDeleted {
         nodes::table.filter(nodes::deleted_at.is_null())
+    }
+
+    pub async fn report(
+        &self,
+        resource: Resource,
+        message: String,
+        conn: &mut Conn<'_>,
+    ) -> Result<NodeReport, Error> {
+        let entry = ResourceEntry::from(resource);
+        let report = NewNodeReport {
+            node_id: self.id,
+            created_by: entry.resource_id,
+            created_by_resource: entry.resource_type,
+            message,
+        };
+        report.create(conn).await.map_err(Error::Report)
+    }
+
+    pub const fn created_by_user(&self) -> Option<UserId> {
+        let (Some(resource_type), Some(id)) = (self.created_by_resource, self.created_by) else {
+            return None;
+        };
+        ResourceEntry::new(resource_type, id).user_id()
     }
 }
 

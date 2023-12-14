@@ -19,6 +19,7 @@ CREATE TYPE enum_node_chain_status AS ENUM (
     'provisioning'
 );
 ALTER TABLE nodes RENAME COLUMN node_status TO chain_status;
+ALTER TABLE nodes ALTER COLUMN chain_status DROP DEFAULT;
 ALTER TABLE nodes ALTER COLUMN chain_status TYPE enum_node_chain_status USING chain_status::text::enum_node_chain_status;
 ALTER TABLE nodes ALTER COLUMN chain_status SET DEFAULT 'unknown';
 DROP TYPE enum_node_status;

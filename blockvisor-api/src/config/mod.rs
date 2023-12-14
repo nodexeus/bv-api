@@ -5,6 +5,7 @@ pub mod email;
 pub mod grpc;
 pub mod log;
 pub mod mqtt;
+pub mod slack;
 pub mod storage;
 pub mod token;
 

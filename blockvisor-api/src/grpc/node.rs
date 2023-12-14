@@ -11,15 +11,15 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::auth::rbac::{NodeAdminPerm, NodePerm};
-use crate::auth::resource::{HostId, NodeId, Resource, ResourceEntry, ResourceType};
+use crate::auth::resource::{HostId, NodeId, Resource, ResourceEntry, UserId};
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::blockchain::{BlockchainProperty, BlockchainPropertyId, BlockchainVersion};
 use crate::models::command::NewCommand;
 use crate::models::node::{
     ContainerStatus, FilteredIpAddr, NewNode, Node, NodeFilter, NodeJob, NodeJobProgress,
-    NodeJobStatus, NodeProperty, NodeScheduler, NodeSearch, NodeSort, NodeStatus, NodeType,
-    StakingStatus, SyncStatus, UpdateNode,
+    NodeJobStatus, NodeProperty, NodeReport, NodeScheduler, NodeSearch, NodeSort, NodeStatus,
+    NodeType, StakingStatus, SyncStatus, UpdateNode,
 };
 use crate::models::{Blockchain, CommandType, Host, Org, Region, User};
 use crate::storage::image::ImageId;
@@ -89,6 +89,8 @@ pub enum Error {
     PropertyNotFound(String),
     /// Node region error: {0}
     Region(#[from] crate::models::region::Error),
+    /// Node report error: {0}
+    Report(#[from] crate::models::node::report::Error),
     /// Node resource error: {0}
     Resource(#[from] crate::auth::resource::Error),
     /// Node search failed: {0}
@@ -144,6 +146,7 @@ impl From<Error> for Status {
             Model(err) => err.into(),
             Org(err) => err.into(),
             Region(err) => err.into(),
+            Report(err) => err.into(),
             Resource(err) => err.into(),
             User(err) => err.into(),
         }
@@ -201,6 +204,15 @@ impl NodeService for Grpc {
     ) -> Result<Response<api::NodeServiceDeleteResponse>, Status> {
         let (meta, _, req) = req.into_parts();
         self.write(|write| delete(req, meta, write).scope_boxed())
+            .await
+    }
+
+    async fn report(
+        &self,
+        req: Request<api::NodeServiceReportRequest>,
+    ) -> Result<Response<api::NodeServiceReportResponse>, Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| report(req, meta, write).scope_boxed())
             .await
     }
 
@@ -424,6 +436,26 @@ async fn delete(
     Ok(api::NodeServiceDeleteResponse {})
 }
 
+async fn report(
+    req: api::NodeServiceReportRequest,
+    meta: MetadataMap,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::NodeServiceReportResponse, Error> {
+    let node_id: NodeId = req.node_id.parse().map_err(Error::ParseId)?;
+
+    let authz = write
+        .auth_or_all(&meta, NodeAdminPerm::Report, NodePerm::Report, node_id)
+        .await?;
+    let node = Node::find_by_id(node_id, &mut write).await?;
+
+    let resource = authz.resource();
+    let report = node.report(resource, req.message, &mut write).await?;
+
+    Ok(api::NodeServiceReportResponse {
+        id: report.id.to_string(),
+    })
+}
+
 async fn start(
     req: api::NodeServiceStartRequest,
     meta: MetadataMap,
@@ -519,7 +551,15 @@ impl api::Node {
         let host = Host::find_by_id(node.host_id, conn).await?;
         let org = Org::find_by_id(node.org_id, conn).await?;
         let region = node.region(conn).await?;
-        let created_by = common::EntityUpdate::from_node(&node, conn).await?;
+        let reports = NodeReport::find_by_node(node.id, conn).await?;
+        let user_ids = reports
+            .iter()
+            .filter_map(NodeReport::user_id)
+            .chain(node.created_by_user())
+            .collect();
+        let users = User::find_by_ids(user_ids, conn)
+            .await?
+            .to_map_keep_last(|u| (u.id, u));
 
         api::Node::new(
             node,
@@ -528,7 +568,8 @@ impl api::Node {
             &blockchain,
             properties,
             region.as_ref(),
-            created_by,
+            reports,
+            &users,
         )
     }
 
@@ -537,7 +578,7 @@ impl api::Node {
     /// function above, but rather it performs 1 query for n nodes. We like it this way :)
     pub async fn from_models(nodes: Vec<Node>, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
         let node_ids = nodes.iter().map(|n| n.id).collect();
-        let node_props = NodeProperty::by_node_ids(node_ids, conn).await?;
+        let node_props = NodeProperty::by_node_ids(&node_ids, conn).await?;
         let property_ids = node_props
             .iter()
             .map(|np| np.blockchain_property_id)
@@ -573,12 +614,14 @@ impl api::Node {
             .await?
             .to_map_keep_last(|region| (region.id, region));
 
+        let mut reports = NodeReport::find_by_nodes(&node_ids, conn)
+            .await?
+            .to_map_keep_all(|report| (report.node_id, report));
+
         let user_ids = nodes
             .iter()
-            .filter_map(|node| match node.created_by_resource {
-                Some(ResourceType::User) => node.created_by.map(|id| (*id).into()),
-                _ => None,
-            })
+            .filter_map(Node::created_by_user)
+            .chain(reports.values().flatten().filter_map(NodeReport::user_id))
             .collect();
         let users = User::find_by_ids(user_ids, conn)
             .await?
@@ -592,16 +635,16 @@ impl api::Node {
                 let blockchain = blockchains.get(&node.blockchain_id)?;
                 let properties = properties.remove(&node.id).unwrap_or_default();
                 let region = node.scheduler_region.map(|id| &regions[&id]);
-                let user = node.created_by.and_then(|id| users.get(&(*id).into()));
-                let created_by = common::EntityUpdate::from_node_user(&node, user);
+                let reports = reports.remove(&node.id).unwrap_or_default();
 
                 Some(api::Node::new(
-                    node, org, host, blockchain, properties, region, created_by,
+                    node, org, host, blockchain, properties, region, reports, &users,
                 ))
             })
             .collect()
     }
 
+    #[allow(clippy::too_many_arguments)] // not now please
     pub fn new(
         node: Node,
         org: &Org,
@@ -609,7 +652,8 @@ impl api::Node {
         blockchain: &Blockchain,
         properties: Vec<api::NodeProperty>,
         region: Option<&Region>,
-        created_by: Option<common::EntityUpdate>,
+        reports: Vec<NodeReport>,
+        users: &HashMap<UserId, User>,
     ) -> Result<Self, Error> {
         let scheduler = node
             .scheduler_resource
@@ -619,6 +663,9 @@ impl api::Node {
                 resource,
                 region: Some(region.clone()),
             });
+
+        let user = node.created_by.and_then(|id| users.get(&(*id).into()));
+        let created_by = common::EntityUpdate::from_node_user(&node, user);
 
         // If there is a scheduler we return the node placement variant,
         // otherwise we return the host id variant.
@@ -684,6 +731,23 @@ impl api::Node {
             host_org_id: host.org_id.to_string(),
             data_directory_mountpoint: node.data_directory_mountpoint,
             jobs,
+            reports: reports
+                .into_iter()
+                .map(|report| {
+                    let created_by = report.user_id().and_then(|id| users.get(&id));
+                    api::NodeReport {
+                        id: report.id.to_string(),
+                        message: report.message,
+                        created_by: Some(common::EntityUpdate {
+                            resource: common::Resource::from(report.created_by_resource) as i32,
+                            resource_id: Some(report.created_by.to_string()),
+                            name: created_by.map(User::name),
+                            email: created_by.map(|u| u.email.clone()),
+                        }),
+                        created_at: Some(NanosUtc::from(report.created_at).into()),
+                    }
+                })
+                .collect(),
         })
     }
 }
@@ -1037,20 +1101,6 @@ impl api::NodeJobStatus {
 }
 
 impl common::EntityUpdate {
-    pub async fn from_node(node: &Node, conn: &mut Conn<'_>) -> Result<Option<Self>, Error> {
-        let (Some(created_by), Some(resource)) = (node.created_by, node.created_by_resource) else {
-            return Ok(None);
-        };
-
-        let user = if resource == ResourceType::User {
-            Some(User::find_by_id((*created_by).into(), conn).await?)
-        } else {
-            None
-        };
-
-        Ok(Self::from_node_user(node, user.as_ref()))
-    }
-
     pub fn from_node_user(node: &Node, user: Option<&User>) -> Option<Self> {
         let (Some(created_by), Some(resource)) = (node.created_by, node.created_by_resource) else {
             return None;

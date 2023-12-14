@@ -368,6 +368,13 @@ impl ResourceEntry {
             resource_id: (*node_id).into(),
         }
     }
+
+    pub const fn user_id(self) -> Option<UserId> {
+        match self.resource_type {
+            ResourceType::User => Some(UserId(self.resource_id.0)),
+            _ => None,
+        }
+    }
 }
 
 impl From<Resource> for ResourceEntry {

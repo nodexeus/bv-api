@@ -248,6 +248,20 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use super::sql_types::EnumResourceType;
+
+    node_reports (id) {
+        id -> Uuid,
+        node_id -> Uuid,
+        created_by_resource -> EnumResourceType,
+        created_by -> Uuid,
+        message -> Text,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
     use super::sql_types::EnumNodeSimilarityAffinity;
     use super::sql_types::EnumNodeResourceAffinity;
     use super::sql_types::EnumResourceType;
@@ -414,6 +428,7 @@ diesel::joinable!(invitations -> users (invited_by));
 diesel::joinable!(ip_addresses -> hosts (host_id));
 diesel::joinable!(node_properties -> blockchain_properties (blockchain_property_id));
 diesel::joinable!(node_properties -> nodes (node_id));
+diesel::joinable!(node_reports -> nodes (node_id));
 diesel::joinable!(nodes -> blockchains (blockchain_id));
 diesel::joinable!(nodes -> hosts (host_id));
 diesel::joinable!(nodes -> orgs (org_id));
@@ -440,6 +455,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     ip_addresses,
     node_logs,
     node_properties,
+    node_reports,
     nodes,
     orgs,
     orgs_users,
