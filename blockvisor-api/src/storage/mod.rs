@@ -339,22 +339,21 @@ impl Storage {
             versions.last().unwrap_or(&0) + 1
         };
 
-        let key = format!(
+        let path = format!(
             "{protocol}/{node_type}/{min_node_version}/{network}/{data_version}",
             protocol = image.protocol,
-            node_type = image.node_type,
+            node_type = image.node_type.to_string().to_lowercase(),
             min_node_version = image.node_version,
         );
 
         let mut slots = Vec::with_capacity(upload_slots as usize);
         for index in 0..upload_slots {
-            slots.push(UploadSlot {
-                key: format!("{key}/data.part_{index}"),
-                url: self
-                    .client
-                    .upload_url(&self.bucket.archive, &key, expires)
-                    .await?,
-            });
+            let key = format!("{path}/data.part_{index}");
+            let url = self
+                .client
+                .upload_url(&self.bucket.archive, &key, expires)
+                .await?;
+            slots.push(UploadSlot { key, url });
         }
 
         Ok(UploadManifest { slots })
