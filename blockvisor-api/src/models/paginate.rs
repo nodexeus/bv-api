@@ -12,21 +12,10 @@ use diesel_async::methods::LoadQuery;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use displaydoc::Display;
 use thiserror::Error;
+use tonic::Status;
 
 pub trait Paginate: Sized {
     fn paginate(self, limit: u64, offset: u64) -> Result<Paginated<Self>, Error>;
-}
-
-#[derive(Debug, Display, Error)]
-pub enum Error {
-    /// Failed to parse row count as u64: {0}
-    Count(std::num::TryFromIntError),
-    /// Failed to parse row limit as i64: {0}
-    Limit(std::num::TryFromIntError),
-    /// Failed to parse row offset as i64: {0}
-    Offset(std::num::TryFromIntError),
-    /// Failed to run paginated query: {0}
-    Query(diesel::result::Error),
 }
 
 impl<Q> Paginate for Q {
@@ -44,6 +33,30 @@ impl<Q> Paginate for Q {
             offset,
             empty,
         })
+    }
+}
+
+#[derive(Debug, Display, Error)]
+pub enum Error {
+    /// Failed to parse row count as u64: {0}
+    Count(std::num::TryFromIntError),
+    /// Failed to parse row limit as i64: {0}
+    Limit(std::num::TryFromIntError),
+    /// Failed to parse row offset as i64: {0}
+    Offset(std::num::TryFromIntError),
+    /// Failed to run paginated query: {0}
+    Query(diesel::result::Error),
+}
+
+impl From<Error> for Status {
+    fn from(err: Error) -> Self {
+        use Error::*;
+        match err {
+            Limit(_) => Status::invalid_argument("limit"),
+            Offset(_) => Status::invalid_argument("offset"),
+            Query(diesel::result::Error::NotFound) => Status::not_found("Not found."),
+            Query(_) | Count(_) => Status::internal("Internal error."),
+        }
     }
 }
 

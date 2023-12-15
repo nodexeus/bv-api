@@ -95,6 +95,7 @@ impl From<Error> for Status {
             AlreadyConfirmed => Status::failed_precondition("Already confirmed."),
             NotConfirmed => Status::unauthenticated("User is not confirmed."),
             LoginEmail | VerifyPassword(_) => Status::unauthenticated("Invalid email or password."),
+            Paginate(err) => err.into(),
             Org(err) => err.into(),
             Rbac(err) => err.into(),
             _ => Status::internal("Internal error."),

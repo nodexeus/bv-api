@@ -85,6 +85,7 @@ impl From<Error> for Status {
                 Status::invalid_argument("billing_amount")
             }
             ParseIp(_) => Status::invalid_argument("ip_addr"),
+            Paginate(err) => err.into(),
             IpAddress(err) => err.into(),
             Region(err) => err.into(),
             _ => Status::internal("Internal error."),

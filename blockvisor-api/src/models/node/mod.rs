@@ -131,6 +131,7 @@ impl From<Error> for Status {
             | FindByIds(_, NotFound)
             | UpgradeableByType(_, _, NotFound) => Status::not_found("Not found."),
             NoMatchingHost => Status::resource_exhausted("No matching host."),
+            Paginate(err) => err.into(),
             _ => Status::internal("Internal error."),
         }
     }

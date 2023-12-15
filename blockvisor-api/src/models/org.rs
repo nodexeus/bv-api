@@ -86,6 +86,7 @@ impl From<Error> for Status {
             | FindPersonal(_, NotFound)
             | RemoveUser(NotFound) => Status::not_found("Not found."),
             FindOrgUserByToken(_) => Status::permission_denied("Invalid token."),
+            Paginate(err) => err.into(),
             Rbac(err) => err.into(),
             _ => Status::internal("Internal error."),
         }
