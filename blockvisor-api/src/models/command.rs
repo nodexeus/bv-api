@@ -223,7 +223,7 @@ impl NewCommand {
     pub async fn create(self, conn: &mut Conn<'_>) -> Result<Command, Error> {
         diesel::insert_into(commands::table)
             .values(self)
-            .get_result::<Command>(conn)
+            .get_result(conn)
             .await
             .map_err(Error::Create)
     }

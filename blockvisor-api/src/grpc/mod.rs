@@ -93,13 +93,17 @@ pub fn server(context: &Arc<Context>) -> Router<CorsServer> {
         .layer(cors_rules)
         .into_inner();
 
+    let fifty_mb = 50 * 1024 * 1024;
+
     Server::builder()
         .layer(middleware)
         .concurrency_limit_per_connection(context.config.grpc.request_concurrency_limit)
         .add_service(ApiKeyServiceServer::new(grpc.clone()))
         .add_service(AuthServiceServer::new(grpc.clone()))
         .add_service(BlockchainServiceServer::new(grpc.clone()))
-        .add_service(BlockchainArchiveServiceServer::new(grpc.clone()))
+        .add_service(
+            BlockchainArchiveServiceServer::new(grpc.clone()).max_decoding_message_size(fifty_mb),
+        )
         .add_service(BundleServiceServer::new(grpc.clone()))
         .add_service(CommandServiceServer::new(grpc.clone()))
         .add_service(DiscoveryServiceServer::new(grpc.clone()))

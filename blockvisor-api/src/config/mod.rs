@@ -173,7 +173,7 @@ where
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<T>()
+        s.parse()
             .map(Self)
             .map_err(|err| Error::Redacted(type_name::<T>(), Box::new(err)))
     }

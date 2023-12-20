@@ -320,7 +320,7 @@ async fn list_permissions(
         granted
     };
 
-    let mut permissions = granted.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let mut permissions: Vec<_> = granted.iter().map(ToString::to_string).collect();
     permissions.sort();
 
     Ok(api::AuthServiceListPermissionsResponse { permissions })
