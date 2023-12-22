@@ -47,7 +47,7 @@ pub enum Error {
     Unexpected(&'static str),
     /// Failed to create presigned download URL for key `{0}`: {1}
     UploadUrl(String, SdkError<PutObjectError>),
-    /// Failed to write key `{0}:{1}`: {2}
+    /// Failed to write key `{0}:{1}`: {2:?}
     WriteKey(String, String, SdkError<PutObjectError>),
 }
 
