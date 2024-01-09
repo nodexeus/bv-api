@@ -3,7 +3,8 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use derive_more::{AsRef, Deref, From, Into};
 use displaydoc::Display;
-use jsonwebtoken::{errors, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::errors::ErrorKind;
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tonic::metadata::{AsciiMetadataValue, MetadataMap};
@@ -21,10 +22,10 @@ const COOKIE_EXPIRES: &str = "expires=";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to decode refresh token: {0}
-    Decode(errors::Error),
-    /// Failed to encode refresh token: {0}
-    Encode(errors::Error),
+    /// Failed to decode refresh token: {0:?}
+    Decode(ErrorKind),
+    /// Failed to encode refresh token: {0:?}
+    Encode(ErrorKind),
     /// Empty `{COOKIE_REFRESH:?}` value in `{COOKIE_HEADER:?}`.
     EmptyCookieRefresh,
     /// Refresh token `exp` is before `iat`. This should not happen.
@@ -46,7 +47,7 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             EmptyCookieRefresh | MissingCookieHeader | MissingCookieExpires
-            | MissingCookieRefresh => Status::unauthenticated("Refresh cookie."),
+            | MissingCookieRefresh => Status::permission_denied("Invalid refresh cookie."),
             _ => Status::internal("Internal error."),
         }
     }
@@ -78,41 +79,27 @@ impl Cipher {
     pub fn encode(&self, refresh: &Refresh) -> Result<Encoded, Error> {
         jsonwebtoken::encode(&self.header, refresh, &self.encoding_key)
             .map(Encoded)
-            .map_err(Error::Encode)
+            .map_err(|err| Error::Encode(err.into_kind()))
     }
 
     pub fn decode(&self, encoded: &Encoded) -> Result<Refresh, Error> {
-        let refresh = Self::decode_inner(
-            encoded,
-            &self.decoding_key,
-            &self.fallback_decoding_keys,
-            &self.validation,
-        )
-        .map_err(Error::Decode)?;
+        let refresh: Refresh = jsonwebtoken::decode(encoded, &self.decoding_key, &self.validation)
+            .map(|data| data.claims)
+            .or_else(|err| {
+                for key in &self.fallback_decoding_keys {
+                    if let Ok(data) = jsonwebtoken::decode(encoded, key, &self.validation) {
+                        return Ok(data.claims);
+                    }
+                }
+
+                Err(Error::Decode(err.into_kind()))
+            })?;
 
         if refresh.expirable.expires_at < refresh.expirable.issued_at {
             return Err(Error::ExpiresBeforeIssued);
         }
 
         Ok(refresh)
-    }
-
-    fn decode_inner(
-        token: &Encoded,
-        decoding_key: &DecodingKey,
-        fallback_decoding_keys: &[DecodingKey],
-        validation: &Validation,
-    ) -> Result<Refresh, jsonwebtoken::errors::Error> {
-        let err = match jsonwebtoken::decode(token, decoding_key, validation) {
-            Ok(data) => return Ok(data.claims),
-            Err(err) => err,
-        };
-        for decoding_key in fallback_decoding_keys {
-            if let Ok(data) = jsonwebtoken::decode(token, decoding_key, validation) {
-                return Ok(data.claims);
-            }
-        }
-        Err(err)
     }
 
     pub fn cookie(&self, refresh: &Refresh) -> Result<RequestCookie, Error> {

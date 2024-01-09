@@ -104,6 +104,7 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             Database(_) => Status::internal("Internal error."),
+            DecodeJwt(token::jwt::Error::TokenExpired) => Status::unauthenticated("Token expired."),
             DecodeJwt(_) => Status::permission_denied("Invalid JWT token."),
             DecodeRefresh(_) | RefreshHeader(_) => {
                 Status::permission_denied("Invalid refresh token.")
