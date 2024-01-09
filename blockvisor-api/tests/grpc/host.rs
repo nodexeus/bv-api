@@ -13,7 +13,7 @@ type Service = api::host_service_client::HostServiceClient<Channel>;
 type OrgService = api::org_service_client::OrgServiceClient<Channel>;
 
 #[tokio::test]
-async fn responds_unauthenticated_without_token_for_update() {
+async fn fails_without_token_for_update() {
     let test = TestServer::new().await;
     let req = api::HostServiceUpdateRequest {
         id: test.seed().host.id.to_string(),
@@ -27,11 +27,11 @@ async fn responds_unauthenticated_without_token_for_update() {
         managed_by: None,
     };
     let status = test.send(Service::update, req).await.unwrap_err();
-    assert_eq!(status.code(), tonic::Code::Unauthenticated);
+    assert_eq!(status.code(), tonic::Code::PermissionDenied);
 }
 
 #[tokio::test]
-async fn responds_permission_denied_with_token_ownership_for_update() {
+async fn permission_denied_with_token_ownership_for_update() {
     let test = TestServer::new().await;
 
     let jwt = test.host_jwt();
@@ -56,7 +56,7 @@ async fn responds_permission_denied_with_token_ownership_for_update() {
 }
 
 #[tokio::test]
-async fn responds_permission_denied_with_user_token_for_update() {
+async fn permission_denied_with_user_token_for_update() {
     let test = TestServer::new().await;
 
     let other_host = test.host2().await;
@@ -77,7 +77,7 @@ async fn responds_permission_denied_with_user_token_for_update() {
 }
 
 #[tokio::test]
-async fn responds_ok_for_create() {
+async fn ok_for_create() {
     let test = TestServer::new().await;
     let org_id = test.seed().org.id;
     let user_id = test.seed().user.id;
@@ -114,7 +114,7 @@ async fn responds_ok_for_create() {
 }
 
 #[tokio::test]
-async fn responds_ok_for_update() {
+async fn ok_for_update() {
     let test = TestServer::new().await;
 
     let jwt = test.host_jwt();
@@ -134,7 +134,7 @@ async fn responds_ok_for_update() {
 }
 
 #[tokio::test]
-async fn responds_ok_for_delete() {
+async fn ok_for_delete() {
     let test = TestServer::new().await;
 
     let jwt = test.host_jwt();
@@ -158,7 +158,7 @@ async fn responds_ok_for_delete() {
 }
 
 #[tokio::test]
-async fn responds_ok_for_start_stop_restart() {
+async fn ok_for_start_stop_restart() {
     let test = TestServer::new().await;
 
     let jwt = test.admin_jwt().await;
@@ -180,17 +180,17 @@ async fn responds_ok_for_start_stop_restart() {
 }
 
 #[tokio::test]
-async fn responds_unauthenticated_without_token_for_delete() {
+async fn fails_without_token_for_delete() {
     let test = TestServer::new().await;
     let req = api::HostServiceDeleteRequest {
         id: test.seed().host.id.to_string(),
     };
     let status = test.send(Service::delete, req).await.unwrap_err();
-    assert_eq!(status.code(), tonic::Code::Unauthenticated);
+    assert_eq!(status.code(), tonic::Code::PermissionDenied);
 }
 
 #[tokio::test]
-async fn responds_permission_denied_for_delete() {
+async fn permission_denied_for_delete() {
     let test = TestServer::new().await;
 
     let req = api::HostServiceDeleteRequest {
