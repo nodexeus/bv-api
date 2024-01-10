@@ -123,6 +123,7 @@ define_perms! {
     HostAdmin => {
         Get,
         List,
+        Update,
     }
 
     HostBilling => {
@@ -203,6 +204,7 @@ define_perms! {
     OrgAdmin => {
         Get,
         List,
+        Update,
     }
 
     OrgProvision => {

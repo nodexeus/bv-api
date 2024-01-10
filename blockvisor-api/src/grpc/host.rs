@@ -289,7 +289,9 @@ async fn update(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceUpdateResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
-    write.auth(&meta, HostPerm::Update, id).await?;
+    write
+        .auth_or_all(&meta, HostAdminPerm::Update, HostPerm::Update, id)
+        .await?;
 
     let region = if let Some(ref region) = req.region {
         Region::get_or_create(region, &mut write).await.map(Some)?
