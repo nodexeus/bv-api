@@ -15,6 +15,8 @@ pub mod org;
 pub mod subscription;
 pub mod user;
 
+const MAX_ARCHIVE_MESSAGE_SIZE: usize = 150 * 1024 * 1024;
+
 #[allow(clippy::nursery, clippy::pedantic)]
 pub mod api {
     tonic::include_proto!("blockjoy.v1");
@@ -93,8 +95,6 @@ pub fn server(context: &Arc<Context>) -> Router<CorsServer> {
         .layer(cors_rules)
         .into_inner();
 
-    let fifty_mb = 50 * 1024 * 1024;
-
     Server::builder()
         .layer(middleware)
         .concurrency_limit_per_connection(context.config.grpc.request_concurrency_limit)
@@ -102,7 +102,8 @@ pub fn server(context: &Arc<Context>) -> Router<CorsServer> {
         .add_service(AuthServiceServer::new(grpc.clone()))
         .add_service(BlockchainServiceServer::new(grpc.clone()))
         .add_service(
-            BlockchainArchiveServiceServer::new(grpc.clone()).max_decoding_message_size(fifty_mb),
+            BlockchainArchiveServiceServer::new(grpc.clone())
+                .max_decoding_message_size(MAX_ARCHIVE_MESSAGE_SIZE),
         )
         .add_service(BundleServiceServer::new(grpc.clone()))
         .add_service(CommandServiceServer::new(grpc.clone()))
