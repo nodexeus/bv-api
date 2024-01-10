@@ -21,6 +21,9 @@ use self::token::api_key::Validated;
 use self::token::refresh::{self, Refresh, RequestCookie};
 use self::token::{Cipher, RequestToken};
 
+/// The exact string for clients to match on to handle expired tokens.
+const TOKEN_EXPIRED: &str = "TOKEN_EXPIRED";
+
 #[tonic::async_trait]
 pub trait Authorize {
     /// Authorize request token for some `perms` and `resources`.
@@ -104,7 +107,7 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             Database(_) => Status::internal("Internal error."),
-            DecodeJwt(token::jwt::Error::TokenExpired) => Status::unauthenticated("Token expired."),
+            DecodeJwt(token::jwt::Error::TokenExpired) => Status::unauthenticated(TOKEN_EXPIRED),
             DecodeJwt(_) => Status::permission_denied("Invalid JWT token."),
             DecodeRefresh(_) | RefreshHeader(_) => {
                 Status::permission_denied("Invalid refresh token.")
