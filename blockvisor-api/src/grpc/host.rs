@@ -657,6 +657,7 @@ impl api::HostServiceUpdateRequest {
             ip_range_to: None,
             ip_gateway: None,
             region_id: region.map(|r| r.id),
+            managed_by: self.managed_by().into(),
         })
     }
 }

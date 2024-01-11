@@ -137,6 +137,7 @@ impl<'u> TryFrom<api::HostStatus> for UpdateHost<'u> {
             ip_range_to: None,
             ip_gateway: None,
             region_id: None,
+            managed_by: None,
         })
     }
 }
