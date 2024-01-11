@@ -232,6 +232,7 @@ async fn can_update_host_info() {
         ip_addr: None,
         status: None,
         region_id: None,
+        managed_by: None,
     };
     let mut conn = test.conn().await;
     let update = update_host.update(&mut conn).await.unwrap();
