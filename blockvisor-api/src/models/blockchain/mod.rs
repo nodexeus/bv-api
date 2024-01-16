@@ -82,6 +82,7 @@ pub struct Blockchain {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub visibility: Visibility,
+    pub ticker: String,
 }
 
 impl Blockchain {
