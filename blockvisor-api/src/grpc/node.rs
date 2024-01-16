@@ -11,13 +11,15 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::auth::rbac::{NodeAdminPerm, NodePerm};
-use crate::auth::resource::{HostId, NodeId, Resource, ResourceEntry, UserId};
+use crate::auth::resource::{
+    HostId, NodeId, Resource, ResourceEntry, ResourceId, ResourceType, UserId,
+};
 use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::blockchain::{BlockchainProperty, BlockchainPropertyId, BlockchainVersion};
 use crate::models::command::NewCommand;
 use crate::models::node::{
-    ContainerStatus, FilteredIpAddr, NewNode, Node, NodeFilter, NodeJob, NodeJobProgress,
+    self, ContainerStatus, FilteredIpAddr, NewNode, Node, NodeFilter, NodeJob, NodeJobProgress,
     NodeJobStatus, NodeProperty, NodeReport, NodeScheduler, NodeSearch, NodeSort, NodeStatus,
     NodeType, StakingStatus, SyncStatus, UpdateNode,
 };
@@ -35,6 +37,8 @@ pub enum Error {
     AllowIps(serde_json::Error),
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
+    /// Auth token parsing failed: {0}
+    AuthToken(#[from] crate::auth::token::Error),
     /// Node blockchain error: {0}
     Blockchain(#[from] crate::models::blockchain::Error),
     /// Node blockchain property error: {0}
@@ -105,6 +109,8 @@ pub enum Error {
     SyncTotal(std::num::TryFromIntError),
     /// The requested sort field is unknown.
     UnknownSortField,
+    /// Attempt to update status by {1} {2} of node `{0}`, which doesn't exist.
+    UpdateStatusMissingNode(NodeId, ResourceType, ResourceId),
     /// Node user error: {0}
     User(#[from] crate::models::user::Error),
 }
@@ -134,7 +140,9 @@ impl From<Error> for Status {
             SyncCurrent(_) => Status::invalid_argument("data_sync_progress_current"),
             SyncTotal(_) => Status::invalid_argument("data_sync_progress_total"),
             UnknownSortField => Status::invalid_argument("sort.field"),
+            UpdateStatusMissingNode(_, _, _) => Status::not_found("No such node"),
             Auth(err) => err.into(),
+            AuthToken(err) => err.into(),
             Blockchain(err) => err.into(),
             BlockchainProperty(err) => err.into(),
             BlockchainVersion(err) => err.into(),
@@ -384,7 +392,19 @@ async fn update_status(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceUpdateStatusResponse, Error> {
     let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
-    Node::by_id(node_id, &mut write).await?;
+    match Node::by_id(node_id, &mut write).await {
+        Err(node::Error::FindById(_, diesel::result::Error::NotFound)) => {
+            let token = (&meta).try_into()?;
+            let claims = write.ctx.auth.claims(&token, &mut write).await?;
+            return Err(Error::UpdateStatusMissingNode(
+                node_id,
+                claims.resource_entry.resource_type,
+                claims.resource_entry.resource_id,
+            ));
+        }
+        Err(e) => return Err(e.into()),
+        Ok(_) => {}
+    }
 
     let authz = write
         .auth_or_all(
