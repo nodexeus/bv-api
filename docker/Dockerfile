@@ -2,7 +2,6 @@
 FROM rust:alpine as build
 
 RUN echo "nameserver 1.1.1.1" > /etc/resolv.conf && \
-  sed -i -e "s/http:/https:/" /etc/apk/repositories && \
   apk update && \
   apk add \
     protobuf \
