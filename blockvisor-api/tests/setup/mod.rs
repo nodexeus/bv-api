@@ -169,7 +169,6 @@ impl TestServer {
     }
 }
 
-#[tonic::async_trait]
 impl SocketRpc for TestServer {
     fn input_socket(&self) -> Arc<TempPath> {
         self.socket.clone()

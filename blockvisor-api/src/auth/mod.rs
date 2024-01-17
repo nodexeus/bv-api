@@ -24,8 +24,7 @@ use self::token::{Cipher, RequestToken};
 /// The exact string for clients to match on to handle expired tokens.
 const TOKEN_EXPIRED: &str = "TOKEN_EXPIRED";
 
-#[tonic::async_trait]
-pub trait Authorize {
+pub(crate) trait Authorize {
     /// Authorize request token for some `perms` and `resources`.
     ///
     /// This is the entry point for the authorization process which the other
