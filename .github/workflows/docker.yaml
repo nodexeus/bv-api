@@ -14,12 +14,12 @@ jobs:
 
       - id: auth
         name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: "${{ secrets.GOOGLE_CREDENTIALS }}"
 
       - name: Docker build and push
-        uses: RafikFarhad/push-to-gcr-github-action@v5-beta
+        uses: RafikFarhad/push-to-gcr-github-action@v5-rc1
         with:
           registry: us-docker.pkg.dev
           project_id: blockjoy-deployer
