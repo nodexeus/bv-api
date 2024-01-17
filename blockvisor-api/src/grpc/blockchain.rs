@@ -580,6 +580,7 @@ impl api::Blockchain {
                     updated_at: Some(NanosUtc::from(model.updated_at).into()),
                     stats,
                     visibility: api::BlockchainVisibility::from(model.visibility).into(),
+                    ticker: model.ticker,
                 })
             })
             .collect()
