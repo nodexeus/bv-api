@@ -361,7 +361,8 @@ impl api::Org {
         let host_counts = Org::host_counts(&org_ids, conn).await?;
         let node_counts = Org::node_counts(&org_ids, conn).await?;
 
-        let mut org_users = OrgUsers::for_org_ids(org_ids, conn).await?;
+        let mut org_users = OrgUsers::for_org_ids(&org_ids, conn).await?;
+        let mut invitations = Invitation::for_org_ids(&org_ids, conn).await?;
 
         let user_ids = org_users
             .values()
@@ -377,6 +378,12 @@ impl api::Org {
                 let org_users = org_users
                     .remove(&org.id)
                     .unwrap_or_else(|| OrgUsers::empty(org.id));
+
+                let invitations = invitations
+                    .remove(&org.id)
+                    .unwrap_or_default()
+                    .to_map_keep_last(|inv| (inv.invitee_email.clone(), inv));
+
                 let members: Vec<_> = org_users
                     .user_roles
                     .iter()
@@ -392,6 +399,10 @@ impl api::Org {
                                     name: Some(role.to_string()),
                                 })
                                 .collect(),
+                            joined_at: invitations
+                                .get(&user.email)
+                                .and_then(|inv| inv.accepted_at)
+                                .map(|time| NanosUtc::from(time).into()),
                         })
                     })
                     .collect();

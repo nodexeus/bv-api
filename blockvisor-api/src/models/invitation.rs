@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
@@ -34,6 +35,8 @@ pub enum Error {
     FindById(InvitationId, diesel::result::Error),
     /// Failed to find invitation by org id `{0}`: {1}
     FindByOrgId(OrgId, diesel::result::Error),
+    /// Failed to find invitations for org ids `{0:?}`: {1}
+    FindForOrgIds(HashSet<OrgId>, diesel::result::Error),
     /// Failed to check for open invitations: {0}
     OpenInvite(diesel::result::Error),
     /// Failed to find received invitations for email `{0}`: {1}
@@ -90,6 +93,28 @@ impl Invitation {
             .get_results(conn)
             .await
             .map_err(|err| Error::FindByOrgId(org_id, err))
+    }
+
+    pub async fn for_org_ids(
+        org_ids: &HashSet<OrgId>,
+        conn: &mut Conn<'_>,
+    ) -> Result<HashMap<OrgId, Vec<Self>>, Error> {
+        let invitations: Vec<Self> = invitations::table
+            .filter(invitations::org_id.eq_any(org_ids.iter()))
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::FindForOrgIds(org_ids.clone(), err))?;
+
+        let mut org_invitations: HashMap<OrgId, Vec<_>> = HashMap::with_capacity(invitations.len());
+
+        for invitation in invitations {
+            org_invitations
+                .entry(invitation.org_id)
+                .or_default()
+                .push(invitation);
+        }
+
+        Ok(org_invitations)
     }
 
     pub async fn received(email: &str, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {

@@ -446,14 +446,14 @@ pub struct OrgUsers {
 
 impl OrgUsers {
     pub async fn for_org_ids(
-        org_ids: HashSet<OrgId>,
+        org_ids: &HashSet<OrgId>,
         conn: &mut Conn<'_>,
     ) -> Result<HashMap<OrgId, OrgUsers>, Error> {
         let rows: Vec<UserRole> = user_roles::table
             .filter(user_roles::org_id.eq_any(org_ids.iter()))
             .get_results(conn)
             .await
-            .map_err(|err| Error::FindUserRolesForOrgIds(org_ids, err))?;
+            .map_err(|err| Error::FindUserRolesForOrgIds(org_ids.clone(), err))?;
 
         let mut orgs_users: HashMap<OrgId, OrgUsers> = HashMap::with_capacity(rows.len());
 
