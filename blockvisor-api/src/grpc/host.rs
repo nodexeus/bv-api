@@ -9,7 +9,7 @@ use tracing::error;
 
 use crate::auth::claims::Claims;
 use crate::auth::rbac::{GrpcRole, HostAdminPerm, HostPerm};
-use crate::auth::resource::{HostId, OrgId};
+use crate::auth::resource::{HostId, OrgId, UserId};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
@@ -18,7 +18,7 @@ use crate::models::host::{
     ConnectionStatus, Host, HostFilter, HostSearch, HostSort, HostType, ManagedBy, MonthlyCostUsd,
     NewHost, UpdateHost,
 };
-use crate::models::{Blockchain, CommandType, IpAddress, Node, Org, OrgUser, Region, RegionId};
+use crate::models::{Blockchain, CommandType, IpAddress, Node, Org, Region, RegionId, Token};
 use crate::storage::image::ImageId;
 use crate::util::{HashVec, NanosUtc};
 
@@ -39,6 +39,8 @@ pub enum Error {
     CommandApi(#[from] crate::grpc::command::Error),
     /// Failed to parse cpu count: {0}
     CpuCount(std::num::TryFromIntError),
+    /// Host provisioning token is not for a user. This should not happen.
+    CreateTokenNotUser,
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
     /// Failed to parse disk size: {0}
@@ -47,6 +49,8 @@ pub enum Error {
     HasNodes,
     /// Host model error: {0}
     Host(#[from] crate::models::host::Error),
+    /// Host token error: {0}
+    HostProvisionByToken(crate::models::token::Error),
     /// Invalid value for ManagedBy enum: {0}.
     InvalidManagedBy(i32),
     /// Host model error: {0}
@@ -57,6 +61,8 @@ pub enum Error {
     LookupMissingOrg(OrgId),
     /// Failed to parse mem size: {0}
     MemSize(std::num::TryFromIntError),
+    /// Missing org_id for host provisioning token. This should not happen.
+    MissingTokenOrgId,
     /// Node model error: {0}
     Node(#[from] crate::models::node::Error),
     /// Host org error: {0}
@@ -94,11 +100,11 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Diesel(_) | Jwt(_) | LookupMissingOrg(_) | Refresh(_) | Storage(_) => {
-                Status::internal("Internal error.")
-            }
+            CreateTokenNotUser | Diesel(_) | Jwt(_) | LookupMissingOrg(_) | MissingTokenOrgId
+            | Refresh(_) | Storage(_) => Status::internal("Internal error."),
             CpuCount(_) | DiskSize(_) | MemSize(_) => Status::out_of_range("Host resource."),
             HasNodes => Status::failed_precondition("This host still has nodes."),
+            HostProvisionByToken(_) => Status::permission_denied("Invalid token."),
             ParseBlockchainId(_) => Status::invalid_argument("blockchain_id"),
             ParseId(_) => Status::invalid_argument("id"),
             ParseIpFrom(_) => Status::invalid_argument("ip_range_from"),
@@ -211,10 +217,15 @@ async fn create(
     _meta: MetadataMap,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceCreateResponse, Error> {
-    let org_user = OrgUser::by_token(&req.provision_token, &mut write).await?;
+    let token = Token::host_provision_by_token(&req.provision_token, &mut write)
+        .await
+        .map_err(Error::HostProvisionByToken)?;
+    let user_id = token.user().ok_or(Error::CreateTokenNotUser)?;
+    let org_id = token.org_id.ok_or(Error::MissingTokenOrgId)?;
+
     if let Some(ref id) = req.org_id {
-        let org_id: OrgId = id.parse().map_err(Error::ParseOrgId)?;
-        if org_id != org_user.org_id {
+        let request_org: OrgId = id.parse().map_err(Error::ParseOrgId)?;
+        if request_org != org_id {
             return Err(Error::ProvisionOrg);
         }
     }
@@ -226,7 +237,7 @@ async fn create(
     };
 
     let host = req
-        .as_new(&org_user, region.as_ref())?
+        .as_new(user_id, org_id, region.as_ref())?
         .create(&mut write)
         .await?;
 
@@ -234,7 +245,7 @@ async fn create(
     let expire_refresh = write.ctx.config.token.expire.refresh_host;
 
     let claims = Claims::from_now(expire_token, host.id, GrpcRole::NewHost);
-    let token = write.ctx.auth.cipher.jwt.encode(&claims)?;
+    let jwt = write.ctx.auth.cipher.jwt.encode(&claims)?;
 
     let refresh = Refresh::from_now(expire_refresh, host.id);
     let encoded = write.ctx.auth.cipher.refresh.encode(&refresh)?;
@@ -243,7 +254,7 @@ async fn create(
 
     Ok(api::HostServiceCreateResponse {
         host: Some(host),
-        token: token.into(),
+        token: jwt.into(),
         refresh: encoded.into(),
     })
 }
@@ -552,7 +563,8 @@ impl common::BillingAmount {
 impl api::HostServiceCreateRequest {
     pub fn as_new(
         &self,
-        org_user: &OrgUser,
+        user_id: UserId,
+        org_id: OrgId,
         region: Option<&Region>,
     ) -> Result<NewHost<'_>, Error> {
         Ok(NewHost {
@@ -568,8 +580,8 @@ impl api::HostServiceCreateRequest {
             ip_range_from: self.ip_range_from.parse().map_err(Error::ParseIpFrom)?,
             ip_range_to: self.ip_range_to.parse().map_err(Error::ParseIpTo)?,
             ip_gateway: self.ip_gateway.parse().map_err(Error::ParseIpGateway)?,
-            org_id: org_user.org_id,
-            created_by: org_user.user_id,
+            org_id,
+            created_by: user_id,
             region_id: region.map(|r| r.id),
             host_type: HostType::Cloud,
             monthly_cost_in_usd: self

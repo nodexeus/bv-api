@@ -66,8 +66,8 @@ pub mod sql_types {
     pub struct EnumResourceType;
 
     #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "token_type"))]
-    pub struct TokenType;
+    #[diesel(postgres_type(name = "enum_token_type"))]
+    pub struct EnumTokenType;
 }
 
 diesel::table! {
@@ -343,17 +343,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    orgs_users (org_id, user_id) {
-        org_id -> Uuid,
-        user_id -> Uuid,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-        #[max_length = 32]
-        host_provision_token -> Varchar,
-    }
-}
-
-diesel::table! {
     permissions (name) {
         name -> Text,
         created_at -> Timestamptz,
@@ -394,11 +383,18 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
-    use super::sql_types::TokenType;
+    use super::sql_types::EnumTokenType;
+    use super::sql_types::EnumResourceType;
 
-    token_blacklist (token) {
+    tokens (id) {
+        id -> Uuid,
+        token_type -> EnumTokenType,
         token -> Text,
-        token_type -> TokenType,
+        created_by_resource -> EnumResourceType,
+        created_by -> Uuid,
+        org_id -> Nullable<Uuid>,
+        created_at -> Timestamptz,
+        updated_at -> Nullable<Timestamptz>,
     }
 }
 
@@ -452,8 +448,6 @@ diesel::joinable!(nodes -> blockchains (blockchain_id));
 diesel::joinable!(nodes -> hosts (host_id));
 diesel::joinable!(nodes -> orgs (org_id));
 diesel::joinable!(nodes -> regions (scheduler_region));
-diesel::joinable!(orgs_users -> orgs (org_id));
-diesel::joinable!(orgs_users -> users (user_id));
 diesel::joinable!(role_permissions -> permissions (permission));
 diesel::joinable!(role_permissions -> roles (role));
 diesel::joinable!(subscriptions -> orgs (org_id));
@@ -477,13 +471,12 @@ diesel::allow_tables_to_appear_in_same_query!(
     node_reports,
     nodes,
     orgs,
-    orgs_users,
     permissions,
     regions,
     role_permissions,
     roles,
     subscriptions,
-    token_blacklist,
+    tokens,
     user_roles,
     users,
 );

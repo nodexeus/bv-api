@@ -60,7 +60,7 @@ impl Seed {
         setup_rbac(conn).await;
 
         let org = create_orgs(conn).await;
-        let user = create_users(&org, conn).await;
+        let user = create_users(org.id, conn).await;
         let region = create_region(conn).await;
         let host = create_hosts(&user, org.id, &region, conn).await;
         let blockchain = create_blockchains(conn).await;
@@ -117,7 +117,7 @@ async fn create_orgs(conn: &mut Conn<'_>) -> Org {
     Org::by_id(org_id, conn).await.unwrap()
 }
 
-async fn create_users(org: &Org, conn: &mut Conn<'_>) -> User {
+async fn create_users(org_id: OrgId, conn: &mut Conn<'_>) -> User {
     let root = NewUser::new(ROOT_EMAIL, "Super", "Man", LOGIN_PASSWORD)
         .unwrap()
         .create(conn)
@@ -143,18 +143,18 @@ async fn create_users(org: &Org, conn: &mut Conn<'_>) -> User {
     User::confirm(admin.id, conn).await.unwrap();
     User::confirm(member.id, conn).await.unwrap();
 
-    RbacUser::link_role(root.id, org.id, BlockjoyRole::Admin, conn)
+    RbacUser::link_role(root.id, org_id, BlockjoyRole::Admin, conn)
         .await
         .unwrap();
-    RbacUser::link_role(root.id, org.id, ViewRole::DeveloperPreview, conn)
+    RbacUser::link_role(root.id, org_id, ViewRole::DeveloperPreview, conn)
         .await
         .unwrap();
-    RbacUser::link_role(admin.id, org.id, ViewRole::DeveloperPreview, conn)
+    RbacUser::link_role(admin.id, org_id, ViewRole::DeveloperPreview, conn)
         .await
         .unwrap();
 
-    org.add_admin(admin.id, conn).await.unwrap();
-    org.add_member(member.id, conn).await.unwrap();
+    Org::add_admin(admin.id, org_id, conn).await.unwrap();
+    Org::add_member(member.id, org_id, conn).await.unwrap();
 
     User::by_id(admin.id, conn).await.unwrap()
 }

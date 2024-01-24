@@ -125,7 +125,7 @@ async fn responds_ok_for_revoke() {
     let mut conn = test.conn().await;
     let org = Org::by_id(invitation.org_id, &mut conn).await.unwrap();
     // If the user is already added, thats okay
-    let _ = Org::add_member(&org, test.seed().user.id, &mut conn).await;
+    let _ = Org::add_member(test.seed().user.id, org.id, &mut conn).await;
     let req = api::InvitationServiceRevokeRequest {
         invitation_id: invitation.id.to_string(),
     };
