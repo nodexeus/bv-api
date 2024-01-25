@@ -7,9 +7,6 @@
 pub mod api_key;
 pub use api_key::ApiKey;
 
-pub mod blacklist_token;
-pub use blacklist_token::BlacklistToken;
-
 pub mod blockchain;
 pub use blockchain::{Blockchain, BlockchainId};
 
@@ -29,7 +26,7 @@ pub mod node;
 pub use node::{Node, NodeType};
 
 pub mod org;
-pub use org::{Org, OrgUser};
+pub use org::Org;
 
 pub mod paginate;
 pub use paginate::Paginate;
@@ -44,6 +41,9 @@ pub mod schema;
 
 pub mod subscription;
 pub use subscription::{Subscription, SubscriptionId};
+
+pub mod token;
+pub use token::Token;
 
 pub mod user;
 pub use user::User;

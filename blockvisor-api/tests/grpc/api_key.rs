@@ -190,8 +190,9 @@ async fn user_can_manage_org_with_api_key() {
 
     // add key2.token as org member
     let conn = &mut test.conn().await;
-    let org = Org::by_id(org_id.parse().unwrap(), conn).await.unwrap();
-    org.add_member(key2.user_id, conn).await.unwrap();
+    Org::add_member(key2.user_id, org_id.parse().unwrap(), conn)
+        .await
+        .unwrap();
 
     // key2.token can now get org_id
     let req = api::OrgServiceGetRequest { id: org_id.clone() };

@@ -13,7 +13,7 @@ use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::org::{NewOrg, OrgFilter, OrgSearch, OrgSort, UpdateOrg};
 use crate::models::rbac::{OrgUsers, RbacUser};
-use crate::models::{Invitation, Org, OrgUser, User};
+use crate::models::{Invitation, Org, Token, User};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::org_service_server::OrgService;
@@ -57,6 +57,8 @@ pub enum Error {
     SearchOperator(crate::util::search::Error),
     /// Sort order: {0}
     SortOrder(crate::util::search::Error),
+    /// Org token error: {0}
+    Token(#[from] crate::models::token::Error),
     /// The requested sort field is unknown.
     UnknownSortField,
     /// Org user error: {0}
@@ -85,6 +87,7 @@ impl From<Error> for Status {
             Model(err) => err.into(),
             Rbac(err) => err.into(),
             Resource(err) => err.into(),
+            Token(err) => err.into(),
             User(err) => err.into(),
         }
     }
@@ -297,7 +300,7 @@ async fn remove_member(
         return Err(Error::RemoveLastOwner);
     }
 
-    org.remove_user(user_id, &mut write).await?;
+    Org::remove_user(user_id, org_id, &mut write).await?;
 
     // In case a user needs to be re-invited later, we also remove the (already accepted) invites
     // from the database. This is to prevent them from running into a unique constraint when they
@@ -321,10 +324,10 @@ async fn get_provision_token(
     read.auth(&meta, OrgProvisionPerm::GetToken, org_id).await?;
 
     let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
-    let org_user = OrgUser::by_user_org(user_id, org_id, &mut read).await?;
+    let token = Token::host_provision_by_user(user_id, org_id, &mut read).await?;
 
     Ok(api::OrgServiceGetProvisionTokenResponse {
-        token: org_user.host_provision_token,
+        token: token.token.take(),
     })
 }
 
@@ -339,10 +342,11 @@ async fn reset_provision_token(
         .await?;
 
     let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
-    let org_user = OrgUser::by_user_org(user_id, org_id, &mut write).await?;
-    let token = org_user.reset_token(&mut write).await?;
+    let new_token = Token::reset_host_provision(user_id, org_id, &mut write).await?;
 
-    Ok(api::OrgServiceResetProvisionTokenResponse { token })
+    Ok(api::OrgServiceResetProvisionTokenResponse {
+        token: new_token.take(),
+    })
 }
 
 impl api::Org {
