@@ -207,7 +207,7 @@ pub mod tests {
     #[tokio::test]
     async fn create_dns_record() {
         let (ctx, _db) = crate::config::Context::with_mocked().await.unwrap();
-        let name = petname::petname(3, "_").unwrap();
+        let name = petname::petname(3, "-").unwrap();
 
         ctx.dns
             .create(&name, Ipv4Addr::LOCALHOST.into())

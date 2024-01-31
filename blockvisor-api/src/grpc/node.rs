@@ -59,8 +59,8 @@ pub enum Error {
     Diesel(#[from] diesel::result::Error),
     /// Failed to parse disk size bytes: {0}
     DiskSize(std::num::TryFromIntError),
-    /// Failed to generate petnames. This should not happen.
-    GeneratePetnames,
+    /// Failed to generate node name. This should not happen.
+    GenerateName,
     /// Node host error: {0}
     Host(#[from] crate::models::host::Error),
     /// Node ip address error: {0}
@@ -120,10 +120,8 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Diesel(_) | GeneratePetnames | MissingPropertyId(_) | ModelProperty(_)
-            | ParseIpAddr(_) | PropertyNotFound(_) | Storage(_) => {
-                Status::internal("Internal error.")
-            }
+            Diesel(_) | GenerateName | MissingPropertyId(_) | ModelProperty(_) | ParseIpAddr(_)
+            | PropertyNotFound(_) | Storage(_) => Status::internal("Internal error."),
             AllowIps(_) => Status::invalid_argument("allow_ips"),
             BlockHeight(_) => Status::invalid_argument("block_height"),
             DenyIps(_) => Status::invalid_argument("deny_ips"),
@@ -790,8 +788,14 @@ impl api::NodeServiceCreateRequest {
         created_by: Resource,
         conn: &mut Conn<'_>,
     ) -> Result<NewNode, Error> {
-        let inner = self.placement.as_ref().ok_or(Error::MissingPlacement)?;
-        let placement = inner.placement.as_ref().ok_or(Error::MissingPlacement)?;
+        let name = Petnames::small()
+            .generate_one(3, "-")
+            .ok_or(Error::GenerateName)?;
+        let placement = self
+            .placement
+            .as_ref()
+            .and_then(|p| p.placement.as_ref())
+            .ok_or(Error::MissingPlacement)?;
         let scheduler = match placement {
             api::node_placement::Placement::HostId(_) => None,
             api::node_placement::Placement::Scheduler(s) => Some(s),
@@ -817,9 +821,7 @@ impl api::NodeServiceCreateRequest {
         Ok(NewNode {
             id: Uuid::new_v4().into(),
             org_id: self.org_id.parse().map_err(Error::ParseOrgId)?,
-            name: Petnames::large()
-                .generate_one(3, "_")
-                .ok_or(Error::GeneratePetnames)?,
+            name,
             version: self.version.clone().into(),
             blockchain_id: self
                 .blockchain_id
