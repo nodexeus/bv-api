@@ -30,6 +30,7 @@ use diesel::{dsl, prelude::*};
 use diesel_async::RunQueryDsl;
 use displaydoc::Display;
 use futures_util::future::OptionFuture;
+use petname::{Generator, Petnames};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tonic::Status;
@@ -107,6 +108,8 @@ pub enum Error {
     ParseIpAddr(std::net::AddrParseError),
     /// Node region error: {0}
     Region(crate::models::region::Error),
+    /// Failed to regenerate node name. This should not happen.
+    RegenerateName,
     /// Node report error: {0}
     Report(report::Error),
     /// Storage error for node: {0}
@@ -608,7 +611,7 @@ pub struct NewNode {
 
 impl NewNode {
     pub async fn create(
-        self,
+        mut self,
         host: Option<Host>,
         authz: &AuthZ,
         mut write: &mut WriteConn<'_, '_>,
@@ -623,33 +626,57 @@ impl NewNode {
             self.find_host(scheduler, authz, write).await?
         };
 
-        let ip_gateway = host.ip_gateway.ip().to_string();
         let node_ip = IpAddress::next_for_host(host.id, write)
             .await
             .map_err(Error::NextHostIp)?;
+        let ip_addr = node_ip.ip().to_string();
+        let ip_gateway = host.ip_gateway.ip().to_string();
+
         node_ip.assign(write).await.map_err(Error::AssignIpAddr)?;
+        let dns_record = write.ctx.dns.create(&self.name, node_ip.ip()).await?;
+        let dns_id = dns_record.id;
 
         let blockchain = Blockchain::by_id(self.blockchain_id, authz, write).await?;
-        let dns_record = write.ctx.dns.create(&self.name, node_ip.ip()).await?;
-
         let image = ImageId::new(blockchain.name, self.node_type, self.version.clone());
         let meta = write.ctx.storage.rhai_metadata(&image).await?;
         let data_directory_mountpoint = meta
             .babel_config
             .and_then(|cfg| cfg.data_directory_mount_point);
 
-        diesel::insert_into(nodes::table)
-            .values((
-                self,
-                nodes::host_id.eq(host.id),
-                nodes::ip_gateway.eq(ip_gateway),
-                nodes::ip_addr.eq(node_ip.ip().to_string()),
-                nodes::dns_record_id.eq(dns_record.id),
-                nodes::data_directory_mountpoint.eq(data_directory_mountpoint),
-            ))
-            .get_result(&mut write)
-            .await
-            .map_err(Error::Create)
+        loop {
+            match diesel::insert_into(nodes::table)
+                .values((
+                    &self,
+                    nodes::host_id.eq(host.id),
+                    nodes::ip_gateway.eq(&ip_gateway),
+                    nodes::ip_addr.eq(&ip_addr),
+                    nodes::dns_record_id.eq(&dns_id),
+                    nodes::data_directory_mountpoint.eq(&data_directory_mountpoint),
+                ))
+                .get_result(&mut write)
+                .await
+            {
+                Ok(node) => return Ok(node),
+                Err(DatabaseError(UniqueViolation, info)) if info.column_name() == Some("name") => {
+                    warn!("Node name {} already taken. Retrying...", self.name);
+                    self.name = Petnames::small()
+                        .generate_one(3, "-")
+                        .ok_or(Error::RegenerateName)?;
+                    continue;
+                }
+                Err(err) => {
+                    if let Err(err) = node_ip.unassign(write).await {
+                        warn!("Failed to unassign IP {node_ip:?} for aborted node creation: {err}");
+                    }
+                    if let Err(err) = write.ctx.dns.delete(&dns_id).await {
+                        warn!(
+                            "Failed to delete DNS record {dns_id} for aborted node creation: {err}"
+                        );
+                    }
+                    return Err(Error::Create(err));
+                }
+            }
+        }
     }
 
     /// Finds the most suitable host to initially place the node on.
@@ -657,7 +684,7 @@ impl NewNode {
     /// Since this is a freshly created node, we do not need to worry about
     /// logic regarding where to retry placing the node. We simply ask for an
     /// ordered list of the most suitable hosts, and pick the first one.
-    pub async fn find_host(
+    async fn find_host(
         &self,
         scheduler: NodeScheduler,
         authz: &AuthZ,
@@ -768,7 +795,6 @@ mod tests {
     #[tokio::test]
     async fn can_filter_nodes() {
         let (ctx, db) = Context::with_mocked().await.unwrap();
-        let name = format!("test_{}", petname::petname(3, "_").unwrap());
 
         let blockchain_id = db.seed.blockchain.id;
         let user_id = db.seed.user.id;
@@ -783,7 +809,7 @@ mod tests {
             container_status: ContainerStatus::Installing,
             block_height: None,
             node_data: None,
-            name,
+            name: "my-test-node".to_string(),
             version: "3.3.0".to_string().into(),
             staking_status: StakingStatus::Staked,
             self_update: false,
