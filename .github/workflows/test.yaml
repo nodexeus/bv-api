@@ -12,7 +12,9 @@ env:
 jobs:
   test:
     name: Tests
-    runs-on: self-hosted
+    runs-on: 
+      group: Docker
+      labels: docker
     env:
       CONFIG_FILE: "${{ github.workspace }}/blockvisor-api/config.toml"
     services:
@@ -60,7 +62,9 @@ jobs:
 
   lints:
     name: Lints
-    runs-on: self-hosted
+    runs-on:  
+      group: Docker
+      labels: docker
 
     steps:
       - uses: actions/checkout@v3
