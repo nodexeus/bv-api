@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
 use diesel::dsl;
@@ -26,9 +26,8 @@ use crate::util::{SearchOperator, SortOrder};
 use super::blockchain::{Blockchain, BlockchainId};
 use super::ip_address::NewIpAddressRange;
 use super::node::{NodeScheduler, NodeType, ResourceAffinity};
-use super::schema::{hosts, nodes, sql_types};
-use super::{Command, Node, Org};
-use super::{Paginate, Region, RegionId};
+use super::schema::{hosts, sql_types};
+use super::{Command, Org, Paginate, Region, RegionId};
 
 type NotDeleted = dsl::Filter<hosts::table, dsl::IsNull<hosts::deleted_at>>;
 
@@ -44,6 +43,8 @@ pub enum Error {
     Command(Box<super::command::Error>),
     /// Failed to create host: {0}
     Create(diesel::result::Error),
+    /// Failed to decrement node count for host `{0}`: {1}
+    DecrementNode(HostId, diesel::result::Error),
     /// Failed to delete host id `{0}`: {1}
     Delete(HostId, diesel::result::Error),
     /// Failed to find host by id `{0}`: {1}
@@ -56,10 +57,10 @@ pub enum Error {
     FindByName(String, diesel::result::Error),
     /// Failed to get host candidates: {0}
     HostCandidates(diesel::result::Error),
+    /// Failed to increment node count for host `{0}`: {1}
+    IncrementNode(HostId, diesel::result::Error),
     /// Host ip address error: {0}
     IpAddress(#[from] crate::models::ip_address::Error),
-    /// Failed to parse node count for host as i64: {0}
-    NodeCount(std::num::TryFromIntError),
     /// Failed to get node counts for host: {0}
     NodeCounts(diesel::result::Error),
     /// Nothing to update.
@@ -152,6 +153,7 @@ pub struct Host {
     pub vmm_mountpoint: Option<String>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub managed_by: ManagedBy,
+    pub node_count: i32,
 }
 
 impl AsRef<Host> for Host {
@@ -207,6 +209,24 @@ impl Host {
             .get_result(conn)
             .await
             .map_err(|err| Error::FindByName(name.into(), err))
+    }
+
+    pub async fn increment_node(host_id: HostId, conn: &mut Conn<'_>) -> Result<(), Error> {
+        diesel::update(hosts::table.filter(hosts::id.eq(host_id)))
+            .set(hosts::node_count.eq(hosts::node_count + 1))
+            .execute(conn)
+            .await
+            .map(|_| ())
+            .map_err(|err| Error::IncrementNode(host_id, err))
+    }
+
+    pub async fn decrement_node(host_id: HostId, conn: &mut Conn<'_>) -> Result<(), Error> {
+        diesel::update(hosts::table.filter(hosts::id.eq(host_id)))
+            .set(hosts::node_count.eq(hosts::node_count - 1))
+            .execute(conn)
+            .await
+            .map(|_| ())
+            .map_err(|err| Error::DecrementNode(host_id, err))
     }
 
     pub async fn delete(id: HostId, conn: &mut Conn<'_>) -> Result<(), Error> {
@@ -317,24 +337,6 @@ impl Host {
         Self::by_ids(host_ids, conn).await
     }
 
-    pub async fn node_counts(
-        host_ids: &HashSet<HostId>,
-        conn: &mut Conn<'_>,
-    ) -> Result<HashMap<HostId, u64>, Error> {
-        let counts: Vec<(HostId, i64)> = Node::not_deleted()
-            .filter(nodes::host_id.eq_any(host_ids))
-            .group_by(nodes::host_id)
-            .select((nodes::host_id, dsl::count(nodes::id)))
-            .get_results(conn)
-            .await
-            .map_err(Error::NodeCounts)?;
-
-        counts
-            .into_iter()
-            .map(|(host, count)| Ok((host, u64::try_from(count).map_err(Error::NodeCount)?)))
-            .collect()
-    }
-
     pub async fn regions_for(
         org_id: OrgId,
         blockchain: Blockchain,
@@ -400,6 +402,7 @@ pub enum HostSort {
     CpuCount(SortOrder),
     MemSizeBytes(SortOrder),
     DiskSizeBytes(SortOrder),
+    NodeCount(SortOrder),
 }
 
 impl HostSort {
@@ -413,6 +416,7 @@ impl HostSort {
         hosts::cpu_count: SelectableExpression<T>,
         hosts::mem_size_bytes: SelectableExpression<T>,
         hosts::disk_size_bytes: SelectableExpression<T>,
+        hosts::node_count: SelectableExpression<T>,
     {
         use HostSort::*;
         use SortOrder::*;
@@ -441,6 +445,9 @@ impl HostSort {
 
             DiskSizeBytes(Asc) => Box::new(hosts::disk_size_bytes.asc()),
             DiskSizeBytes(Desc) => Box::new(hosts::disk_size_bytes.desc()),
+
+            NodeCount(Asc) => Box::new(hosts::node_count.asc()),
+            NodeCount(Desc) => Box::new(hosts::node_count.desc()),
         }
     }
 }

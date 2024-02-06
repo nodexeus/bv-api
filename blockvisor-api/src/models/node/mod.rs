@@ -287,6 +287,8 @@ impl Node {
         node.ip(write).await?.unassign(write).await?;
 
         Org::decrement_node(node.org_id, write).await?;
+        Host::decrement_node(node.host_id, write).await?;
+
         Command::delete_node_pending(node.id, write)
             .await
             .map_err(|err| Error::Command(Box::new(err)))?;
@@ -646,6 +648,7 @@ impl NewNode {
             .and_then(|cfg| cfg.data_directory_mount_point);
 
         Org::increment_node(self.org_id, write).await?;
+        Host::increment_node(host.id, write).await?;
 
         loop {
             match diesel::insert_into(nodes::table)

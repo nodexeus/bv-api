@@ -208,6 +208,7 @@ diesel::table! {
         vmm_mountpoint -> Nullable<Text>,
         deleted_at -> Nullable<Timestamptz>,
         managed_by -> EnumManagedBy,
+        node_count -> Int4,
     }
 }
 
