@@ -8,7 +8,7 @@ set host_count = (
   select count(*)
   from hosts
   where orgs.id = hosts.org_id
-    and hosts.deleted_at is not null
+    and hosts.deleted_at is null
 );
 
 update orgs
@@ -16,7 +16,7 @@ set node_count = (
   select count(*)
   from nodes
   where orgs.id = nodes.org_id
-    and nodes.deleted_at is not null
+    and nodes.deleted_at is null
 );
 
 update orgs
@@ -27,6 +27,10 @@ from (
   group by org_id
 ) as q
 where orgs.id = q.org_id;
+
+update orgs set host_count = 0 where host_count is null;
+update orgs set node_count = 0 where node_count is null;
+update orgs set member_count = 0 where member_count is null;
 
 alter table orgs
 alter column host_count set not null,
