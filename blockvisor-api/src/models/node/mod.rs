@@ -48,7 +48,7 @@ use crate::util::{SearchOperator, SortOrder};
 use super::blockchain::{Blockchain, BlockchainId};
 use super::host::{Host, HostRequirements, HostType};
 use super::schema::nodes;
-use super::{Command, IpAddress, Paginate, Region, RegionId};
+use super::{Command, IpAddress, Org, Paginate, Region, RegionId};
 
 type NotDeleted = dsl::Filter<nodes::table, dsl::IsNull<nodes::deleted_at>>;
 
@@ -102,6 +102,8 @@ pub enum Error {
     NoHostOrScheduler,
     /// Failed to find a matching host.
     NoMatchingHost,
+    /// Node org error: {0}
+    Org(#[from] crate::models::org::Error),
     /// Node pagination: {0}
     Paginate(#[from] crate::models::paginate::Error),
     /// Failed to parse IpAddr: {0}
@@ -136,6 +138,7 @@ impl From<Error> for Status {
             | FindByIds(_, NotFound)
             | UpgradeableByType(_, _, NotFound) => Status::not_found("Not found."),
             NoMatchingHost => Status::resource_exhausted("No matching host."),
+            Org(err) => err.into(),
             Paginate(err) => err.into(),
             _ => Status::internal("Internal error."),
         }
@@ -275,16 +278,15 @@ impl Node {
     }
 
     pub async fn delete(id: NodeId, write: &mut WriteConn<'_, '_>) -> Result<(), Error> {
-        let node = Self::by_id(id, write).await?;
-
-        diesel::update(nodes::table.find(id))
+        let node: Node = diesel::update(nodes::table.find(id))
             .set(nodes::deleted_at.eq(Utc::now()))
-            .execute(write)
+            .get_result(write)
             .await
             .map_err(|err| Error::Delete(id, err))?;
 
         node.ip(write).await?.unassign(write).await?;
 
+        Org::decrement_node(node.org_id, write).await?;
         Command::delete_node_pending(node.id, write)
             .await
             .map_err(|err| Error::Command(Box::new(err)))?;
@@ -642,6 +644,8 @@ impl NewNode {
         let data_directory_mountpoint = meta
             .babel_config
             .and_then(|cfg| cfg.data_directory_mount_point);
+
+        Org::increment_node(self.org_id, write).await?;
 
         loop {
             match diesel::insert_into(nodes::table)
