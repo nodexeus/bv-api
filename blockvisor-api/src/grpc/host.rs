@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 
 use diesel_async::scoped_futures::ScopedFutureExt;
@@ -77,6 +78,8 @@ pub enum Error {
     ParseIpGateway(ipnetwork::IpNetworkError),
     /// Failed to parse IP to: {0}
     ParseIpTo(ipnetwork::IpNetworkError),
+    /// Failed to parse non-zero host node_count as u64: {0}
+    ParseNodeCount(std::num::TryFromIntError),
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
     /// Provision token is for a different organization.
@@ -101,7 +104,7 @@ impl From<Error> for Status {
         error!("{err}");
         match err {
             CreateTokenNotUser | Diesel(_) | Jwt(_) | LookupMissingOrg(_) | MissingTokenOrgId
-            | Refresh(_) | Storage(_) => Status::internal("Internal error."),
+            | ParseNodeCount(_) | Refresh(_) | Storage(_) => Status::internal("Internal error."),
             CpuCount(_) | DiskSize(_) | MemSize(_) => Status::out_of_range("Host resource."),
             HasNodes => Status::failed_precondition("This host still has nodes."),
             HostProvisionByToken(_) => Status::permission_denied("Invalid token."),
@@ -473,7 +476,7 @@ impl api::Host {
             ip_range_to: host.ip_range_to.ip().to_string(),
             ip_gateway: host.ip_gateway.ip().to_string(),
             org_id: host.org_id.to_string(),
-            node_count: lookup.nodes.get(&host.id).copied().unwrap_or(0),
+            node_count: u64::try_from(max(0, host.node_count)).map_err(Error::ParseNodeCount)?,
             org_name: lookup
                 .orgs
                 .get(&host.org_id)
@@ -493,7 +496,6 @@ impl api::Host {
 }
 
 struct Lookup {
-    nodes: HashMap<HostId, u64>,
     orgs: HashMap<OrgId, Org>,
     regions: HashMap<RegionId, Region>,
     ip_addresses: HashMap<HostId, Vec<IpAddress>>,
@@ -509,7 +511,6 @@ impl Lookup {
         H: AsRef<Host> + Send + Sync,
     {
         let host_ids: HashSet<HostId> = hosts.iter().map(|h| h.as_ref().id).collect();
-        let nodes = Host::node_counts(&host_ids, conn).await?;
 
         let org_ids = hosts.iter().map(|h| h.as_ref().org_id).collect();
         let orgs = Org::by_ids(org_ids, conn)
@@ -528,7 +529,6 @@ impl Lookup {
             .to_map_keep_all(|(host_id, ip)| (host_id, ip));
 
         Ok(Lookup {
-            nodes,
             orgs,
             regions,
             ip_addresses,
@@ -635,6 +635,7 @@ impl api::HostServiceListRequest {
                     api::HostSortField::CpuCount => Ok(HostSort::CpuCount(order)),
                     api::HostSortField::MemSizeBytes => Ok(HostSort::MemSizeBytes(order)),
                     api::HostSortField::DiskSizeBytes => Ok(HostSort::DiskSizeBytes(order)),
+                    api::HostSortField::NodeCount => Ok(HostSort::NodeCount(order)),
                 }
             })
             .collect::<Result<_, _>>()?;
