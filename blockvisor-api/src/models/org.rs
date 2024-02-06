@@ -1,5 +1,4 @@
-use std::collections::VecDeque;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
 use diesel::dsl;
@@ -20,8 +19,8 @@ use crate::database::Conn;
 use crate::util::{SearchOperator, SortOrder};
 
 use super::rbac::RbacUser;
-use super::schema::{hosts, nodes, orgs, user_roles};
-use super::{Host, Node, Paginate, Token};
+use super::schema::{orgs, user_roles};
+use super::{Paginate, Token};
 
 const PERSONAL_ORG_NAME: &str = "Personal";
 
@@ -31,6 +30,12 @@ type NotDeleted = dsl::Filter<orgs::table, dsl::IsNull<orgs::deleted_at>>;
 pub enum Error {
     /// Failed to create org: {0}
     Create(diesel::result::Error),
+    /// Failed to decrement host count for org `{0}`: {1}
+    DecrementHost(OrgId, diesel::result::Error),
+    /// Failed to decrement member count for org `{0}`: {1}
+    DecrementMember(OrgId, diesel::result::Error),
+    /// Failed to decrement node count for org `{0}`: {1}
+    DecrementNode(OrgId, diesel::result::Error),
     /// Failed to delete org `{0}`: {1}
     Delete(OrgId, diesel::result::Error),
     /// Failed to find org by id `{0}`: {1}
@@ -39,18 +44,18 @@ pub enum Error {
     FindByIds(HashSet<OrgId>, diesel::result::Error),
     /// Failed to find personal org for user `{0}`: {1}
     FindPersonal(UserId, diesel::result::Error),
+    /// Failed to increment host count for org `{0}`: {1}
+    IncrementHost(OrgId, diesel::result::Error),
+    /// Failed to increment member count for org `{0}`: {1}
+    IncrementMember(OrgId, diesel::result::Error),
+    /// Failed to increment node count for org `{0}`: {1}
+    IncrementNode(OrgId, diesel::result::Error),
     /// Failed to check if org `{0}` has user `{1}`: {2}
     HasUser(OrgId, UserId, diesel::result::Error),
-    /// Failed to parse host count for org: {0}
-    HostCount(std::num::TryFromIntError),
     /// Failed to get host counts for org: {0}
     HostCounts(diesel::result::Error),
     /// Failed to find org memberships for user `{0}`: {1}
     Memberships(UserId, diesel::result::Error),
-    /// Failed to parse node count for org: {0}
-    NodeCount(std::num::TryFromIntError),
-    /// Failed to get node counts for org: {0}
-    NodeCounts(diesel::result::Error),
     /// Org pagination: {0}
     Paginate(#[from] crate::models::paginate::Error),
     /// Org model RBAC error: {0}
@@ -86,6 +91,9 @@ pub struct Org {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
+    pub host_count: i32,
+    pub node_count: i32,
+    pub member_count: i32,
 }
 
 impl Org {
@@ -147,8 +155,7 @@ impl Org {
 
         Token::new_host_provision(user_id, org_id, conn).await?;
         RbacUser::link_roles(user_id, org_id, roles.copied(), conn).await?;
-
-        Ok(())
+        Org::increment_member(org_id, conn).await
     }
 
     pub async fn has_user(
@@ -172,9 +179,8 @@ impl Org {
         conn: &mut Conn<'_>,
     ) -> Result<(), Error> {
         Token::delete_host_provision(user_id, org_id, conn).await?;
-        RbacUser::unlink_role(user_id, org_id, None::<Role>, conn)
-            .await
-            .map_err(Into::into)
+        RbacUser::unlink_role(user_id, org_id, None::<Role>, conn).await?;
+        Org::decrement_member(org_id, conn).await
     }
 
     /// Marks the the given organization as deleted
@@ -192,40 +198,76 @@ impl Org {
             .map_err(|err| Error::Delete(org_id, err))
     }
 
-    pub async fn host_counts(
-        org_ids: &HashSet<OrgId>,
-        conn: &mut Conn<'_>,
-    ) -> Result<HashMap<OrgId, u64>, Error> {
-        let counts: Vec<(OrgId, i64)> = Host::not_deleted()
-            .filter(hosts::org_id.eq_any(org_ids))
-            .group_by(hosts::org_id)
-            .select((hosts::org_id, dsl::count(hosts::id)))
-            .get_results(conn)
+    pub async fn increment_host(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+        diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
+            .set((
+                orgs::host_count.eq(orgs::host_count + 1),
+                orgs::updated_at.eq(Utc::now()),
+            ))
+            .execute(conn)
             .await
-            .map_err(Error::HostCounts)?;
-
-        counts
-            .into_iter()
-            .map(|(id, count)| Ok((id, count.try_into().map_err(Error::HostCount)?)))
-            .collect()
+            .map(|_| ())
+            .map_err(|err| Error::IncrementHost(org_id, err))
     }
 
-    pub async fn node_counts(
-        org_ids: &HashSet<OrgId>,
-        conn: &mut Conn<'_>,
-    ) -> Result<HashMap<OrgId, u64>, Error> {
-        let counts: Vec<(OrgId, i64)> = Node::not_deleted()
-            .filter(nodes::org_id.eq_any(org_ids))
-            .group_by(nodes::org_id)
-            .select((nodes::org_id, dsl::count(nodes::id)))
-            .get_results(conn)
+    pub async fn decrement_host(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+        diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
+            .set((
+                orgs::host_count.eq(orgs::host_count - 1),
+                orgs::updated_at.eq(Utc::now()),
+            ))
+            .execute(conn)
             .await
-            .map_err(Error::NodeCounts)?;
+            .map(|_| ())
+            .map_err(|err| Error::DecrementHost(org_id, err))
+    }
 
-        counts
-            .into_iter()
-            .map(|(id, count)| Ok((id, count.try_into().map_err(Error::NodeCount)?)))
-            .collect()
+    pub async fn increment_node(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+        diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
+            .set((
+                orgs::node_count.eq(orgs::node_count + 1),
+                orgs::updated_at.eq(Utc::now()),
+            ))
+            .execute(conn)
+            .await
+            .map(|_| ())
+            .map_err(|err| Error::IncrementNode(org_id, err))
+    }
+
+    pub async fn decrement_node(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+        diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
+            .set((
+                orgs::node_count.eq(orgs::node_count - 1),
+                orgs::updated_at.eq(Utc::now()),
+            ))
+            .execute(conn)
+            .await
+            .map(|_| ())
+            .map_err(|err| Error::DecrementNode(org_id, err))
+    }
+
+    pub async fn increment_member(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+        diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
+            .set((
+                orgs::member_count.eq(orgs::member_count + 1),
+                orgs::updated_at.eq(Utc::now()),
+            ))
+            .execute(conn)
+            .await
+            .map(|_| ())
+            .map_err(|err| Error::IncrementMember(org_id, err))
+    }
+
+    pub async fn decrement_member(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+        diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
+            .set((
+                orgs::member_count.eq(orgs::member_count - 1),
+                orgs::updated_at.eq(Utc::now()),
+            ))
+            .execute(conn)
+            .await
+            .map(|_| ())
+            .map_err(|err| Error::DecrementMember(org_id, err))
     }
 
     fn not_deleted() -> NotDeleted {
@@ -250,6 +292,9 @@ pub enum OrgSort {
     Name(SortOrder),
     CreatedAt(SortOrder),
     UpdatedAt(SortOrder),
+    HostCount(SortOrder),
+    NodeCount(SortOrder),
+    MemberCount(SortOrder),
 }
 
 impl OrgSort {
@@ -258,6 +303,9 @@ impl OrgSort {
         orgs::name: SelectableExpression<T>,
         orgs::created_at: SelectableExpression<T>,
         orgs::updated_at: SelectableExpression<T>,
+        orgs::host_count: SelectableExpression<T>,
+        orgs::node_count: SelectableExpression<T>,
+        orgs::member_count: SelectableExpression<T>,
     {
         use OrgSort::*;
         use SortOrder::*;
@@ -271,6 +319,15 @@ impl OrgSort {
 
             UpdatedAt(Asc) => Box::new(orgs::updated_at.asc()),
             UpdatedAt(Desc) => Box::new(orgs::updated_at.desc()),
+
+            HostCount(Asc) => Box::new(orgs::host_count.asc()),
+            HostCount(Desc) => Box::new(orgs::host_count.desc()),
+
+            NodeCount(Asc) => Box::new(orgs::node_count.asc()),
+            NodeCount(Desc) => Box::new(orgs::node_count.desc()),
+
+            MemberCount(Asc) => Box::new(orgs::member_count.asc()),
+            MemberCount(Desc) => Box::new(orgs::member_count.desc()),
         }
     }
 }

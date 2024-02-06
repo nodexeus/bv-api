@@ -27,7 +27,7 @@ use super::blockchain::{Blockchain, BlockchainId};
 use super::ip_address::NewIpAddressRange;
 use super::node::{NodeScheduler, NodeType, ResourceAffinity};
 use super::schema::{hosts, nodes, sql_types};
-use super::{Command, Node};
+use super::{Command, Node, Org};
 use super::{Paginate, Region, RegionId};
 
 type NotDeleted = dsl::Filter<hosts::table, dsl::IsNull<hosts::deleted_at>>;
@@ -64,6 +64,8 @@ pub enum Error {
     NodeCounts(diesel::result::Error),
     /// Nothing to update.
     NoUpdate,
+    /// Host org error: {0}
+    Org(#[from] crate::models::org::Error),
     /// Host pagination: {0}
     Paginate(#[from] crate::models::paginate::Error),
     /// Failed to parse host ip address: {0}
@@ -92,6 +94,7 @@ impl From<Error> for Status {
             ParseIp(_) => Status::invalid_argument("ip_addr"),
             Paginate(err) => err.into(),
             IpAddress(err) => err.into(),
+            Org(err) => err.into(),
             Region(err) => err.into(),
             _ => Status::internal("Internal error."),
         }
@@ -207,12 +210,13 @@ impl Host {
     }
 
     pub async fn delete(id: HostId, conn: &mut Conn<'_>) -> Result<(), Error> {
-        diesel::update(Self::not_deleted().find(id))
+        let host: Host = diesel::update(Self::not_deleted().find(id))
             .set(hosts::deleted_at.eq(Utc::now()))
-            .execute(conn)
+            .get_result(conn)
             .await
             .map_err(|err| Error::Delete(id, err))?;
 
+        Org::decrement_host(host.org_id, conn).await?;
         Command::delete_host_pending(id, conn)
             .await
             .map_err(|err| Error::Command(Box::new(err)))?;
@@ -551,6 +555,7 @@ impl NewHost<'_> {
         let ip_gateway = self.ip_gateway.ip();
         let ip_range_from = self.ip_range_from.ip();
         let ip_range_to = self.ip_range_to.ip();
+        let org_id = self.org_id;
 
         let host: Host = diesel::insert_into(hosts::table)
             .values(self)
@@ -558,6 +563,7 @@ impl NewHost<'_> {
             .await
             .map_err(Error::Create)?;
 
+        Org::increment_host(org_id, conn).await?;
         NewIpAddressRange::try_new(ip_range_from, ip_range_to, host.id)?
             .create(&[ip_addr, ip_gateway], conn)
             .await?;

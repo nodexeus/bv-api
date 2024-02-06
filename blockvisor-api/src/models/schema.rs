@@ -339,6 +339,9 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         deleted_at -> Nullable<Timestamptz>,
+        host_count -> Int4,
+        node_count -> Int4,
+        member_count -> Int4,
     }
 }
 

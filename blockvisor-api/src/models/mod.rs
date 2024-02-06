@@ -48,6 +48,8 @@ pub use token::Token;
 pub mod user;
 pub use user::User;
 
-diesel::sql_function!(fn lower(x: diesel::sql_types::Text) -> diesel::sql_types::Text);
-diesel::sql_function!(fn string_to_array(version: diesel::sql_types::Text, split: diesel::sql_types::Text) -> diesel::sql_types::Array<diesel::sql_types::Text>);
-diesel::sql_function!(fn text(version: diesel::sql_types::Uuid) -> diesel::sql_types::Text);
+use diesel::{sql_function, sql_types};
+
+sql_function!(fn lower(x: sql_types::Text) -> sql_types::Text);
+sql_function!(fn string_to_array(version: sql_types::Text, split: sql_types::Text) -> sql_types::Array<diesel::sql_types::Text>);
+sql_function!(fn text(version: sql_types::Uuid) -> sql_types::Text);

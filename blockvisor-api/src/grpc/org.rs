@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::collections::HashSet;
 
 use diesel_async::scoped_futures::ScopedFutureExt;
@@ -35,14 +36,14 @@ pub enum Error {
     Diesel(#[from] diesel::result::Error),
     /// Org invitation error: {0}
     Invitation(#[from] crate::models::invitation::Error),
-    /// Failed to parse member count: {0}
-    MemberCount(std::num::TryFromIntError),
     /// Missing permission: org-remove-self
     MissingRemoveSelf,
     /// Org model error: {0}
     Model(#[from] crate::models::org::Error),
     /// Failed to parse `id` as OrgId: {0}
     ParseId(uuid::Error),
+    /// Failed to parse non-zero count as u64: {0}
+    ParseMax(std::num::TryFromIntError),
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
     /// Failed to parse UserId: {0}
@@ -73,7 +74,7 @@ impl From<Error> for Status {
             ClaimsNotUser | DeletePersonal | MissingRemoveSelf => {
                 Status::permission_denied("Access denied.")
             }
-            ConvertNoOrg | Diesel(_) | MemberCount(_) => Status::internal("Internal error."),
+            ConvertNoOrg | Diesel(_) | ParseMax(_) => Status::internal("Internal error."),
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
@@ -362,9 +363,6 @@ impl api::Org {
             .map(|org| org.as_ref().id)
             .collect::<HashSet<_>>();
 
-        let host_counts = Org::host_counts(&org_ids, conn).await?;
-        let node_counts = Org::node_counts(&org_ids, conn).await?;
-
         let mut org_users = OrgUsers::for_org_ids(&org_ids, conn).await?;
         let mut invitations = Invitation::for_org_ids(&org_ids, conn).await?;
 
@@ -417,10 +415,11 @@ impl api::Org {
                     personal: org.is_personal,
                     created_at: Some(NanosUtc::from(org.created_at).into()),
                     updated_at: Some(NanosUtc::from(org.updated_at).into()),
-                    member_count: members.len().try_into().map_err(Error::MemberCount)?,
+                    host_count: u64::try_from(max(0, org.host_count)).map_err(Error::ParseMax)?,
+                    node_count: u64::try_from(max(0, org.node_count)).map_err(Error::ParseMax)?,
+                    member_count: u64::try_from(max(0, org.member_count))
+                        .map_err(Error::ParseMax)?,
                     members,
-                    host_count: host_counts.get(&org.id).copied().unwrap_or(0),
-                    node_count: node_counts.get(&org.id).copied().unwrap_or(0),
                 })
             })
             .collect()
@@ -463,6 +462,9 @@ impl api::OrgServiceListRequest {
                     api::OrgSortField::Name => Ok(OrgSort::Name(order)),
                     api::OrgSortField::CreatedAt => Ok(OrgSort::CreatedAt(order)),
                     api::OrgSortField::UpdatedAt => Ok(OrgSort::UpdatedAt(order)),
+                    api::OrgSortField::HostCount => Ok(OrgSort::HostCount(order)),
+                    api::OrgSortField::NodeCount => Ok(OrgSort::NodeCount(order)),
+                    api::OrgSortField::MemberCount => Ok(OrgSort::MemberCount(order)),
                 }
             })
             .collect::<Result<_, _>>()?;
