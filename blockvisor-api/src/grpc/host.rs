@@ -217,7 +217,7 @@ impl HostService for Grpc {
 
 async fn create(
     req: api::HostServiceCreateRequest,
-    _meta: MetadataMap,
+    _: MetadataMap,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceCreateResponse, Error> {
     let token = Token::host_provision_by_token(&req.provision_token, &mut write)

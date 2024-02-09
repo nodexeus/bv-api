@@ -150,7 +150,7 @@ impl AuthService for Grpc {
 
 async fn login(
     req: api::AuthServiceLoginRequest,
-    _meta: MetadataMap,
+    _: MetadataMap,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceLoginResponse, Error> {
     // No auth claims are required as the password is checked instead.
@@ -171,7 +171,7 @@ async fn login(
 }
 
 async fn confirm(
-    _req: api::AuthServiceConfirmRequest,
+    _: api::AuthServiceConfirmRequest,
     meta: MetadataMap,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceConfirmResponse, Error> {
@@ -248,7 +248,7 @@ async fn refresh(
 /// then done through the `update` function.
 async fn reset_password(
     req: api::AuthServiceResetPasswordRequest,
-    _meta: MetadataMap,
+    _: MetadataMap,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceResetPasswordResponse, Error> {
     // We are going to query the user and send them an email, but when something goes wrong we

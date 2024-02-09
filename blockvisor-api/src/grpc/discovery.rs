@@ -47,7 +47,7 @@ impl DiscoveryService for Grpc {
 }
 
 async fn services(
-    _req: api::DiscoveryServiceServicesRequest,
+    _: api::DiscoveryServiceServicesRequest,
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::DiscoveryServiceServicesResponse, Error> {

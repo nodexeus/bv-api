@@ -90,7 +90,7 @@ async fn retrieve(
 
 /// List all available bundle versions.
 async fn list_bundle_versions(
-    _req: api::BundleServiceListBundleVersionsRequest,
+    _: api::BundleServiceListBundleVersionsRequest,
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BundleServiceListBundleVersionsResponse, Error> {
@@ -102,7 +102,7 @@ async fn list_bundle_versions(
 
 /// Delete bundle from storage.
 async fn delete(
-    _req: api::BundleServiceDeleteRequest,
+    _: api::BundleServiceDeleteRequest,
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BundleServiceDeleteResponse, Error> {
