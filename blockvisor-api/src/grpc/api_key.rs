@@ -129,7 +129,7 @@ async fn create(
 }
 
 async fn list(
-    _req: api::ApiKeyServiceListRequest,
+    _: api::ApiKeyServiceListRequest,
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ApiKeyServiceListResponse, Error> {

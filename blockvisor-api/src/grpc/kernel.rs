@@ -77,8 +77,8 @@ async fn retrieve_kernel_(
 }
 
 async fn list_kernel_versions(
-    _req: api::KernelServiceListKernelVersionsRequest,
-    _meta: MetadataMap,
+    _: api::KernelServiceListKernelVersionsRequest,
+    _: MetadataMap,
     read: ReadConn<'_, '_>,
 ) -> Result<api::KernelServiceListKernelVersionsResponse, Error> {
     let identifiers = read.ctx.storage.list_kernels().await?;
