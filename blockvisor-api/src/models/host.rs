@@ -211,21 +211,19 @@ impl Host {
             .map_err(|err| Error::FindByName(name.into(), err))
     }
 
-    pub async fn increment_node(host_id: HostId, conn: &mut Conn<'_>) -> Result<(), Error> {
+    pub async fn increment_node(host_id: HostId, conn: &mut Conn<'_>) -> Result<Self, Error> {
         diesel::update(hosts::table.filter(hosts::id.eq(host_id)))
             .set(hosts::node_count.eq(hosts::node_count + 1))
-            .execute(conn)
+            .get_result(conn)
             .await
-            .map(|_| ())
             .map_err(|err| Error::IncrementNode(host_id, err))
     }
 
-    pub async fn decrement_node(host_id: HostId, conn: &mut Conn<'_>) -> Result<(), Error> {
+    pub async fn decrement_node(host_id: HostId, conn: &mut Conn<'_>) -> Result<Self, Error> {
         diesel::update(hosts::table.filter(hosts::id.eq(host_id)))
             .set(hosts::node_count.eq(hosts::node_count - 1))
-            .execute(conn)
+            .get_result(conn)
             .await
-            .map(|_| ())
             .map_err(|err| Error::DecrementNode(host_id, err))
     }
 

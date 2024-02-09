@@ -128,7 +128,7 @@ impl Org {
         user_id: UserId,
         org_id: OrgId,
         conn: &mut Conn<'_>,
-    ) -> Result<(), Error> {
+    ) -> Result<Self, Error> {
         Self::add_user(user_id, org_id, OrgRole::Admin, conn).await
     }
 
@@ -136,7 +136,7 @@ impl Org {
         user_id: UserId,
         org_id: OrgId,
         conn: &mut Conn<'_>,
-    ) -> Result<(), Error> {
+    ) -> Result<Self, Error> {
         Self::add_user(user_id, org_id, OrgRole::Member, conn).await
     }
 
@@ -145,7 +145,7 @@ impl Org {
         org_id: OrgId,
         role: OrgRole,
         conn: &mut Conn<'_>,
-    ) -> Result<(), Error> {
+    ) -> Result<Self, Error> {
         let roles = match role {
             OrgRole::Owner => [OrgRole::Owner, OrgRole::Admin, OrgRole::Member].iter(),
             OrgRole::Admin => [OrgRole::Admin, OrgRole::Member].iter(),
@@ -177,7 +177,7 @@ impl Org {
         user_id: UserId,
         org_id: OrgId,
         conn: &mut Conn<'_>,
-    ) -> Result<(), Error> {
+    ) -> Result<Self, Error> {
         Token::delete_host_provision(user_id, org_id, conn).await?;
         RbacUser::unlink_role(user_id, org_id, None::<Role>, conn).await?;
         Org::decrement_member(org_id, conn).await
@@ -198,75 +198,69 @@ impl Org {
             .map_err(|err| Error::Delete(org_id, err))
     }
 
-    pub async fn increment_host(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+    pub async fn increment_host(org_id: OrgId, conn: &mut Conn<'_>) -> Result<Self, Error> {
         diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
             .set((
                 orgs::host_count.eq(orgs::host_count + 1),
                 orgs::updated_at.eq(Utc::now()),
             ))
-            .execute(conn)
+            .get_result(conn)
             .await
-            .map(|_| ())
             .map_err(|err| Error::IncrementHost(org_id, err))
     }
 
-    pub async fn decrement_host(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+    pub async fn decrement_host(org_id: OrgId, conn: &mut Conn<'_>) -> Result<Self, Error> {
         diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
             .set((
                 orgs::host_count.eq(orgs::host_count - 1),
                 orgs::updated_at.eq(Utc::now()),
             ))
-            .execute(conn)
+            .get_result(conn)
             .await
-            .map(|_| ())
             .map_err(|err| Error::DecrementHost(org_id, err))
     }
 
-    pub async fn increment_node(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+    pub async fn increment_node(org_id: OrgId, conn: &mut Conn<'_>) -> Result<Self, Error> {
         diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
             .set((
                 orgs::node_count.eq(orgs::node_count + 1),
                 orgs::updated_at.eq(Utc::now()),
             ))
-            .execute(conn)
+            .get_result(conn)
             .await
-            .map(|_| ())
             .map_err(|err| Error::IncrementNode(org_id, err))
     }
 
-    pub async fn decrement_node(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+    pub async fn decrement_node(org_id: OrgId, conn: &mut Conn<'_>) -> Result<Self, Error> {
         diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
             .set((
                 orgs::node_count.eq(orgs::node_count - 1),
                 orgs::updated_at.eq(Utc::now()),
             ))
-            .execute(conn)
+            .get_result(conn)
             .await
-            .map(|_| ())
             .map_err(|err| Error::DecrementNode(org_id, err))
     }
 
-    pub async fn increment_member(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+    pub async fn increment_member(org_id: OrgId, conn: &mut Conn<'_>) -> Result<Self, Error> {
         diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
             .set((
                 orgs::member_count.eq(orgs::member_count + 1),
                 orgs::updated_at.eq(Utc::now()),
             ))
-            .execute(conn)
+            .get_result(conn)
             .await
-            .map(|_| ())
             .map_err(|err| Error::IncrementMember(org_id, err))
     }
 
-    pub async fn decrement_member(org_id: OrgId, conn: &mut Conn<'_>) -> Result<(), Error> {
+    pub async fn decrement_member(org_id: OrgId, conn: &mut Conn<'_>) -> Result<Self, Error> {
         diesel::update(orgs::table.filter(orgs::id.eq(org_id)))
             .set((
                 orgs::member_count.eq(orgs::member_count - 1),
                 orgs::updated_at.eq(Utc::now()),
             ))
-            .execute(conn)
+            .get_result(conn)
             .await
-            .map(|_| ())
             .map_err(|err| Error::DecrementMember(org_id, err))
     }
 
@@ -429,9 +423,7 @@ impl<'a> NewOrg<'a> {
             .await
             .map_err(Error::Create)?;
 
-        Org::add_user(user_id, org.id, role, conn).await?;
-
-        Ok(org)
+        Org::add_user(user_id, org.id, role, conn).await
     }
 }
 

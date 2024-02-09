@@ -276,8 +276,7 @@ async fn accept(
 
     // Only registered users can accept an invitation
     let user = User::by_email(&invitation.invitee_email, &mut write).await?;
-    let org = Org::by_id(invitation.org_id, &mut write).await?;
-    Org::add_member(user.id, org.id, &mut write).await?;
+    let org = Org::add_member(user.id, invitation.org_id, &mut write).await?;
 
     let invitation = api::Invitation::from_model(invitation, &org, &mut write).await?;
     let accepted = api::OrgMessage::invitation_accepted(invitation, &org, user);
