@@ -187,8 +187,10 @@ impl Email {
         let lang = recipient.preferred_language.unwrap_or(Language::En);
         let template = self.templates.render(kind, lang, context)?;
 
-        let mail = v3::Message::new(v3::Email::new(recipient.email).set_name(name))
-            .set_from(v3::Email::new(FROM_EMAIL).set_name(FROM_NAME))
+        let to = v3::Email::new(recipient.email).set_name(name);
+        let from = v3::Email::new(FROM_EMAIL).set_name(FROM_NAME);
+        let mail = v3::Message::new(from)
+            .add_personalization(v3::Personalization::new(to))
             .set_subject(kind.subject())
             .add_content(
                 v3::Content::new()
