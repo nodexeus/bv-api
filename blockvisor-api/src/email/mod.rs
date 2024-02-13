@@ -194,13 +194,13 @@ impl Email {
             .set_subject(kind.subject())
             .add_content(
                 v3::Content::new()
-                    .set_content_type("text/html")
-                    .set_value(template.html),
+                    .set_content_type("text/plain")
+                    .set_value(template.text),
             )
             .add_content(
                 v3::Content::new()
-                    .set_content_type("text/plain")
-                    .set_value(template.text),
+                    .set_content_type("text/html")
+                    .set_value(template.html),
             )
             .set_tracking_settings(Self::tracking_settings());
 
