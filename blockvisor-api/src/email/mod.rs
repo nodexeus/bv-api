@@ -189,19 +189,17 @@ impl Email {
 
         let to = v3::Email::new(recipient.email).set_name(name);
         let from = v3::Email::new(FROM_EMAIL).set_name(FROM_NAME);
+        let text = v3::Content::new()
+            .set_content_type("text/plain")
+            .set_value(template.text);
+        let html = v3::Content::new()
+            .set_content_type("text/html")
+            .set_value(template.html);
         let mail = v3::Message::new(from)
             .add_personalization(v3::Personalization::new(to))
             .set_subject(kind.subject())
-            .add_content(
-                v3::Content::new()
-                    .set_content_type("text/plain")
-                    .set_value(template.text),
-            )
-            .add_content(
-                v3::Content::new()
-                    .set_content_type("text/html")
-                    .set_value(template.html),
-            )
+            .add_content(text)
+            .add_content(html)
             .set_tracking_settings(Self::tracking_settings());
 
         self.sender.send_mail(mail).await
