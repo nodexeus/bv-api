@@ -11,7 +11,7 @@ use crate::database::WriteConn;
 use crate::grpc::api;
 use crate::models::command::NewCommand;
 use crate::models::node::{NewNodeLog, NodeLogEvent, UpdateNode};
-use crate::models::{Blockchain, Command, CommandType, IpAddress, Node};
+use crate::models::{Blockchain, Command, CommandType, Host, IpAddress, Node};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -27,6 +27,8 @@ pub enum Error {
     CreateNodeId,
     /// Failed to create deployment log: {0}
     DeploymentLog(crate::models::node::log::Error),
+    /// Command recovery host error: {0}
+    Host(#[from] crate::models::host::Error),
     /// Command recovery node error: {0}
     Node(#[from] crate::models::node::Error),
     /// Command recovery failed to update node: {0}
@@ -44,13 +46,14 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
+            Cloudflare(_) => Status::internal("Internal error."),
             CreateNodeId => Status::invalid_argument("node_id"),
+            AssignIp(err) | FindIp(err) | UnassignIp(err) => err.into(),
             Blockchain(err) => err.into(),
             CancelationLog(err) | DeploymentLog(err) => err.into(),
-            Cloudflare(_) => Status::internal("Internal error."),
             Command(err) => err.into(),
+            Host(err) => err.into(),
             Node(err) | UpdateNode(err) => err.into(),
-            UnassignIp(err) | AssignIp(err) | FindIp(err) => err.into(),
         }
     }
 }
@@ -143,15 +146,20 @@ async fn recover_created(
             Err(err) => return Err(Error::CancelationLog(err)),
         }
     };
+
     let ip = IpAddress::next_for_host(host.id, write)
         .await
         .map_err(Error::FindIp)?;
     let ip_addr = ip.ip().to_string();
     let ip_gateway = host.ip_gateway.ip().to_string();
+
+    Host::decrement_node(node.host_id, write).await?;
+    Host::increment_node(host.id, write).await?;
+
     let update = UpdateNode {
+        host_id: Some(host.id),
         ip_addr: Some(&ip_addr),
         ip_gateway: Some(&ip_gateway),
-        host_id: Some(host.id),
         ..Default::default()
     };
     let node = node
