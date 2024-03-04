@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::auth::rbac::{NodeAdminPerm, NodePerm};
 use crate::auth::resource::{
-    HostId, NodeId, Resource, ResourceEntry, ResourceId, ResourceType, UserId,
+    HostId, NodeId, OrgId, Resource, ResourceEntry, ResourceId, ResourceType, UserId,
 };
 use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
@@ -291,6 +291,8 @@ async fn create(
     meta: MetadataMap,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceCreateResponse, Error> {
+    let org_id = req.org_id.parse().map_err(Error::ParseOrgId)?;
+
     // The host_id is either determined by the scheduler, or an optional host_id.
     let (host, authz) = if let Some(host_id) = req.host_id()? {
         let host = Host::by_id(host_id, &mut write).await?;
@@ -301,7 +303,7 @@ async fn create(
     } else if let Ok(authz) = write.auth_all(&meta, NodeAdminPerm::Create).await {
         (None, authz)
     } else {
-        let authz = write.auth_all(&meta, NodePerm::Create).await?;
+        let authz = write.auth(&meta, NodePerm::Create, org_id).await?;
         (None, authz)
     };
 
@@ -318,7 +320,9 @@ async fn create(
 
     let requirements = write.ctx.storage.rhai_metadata(&image).await?.requirements;
     let created_by = authz.resource();
-    let new_node = req.as_new(requirements, created_by, &mut write).await?;
+    let new_node = req
+        .as_new(requirements, org_id, created_by, &mut write)
+        .await?;
     let node = new_node.create(host, &authz, &mut write).await?;
 
     // The user sends in the properties in a key-value style, that is,
@@ -786,6 +790,7 @@ impl api::NodeServiceCreateRequest {
     pub async fn as_new(
         &self,
         requirements: HardwareRequirements,
+        org_id: OrgId,
         created_by: Resource,
         conn: &mut Conn<'_>,
     ) -> Result<NewNode, Error> {
@@ -821,7 +826,7 @@ impl api::NodeServiceCreateRequest {
 
         Ok(NewNode {
             id: Uuid::new_v4().into(),
-            org_id: self.org_id.parse().map_err(Error::ParseOrgId)?,
+            org_id,
             name,
             version: self.version.clone().into(),
             blockchain_id: self
