@@ -24,6 +24,8 @@ use super::{api, common, Grpc};
 pub enum Error {
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
+    /// Failed to remove user from org with permission `org-remove-self`, user to remove is not self
+    CanOnlyRemoveSelf,
     /// No org found after conversion.
     ConvertNoOrg,
     /// Claims check failed: {0}
@@ -36,8 +38,6 @@ pub enum Error {
     Diesel(#[from] diesel::result::Error),
     /// Org invitation error: {0}
     Invitation(#[from] crate::models::invitation::Error),
-    /// Missing permission: org-remove-self
-    MissingRemoveSelf,
     /// Org model error: {0}
     Model(#[from] crate::models::org::Error),
     /// Failed to parse `id` as OrgId: {0}
@@ -71,7 +71,7 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            ClaimsNotUser | DeletePersonal | MissingRemoveSelf => {
+            ClaimsNotUser | DeletePersonal | CanOnlyRemoveSelf => {
                 Status::permission_denied("Access denied.")
             }
             ConvertNoOrg | Diesel(_) | ParseMax(_) => Status::internal("Internal error."),
@@ -280,16 +280,23 @@ async fn remove_member(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::OrgServiceRemoveMemberResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
-    let authz = write.auth(&meta, OrgPerm::RemoveMember, org_id).await?;
 
     let user_id = req.user_id.parse().map_err(Error::ParseUserId)?;
     let user = User::by_id(user_id, &mut write).await?;
 
-    if let Some(self_id) = authz.resource().user() {
-        if user_id == self_id && !authz.has_perm(OrgPerm::RemoveSelf) {
-            return Err(Error::MissingRemoveSelf);
+    let authz = match write.auth(&meta, OrgPerm::RemoveMember, org_id).await {
+        Ok(authz) => authz,
+        Err(err) => {
+            if let Ok(authz) = write.auth(&meta, OrgPerm::RemoveSelf, org_id).await {
+                if Some(user_id) != authz.resource().user() {
+                    return Err(Error::CanOnlyRemoveSelf);
+                }
+                authz
+            } else {
+                return Err(err.into());
+            }
         }
-    }
+    };
 
     let org = Org::by_id(org_id, &mut write).await?;
     if org.is_personal {
