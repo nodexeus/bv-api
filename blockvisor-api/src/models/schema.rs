@@ -325,11 +325,11 @@ diesel::table! {
         created_by_resource -> Nullable<EnumResourceType>,
         deleted_at -> Nullable<Timestamptz>,
         node_type -> EnumNodeType,
-        node_status -> EnumNodeStatus,
         container_status -> EnumContainerStatus,
         sync_status -> EnumNodeSyncStatus,
         staking_status -> Nullable<EnumNodeStakingStatus>,
         note -> Nullable<Text>,
+        node_status -> EnumNodeStatus,
         url -> Text,
     }
 }
