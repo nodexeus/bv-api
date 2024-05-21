@@ -92,21 +92,6 @@ impl NodeLog {
             .map_err(Error::ByNode)
     }
 
-    /// Finds all deployments belonging to the provided node, that were created after the provided
-    /// date.
-    pub async fn by_node_id_since(
-        node_id: NodeId,
-        since: DateTime<Utc>,
-        conn: &mut Conn<'_>,
-    ) -> Result<Self, Error> {
-        node_logs::table
-            .filter(node_logs::node_id.eq(node_id))
-            .filter(node_logs::created_at.gt(since))
-            .get_result(conn)
-            .await
-            .map_err(Error::ByNodeSince)
-    }
-
     /// Returns the number of distinct hosts we have tried to deploy a node on. To do this it counts
     /// the number of `CreateSent` events that were undertaken.
     pub async fn hosts_tried(
