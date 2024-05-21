@@ -40,6 +40,8 @@ pub enum Error {
     SearchOperator(crate::util::search::Error),
     /// Sort order: {0}
     SortOrder(crate::util::search::Error),
+    /// Stripe error: {0}
+    Stripe(#[from] crate::stripe::Error),
     /// The requested sort field is unknown.
     UnknownSortField,
     /// User settings error: {0}
@@ -51,7 +53,9 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Diesel(_) | Email(_) | ParseInvitationId(_) => Status::internal("Internal error."),
+            Diesel(_) | Email(_) | ParseInvitationId(_) | Stripe(_) => {
+                Status::internal("Internal error.")
+            }
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
@@ -162,6 +166,15 @@ impl UserService for Grpc {
     ) -> Result<Response<api::UserServiceDeleteSettingsResponse>, Status> {
         let (meta, _, req) = req.into_parts();
         self.write(|write| delete_settings(req, meta, write).scope_boxed())
+            .await
+    }
+
+    async fn init_card(
+        &self,
+        req: Request<api::UserServiceInitCardRequest>,
+    ) -> Result<Response<api::UserServiceInitCardResponse>, Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| init_card(req, meta, write).scope_boxed())
             .await
     }
 }
@@ -360,6 +373,26 @@ async fn delete_settings(
     UserSetting::delete(user.id, &req.name, &mut write).await?;
 
     Ok(api::UserServiceDeleteSettingsResponse {})
+}
+
+async fn init_card(
+    req: api::UserServiceInitCardRequest,
+    meta: MetadataMap,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::UserServiceInitCardResponse, Error> {
+    let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
+    write
+        .auth(&meta, UserBillingPerm::InitCard, user_id)
+        .await?;
+
+    let client_secret = write
+        .ctx
+        .stripe
+        .create_setup_intent(user_id)
+        .await?
+        .client_secret;
+
+    Ok(api::UserServiceInitCardResponse { client_secret })
 }
 
 impl api::User {
