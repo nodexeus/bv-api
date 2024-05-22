@@ -66,10 +66,8 @@ impl Client {
     where
         E: Endpoint,
     {
-        let url = self
-            .endpoint
-            .join(&endpoint.path())
-            .map_err(Error::JoinEndpoint)?;
+        let url =
+            dbg!(dbg!(&self.endpoint).join(dbg!(&endpoint.path()))).map_err(Error::JoinEndpoint)?;
 
         let mut request = self
             .inner
