@@ -8,7 +8,7 @@ use url::Url;
 use super::api::Endpoint;
 
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(5);
-const CONTENT_JSON: &str = "application/json";
+const CONTENT_FORM_ENCODED: &str = "application/x-www-form-urlencoded";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -76,7 +76,7 @@ impl Client {
 
         if let Some(body) = endpoint.body() {
             request = request.body(body);
-            request = request.header(CONTENT_TYPE, CONTENT_JSON);
+            request = request.header(CONTENT_TYPE, CONTENT_FORM_ENCODED);
         }
 
         let resp = request
