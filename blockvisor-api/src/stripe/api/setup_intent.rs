@@ -67,16 +67,16 @@ pub struct CreateSetupIntent<'a> {
     /// SetupIntent.
     #[serde(skip_serializing_if = "Option::is_none")]
     payment_method: Option<&'a str>,
-    /// The list of payment method types (for example, card) that this SetupIntent can use. If you
-    /// don’t provide this, it defaults to [“card”].
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    payment_method_types: Vec<&'a str>,
+    // /// The list of payment method types (for example, card) that this SetupIntent can use. If you
+    // /// don’t provide this, it defaults to [“card”].
+    // #[serde(skip_serializing_if = "Vec::is_empty")]
+    // payment_method_types: &'a str,
 }
 
 impl CreateSetupIntent<'_> {
     pub fn new(org_id: OrgId, user_id: UserId) -> Self {
         Self {
-            payment_method_types: vec!["card"],
+            // payment_method_types: vec!["card"],
             metadata: Some(super::Metadata(hashmap! {
                 "org_id".to_string() => org_id.to_string(),
                 "created_by_user".to_string() => user_id.to_string(),
