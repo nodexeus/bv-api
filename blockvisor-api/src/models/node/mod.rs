@@ -867,6 +867,8 @@ impl UpdateNodeMetrics {
 
 #[cfg(test)]
 mod tests {
+    use diesel_async::scoped_futures::ScopedFutureExt;
+    use diesel_async::AsyncConnection;
     use tokio::sync::mpsc;
     use uuid::Uuid;
 
@@ -918,12 +920,19 @@ mod tests {
             meta_tx,
             mqtt_tx,
         };
-
         let authz = view_authz(&ctx, db.seed.node.id, &mut write).await;
         let host = db.seed.host.clone();
         let host_id = db.seed.host.id;
-        req.create(Some(host), &authz, &mut write).await.unwrap();
-
+        write
+            .transaction(|conn| {
+                async move {
+                    req.create(Some(host), &authz, conn).await.unwrap();
+                    Ok(()) as Result<(), diesel::result::Error>
+                }
+                .scope_boxed()
+            })
+            .await
+            .unwrap();
         let filter = NodeFilter {
             org_ids: vec![org_id],
             offset: 0,
