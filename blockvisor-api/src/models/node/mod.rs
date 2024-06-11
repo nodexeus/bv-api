@@ -93,8 +93,10 @@ pub enum Error {
     Host(#[from] super::host::Error),
     /// Only available host candidate failed.
     HostCandidateFailed,
-    /// Ip address error: {0},
+    /// Ip address error: {0}
     IpAddr(#[from] super::ip_address::Error),
+    /// Failed to lock table `nodes`: {0}
+    Lock(diesel::result::Error),
     /// Failed to get next host ip for node: {0}
     NextHostIp(crate::models::ip_address::Error),
     /// Node log error: {0}
@@ -690,10 +692,17 @@ impl NewNode {
             self.find_host(scheduler, authz, write).await?
         };
 
+        let ip_gateway = host.ip_gateway.ip().to_string();
+
+        // We are having concurrency issues with the node ip selection, so we take an exclusive lock
+        // before selecting the right ip.
+        diesel::sql_query("LOCK TABLE nodes IN EXCLUSIVE MODE;")
+            .execute(write)
+            .await
+            .map_err(Error::Lock)?;
         let node_ip = IpAddress::by_host_unassigned(host.id, write)
             .await
             .map_err(Error::NextHostIp)?;
-        let ip_gateway = host.ip_gateway.ip().to_string();
 
         let dns_record = write.ctx.dns.create(&self.name, node_ip.ip()).await?;
         let dns_id = dns_record.id;
