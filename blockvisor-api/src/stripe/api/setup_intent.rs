@@ -61,9 +61,9 @@ pub struct CreateSetupIntent<'a> {
     /// by posting an empty value to them. All keys can be unset by posting an empty value to
     /// metadata.
     #[serde(rename = "metadata[org_id]")]
-    metadata_org_id: Option<OrgId>,
+    metadata_org_id: Option<String>,
     #[serde(rename = "metadata[created_by_user]")]
-    metadata_user_id: Option<UserId>,
+    metadata_user_id: Option<String>,
     /// ID of the payment method (a PaymentMethod, Card, or saved Source object) to attach to this
     /// SetupIntent.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,8 +73,8 @@ pub struct CreateSetupIntent<'a> {
 impl CreateSetupIntent<'_> {
     pub fn new(org_id: OrgId, user_id: UserId) -> Self {
         Self {
-            metadata_org_id: Some(org_id),
-            metadata_user_id: Some(user_id),
+            metadata_org_id: Some(org_id.to_string()),
+            metadata_user_id: Some(user_id.to_string()),
             ..Default::default()
         }
     }
