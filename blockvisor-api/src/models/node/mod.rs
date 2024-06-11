@@ -845,7 +845,7 @@ impl UpdateNodeMetrics {
         Ok(results)
     }
 
-    fn has_field(&self) -> bool {
+    const fn has_field(&self) -> bool {
         self.block_height.is_some()
             || self.block_age.is_some()
             || self.staking_status.is_some()
