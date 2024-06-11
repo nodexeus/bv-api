@@ -1,8 +1,5 @@
-use std::any::type_name;
-
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
 
 use crate::auth::resource::{OrgId, UserId};
 
@@ -43,7 +40,7 @@ struct Card {
 /// permissions to charge the payment method later.
 ///
 /// <https://docs.stripe.com/api/setup_intents/create>
-#[derive(Serialize, Default)]
+#[derive(Debug, Serialize, Default)]
 pub struct CreateSetupIntent<'a> {
     /// Set to true to attempt to confirm this SetupIntent immediately. This parameter defaults to
     /// false. If a card is the attached payment method, you can provide a return_url in case
@@ -100,10 +97,8 @@ impl super::StripeEndpoint for CreateSetupIntent<'_> {
         "setup_intents".to_string()
     }
 
-    fn body(&self) -> Option<String> {
-        serde_json::to_string(self)
-            .map_err(|err| warn!("Failed to serialize {}: {}", type_name::<Self>(), err))
-            .ok()
+    fn body(&self) -> Option<&Self> {
+        Some(self)
     }
 }
 
