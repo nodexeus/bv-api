@@ -682,6 +682,12 @@ impl NewNode {
         authz: &AuthZ,
         mut write: &mut WriteConn<'_, '_>,
     ) -> Result<Node, Error> {
+        // We are having concurrency issues with the node ip selection, so we take an exclusive lock
+        // before selecting the right ip and host.
+        diesel::sql_query("LOCK TABLE nodes IN EXCLUSIVE MODE;")
+            .execute(write)
+            .await
+            .map_err(Error::Lock)?;
         let host = if let Some(host) = host {
             host
         } else {
@@ -693,13 +699,6 @@ impl NewNode {
         };
 
         let ip_gateway = host.ip_gateway.ip().to_string();
-
-        // We are having concurrency issues with the node ip selection, so we take an exclusive lock
-        // before selecting the right ip.
-        diesel::sql_query("LOCK TABLE nodes IN EXCLUSIVE MODE;")
-            .execute(write)
-            .await
-            .map_err(Error::Lock)?;
         let node_ip = IpAddress::by_host_unassigned(host.id, write)
             .await
             .map_err(Error::NextHostIp)?;
