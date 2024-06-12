@@ -680,8 +680,6 @@ impl NewNode {
         authz: &AuthZ,
         mut write: &mut WriteConn<'_, '_>,
     ) -> Result<Node, Error> {
-        // We are having concurrency issues with the node ip selection, so we take an exclusive lock
-        // before selecting the right ip and host.
         let host = if let Some(host) = host {
             host
         } else {
