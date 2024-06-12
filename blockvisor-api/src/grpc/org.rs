@@ -40,6 +40,8 @@ pub enum Error {
     Invitation(#[from] crate::models::invitation::Error),
     /// Org model error: {0}
     Model(#[from] crate::models::org::Error),
+    /// No customer exists in stripe for org `{0}`.
+    NoCustomer(OrgId),
     /// Failed to parse `id` as OrgId: {0}
     ParseId(uuid::Error),
     /// Failed to parse non-zero count as u64: {0}
@@ -86,6 +88,7 @@ impl From<Error> for Status {
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
+            NoCustomer(_) => Status::failed_precondition("No customer for that org."),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Invitation(err) => err.into(),
@@ -184,7 +187,16 @@ impl OrgService for Grpc {
         req: Request<api::OrgServiceListPaymentMethodsRequest>,
     ) -> Result<Response<api::OrgServiceListPaymentMethodsResponse>, Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| list_payment_methods(req, meta, write).scope_boxed())
+        self.read(|read| list_payment_methods(req, meta, read).scope_boxed())
+            .await
+    }
+
+    async fn billing_details(
+        &self,
+        req: Request<api::OrgServiceBillingDetailsRequest>,
+    ) -> Result<Response<api::OrgServiceBillingDetailsResponse>, Status> {
+        let (meta, _, req) = req.into_parts();
+        self.read(|read| billing_details(req, meta, read).scope_boxed())
             .await
     }
 }
@@ -401,16 +413,15 @@ async fn init_card(
 async fn list_payment_methods(
     req: api::OrgServiceListPaymentMethodsRequest,
     meta: MetadataMap,
-    mut write: WriteConn<'_, '_>,
+    mut read: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceListPaymentMethodsResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
-    write
-        .auth(&meta, OrgBillingPerm::ListPaymentMethods, org_id)
+    read.auth(&meta, OrgBillingPerm::ListPaymentMethods, org_id)
         .await?;
 
-    let org = Org::by_id(org_id, &mut write).await?;
+    let org = Org::by_id(org_id, &mut read).await?;
     let payment_methods = if let Some(customer_id) = &org.stripe_customer_id {
-        write.ctx.stripe.list_payment_methods(customer_id).await?
+        read.ctx.stripe.list_payment_methods(customer_id).await?
     } else {
         vec![]
     };
@@ -418,7 +429,6 @@ async fn list_payment_methods(
     let methods = payment_methods
         .into_iter()
         .map(|pm| api::PaymentMethod {
-            id: None,
             org_id: Some(org_id.to_string()),
             user_id: pm.metadata.and_then(|meta| meta.get("user_id").cloned()),
             details: Some(api::BillingDetails {
@@ -452,6 +462,51 @@ async fn list_payment_methods(
         .collect();
 
     Ok(api::OrgServiceListPaymentMethodsResponse { methods })
+}
+
+async fn billing_details(
+    req: api::OrgServiceBillingDetailsRequest,
+    meta: MetadataMap,
+    mut read: ReadConn<'_, '_>,
+) -> Result<api::OrgServiceBillingDetailsResponse, Error> {
+    let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
+    read.auth(&meta, OrgBillingPerm::ListPaymentMethods, org_id)
+        .await?;
+
+    let org = Org::by_id(org_id, &mut read).await?;
+    let subscription = if let Some(customer_id) = org.stripe_customer_id.as_deref() {
+        read.ctx.stripe.get_subscription(customer_id).await?
+    } else {
+        return Err(Error::NoCustomer(org_id));
+    };
+
+    Ok(api::OrgServiceBillingDetailsResponse {
+        currency: subscription.currency.to_string(),
+        current_period_start: chrono::DateTime::from_timestamp(
+            subscription.current_period_start.0,
+            0,
+        )
+        .map(NanosUtc::from)
+        .map(Into::into),
+        current_period_end: chrono::DateTime::from_timestamp(subscription.current_period_end.0, 0)
+            .map(NanosUtc::from)
+            .map(Into::into),
+        default_payment_method: subscription.default_payment_method,
+        created_at: chrono::DateTime::from_timestamp(subscription.created.0, 0)
+            .map(NanosUtc::from)
+            .map(Into::into),
+        status: subscription.status.to_string(),
+        items: subscription
+            .items
+            .data
+            .into_iter()
+            .map(|item| api::BillingItem {
+                name: item.price.as_ref().and_then(|price| price.nickname.clone()),
+                unit_amount: item.price.as_ref().and_then(|price| price.unit_amount),
+                quantity: item.quantity,
+            })
+            .collect(),
+    })
 }
 
 impl api::Org {
