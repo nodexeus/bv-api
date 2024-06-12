@@ -95,8 +95,6 @@ pub enum Error {
     HostCandidateFailed,
     /// Ip address error: {0}
     IpAddr(#[from] super::ip_address::Error),
-    /// Failed to lock table `nodes`: {0}
-    Lock(diesel::result::Error),
     /// Failed to get next host ip for node: {0}
     NextHostIp(crate::models::ip_address::Error),
     /// Node log error: {0}
@@ -684,10 +682,6 @@ impl NewNode {
     ) -> Result<Node, Error> {
         // We are having concurrency issues with the node ip selection, so we take an exclusive lock
         // before selecting the right ip and host.
-        diesel::sql_query("LOCK TABLE nodes IN EXCLUSIVE MODE;")
-            .execute(write)
-            .await
-            .map_err(Error::Lock)?;
         let host = if let Some(host) = host {
             host
         } else {

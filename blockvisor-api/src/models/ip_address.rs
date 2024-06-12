@@ -25,6 +25,8 @@ pub enum Error {
     FindByHosts(HashSet<HostId>, diesel::result::Error),
     /// Failed to find ip address for ip `{0}`: {1}
     FindByIp(IpAddr, diesel::result::Error),
+    /// Failed to lock table `nodes`: {0}
+    Lock(diesel::result::Error),
     /// Failed to get next IP for host: {0}
     NextForHost(diesel::result::Error),
     /// Failed to create new IP network: {0}
@@ -89,6 +91,8 @@ impl IpAddress {
             .left_join(nodes::table.on(node_for_this_ip))
             .filter(nodes::id.is_null())
             .select(ip_addresses::all_columns)
+            .for_update()
+            .skip_locked()
             .get_result(conn)
             .await
             .map_err(Error::NextForHost)
