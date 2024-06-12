@@ -108,19 +108,16 @@ async fn setup_intent_succeeded_handler(
         .parse()
         .map_err(Error::BadOrgId)?;
     let org = models::Org::by_id(org_id, &mut write).await?;
-    match org.stripe_customer_id.as_ref() {
-        // We have an existing customer, attach this payment method.
-        Some(stripe_customer_id) => {
-            stripe
-                .attach_payment_method(&setup_intent.payment_method, stripe_customer_id)
-                .await?;
-        }
-        // No customer exists yet, create one and include the payment method straight away.
-        None => {
-            stripe
-                .create_customer(&org, &setup_intent.payment_method)
-                .await?;
-        }
+    if let Some(stripe_customer_id) = org.stripe_customer_id.as_ref() {
+        stripe
+            .attach_payment_method(&setup_intent.payment_method, stripe_customer_id)
+            .await?;
+    } else {
+        let customer_id = stripe
+            .create_customer(&org, &setup_intent.payment_method)
+            .await?
+            .id;
+        org.set_customer_id(&customer_id, &mut write).await?;
     };
 
     Ok("subscription created")
