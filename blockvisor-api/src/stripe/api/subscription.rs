@@ -252,7 +252,7 @@ impl super::StripeEndpoint for ListSubscriptions<'_> {
         "subscriptions".to_string()
     }
 
-    fn body(&self) -> Option<&Self> {
+    fn query(&self) -> Option<&Self> {
         Some(self)
     }
 }

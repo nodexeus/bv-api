@@ -26,7 +26,7 @@ pub trait StripeEndpoint: Send + Sync + Sized {
     fn path(&self) -> String;
 
     /// The url-encoded query string associated with this endpoint.
-    fn query(&self) -> Option<String> {
+    fn query(&self) -> Option<&Self> {
         None
     }
 
