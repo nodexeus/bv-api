@@ -245,7 +245,7 @@ impl super::StripeEndpoint for ListSubscriptions<'_> {
     type Result = super::ListResponse<Subscription>;
 
     fn method(&self) -> reqwest::Method {
-        reqwest::Method::POST
+        reqwest::Method::GET
     }
 
     fn path(&self) -> String {
