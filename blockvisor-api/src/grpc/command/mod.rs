@@ -443,7 +443,7 @@ async fn node_create(
     let version =
         BlockchainVersion::find(blockchain.id, node.node_type, &node.version, conn).await?;
 
-    let id_to_names = BlockchainProperty::id_to_name_map(version.id, conn).await?;
+    let id_to_names = BlockchainProperty::id_to_names(version.id, conn).await?;
     let properties = node
         .properties(conn)
         .await?

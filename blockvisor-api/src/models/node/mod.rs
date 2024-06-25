@@ -44,6 +44,7 @@ use crate::auth::resource::{
 };
 use crate::auth::AuthZ;
 use crate::database::{Conn, WriteConn};
+use crate::grpc::api;
 use crate::storage::image::ImageId;
 use crate::util::{SearchOperator, SortOrder};
 
@@ -113,6 +114,8 @@ pub enum Error {
     Org(#[from] crate::models::org::Error),
     /// Node pagination: {0}
     Paginate(#[from] crate::models::paginate::Error),
+    /// Failed to parse HostId: {0}
+    ParseHostId(uuid::Error),
     /// Failed to parse IpAddr: {0}
     ParseIpAddr(std::net::AddrParseError),
     /// Node region error: {0}
@@ -646,9 +649,7 @@ impl NodeSearch {
 #[derive(Debug, Insertable)]
 #[diesel(table_name = nodes)]
 pub struct NewNode {
-    pub id: NodeId,
     pub org_id: OrgId,
-    pub name: String,
     pub version: NodeVersion,
     pub blockchain_id: BlockchainId,
     pub block_height: Option<i64>,
@@ -677,67 +678,92 @@ pub struct NewNode {
 
 impl NewNode {
     pub async fn create(
-        mut self,
-        host: Option<Host>,
-        authz: &AuthZ,
-        mut write: &mut WriteConn<'_, '_>,
-    ) -> Result<Node, Error> {
-        let host = if let Some(host) = host {
-            host
+        &self,
+        node_counts: Option<Vec<NodeCount>>,
+        blockchain: &Blockchain,
+        write: &mut WriteConn<'_, '_>,
+    ) -> Result<Vec<Node>, Error> {
+        let mut created = Vec::new();
+
+        if let Some(counts) = node_counts {
+            for count in counts {
+                for _ in 0..count.node_count {
+                    match self.create_node(count.host_id, write).await {
+                        Ok(node) => created.push(node),
+                        Err(err) => {
+                            for node in created {
+                                let dns_id = &node.dns_record_id;
+                                if let Err(err) = write.ctx.dns.delete(dns_id).await {
+                                    warn!("Failed to delete DNS record {dns_id}: {err}");
+                                }
+                            }
+
+                            return Err(err);
+                        }
+                    }
+                }
+            }
         } else {
             let scheduler = self
                 .scheduler(write)
                 .await?
                 .ok_or(Error::NoHostOrScheduler)?;
-            self.find_host(scheduler, authz, write).await?
-        };
+            let host = self.find_host(scheduler, blockchain, write).await?;
+            created.push(self.create_node(host.id, write).await?);
+        }
 
+        Ok(created)
+    }
+
+    async fn create_node(
+        &self,
+        host_id: HostId,
+        mut write: &mut WriteConn<'_, '_>,
+    ) -> Result<Node, Error> {
+        let host = Host::by_id(host_id, write).await?;
         let ip_gateway = host.ip_gateway.ip().to_string();
         let node_ip = IpAddress::by_host_unassigned(host.id, write)
             .await
             .map_err(Error::NextHostIp)?;
 
-        let dns_record = write.ctx.dns.create(&self.name, node_ip.ip()).await?;
-        let dns_id = dns_record.id;
-
-        let blockchain = Blockchain::by_id(self.blockchain_id, authz, write).await?;
-        let image = ImageId::new(blockchain.name, self.node_type, self.version.clone());
-        let meta = write.ctx.storage.rhai_metadata(&image).await?;
-        let data_directory_mountpoint = meta
-            .babel_config
-            .and_then(|cfg| cfg.data_directory_mount_point);
-
-        Org::increment_node(self.org_id, write).await?;
-        Host::increment_node(host.id, write).await?;
-
         loop {
+            let name = Petnames::small()
+                .generate_one(3, "-")
+                .ok_or(Error::RegenerateName)?;
+            let dns_record = write.ctx.dns.create(&name, node_ip.ip()).await?;
+            let dns_id = dns_record.id;
+
             match diesel::insert_into(nodes::table)
                 .values((
-                    &self,
+                    self,
+                    nodes::name.eq(&name),
                     nodes::host_id.eq(host.id),
                     nodes::ip_gateway.eq(&ip_gateway),
                     nodes::ip.eq(node_ip.ip),
                     nodes::dns_record_id.eq(&dns_id),
-                    nodes::data_directory_mountpoint.eq(&data_directory_mountpoint),
                     nodes::url.eq(&dns_record.name),
                 ))
                 .get_result(&mut write)
                 .await
             {
-                Ok(node) => return Ok(node),
-                Err(DatabaseError(UniqueViolation, info)) if info.column_name() == Some("name") => {
-                    warn!("Node name {} already taken. Retrying...", self.name);
-                    self.name = Petnames::small()
-                        .generate_one(3, "-")
-                        .ok_or(Error::RegenerateName)?;
-                    continue;
+                Ok(node) => {
+                    Org::increment_node(self.org_id, write).await?;
+                    Host::increment_node(host.id, write).await?;
+                    return Ok(node);
                 }
+
                 Err(err) => {
                     if let Err(err) = write.ctx.dns.delete(&dns_id).await {
-                        warn!(
-                            "Failed to delete DNS record {dns_id} for aborted node creation: {err}"
-                        );
+                        warn!("Failed to delete DNS record {dns_id}: {err}");
                     }
+
+                    if let DatabaseError(UniqueViolation, ref info) = err {
+                        if info.column_name() == Some("name") {
+                            warn!("Node name {} already taken. Retrying...", name);
+                            continue;
+                        }
+                    }
+
                     return Err(Error::Create(err));
                 }
             }
@@ -752,12 +778,10 @@ impl NewNode {
     async fn find_host(
         &self,
         scheduler: NodeScheduler,
-        authz: &AuthZ,
+        blockchain: &Blockchain,
         write: &mut WriteConn<'_, '_>,
     ) -> Result<Host, Error> {
-        let chain = Blockchain::by_id(self.blockchain_id, authz, write).await?;
-
-        let image = ImageId::new(chain.name, self.node_type, self.version.clone());
+        let image = ImageId::new(&blockchain.name, self.node_type, self.version.clone());
         let metadata = write.ctx.storage.rhai_metadata(&image).await?;
 
         let requirements = HostRequirements {
@@ -788,6 +812,31 @@ impl NewNode {
             similarity: self.scheduler_similarity,
             resource,
         }))
+    }
+}
+
+pub struct NodeCount {
+    pub host_id: HostId,
+    pub node_count: u32,
+}
+
+impl NodeCount {
+    pub const fn one(host_id: HostId) -> Self {
+        NodeCount {
+            host_id,
+            node_count: 1,
+        }
+    }
+}
+
+impl TryFrom<&api::NodeCount> for NodeCount {
+    type Error = Error;
+
+    fn try_from(api: &api::NodeCount) -> Result<Self, Self::Error> {
+        Ok(NodeCount {
+            host_id: api.host_id.parse().map_err(Error::ParseHostId)?,
+            node_count: api.node_count,
+        })
     }
 }
 
@@ -863,7 +912,6 @@ mod tests {
     use diesel_async::scoped_futures::ScopedFutureExt;
     use diesel_async::AsyncConnection;
     use tokio::sync::mpsc;
-    use uuid::Uuid;
 
     use crate::auth::rbac::access::tests::view_authz;
     use crate::config::Context;
@@ -874,12 +922,12 @@ mod tests {
     async fn can_filter_nodes() {
         let (ctx, db) = Context::with_mocked().await.unwrap();
 
-        let blockchain_id = db.seed.blockchain.id;
         let user_id = db.seed.user.id;
         let org_id = db.seed.org.id;
+        let host_id = db.seed.host.id;
+        let blockchain_id = db.seed.blockchain.id;
 
         let req = NewNode {
-            id: Uuid::new_v4().into(),
             org_id,
             blockchain_id,
             node_status: NodeStatus::Ingesting,
@@ -887,7 +935,6 @@ mod tests {
             container_status: ContainerStatus::Installing,
             block_height: None,
             node_data: None,
-            name: "my-test-node".to_string(),
             version: "3.3.0".to_string().into(),
             staking_status: StakingStatus::Staked,
             self_update: false,
@@ -913,13 +960,17 @@ mod tests {
             meta_tx,
             mqtt_tx,
         };
+
+        let node_counts = Some(vec![NodeCount::one(host_id)]);
         let authz = view_authz(&ctx, db.seed.node.id, &mut write).await;
-        let host = db.seed.host.clone();
-        let host_id = db.seed.host.id;
+        let blockchain = Blockchain::by_id(blockchain_id, &authz, &mut write)
+            .await
+            .unwrap();
+
         write
             .transaction(|conn| {
                 async move {
-                    req.create(Some(host), &authz, conn).await.unwrap();
+                    req.create(node_counts, &blockchain, conn).await.unwrap();
                     Ok(()) as Result<(), diesel::result::Error>
                 }
                 .scope_boxed()
