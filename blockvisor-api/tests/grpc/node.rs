@@ -70,6 +70,7 @@ async fn responds_ok_for_update_config() {
         }],
         org_id: None,
         note: Some("milk, eggs, bread and copious snacks".to_string()),
+        display_name: Some("<script>alert('XSS');</script>".to_string()),
     };
 
     test.send_with(Service::update_config, req, &jwt)
@@ -93,6 +94,11 @@ async fn responds_ok_for_update_config() {
     assert_eq!(
         node.note,
         Some("milk, eggs, bread and copious snacks".to_string())
+    );
+
+    assert_eq!(
+        node.display_name,
+        "<script>alert('XSS');</script>".to_string()
     );
 
     validate_command(&test).await;
@@ -226,6 +232,7 @@ async fn responds_ok_with_valid_data_for_update_config() {
         deny_ips: vec![],
         org_id: None,
         note: None,
+        display_name: None,
     };
     test.send_admin(Service::update_config, req).await.unwrap();
     validate_command(&test).await;

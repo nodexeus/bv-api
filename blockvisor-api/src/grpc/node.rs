@@ -812,7 +812,9 @@ impl api::Node {
             host_id: node.host_id.to_string(),
             host_name: host.name.clone(),
             blockchain_id: node.blockchain_id.to_string(),
-            name: node.name,
+            node_name: node.node_name,
+            dns_name: node.dns_name,
+            display_name: node.display_name,
             address: node.address,
             version: node.version.into(),
             ip: node.ip.ip().to_string(),
@@ -1019,8 +1021,10 @@ impl api::NodeServiceListRequest {
                         .try_into()
                         .map_err(Error::SearchOperator)?,
                     id: search.id.map(|id| id.trim().to_lowercase()),
-                    name: search.name.map(|name| name.trim().to_lowercase()),
                     ip: search.ip.map(|ip| ip.trim().to_lowercase()),
+                    node_name: search.node_name.map(|name| name.trim().to_lowercase()),
+                    dns_name: search.dns_name.map(|name| name.trim().to_lowercase()),
+                    display_name: search.display_name.map(|name| name.trim().to_lowercase()),
                 })
             })
             .transpose()?;
@@ -1032,6 +1036,8 @@ impl api::NodeServiceListRequest {
                     api::NodeSortField::Unspecified => Err(Error::UnknownSortField),
                     api::NodeSortField::HostName => Ok(NodeSort::HostName(order)),
                     api::NodeSortField::NodeName => Ok(NodeSort::NodeName(order)),
+                    api::NodeSortField::DnsName => Ok(NodeSort::DnsName(order)),
+                    api::NodeSortField::DisplayName => Ok(NodeSort::DisplayName(order)),
                     api::NodeSortField::NodeType => Ok(NodeSort::NodeType(order)),
                     api::NodeSortField::CreatedAt => Ok(NodeSort::CreatedAt(order)),
                     api::NodeSortField::UpdatedAt => Ok(NodeSort::UpdatedAt(order)),
@@ -1072,7 +1078,6 @@ impl api::NodeServiceListRequest {
 
 impl api::NodeServiceUpdateConfigRequest {
     pub fn as_update(&self) -> Result<UpdateNode<'_>, Error> {
-        // Convert the ip list from the gRPC structures to the database models.
         let allow_ips: Vec<FilteredIpAddr> = self
             .allow_ips
             .iter()
@@ -1092,7 +1097,7 @@ impl api::NodeServiceUpdateConfigRequest {
                 .transpose()
                 .map_err(Error::ParseOrgId)?,
             host_id: None,
-            name: None,
+            display_name: self.display_name.as_deref(),
             version: None,
             ip: None,
             ip_gateway: None,
@@ -1116,7 +1121,7 @@ impl api::NodeServiceUpdateStatusRequest {
         Ok(UpdateNode {
             org_id: None,
             host_id: None,
-            name: None,
+            display_name: None,
             version: self.version.as_deref().map(NodeVersion::new).transpose()?,
             ip: None,
             ip_gateway: None,
