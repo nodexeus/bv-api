@@ -160,7 +160,7 @@ pub struct Node {
     pub id: NodeId,
     pub org_id: OrgId,
     pub host_id: HostId,
-    pub name: String,
+    pub node_name: String,
     pub version: NodeVersion,
     pub address: Option<String>,
     pub wallet_address: Option<String>,
@@ -196,6 +196,8 @@ pub struct Node {
     pub node_status: NodeStatus,
     pub url: String,
     pub ip: IpNetwork,
+    pub dns_name: String,
+    pub display_name: String,
 }
 
 impl Node {
@@ -432,13 +434,17 @@ pub struct FilteredIpAddr {
 pub struct NodeSearch {
     pub operator: SearchOperator,
     pub id: Option<String>,
-    pub name: Option<String>,
     pub ip: Option<String>,
+    pub node_name: Option<String>,
+    pub dns_name: Option<String>,
+    pub display_name: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum NodeSort {
     NodeName(SortOrder),
+    DnsName(SortOrder),
+    DisplayName(SortOrder),
     HostName(SortOrder),
     CreatedAt(SortOrder),
     UpdatedAt(SortOrder),
@@ -453,7 +459,9 @@ pub enum NodeSort {
 impl NodeSort {
     fn into_expr<T>(self) -> Box<dyn BoxableExpression<T, Pg, SqlType = NotSelectable>>
     where
-        nodes::name: SelectableExpression<T>,
+        nodes::node_name: SelectableExpression<T>,
+        nodes::dns_name: SelectableExpression<T>,
+        nodes::display_name: SelectableExpression<T>,
         hosts::name: SelectableExpression<T>,
         nodes::created_at: SelectableExpression<T>,
         nodes::updated_at: SelectableExpression<T>,
@@ -468,8 +476,14 @@ impl NodeSort {
         use SortOrder::*;
 
         match self {
-            NodeName(Asc) => Box::new(nodes::name.asc()),
-            NodeName(Desc) => Box::new(nodes::name.desc()),
+            NodeName(Asc) => Box::new(nodes::node_name.asc()),
+            NodeName(Desc) => Box::new(nodes::node_name.desc()),
+
+            DnsName(Asc) => Box::new(nodes::dns_name.asc()),
+            DnsName(Desc) => Box::new(nodes::dns_name.desc()),
+
+            DisplayName(Asc) => Box::new(nodes::display_name.asc()),
+            DisplayName(Desc) => Box::new(nodes::display_name.desc()),
 
             HostName(Asc) => Box::new(hosts::name.asc()),
             HostName(Desc) => Box::new(hosts::name.desc()),
@@ -619,11 +633,18 @@ impl NodeSearch {
                 if let Some(id) = self.id {
                     predicate = Box::new(predicate.or(super::text(nodes::id).like(id)));
                 }
-                if let Some(name) = self.name {
-                    predicate = Box::new(predicate.or(super::lower(nodes::name).like(name)));
-                }
                 if let Some(ip) = self.ip {
                     predicate = Box::new(predicate.or(abbrev(nodes::ip).like(ip)));
+                }
+                if let Some(name) = self.node_name {
+                    predicate = Box::new(predicate.or(super::lower(nodes::node_name).like(name)));
+                }
+                if let Some(name) = self.dns_name {
+                    predicate = Box::new(predicate.or(super::lower(nodes::dns_name).like(name)));
+                }
+                if let Some(name) = self.display_name {
+                    predicate =
+                        Box::new(predicate.or(super::lower(nodes::display_name).like(name)));
                 }
                 predicate
             }
@@ -634,11 +655,18 @@ impl NodeSearch {
                 if let Some(id) = self.id {
                     predicate = Box::new(predicate.and(super::text(nodes::id).like(id)));
                 }
-                if let Some(name) = self.name {
-                    predicate = Box::new(predicate.and(super::lower(nodes::name).like(name)));
-                }
                 if let Some(ip) = self.ip {
                     predicate = Box::new(predicate.and(abbrev(nodes::ip).like(ip)));
+                }
+                if let Some(name) = self.node_name {
+                    predicate = Box::new(predicate.and(super::lower(nodes::node_name).like(name)));
+                }
+                if let Some(name) = self.dns_name {
+                    predicate = Box::new(predicate.and(super::lower(nodes::dns_name).like(name)));
+                }
+                if let Some(name) = self.display_name {
+                    predicate =
+                        Box::new(predicate.and(super::lower(nodes::display_name).like(name)));
                 }
                 predicate
             }
@@ -736,7 +764,9 @@ impl NewNode {
             match diesel::insert_into(nodes::table)
                 .values((
                     self,
-                    nodes::name.eq(&name),
+                    nodes::node_name.eq(&name),
+                    nodes::dns_name.eq(&name),
+                    nodes::display_name.eq(&name),
                     nodes::host_id.eq(host.id),
                     nodes::ip_gateway.eq(&ip_gateway),
                     nodes::ip.eq(node_ip.ip),
@@ -845,7 +875,7 @@ impl TryFrom<&api::NodeCount> for NodeCount {
 pub struct UpdateNode<'a> {
     pub org_id: Option<OrgId>,
     pub host_id: Option<HostId>,
-    pub name: Option<&'a str>,
+    pub display_name: Option<&'a str>,
     pub version: Option<NodeVersion>,
     pub ip: Option<IpNetwork>,
     pub ip_gateway: Option<&'a str>,
