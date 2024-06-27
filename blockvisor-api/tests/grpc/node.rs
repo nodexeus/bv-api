@@ -13,7 +13,7 @@ use crate::setup::TestServer;
 type Service = api::node_service_client::NodeServiceClient<Channel>;
 
 #[tokio::test]
-async fn can_create_node_with_dns() {
+async fn can_create_multiple() {
     let test = TestServer::new().await;
     let mut conn = test.conn().await;
 
@@ -25,18 +25,30 @@ async fn can_create_node_with_dns() {
         version: "3.3.0".to_string(),
         network: "some network".to_string(),
         placement: Some(api::NodePlacement {
-            placement: Some(api::node_placement::Placement::HostId(
-                test.seed().host.id.to_string(),
+            placement: Some(api::node_placement::Placement::Multiple(
+                api::MultipleNodes {
+                    node_counts: vec![api::NodeCount {
+                        host_id: test.seed().host.id.to_string(),
+                        node_count: 2,
+                    }],
+                },
             )),
         }),
         allow_ips: vec![],
         deny_ips: vec![],
     };
-    let resp = test.send_admin(Service::create, req).await.unwrap();
 
-    let node_id = resp.node.unwrap().id.parse().unwrap();
-    let node = Node::by_id(node_id, &mut conn).await.unwrap();
-    assert!(!node.dns_record_id.is_empty());
+    let resp = test.send_admin(Service::create, req).await.unwrap();
+    assert_eq!(resp.nodes.len(), 2);
+
+    let id1 = resp.nodes[0].id.parse().unwrap();
+    let id2 = resp.nodes[1].id.parse().unwrap();
+
+    let node1 = Node::by_id(id1, &mut conn).await.unwrap();
+    assert!(!node1.dns_record_id.is_empty());
+
+    let node2 = Node::by_id(id2, &mut conn).await.unwrap();
+    assert!(!node2.dns_record_id.is_empty());
 }
 
 #[tokio::test]
@@ -132,11 +144,11 @@ async fn responds_ok_with_valid_data_for_create() {
             description: Some("wow so denied".to_string()),
         }],
     };
-    let node = test.send_admin(Service::create, req).await.unwrap();
+    let resp = test.send_admin(Service::create, req).await.unwrap();
 
     // assert that it really exists
     let req = api::NodeServiceGetRequest {
-        id: node.node.unwrap().id,
+        id: resp.nodes[0].id.clone(),
     };
     let resp = test.send_admin(Service::get, req).await.unwrap();
     let node = resp.node.unwrap();
