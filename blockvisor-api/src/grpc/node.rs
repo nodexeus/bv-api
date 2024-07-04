@@ -364,7 +364,7 @@ async fn create(
         .as_new(requirements, org_id, created_by, &mut write)
         .await?;
     let created = new_node
-        .create(node_counts, &blockchain, &mut write)
+        .create(node_counts, &blockchain, &authz, &mut write)
         .await?;
     let mut nodes = Vec::with_capacity(created.len());
 

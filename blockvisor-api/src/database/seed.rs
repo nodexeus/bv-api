@@ -120,6 +120,7 @@ async fn create_orgs(conn: &mut Conn<'_>) -> Org {
             orgs::id.eq(org_id),
             orgs::name.eq("the blockboys"),
             orgs::is_personal.eq(false),
+            orgs::stripe_customer_id.eq("testing testing, is thing thing even on?"),
         ))
         .execute(conn)
         .await
@@ -171,7 +172,9 @@ async fn create_users(org_id: OrgId, conn: &mut Conn<'_>) -> User {
 }
 
 async fn create_region(conn: &mut Conn<'_>) -> Region {
-    Region::get_or_create("moneyland", conn).await.unwrap()
+    Region::get_or_create("moneyland", Some("MOLA"), conn)
+        .await
+        .unwrap()
 }
 
 async fn create_hosts(user: &User, org_id: OrgId, region: &Region, conn: &mut Conn<'_>) -> Host {

@@ -39,6 +39,7 @@ use thiserror::Error;
 use tonic::Status;
 use tracing::warn;
 
+use crate::auth::rbac::NodeAdminPerm;
 use crate::auth::resource::{
     HostId, NodeId, OrgId, Resource, ResourceEntry, ResourceId, ResourceType, UserId,
 };
@@ -110,6 +111,10 @@ pub enum Error {
     NoHostOrScheduler,
     /// Failed to find a matching host.
     NoMatchingHost,
+    /// Org with id `{0}` has no customer in stripe.
+    NoStripeCustomer(OrgId),
+    /// Cannot launch node without a region.
+    NoRegion,
     /// Node org error: {0}
     Org(#[from] crate::models::org::Error),
     /// Node pagination: {0}
@@ -119,13 +124,17 @@ pub enum Error {
     /// Failed to parse IpAddr: {0}
     ParseIpAddr(std::net::AddrParseError),
     /// Node region error: {0}
-    Region(crate::models::region::Error),
+    Region(#[from] crate::models::region::Error),
+    /// The region `{0}` has no pricing set, so we cannot launch nodes here.
+    RegionWithoutPricing(RegionId),
     /// Failed to regenerate node name. This should not happen.
     RegenerateName,
     /// Node report error: {0}
     Report(report::Error),
     /// Storage error for node: {0}
     Storage(#[from] crate::storage::Error),
+    /// Stripe error for node: {0}
+    Stripe(#[from] crate::stripe::Error),
     /// Failed to update node: {0}
     Update(diesel::result::Error),
     /// Failed to update node `{0}`: {1}
@@ -141,6 +150,7 @@ pub enum Error {
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
+        tracing::error!("{err}");
         match err {
             Create(DatabaseError(UniqueViolation, _)) => Status::already_exists("Already exists."),
             Delete(_, NotFound)
@@ -709,14 +719,22 @@ impl NewNode {
         &self,
         node_counts: Option<Vec<NodeCount>>,
         blockchain: &Blockchain,
+        authz: &AuthZ,
         write: &mut WriteConn<'_, '_>,
     ) -> Result<Vec<Node>, Error> {
+        let org = Org::by_id(self.org_id, write).await?;
+
         let mut created = Vec::new();
 
         if let Some(counts) = node_counts {
             for count in counts {
+                let host = Host::by_id(count.host_id, write).await?;
+                let region = Region::by_id(host.region_id.ok_or(Error::NoRegion)?, write).await?;
                 for _ in 0..count.node_count {
-                    match self.create_node(count.host_id, write).await {
+                    match self
+                        .create_node(&host, blockchain, &org, &region, authz, write)
+                        .await
+                    {
                         Ok(node) => created.push(node),
                         Err(err) => {
                             for node in created {
@@ -736,8 +754,12 @@ impl NewNode {
                 .scheduler(write)
                 .await?
                 .ok_or(Error::NoHostOrScheduler)?;
+            let region = scheduler.region.clone().ok_or(Error::NoRegion)?;
             let host = self.find_host(scheduler, blockchain, write).await?;
-            created.push(self.create_node(host.id, write).await?);
+            let node = self
+                .create_node(&host, blockchain, &org, &region, authz, write)
+                .await?;
+            created.push(node);
         }
 
         Ok(created)
@@ -745,14 +767,47 @@ impl NewNode {
 
     async fn create_node(
         &self,
-        host_id: HostId,
+        host: &Host,
+        blockchain: &Blockchain,
+        org: &Org,
+        region: &Region,
+        authz: &AuthZ,
         mut write: &mut WriteConn<'_, '_>,
     ) -> Result<Node, Error> {
-        let host = Host::by_id(host_id, write).await?;
         let ip_gateway = host.ip_gateway.ip().to_string();
         let node_ip = IpAddress::by_host_unassigned(host.id, write)
             .await
             .map_err(Error::NextHostIp)?;
+
+        // We let superusers continue making new nodes unmolested so as not to interfere with any
+        // testing.
+        let needs_billing = !authz.has_perm(NodeAdminPerm::Create);
+        if needs_billing {
+            let stripe_customer_id = org
+                .stripe_customer_id
+                .as_ref()
+                .ok_or_else(|| Error::NoStripeCustomer(org.id))?;
+            let sku = self.sku(blockchain, region)?;
+            let price = write.ctx.stripe.get_price(&sku).await?;
+            if let Some(subscription) = write
+                .ctx
+                .stripe
+                .get_subscription(stripe_customer_id)
+                .await?
+            {
+                write
+                    .ctx
+                    .stripe
+                    .create_item(&subscription.id, &price.id)
+                    .await?;
+            } else {
+                write
+                    .ctx
+                    .stripe
+                    .create_subscription(stripe_customer_id, &price.id)
+                    .await?;
+            }
+        }
 
         loop {
             let name = Petnames::small()
@@ -842,6 +897,29 @@ impl NewNode {
             similarity: self.scheduler_similarity,
             resource,
         }))
+    }
+
+    fn sku(&self, blockchain: &super::Blockchain, region: &super::Region) -> Result<String, Error> {
+        // FMN - hardcoded for Nodes (Fully-Managed Node)
+        // BLASTGETH - Node ticker (Blast Geth)
+        // A - Node Type (archive)
+        // MN - Net type (mainnet)
+        // USW1 - Region (US west)
+        // USD - hardcoded for now
+        // M - Billing cycle (monthly)
+        // FMN-BLASTGETH-A-MN-USW1-USD-M
+        let blockchain = &blockchain.ticker;
+        let full_network_name = self.network.to_uppercase();
+        let network = match full_network_name.as_str() {
+            "main" | "mainnet" => "MN",
+            "test" | "testnet" => "TN",
+            other => &other[0..std::cmp::min(other.len(), 3)],
+        };
+        let region = region
+            .pricing_tier
+            .as_deref()
+            .ok_or_else(|| Error::RegionWithoutPricing(region.id))?;
+        Ok(format!("FMN-{blockchain}-A-{network}-{region}-USD-M"))
     }
 }
 
@@ -1000,7 +1078,9 @@ mod tests {
         write
             .transaction(|conn| {
                 async move {
-                    req.create(node_counts, &blockchain, conn).await.unwrap();
+                    req.create(node_counts, &blockchain, &authz, conn)
+                        .await
+                        .unwrap();
                     Ok(()) as Result<(), diesel::result::Error>
                 }
                 .scope_boxed()
