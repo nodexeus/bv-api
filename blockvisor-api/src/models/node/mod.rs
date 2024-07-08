@@ -909,7 +909,7 @@ impl NewNode {
         // M - Billing cycle (monthly)
         // FMN-BLASTGETH-A-MN-USW1-USD-M
         let blockchain = &blockchain.ticker;
-        let full_network_name = self.network.to_uppercase();
+        let full_network_name = self.network.to_lowercase();
         let network = match full_network_name.as_str() {
             "main" | "mainnet" => "MN",
             "test" | "testnet" => "TN",
