@@ -13,11 +13,12 @@ use displaydoc::Display;
 use thiserror::Error;
 use tracing::{debug, error};
 
+use crate::auth::rbac::{OrgRole, Role};
 use crate::auth::resource::{OrgId, UserId};
 use crate::config::Context;
 use crate::database::{Transaction, WriteConn};
 use crate::http::response::{bad_params, failed, ok_custom};
-use crate::models;
+use crate::models::{self, User};
 use crate::stripe::api::event;
 
 #[derive(Debug, Display, Error)]
@@ -38,8 +39,12 @@ pub enum Error {
     MissingOrgId,
     /// Stripe event is missing a user_id in its metadata.
     MissingUserId,
+    /// Org `{0}` has no owner.
+    NoOwner(OrgId),
     /// Stripe org: {0}
     Org(#[from] crate::models::org::Error),
+    /// Stripe user: {0}
+    User(#[from] crate::models::user::Error),
 }
 
 impl From<Error> for tonic::Status {
@@ -52,7 +57,8 @@ impl From<Error> for tonic::Status {
             BadUserId(_) => tonic::Status::invalid_argument("Could not parse user id"),
             MissingOrgId => tonic::Status::invalid_argument("Org id missing from metadata"),
             BadOrgId(_) => tonic::Status::invalid_argument("Could not parse org id"),
-            Database(_) | Subscription(_) | Org(_) | Stripe(_) => {
+            NoOwner(_) => tonic::Status::failed_precondition("Org has no owner"),
+            Database(_) | Subscription(_) | Org(_) | Stripe(_) | User(_) => {
                 tonic::Status::internal("Internal error.")
             }
         }
@@ -113,8 +119,12 @@ async fn setup_intent_succeeded_handler(
             .attach_payment_method(&setup_intent.payment_method, stripe_customer_id)
             .await?;
     } else {
+        let owner = User::by_org_role(org_id, Role::Org(OrgRole::Owner), &mut write)
+            .await?
+            .pop()
+            .ok_or_else(|| Error::NoOwner(org_id))?;
         let customer_id = stripe
-            .create_customer(&org, &setup_intent.payment_method)
+            .create_customer(&org, &owner, &setup_intent.payment_method)
             .await?
             .id;
         org.set_customer_id(&customer_id, &mut write).await?;

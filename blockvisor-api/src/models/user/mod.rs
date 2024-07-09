@@ -18,6 +18,7 @@ use thiserror::Error;
 use tonic::Status;
 use validator::Validate;
 
+use crate::auth::rbac::Role;
 use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
 use crate::email::Language;
@@ -53,6 +54,8 @@ pub enum Error {
     FindById(UserId, diesel::result::Error),
     /// Failed to find users by ids `{0:?}`: {1}
     FindByIds(HashSet<UserId>, diesel::result::Error),
+    /// Failed to find users with role {1} in org {0}: {2}
+    FindByOrgRole(OrgId, Role, diesel::result::Error),
     /// Failed to check if user `{0}` is confirmed: {1}
     IsConfirmed(UserId, diesel::result::Error),
     /// Login failed because no email was found.
@@ -147,6 +150,21 @@ impl User {
             .get_result(conn)
             .await
             .map_err(|err| Error::FindByEmail(email.to_lowercase(), err))
+    }
+
+    pub async fn by_org_role(
+        org_id: OrgId,
+        role: Role,
+        conn: &mut Conn<'_>,
+    ) -> Result<Vec<Self>, Error> {
+        Self::not_deleted()
+            .inner_join(user_roles::table)
+            .filter(user_roles::org_id.eq(org_id))
+            .filter(user_roles::role.eq(role.to_string()))
+            .select(users::all_columns)
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::FindByOrgRole(org_id, role, err))
     }
 
     pub fn verify_password(&self, password: &str) -> Result<(), Error> {
