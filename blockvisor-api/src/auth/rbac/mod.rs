@@ -268,6 +268,12 @@ define_perms! {
         Delete,
     }
 
+    UserSettingsAdmin => {
+        Get,
+        Update,
+        Delete,
+    }
+
     Billing => {
         Enabled,
     }
