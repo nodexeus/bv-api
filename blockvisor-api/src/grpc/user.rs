@@ -5,7 +5,9 @@ use tonic::metadata::MetadataMap;
 use tonic::{Request, Response, Status};
 use tracing::error;
 
-use crate::auth::rbac::{UserAdminPerm, UserBillingPerm, UserPerm, UserSettingsPerm};
+use crate::auth::rbac::{
+    UserAdminPerm, UserBillingPerm, UserPerm, UserSettingsAdminPerm, UserSettingsPerm,
+};
 use crate::auth::resource::UserId;
 use crate::auth::{self, token, Authorize};
 use crate::database::{ReadConn, Transaction, WriteConn};
@@ -317,7 +319,13 @@ async fn get_settings(
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::UserServiceGetSettingsResponse, Error> {
     let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
-    read.auth(&meta, UserSettingsPerm::Get, user_id).await?;
+    read.auth_or_all(
+        &meta,
+        UserSettingsAdminPerm::Get,
+        UserSettingsPerm::Get,
+        user_id,
+    )
+    .await?;
 
     let user = User::by_id(user_id, &mut read).await?;
     let settings = UserSetting::by_user(user.id, &mut read)
@@ -335,7 +343,14 @@ async fn update_settings(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::UserServiceUpdateSettingsResponse, Error> {
     let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
-    write.auth(&meta, UserSettingsPerm::Get, user_id).await?;
+    write
+        .auth_or_all(
+            &meta,
+            UserSettingsAdminPerm::Update,
+            UserSettingsPerm::Update,
+            user_id,
+        )
+        .await?;
 
     let user = User::by_id(user_id, &mut write).await?;
     let setting = NewUserSetting::new(user.id, &req.name, &req.value)
@@ -354,7 +369,14 @@ async fn delete_settings(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::UserServiceDeleteSettingsResponse, Error> {
     let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
-    write.auth(&meta, UserSettingsPerm::Get, user_id).await?;
+    write
+        .auth_or_all(
+            &meta,
+            UserSettingsAdminPerm::Delete,
+            UserSettingsPerm::Delete,
+            user_id,
+        )
+        .await?;
 
     let user = User::by_id(user_id, &mut write).await?;
     UserSetting::delete(user.id, &req.name, &mut write).await?;
