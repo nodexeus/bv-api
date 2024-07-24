@@ -3,18 +3,19 @@ use std::collections::HashSet;
 
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
+use futures::future::OptionFuture;
 use thiserror::Error;
 use tonic::metadata::MetadataMap;
 use tonic::{Request, Response, Status};
 use tracing::{debug, error};
 
-use crate::auth::rbac::{OrgAdminPerm, OrgBillingPerm, OrgPerm, OrgProvisionPerm};
+use crate::auth::rbac::{OrgAddressPerm, OrgAdminPerm, OrgBillingPerm, OrgPerm, OrgProvisionPerm};
 use crate::auth::resource::{OrgId, UserId};
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::models::org::{NewOrg, OrgFilter, OrgSearch, OrgSort, UpdateOrg};
 use crate::models::rbac::{OrgUsers, RbacUser};
-use crate::models::{Invitation, Org, Token, User};
+use crate::models::{Address, Invitation, NewAddress, Org, Token, User};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::org_service_server::OrgService;
@@ -22,6 +23,8 @@ use super::{api, common, Grpc};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
+    /// Address error: {0}
+    Address(#[from] crate::models::address::Error),
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
     /// Failed to remove user from org with permission `org-remove-self`, user to remove is not self
@@ -38,6 +41,8 @@ pub enum Error {
     Diesel(#[from] diesel::result::Error),
     /// Org invitation error: {0}
     Invitation(#[from] crate::models::invitation::Error),
+    /// The request is missing the `address` fields.
+    MissingAddress,
     /// Org model error: {0}
     Model(#[from] crate::models::org::Error),
     /// No customer exists in stripe for org `{0}`.
@@ -90,8 +95,10 @@ impl From<Error> for Status {
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
+            MissingAddress => Status::failed_precondition("User has no address."),
             NoStripeCustomer(_) => Status::failed_precondition("No customer for that org."),
             NoStripeSubscription(_) => Status::failed_precondition("No subscription for that org."),
+            Address(err) => err.into(),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Invitation(err) => err.into(),
@@ -202,6 +209,33 @@ impl OrgService for Grpc {
         self.read(|read| billing_details(req, meta, read).scope_boxed())
             .await
     }
+
+    async fn get_address(
+        &self,
+        req: Request<api::OrgServiceGetAddressRequest>,
+    ) -> Result<Response<api::OrgServiceGetAddressResponse>, Status> {
+        let (meta, _, req) = req.into_parts();
+        self.read(|read| get_address(req, meta, read).scope_boxed())
+            .await
+    }
+
+    async fn set_address(
+        &self,
+        req: Request<api::OrgServiceSetAddressRequest>,
+    ) -> Result<Response<api::OrgServiceSetAddressResponse>, Status> {
+        let (meta, _, req) = req.into_parts();
+        self.read(|read| set_address(req, meta, read).scope_boxed())
+            .await
+    }
+
+    async fn delete_address(
+        &self,
+        req: Request<api::OrgServiceDeleteAddressRequest>,
+    ) -> Result<Response<api::OrgServiceDeleteAddressResponse>, Status> {
+        let (meta, _, req) = req.into_parts();
+        self.read(|read| delete_address(req, meta, read).scope_boxed())
+            .await
+    }
 }
 
 async fn create(
@@ -273,6 +307,7 @@ async fn update(
     let update = UpdateOrg {
         id: org_id,
         name: req.name.as_deref(),
+        address_id: None,
     };
     let org = update.update(&mut write).await?;
     let org = api::Org::from_model(&org, &mut write).await?;
@@ -435,14 +470,18 @@ async fn list_payment_methods(
             org_id: Some(org_id.to_string()),
             user_id: pm.metadata.and_then(|meta| meta.get("user_id").cloned()),
             details: Some(api::BillingDetails {
-                address: pm.billing_details.address.as_ref().map(|add| api::Address {
-                    city: add.city.clone(),
-                    country: add.country.clone(),
-                    line1: add.line1.clone(),
-                    line2: add.line2.clone(),
-                    postal_code: add.postal_code.clone(),
-                    state: add.state.clone(),
-                }),
+                address: pm
+                    .billing_details
+                    .address
+                    .as_ref()
+                    .map(|add| common::Address {
+                        city: add.city.clone(),
+                        country: add.country.clone(),
+                        line1: add.line1.clone(),
+                        line2: add.line2.clone(),
+                        postal_code: add.postal_code.clone(),
+                        state: add.state.clone(),
+                    }),
                 email: pm.billing_details.email.clone(),
                 name: pm.billing_details.name.clone(),
                 phone: pm.billing_details.phone.clone(),
@@ -514,6 +553,92 @@ async fn billing_details(
             })
             .collect(),
     })
+}
+
+async fn get_address(
+    req: api::OrgServiceGetAddressRequest,
+    meta: MetadataMap,
+    mut read: ReadConn<'_, '_>,
+) -> Result<api::OrgServiceGetAddressResponse, Error> {
+    let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
+    read.auth(&meta, OrgAddressPerm::Get, org_id).await?;
+    let org = Org::by_id(org_id, &mut read).await?;
+    let customer_id = org
+        .stripe_customer_id
+        .as_deref()
+        .ok_or(Error::NoStripeCustomer(org_id))?;
+    let address = read.ctx.stripe.get_address(customer_id).await?;
+    Ok(api::OrgServiceGetAddressResponse {
+        address: address.map(Into::into),
+    })
+}
+
+async fn set_address(
+    req: api::OrgServiceSetAddressRequest,
+    meta: MetadataMap,
+    mut write: ReadConn<'_, '_>,
+) -> Result<api::OrgServiceSetAddressResponse, Error> {
+    let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
+    write.auth(&meta, OrgAddressPerm::Set, org_id).await?;
+    let org = Org::by_id(org_id, &mut write).await?;
+    let address = req.address.ok_or(Error::MissingAddress)?;
+    let customer_id = org
+        .stripe_customer_id
+        .as_deref()
+        .ok_or(Error::NoStripeCustomer(org_id))?;
+    let address = write
+        .ctx
+        .stripe
+        .set_address(customer_id, &address.into())
+        .await?;
+    let maybe_address = org.address_id.map(|a_id| Address::by_id(a_id, &mut write));
+    match OptionFuture::from(maybe_address).await {
+        Some(Ok(mut existing)) => {
+            existing.city = address.city;
+            existing.country = address.country;
+            existing.line1 = address.line1;
+            existing.line2 = address.line2;
+            existing.postal_code = address.postal_code;
+            existing.state = address.state;
+            existing.update(&mut write).await?;
+        }
+        None
+        | Some(Err(crate::models::address::Error::FindById(_, diesel::result::Error::NotFound))) => {
+            let new_address = NewAddress::new(
+                address.city.as_deref(),
+                address.country.as_deref(),
+                address.line1.as_deref(),
+                address.line2.as_deref(),
+                address.postal_code.as_deref(),
+                address.state.as_deref(),
+            );
+            let address = new_address.create(&mut write).await?;
+            let update_org = UpdateOrg {
+                id: org.id,
+                name: None,
+                address_id: Some(address.id),
+            };
+            update_org.update(&mut write).await?;
+        }
+        Some(Err(err)) => return Err(err.into()),
+    };
+    Ok(api::OrgServiceSetAddressResponse {})
+}
+
+async fn delete_address(
+    req: api::OrgServiceDeleteAddressRequest,
+    meta: MetadataMap,
+    mut write: ReadConn<'_, '_>,
+) -> Result<api::OrgServiceDeleteAddressResponse, Error> {
+    let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
+    write.auth(&meta, OrgAddressPerm::Delete, org_id).await?;
+    let org = Org::by_id(org_id, &mut write).await?;
+    let customer_id = org
+        .stripe_customer_id
+        .as_deref()
+        .ok_or(Error::NoStripeCustomer(org_id))?;
+    write.ctx.stripe.delete_address(customer_id).await?;
+    Ok(api::OrgServiceDeleteAddressResponse {})
 }
 
 impl api::Org {
