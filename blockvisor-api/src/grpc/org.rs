@@ -486,12 +486,6 @@ async fn list_payment_methods(
         .map(|pm| api::PaymentMethod {
             org_id: Some(org_id.to_string()),
             user_id: pm.metadata.and_then(|meta| meta.get("user_id").cloned()),
-            details: Some(api::BillingDetails {
-                address: pm.billing_details.address.map(common::Address::from),
-                email: pm.billing_details.email,
-                name: pm.billing_details.name,
-                phone: pm.billing_details.phone,
-            }),
             created_at: chrono::DateTime::from_timestamp(pm.created.0, 0)
                 .map(NanosUtc::from)
                 .map(Into::into),
