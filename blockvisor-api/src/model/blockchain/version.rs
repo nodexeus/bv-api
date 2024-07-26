@@ -14,8 +14,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthZ;
 use crate::database::Conn;
-use crate::models::node::{NodeType, NodeVersion};
-use crate::models::schema::{blockchain_node_types, blockchain_versions};
+use crate::model::node::{NodeType, NodeVersion};
+use crate::model::schema::{blockchain_node_types, blockchain_versions};
 
 use super::{BlockchainId, BlockchainNodeType, BlockchainNodeTypeId};
 

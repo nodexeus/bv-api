@@ -1,10 +1,26 @@
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+use displaydoc::Display;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::grpc::common;
+
+#[derive(Debug, Display, Error)]
+pub enum Error {
+    /// Stripe Currency error: {0}
+    Currency(super::currency::Error),
+    /// Missing stripe Price amount.
+    MissingAmount,
+    /// Missing stripe Currency.
+    MissingCurrency,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PriceId(pub String);
 
 /// The resource representing a Stripe "Price".
 ///
 /// For more details see <https://stripe.com/docs/api/prices/object>
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Price {
     /// Unique identifier for the object.
     pub id: PriceId,
@@ -49,7 +65,25 @@ pub struct Price {
     pub unit_amount_decimal: Option<String>,
 }
 
-#[derive(Debug, serde::Serialize)]
+impl TryFrom<&Price> for common::BillingAmount {
+    type Error = Error;
+
+    fn try_from(price: &Price) -> Result<Self, Self::Error> {
+        Ok(common::BillingAmount {
+            amount: Some(common::Amount {
+                currency: price
+                    .currency
+                    .ok_or(Error::MissingCurrency)
+                    .and_then(|c| common::Currency::try_from(c).map_err(Error::Currency))?
+                    as i32,
+                value: price.unit_amount.ok_or(Error::MissingAmount)?,
+            }),
+            period: common::Period::Monthly.into(),
+        })
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct SearchPrice {
     query: String,
     #[serde(skip_serializing_if = "Option::is_none")]

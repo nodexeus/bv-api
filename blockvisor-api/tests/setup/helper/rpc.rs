@@ -7,8 +7,8 @@ use blockvisor_api::auth::resource::{OrgId, ResourceId, ResourceType, UserId};
 use blockvisor_api::auth::token::jwt::Jwt;
 use blockvisor_api::database::seed;
 use blockvisor_api::grpc::{api, common};
-use blockvisor_api::models::org::NewOrg;
-use blockvisor_api::models::user::{NewUser, User};
+use blockvisor_api::model::org::NewOrg;
+use blockvisor_api::model::user::{NewUser, User};
 
 use crate::setup::helper::traits::SocketRpc;
 use crate::setup::TestServer;

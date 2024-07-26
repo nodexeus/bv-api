@@ -6,7 +6,7 @@ use blockvisor_api::auth::token::refresh::Refresh;
 use blockvisor_api::auth::token::RequestToken;
 use blockvisor_api::database::seed::LOGIN_PASSWORD;
 use blockvisor_api::grpc::api::{self, auth_service_client};
-use blockvisor_api::models::user::User;
+use blockvisor_api::model::user::User;
 
 use crate::setup::helper::traits::SocketRpc;
 use crate::setup::TestServer;

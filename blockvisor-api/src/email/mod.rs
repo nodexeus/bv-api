@@ -16,7 +16,7 @@ use crate::auth::resource::Resource;
 use crate::auth::token::Cipher;
 use crate::config::token::ExpireChrono;
 use crate::config::Config;
-use crate::models::{Invitation, User};
+use crate::model::{Invitation, User};
 
 const FROM_EMAIL: &str = "no-reply@blockjoy.com";
 const FROM_NAME: &str = "BlockJoy";

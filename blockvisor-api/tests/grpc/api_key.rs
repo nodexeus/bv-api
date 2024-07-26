@@ -1,7 +1,7 @@
 use blockvisor_api::auth::resource::{ResourceEntry, ResourceType};
 use blockvisor_api::grpc::{api, common};
-use blockvisor_api::models::api_key::ApiKey;
-use blockvisor_api::models::org::Org;
+use blockvisor_api::model::api_key::ApiKey;
+use blockvisor_api::model::org::Org;
 use blockvisor_api::util::NanosUtc;
 use tonic::transport::Channel;
 use uuid::Uuid;

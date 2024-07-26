@@ -18,7 +18,7 @@ use blockvisor_api::config::Context;
 use blockvisor_api::database::seed::{self, Seed};
 use blockvisor_api::database::tests::TestDb;
 use blockvisor_api::database::Conn;
-use blockvisor_api::models::{Host, Org, User};
+use blockvisor_api::model::{Host, Org, User};
 
 use self::helper::rpc;
 use self::helper::traits::SocketRpc;

@@ -11,9 +11,9 @@ use tracing::{trace, warn};
 use crate::database::{Database, Pool};
 use crate::grpc::api;
 use crate::grpc::command::host_pending;
-use crate::models::command::NewCommand;
-use crate::models::host::{ConnectionStatus, UpdateHost};
-use crate::models::{Command, CommandType, Host};
+use crate::model::command::NewCommand;
+use crate::model::host::{ConnectionStatus, UpdateHost};
+use crate::model::{Command, CommandType, Host};
 
 use super::{Client, Message, CLIENT_CAPACITY, CLIENT_QOS};
 
@@ -22,11 +22,11 @@ pub enum Error {
     /// MQTT client error: {0}
     Client(#[from] crate::mqtt::Error),
     /// MQTT Command error: {0}
-    Command(#[from] crate::models::command::Error),
+    Command(#[from] crate::model::command::Error),
     /// MQTT GRPC Command error: {0}
     GrpcCommand(#[from] crate::grpc::command::Error),
     /// MQTT host error: {0}
-    Host(#[from] crate::models::host::Error),
+    Host(#[from] crate::model::host::Error),
     /// Failed to parse HostId from MQTT HostStatus: {0}
     ParseHostId(uuid::Error),
     /// Failed to parse HostStatus: {0}
@@ -38,7 +38,7 @@ pub enum Error {
     /// Failed to subscribe to `/bv/hosts/#`: {0}
     SubscribeHosts(rumqttc::v5::ClientError),
     /// MQTT failed to update host connection status: {0}
-    UpdateHostStatus(crate::models::host::Error),
+    UpdateHostStatus(crate::model::host::Error),
 }
 
 #[derive(Clone, Debug)]

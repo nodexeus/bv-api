@@ -8,14 +8,14 @@ use uuid::Uuid;
 use crate::auth::rbac::{BlockjoyRole, ViewRole};
 use crate::auth::resource::{NodeId, OrgId};
 use crate::grpc::common;
-use crate::models::blockchain::BlockchainId;
-use crate::models::host::{ConnectionStatus, Host, HostType, ManagedBy, MonthlyCostUsd, NewHost};
-use crate::models::ip_address::CreateIpAddress;
-use crate::models::node::{Node, NodeProperty, NodeStatus, NodeType, ResourceAffinity};
-use crate::models::rbac::RbacUser;
-use crate::models::schema::{blockchains, nodes, orgs};
-use crate::models::user::NewUser;
-use crate::models::{Blockchain, IpAddress, Org, Region, User};
+use crate::model::blockchain::BlockchainId;
+use crate::model::host::{ConnectionStatus, Host, HostType, ManagedBy, MonthlyCostUsd, NewHost};
+use crate::model::ip_address::CreateIpAddress;
+use crate::model::node::{Node, NodeProperty, NodeStatus, NodeType, ResourceAffinity};
+use crate::model::rbac::RbacUser;
+use crate::model::schema::{blockchains, nodes, orgs};
+use crate::model::user::NewUser;
+use crate::model::{Blockchain, IpAddress, Org, Region, User};
 
 use super::Conn;
 

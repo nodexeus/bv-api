@@ -30,8 +30,8 @@ use crate::auth::resource::OrgId;
 use crate::auth::AuthZ;
 use crate::database::Conn;
 use crate::grpc::api;
-use crate::models::node::{ContainerStatus, NodeStatus, SyncStatus};
-use crate::models::schema::sql_types;
+use crate::model::node::{ContainerStatus, NodeStatus, SyncStatus};
+use crate::model::schema::sql_types;
 use crate::util::{SearchOperator, SortOrder};
 
 use super::node::node_type::NodeNetwork;
@@ -54,7 +54,7 @@ pub enum Error {
     /// Failed to get node stats for orgs `{0:?}`: {1}
     NodeStatsForOrgs(Vec<OrgId>, diesel::result::Error),
     /// Node pagination: {0}
-    Paginate(#[from] crate::models::paginate::Error),
+    Paginate(#[from] crate::model::paginate::Error),
     /// Blockchain Property model error: {0}
     Property(#[from] property::Error),
     /// The region `{0}` has no pricing set, so we cannot launch nodes here.

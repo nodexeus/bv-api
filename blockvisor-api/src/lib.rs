@@ -36,7 +36,7 @@ pub mod database;
 pub mod email;
 pub mod grpc;
 pub mod http;
-pub mod models;
+pub mod model;
 pub mod mqtt;
 pub mod server;
 pub mod storage;

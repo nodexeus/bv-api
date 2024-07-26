@@ -28,7 +28,7 @@ use crate::auth::resource::Resources;
 use crate::auth::{self, AuthZ, Authorize};
 use crate::config::database::Config;
 use crate::config::Context;
-use crate::models::rbac::{RbacPerm, RbacRole};
+use crate::model::rbac::{RbacPerm, RbacRole};
 use crate::mqtt::Message;
 
 pub const MIGRATIONS: EmbeddedMigrations = diesel_migrations::embed_migrations!();
@@ -64,9 +64,9 @@ pub enum Error {
     /// Failed to build database pool: {0}
     BuildPool(diesel_async::pooled_connection::PoolError),
     /// Failed to create RBAC perms: {0}
-    CreatePerms(crate::models::rbac::Error),
+    CreatePerms(crate::model::rbac::Error),
     /// Failed to create RBAC roles: {0}
-    CreateRoles(crate::models::rbac::Error),
+    CreateRoles(crate::model::rbac::Error),
     /// Failed to create a pool connection: {0}
     PoolConnection(bb8::RunError),
 }

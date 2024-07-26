@@ -3,8 +3,8 @@ use blockvisor_api::auth::rbac::InvitationPerm;
 use blockvisor_api::auth::resource::ResourceEntry;
 use blockvisor_api::database::seed;
 use blockvisor_api::grpc::api;
-use blockvisor_api::models::invitation::{Invitation, NewInvitation};
-use blockvisor_api::models::org::Org;
+use blockvisor_api::model::invitation::{Invitation, NewInvitation};
+use blockvisor_api::model::org::Org;
 use tonic::transport::Channel;
 
 use crate::setup::helper::traits::SocketRpc;

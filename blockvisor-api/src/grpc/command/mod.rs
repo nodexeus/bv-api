@@ -16,10 +16,10 @@ use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::grpc::api::command_service_server::CommandService;
 use crate::grpc::common::{FirewallAction, FirewallDirection, FirewallProtocol, FirewallRule};
 use crate::grpc::{api, common, Grpc};
-use crate::models::blockchain::{Blockchain, BlockchainProperty, BlockchainVersion};
-use crate::models::command::{CommandFilter, ExitCode, UpdateCommand};
-use crate::models::node::{NodeStatus, UpdateNode};
-use crate::models::{Command, CommandType, Host, Node};
+use crate::model::blockchain::{Blockchain, BlockchainProperty, BlockchainVersion};
+use crate::model::command::{CommandFilter, ExitCode, UpdateCommand};
+use crate::model::node::{NodeStatus, UpdateNode};
+use crate::model::{Command, CommandType, Host, Node};
 use crate::util::NanosUtc;
 
 #[derive(Debug, Display, Error)]
@@ -27,21 +27,21 @@ pub enum Error {
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
     /// Command blockchain error: {0}
-    Blockchain(#[from] crate::models::blockchain::Error),
+    Blockchain(#[from] crate::model::blockchain::Error),
     /// Command blockchain property error: {0}
-    BlockchainProperty(#[from] crate::models::blockchain::property::Error),
+    BlockchainProperty(#[from] crate::model::blockchain::property::Error),
     /// Command blockchain version error: {0}
-    BlockchainVersion(#[from] crate::models::blockchain::version::Error),
+    BlockchainVersion(#[from] crate::model::blockchain::version::Error),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
     /// Command model failure: {0}
-    Command(#[from] crate::models::command::Error),
+    Command(#[from] crate::model::command::Error),
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
     /// Error creating a gRPC representation of a node: {0}
     GrpcHost(Box<crate::grpc::node::Error>),
     /// Command host error: {0}
-    Host(#[from] crate::models::host::Error),
+    Host(#[from] crate::model::host::Error),
     /// IP is not a CIDR.
     IpNotCidr,
     /// Missing BlockchainPropertyId. This should not happen.
@@ -49,7 +49,7 @@ pub enum Error {
     /// Missing `command.node_id`.
     MissingNodeId,
     /// Command node error: {0}
-    Node(#[from] crate::models::node::Error),
+    Node(#[from] crate::model::node::Error),
     /// Not implemented.
     NotImplemented,
     /// Failed to parse ExitCode.

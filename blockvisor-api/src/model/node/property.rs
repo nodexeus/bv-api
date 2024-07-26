@@ -12,8 +12,8 @@ use uuid::Uuid;
 
 use crate::auth::resource::NodeId;
 use crate::database::Conn;
-use crate::models::blockchain::BlockchainPropertyId;
-use crate::models::schema::node_properties;
+use crate::model::blockchain::BlockchainPropertyId;
+use crate::model::schema::node_properties;
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {

@@ -11,8 +11,8 @@ use uuid::Uuid;
 
 use crate::auth::resource::{HostId, NodeId, OrgId};
 use crate::database::Conn;
-use crate::models::schema::{node_logs, sql_types};
-use crate::models::{BlockchainId, Host};
+use crate::model::schema::{node_logs, sql_types};
+use crate::model::{BlockchainId, Host};
 
 use super::{NodeType, NodeVersion};
 
@@ -25,7 +25,7 @@ pub enum Error {
     /// Failed to find recent node logs by node: {0}
     ByNodeSince(diesel::result::Error),
     /// Node log host error: {0}
-    Host(#[from] crate::models::host::Error),
+    Host(#[from] crate::model::host::Error),
 }
 
 impl From<Error> for Status {

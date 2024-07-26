@@ -9,7 +9,7 @@ use crate::auth::rbac::ApiKeyPerm;
 use crate::auth::resource::{ResourceEntry, ResourceType};
 use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction, WriteConn};
-use crate::models::api_key::{ApiKey, NewApiKey, UpdateLabel, UpdateScope};
+use crate::model::api_key::{ApiKey, NewApiKey, UpdateLabel, UpdateScope};
 use crate::util::NanosUtc;
 
 use super::api::api_key_service_server::ApiKeyService;
@@ -32,7 +32,7 @@ pub enum Error {
     /// Missing API key `updated_at`.
     MissingUpdatedAt,
     /// Database model error: {0}
-    Model(#[from] crate::models::api_key::Error),
+    Model(#[from] crate::model::api_key::Error),
     /// Nothing is set to be updated in the request.
     NothingToUpdate,
     /// Failed to parse KeyId: {0}

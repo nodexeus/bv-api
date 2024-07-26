@@ -98,7 +98,7 @@ pub enum Error {
     /// Ip address error: {0}
     IpAddr(#[from] super::ip_address::Error),
     /// Failed to get next host ip for node: {0}
-    NextHostIp(crate::models::ip_address::Error),
+    NextHostIp(crate::model::ip_address::Error),
     /// Node log error: {0}
     NodeLog(#[from] log::Error),
     /// Node property error: {0}
@@ -116,15 +116,15 @@ pub enum Error {
     /// Cannot launch node without a region.
     NoRegion,
     /// Node org error: {0}
-    Org(#[from] crate::models::org::Error),
+    Org(#[from] crate::model::org::Error),
     /// Node pagination: {0}
-    Paginate(#[from] crate::models::paginate::Error),
+    Paginate(#[from] crate::model::paginate::Error),
     /// Failed to parse HostId: {0}
     ParseHostId(uuid::Error),
     /// Failed to parse IpAddr: {0}
     ParseIpAddr(std::net::AddrParseError),
     /// Node region error: {0}
-    Region(#[from] crate::models::region::Error),
+    Region(#[from] crate::model::region::Error),
     /// Failed to regenerate node name. This should not happen.
     RegenerateName,
     /// Node report error: {0}

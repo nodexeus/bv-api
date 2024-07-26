@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::auth::resource::{NodeId, ResourceEntry, ResourceId, ResourceType, UserId};
 use crate::database::Conn;
-use crate::models::schema::node_reports;
+use crate::model::schema::node_reports;
 
 #[derive(Debug, displaydoc::Display, Error)]
 pub enum Error {

@@ -6,10 +6,11 @@ use std::sync::Arc;
 use displaydoc::Display;
 use thiserror::Error;
 
-use crate::auth::resource::OrgId;
-use crate::models;
-use crate::{auth::resource::UserId, config::stripe::Config};
-use api::{address, customer, invoice, payment_method, price, setup_intent, subscription};
+use crate::auth::resource::{OrgId, UserId};
+use crate::config::stripe::Config;
+use crate::model::{Org, User};
+
+use self::api::{address, customer, invoice, payment_method, price, setup_intent, subscription};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -60,8 +61,8 @@ pub trait Payment {
 
     async fn create_customer(
         &self,
-        org: &models::Org,
-        user: &models::User,
+        org: &Org,
+        user: &User,
         payment_method_id: Option<&api::PaymentMethodId>,
     ) -> Result<customer::Customer, Error>;
 
@@ -102,7 +103,7 @@ pub trait Payment {
     async fn set_address(
         &self,
         customer_id: &str,
-        addr: &address::Address,
+        address: &address::Address,
     ) -> Result<address::Address, Error>;
 
     async fn delete_address(&self, customer_id: &str) -> Result<(), Error>;
@@ -141,8 +142,8 @@ impl Payment for Stripe {
 
     async fn create_customer(
         &self,
-        org: &models::Org,
-        user: &models::User,
+        org: &Org,
+        user: &User,
         payment_method_id: Option<&api::PaymentMethodId>,
     ) -> Result<customer::Customer, Error> {
         let customer = customer::CreateCustomer::new(org, user, payment_method_id);
@@ -317,8 +318,8 @@ pub mod tests {
 
         async fn create_customer(
             &self,
-            org: &models::Org,
-            user: &models::User,
+            org: &Org,
+            user: &User,
             payment_method_id: Option<&api::PaymentMethodId>,
         ) -> Result<customer::Customer, Error> {
             self.stripe
@@ -380,9 +381,9 @@ pub mod tests {
         async fn set_address(
             &self,
             customer_id: &str,
-            addr: &address::Address,
+            address: &address::Address,
         ) -> Result<address::Address, Error> {
-            self.stripe.set_address(customer_id, addr).await
+            self.stripe.set_address(customer_id, address).await
         }
 
         async fn delete_address(&self, customer_id: &str) -> Result<(), Error> {

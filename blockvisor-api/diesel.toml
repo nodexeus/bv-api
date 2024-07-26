@@ -1,5 +1,5 @@
 [print_schema]
-file = "src/models/schema.rs"
+file = "src/model/schema.rs"
 custom_type_derives = ["diesel::query_builder::QueryId"]
 
 [migrations_directory]

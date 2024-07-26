@@ -144,7 +144,7 @@ pub struct BabelConfig {
 #[cfg(any(test, feature = "integration-test"))]
 pub mod tests {
     #[cfg(test)]
-    use crate::{models::NodeType, storage::image::ImageId};
+    use crate::{model::NodeType, storage::image::ImageId};
 
     #[cfg(test)]
     use super::*;

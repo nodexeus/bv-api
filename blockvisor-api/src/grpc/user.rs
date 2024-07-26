@@ -11,8 +11,8 @@ use crate::auth::rbac::{
 use crate::auth::resource::UserId;
 use crate::auth::{self, token, Authorize};
 use crate::database::{ReadConn, Transaction, WriteConn};
-use crate::models::user::setting::{NewUserSetting, UserSetting};
-use crate::models::user::{NewUser, UpdateUser, User, UserFilter, UserSearch, UserSort};
+use crate::model::user::setting::{NewUserSetting, UserSetting};
+use crate::model::user::{NewUser, UpdateUser, User, UserFilter, UserSearch, UserSort};
 use crate::util::NanosUtc;
 
 use super::api::user_service_server::UserService;
@@ -37,7 +37,7 @@ pub enum Error {
     /// Failed to parse UserId: {0}
     ParseUserId(uuid::Error),
     /// User model error: {0}
-    Model(#[from] crate::models::user::Error),
+    Model(#[from] crate::model::user::Error),
     /// User search failed: {0}
     SearchOperator(crate::util::search::Error),
     /// Sort order: {0}
@@ -45,7 +45,7 @@ pub enum Error {
     /// The requested sort field is unknown.
     UnknownSortField,
     /// User settings error: {0}
-    UserSettings(#[from] crate::models::user::setting::Error),
+    UserSettings(#[from] crate::model::user::setting::Error),
 }
 
 impl From<Error> for Status {

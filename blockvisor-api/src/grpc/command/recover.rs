@@ -9,36 +9,36 @@ use crate::auth::AuthZ;
 use crate::cloudflare;
 use crate::database::WriteConn;
 use crate::grpc::api;
-use crate::models::command::NewCommand;
-use crate::models::node::{NewNodeLog, NodeLogEvent, UpdateNode};
-use crate::models::{Blockchain, Command, CommandType, Host, IpAddress, Node};
+use crate::model::command::NewCommand;
+use crate::model::node::{NewNodeLog, NodeLogEvent, UpdateNode};
+use crate::model::{Blockchain, Command, CommandType, Host, IpAddress, Node};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
     /// Command recovery blockchain error: {0}
-    Blockchain(#[from] crate::models::blockchain::Error),
+    Blockchain(#[from] crate::model::blockchain::Error),
     /// Failed to create cancelation log: {0}
-    CancelationLog(crate::models::node::log::Error),
+    CancelationLog(crate::model::node::log::Error),
     /// Failed to create dns record for node: {0}
     Cloudflare(cloudflare::Error),
     /// Command error: {0}
-    Command(#[from] crate::models::command::Error),
+    Command(#[from] crate::model::command::Error),
     /// CreateNode command has no node id.
     CreateNodeId,
     /// Failed to create deployment log: {0}
-    DeploymentLog(crate::models::node::log::Error),
+    DeploymentLog(crate::model::node::log::Error),
     /// Command recovery host error: {0}
-    Host(#[from] crate::models::host::Error),
+    Host(#[from] crate::model::host::Error),
     /// Command recovery node error: {0}
-    Node(#[from] crate::models::node::Error),
+    Node(#[from] crate::model::node::Error),
     /// Command recovery failed to update node: {0}
-    UpdateNode(crate::models::node::Error),
+    UpdateNode(crate::model::node::Error),
     /// Unassigning an ip address failed: {0}
-    UnassignIp(crate::models::ip_address::Error),
+    UnassignIp(crate::model::ip_address::Error),
     /// Assigning an ip address failed: {0}
-    AssignIp(crate::models::ip_address::Error),
+    AssignIp(crate::model::ip_address::Error),
     /// Finding an ip address failed: {0}
-    FindIp(crate::models::ip_address::Error),
+    FindIp(crate::model::ip_address::Error),
 }
 
 impl From<Error> for Status {

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use blockvisor_api::auth::rbac::OrgRole;
 use blockvisor_api::auth::resource::{OrgId, ResourceType};
 use blockvisor_api::grpc::api;
-use blockvisor_api::models::rbac::RbacUser;
+use blockvisor_api::model::rbac::RbacUser;
 use tonic::transport::Channel;
 
 use crate::setup::helper::rpc;

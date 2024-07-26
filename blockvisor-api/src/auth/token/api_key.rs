@@ -28,7 +28,7 @@ use crate::auth::rbac::{Access, ApiKeyRole, Roles};
 use crate::auth::resource::{Resource, ResourceEntry, ResourceType};
 use crate::auth::token::ApiToken;
 use crate::database::Conn;
-use crate::models::ApiKey;
+use crate::model::ApiKey;
 
 const SALT_BYTES: usize = 16;
 const SECRET_BYTES: usize = 20;
@@ -50,7 +50,7 @@ pub enum Error {
     /// Failed to parse secret as base64.
     DecodeSecret(base64::DecodeError),
     /// Failed to find KeyId: {0}
-    FindKeyId(crate::models::api_key::Error),
+    FindKeyId(crate::model::api_key::Error),
     /// Key hash mismatch.
     HashMismatch,
     /// Failed to parse KeyId: {0}

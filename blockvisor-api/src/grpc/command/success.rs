@@ -5,9 +5,9 @@ use tracing::error;
 use crate::auth::AuthZ;
 use crate::database::WriteConn;
 use crate::grpc::api;
-use crate::models::blockchain::Blockchain;
-use crate::models::command::{Command, CommandType, NewCommand};
-use crate::models::node::{NewNodeLog, Node, NodeLogEvent, NodeStatus, UpdateNode};
+use crate::model::blockchain::Blockchain;
+use crate::model::command::{Command, CommandType, NewCommand};
+use crate::model::node::{NewNodeLog, Node, NodeLogEvent, NodeStatus, UpdateNode};
 
 type Result = std::result::Result<(), ()>;
 

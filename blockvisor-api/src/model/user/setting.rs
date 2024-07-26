@@ -8,7 +8,7 @@ use tonic::Status;
 
 use crate::auth::resource::UserId;
 use crate::database::Conn;
-use crate::models::schema::user_settings;
+use crate::model::schema::user_settings;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

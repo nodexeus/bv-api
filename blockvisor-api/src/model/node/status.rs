@@ -1,7 +1,7 @@
 use diesel_derive_enum::DbEnum;
 
 use crate::grpc::common;
-use crate::models::schema::sql_types;
+use crate::model::schema::sql_types;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumNodeStatus"]

@@ -10,7 +10,7 @@ use thiserror::Error;
 use tonic::Status;
 
 use crate::grpc::common;
-use crate::models::schema::sql_types;
+use crate::model::schema::sql_types;
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {

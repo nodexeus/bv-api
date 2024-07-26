@@ -1,7 +1,7 @@
 use blockvisor_api::database::seed::NODE_ID;
 use blockvisor_api::grpc::api;
-use blockvisor_api::models::host::{Host, UpdateHost};
-use blockvisor_api::models::schema;
+use blockvisor_api::model::host::{Host, UpdateHost};
+use blockvisor_api::model::schema;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use tonic::transport::Channel;

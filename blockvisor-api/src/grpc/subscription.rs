@@ -9,8 +9,8 @@ use crate::auth::rbac::SubscriptionPerm;
 use crate::auth::resource::OrgId;
 use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction, WriteConn};
-use crate::models::org::Org;
-use crate::models::subscription::{NewSubscription, Subscription};
+use crate::model::org::Org;
+use crate::model::subscription::{NewSubscription, Subscription};
 
 use super::api::subscription_service_server::SubscriptionService;
 use super::{api, Grpc};
@@ -30,9 +30,9 @@ pub enum Error {
     /// Missing `user_id`.
     MissingUserId,
     /// Subscription model error: {0}
-    Model(#[from] crate::models::subscription::Error),
+    Model(#[from] crate::model::subscription::Error),
     /// Subscription org error: {0}
-    Org(#[from] crate::models::org::Error),
+    Org(#[from] crate::model::org::Error),
     /// Failed to parse SubscriptionId: {0}
     ParseId(uuid::Error),
     /// Failed to parse OrgId: {0}

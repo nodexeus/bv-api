@@ -15,8 +15,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthZ;
 use crate::database::Conn;
-use crate::models::schema::blockchain_node_types;
-use crate::models::NodeType;
+use crate::model::schema::blockchain_node_types;
+use crate::model::NodeType;
 
 use super::{BlockchainId, Visibility};
 

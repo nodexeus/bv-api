@@ -12,7 +12,7 @@ use crate::auth::token::refresh::Refresh;
 use crate::auth::token::RequestToken;
 use crate::auth::Authorize;
 use crate::database::{Transaction, WriteConn};
-use crate::models::{Host, Node, Org, User};
+use crate::model::{Host, Node, Org, User};
 
 use super::api::auth_service_server::AuthService;
 use super::{api, Grpc};
@@ -30,17 +30,17 @@ pub enum Error {
     /// Failed to send email: {0}
     Email(#[from] crate::email::Error),
     /// Host auth error: {0}
-    Host(#[from] crate::models::host::Error),
+    Host(#[from] crate::model::host::Error),
     /// JWT token failure: {0}
     Jwt(#[from] crate::auth::token::jwt::Error),
     /// Node auth error: {0}
-    Node(#[from] crate::models::node::Error),
+    Node(#[from] crate::model::node::Error),
     /// Not Bearer Token.
     NotBearer,
     /// No Refresh token in cookie or request body.
     NoRefresh,
     /// Org auth error: {0}
-    Org(#[from] crate::models::org::Error),
+    Org(#[from] crate::model::org::Error),
     /// Failed to parse RequestToken: {0}
     ParseToken(crate::auth::token::Error),
     /// Failed to parse OrgId: {0}
@@ -48,13 +48,13 @@ pub enum Error {
     /// Failed to parse UserId: {0}
     ParseUserId(uuid::Error),
     /// User RBAC error: {0}
-    Rbac(#[from] crate::models::rbac::Error),
+    Rbac(#[from] crate::model::rbac::Error),
     /// Refresh token failure: {0}
     Refresh(#[from] crate::auth::token::refresh::Error),
     /// Refresh token doesn't match JWT Resource.
     RefreshResource,
     /// User auth error: {0}
-    User(#[from] crate::models::user::Error),
+    User(#[from] crate::model::user::Error),
 }
 
 impl From<Error> for Status {

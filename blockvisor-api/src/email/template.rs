@@ -169,7 +169,7 @@ mod test {
     use crate::config::Config;
     use crate::email::tests::MockEmail;
     use crate::email::{Email, Recipient};
-    use crate::models::{Invitation, User};
+    use crate::model::{Invitation, User};
 
     use super::*;
 
