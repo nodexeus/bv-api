@@ -671,7 +671,9 @@ async fn get_invoices(
         .into_iter()
         .map(api::Invoice::try_from)
         .collect::<Result<_, _>>()?;
-    Ok(api::OrgServiceGetInvoicesResponse { invoices })
+    Ok(api::OrgServiceGetInvoicesResponse {
+        invoices: dbg!(invoices),
+    })
 }
 
 impl api::Org {
