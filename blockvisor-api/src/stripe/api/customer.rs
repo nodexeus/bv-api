@@ -229,6 +229,7 @@ impl super::StripeEndpoint for GetCustomer<'_> {
 
 #[derive(Debug, serde::Serialize)]
 pub struct UpdateCustomer<'a> {
+    #[serde(skip_serializing)]
     customer_id: &'a str,
 
     #[serde(rename = "address[city]")]
