@@ -439,7 +439,7 @@ pub struct ListInvoices<'a> {
 
 impl<'a> ListInvoices<'a> {
     pub fn new(customer_id: &'a str, expand_discounts: bool) -> Self {
-        let expand = expand_discounts.then_some("discounts");
+        let expand = expand_discounts.then_some("data.lines.data.discounts");
         Self {
             customer_id,
             expand,
