@@ -157,6 +157,7 @@ pub struct Invoice {
     // /// The tax rates applied to this invoice, if any.
     // pub default_tax_rates: Option<Vec<TaxRate>>,
     /// Always true for a deleted object
+    #[serde(default)]
     pub deleted: bool,
     /// An arbitrary string attached to the object.
     ///

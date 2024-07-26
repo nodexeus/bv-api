@@ -66,6 +66,7 @@ pub struct Coupon {
     // /// (https://stripe.com/docs/currencies).
     // pub currency_options: Option<CurrencyMap<CouponCurrencyOption>>,
     // Always true for a deleted object
+    #[serde(default)]
     pub deleted: bool,
     /// One of `forever`, `once`, and `repeating`.
     ///
