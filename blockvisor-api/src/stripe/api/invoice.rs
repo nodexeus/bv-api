@@ -431,7 +431,7 @@ impl From<InvoiceStatus> for api::InvoiceStatus {
 
 #[derive(Debug, Serialize)]
 pub struct ListInvoices<'a> {
-    customer_id: &'a str,
+    customer: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "expand[]")]
     expand: Option<&'static str>,
@@ -441,7 +441,7 @@ impl<'a> ListInvoices<'a> {
     pub fn new(customer_id: &'a str, expand_discounts: bool) -> Self {
         let expand = expand_discounts.then_some("data.lines.data.discounts");
         Self {
-            customer_id,
+            customer: customer_id,
             expand,
         }
     }
