@@ -1,8 +1,20 @@
+use displaydoc::Display;
+use serde::Deserialize;
+use thiserror::Error;
+
+use crate::grpc::common;
+
+#[derive(Debug, Display, Error)]
+pub enum Error {
+    /// Unknown Stripe Currency: {0}
+    UnknownCurrency(Currency),
+}
+
 /// Currency is the list of supported currencies.
 ///
 /// For more details see
 /// <https://support.stripe.com/questions/which-currencies-does-stripe-support>.
-#[derive(Debug, Default, Clone, Copy, serde::Deserialize, derive_more::Display)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, derive_more::Display)]
 #[serde(rename_all = "lowercase")]
 pub enum Currency {
     AED, // United Arab Emirates Dirham
@@ -147,4 +159,15 @@ pub enum Currency {
     YER, // Yemeni Rial
     ZAR, // South African Rand
     ZMW, // Zambian Kwacha
+}
+
+impl TryFrom<Currency> for common::Currency {
+    type Error = Error;
+
+    fn try_from(currency: Currency) -> Result<Self, Self::Error> {
+        match currency {
+            Currency::USD => Ok(common::Currency::Usd),
+            _ => Err(Error::UnknownCurrency(currency)),
+        }
+    }
 }

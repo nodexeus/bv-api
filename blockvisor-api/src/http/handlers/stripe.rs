@@ -18,7 +18,7 @@ use crate::auth::resource::{OrgId, UserId};
 use crate::config::Context;
 use crate::database::{Transaction, WriteConn};
 use crate::http::response::{bad_params, failed, ok_custom};
-use crate::models::{self, User};
+use crate::model::{self, User};
 use crate::stripe::api::event;
 
 #[derive(Debug, Display, Error)]
@@ -28,7 +28,7 @@ pub enum Error {
     /// Stripe subscription: {0}
     Stripe(#[from] crate::stripe::Error),
     /// Stripe subscription: {0}
-    Subscription(#[from] crate::models::subscription::Error),
+    Subscription(#[from] crate::model::subscription::Error),
     /// Stripe event has an unparsable org_id in its metadata.
     BadOrgId(<OrgId as std::str::FromStr>::Err),
     /// Stripe event has an unparsable user_id in its metadata.
@@ -42,9 +42,9 @@ pub enum Error {
     /// Org `{0}` has no owner.
     NoOwner(OrgId),
     /// Stripe org: {0}
-    Org(#[from] crate::models::org::Error),
+    Org(#[from] crate::model::org::Error),
     /// Stripe user: {0}
-    User(#[from] crate::models::user::Error),
+    User(#[from] crate::model::user::Error),
 }
 
 impl From<Error> for tonic::Status {
@@ -113,7 +113,7 @@ async fn setup_intent_succeeded_handler(
         .ok_or_else(|| Error::MissingOrgId)?
         .parse()
         .map_err(Error::BadOrgId)?;
-    let org = models::Org::by_id(org_id, &mut write).await?;
+    let org = model::Org::by_id(org_id, &mut write).await?;
     if let Some(stripe_customer_id) = org.stripe_customer_id.as_ref() {
         stripe
             .attach_payment_method(&setup_intent.payment_method, stripe_customer_id)

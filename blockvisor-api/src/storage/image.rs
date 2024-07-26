@@ -4,20 +4,20 @@ use thiserror::Error;
 use tracing::trace;
 
 use crate::grpc::{api, common};
-use crate::models::node::{NodeType, NodeVersion};
+use crate::model::node::{NodeType, NodeVersion};
 
 use super::{BUNDLE_FILE, KERNEL_FILE};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
     /// Failed to parse NodeVersion from key `{0}`: {1}
-    ParseKeyVersion(String, crate::models::node::node_type::Error),
+    ParseKeyVersion(String, crate::model::node::node_type::Error),
     /// Failed to parse NodeType from key `{0}`: {1}
-    ParseNodeType(String, crate::models::node::node_type::Error),
+    ParseNodeType(String, crate::model::node::node_type::Error),
     /// Failed to parse semantic version from NodeVersion `{0}`: {1}
-    ParseSemver(NodeVersion, crate::models::node::node_type::Error),
+    ParseSemver(NodeVersion, crate::model::node::node_type::Error),
     /// Failed to parse NodeVersion: {0}
-    ParseVersion(crate::models::node::node_type::Error),
+    ParseVersion(crate::model::node::node_type::Error),
     /// Key `{0}` is not splittable into at least 4 `/` separated parts.
     SplitKey(String),
     /// File name should end in `/{BUNDLE_FILE:?}` but is `{0}`.

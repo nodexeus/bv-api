@@ -13,8 +13,8 @@ use uuid::Uuid;
 
 use crate::database::Conn;
 use crate::grpc::common;
-use crate::models::schema::sql_types;
-use crate::models::User;
+use crate::model::schema::sql_types;
+use crate::model::User;
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
@@ -25,7 +25,7 @@ pub enum Error {
     /// Unknown resource type.
     UnknownResourceType,
     /// Resource user error: {0}
-    User(#[from] crate::models::user::Error),
+    User(#[from] crate::model::user::Error),
 }
 
 impl From<Error> for Status {

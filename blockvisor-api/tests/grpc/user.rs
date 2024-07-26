@@ -1,5 +1,5 @@
 use blockvisor_api::grpc::{api, common};
-use blockvisor_api::models::User;
+use blockvisor_api::model::User;
 use tonic::transport::Channel;
 use uuid::Uuid;
 

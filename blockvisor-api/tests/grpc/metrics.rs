@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use blockvisor_api::grpc::api;
-use blockvisor_api::models::node::{Node, NodeStatus, StakingStatus, SyncStatus};
-use blockvisor_api::models::Host;
+use blockvisor_api::model::node::{Node, NodeStatus, StakingStatus, SyncStatus};
+use blockvisor_api::model::Host;
 use tonic::transport::Channel;
 
 use crate::setup::helper::traits::SocketRpc;

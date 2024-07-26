@@ -59,13 +59,13 @@ pub enum Error {
     /// Failed to find org memberships for user `{0}`: {1}
     Memberships(UserId, diesel::result::Error),
     /// Org pagination: {0}
-    Paginate(#[from] crate::models::paginate::Error),
+    Paginate(#[from] crate::model::paginate::Error),
     /// Org model RBAC error: {0}
-    Rbac(#[from] crate::models::rbac::Error),
+    Rbac(#[from] crate::model::rbac::Error),
     /// Failed update customer_id for org: {0}
     SetCustomerId(diesel::result::Error),
     /// Org model token error: {0}
-    Token(#[from] crate::models::token::Error),
+    Token(#[from] crate::model::token::Error),
     /// Failed to update org: {0}
     Update(diesel::result::Error),
 }

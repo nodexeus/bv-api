@@ -15,16 +15,16 @@ use crate::auth::resource::{
 };
 use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
-use crate::models::blockchain::{
+use crate::model::blockchain::{
     BlockchainNodeType, BlockchainProperty, BlockchainPropertyId, BlockchainVersion,
 };
-use crate::models::command::NewCommand;
-use crate::models::node::{
+use crate::model::command::NewCommand;
+use crate::model::node::{
     self, ContainerStatus, FilteredIpAddr, NewNode, Node, NodeCount, NodeFilter, NodeJob,
     NodeJobProgress, NodeJobStatus, NodeProperty, NodeReport, NodeScheduler, NodeSearch, NodeSort,
     NodeStatus, NodeType, NodeVersion, StakingStatus, SyncStatus, UpdateNode,
 };
-use crate::models::{Blockchain, CommandType, Host, Org, Region, User};
+use crate::model::{Blockchain, CommandType, Host, Org, Region, User};
 use crate::storage::image::ImageId;
 use crate::storage::metadata::HardwareRequirements;
 use crate::util::{HashVec, NanosUtc};
@@ -42,19 +42,19 @@ pub enum Error {
     /// Auth token parsing failed: {0}
     AuthToken(#[from] crate::auth::token::Error),
     /// Node blockchain error: {0}
-    Blockchain(#[from] crate::models::blockchain::Error),
+    Blockchain(#[from] crate::model::blockchain::Error),
     /// Node blockchain node type error: {0}
-    BlockchainNodeType(#[from] crate::models::blockchain::node_type::Error),
+    BlockchainNodeType(#[from] crate::model::blockchain::node_type::Error),
     /// Node blockchain property error: {0}
-    BlockchainProperty(#[from] crate::models::blockchain::property::Error),
+    BlockchainProperty(#[from] crate::model::blockchain::property::Error),
     /// Node blockchain property error: {0}
-    BlockchainVersion(#[from] crate::models::blockchain::version::Error),
+    BlockchainVersion(#[from] crate::model::blockchain::version::Error),
     /// Failed to parse block height: {0}
     BlockHeight(std::num::TryFromIntError),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
     /// Node command error: {0}
-    Command(#[from] crate::models::command::Error),
+    Command(#[from] crate::model::command::Error),
     /// Node grpc command error: {0}
     CommandGrpc(#[from] crate::grpc::command::Error),
     /// Failed to parse deny ips: {0}
@@ -66,9 +66,9 @@ pub enum Error {
     /// Failed to generate node name. This should not happen.
     GenerateName,
     /// Node host error: {0}
-    Host(#[from] crate::models::host::Error),
+    Host(#[from] crate::model::host::Error),
     /// Node ip address error: {0}
-    IpAddress(#[from] crate::models::ip_address::Error),
+    IpAddress(#[from] crate::model::ip_address::Error),
     /// Failed to parse mem size bytes: {0}
     MemSize(std::num::TryFromIntError),
     /// Missing placement.
@@ -76,15 +76,15 @@ pub enum Error {
     /// Missing blockchain property id: {0}.
     MissingPropertyId(BlockchainPropertyId),
     /// Node model error: {0}
-    Model(#[from] crate::models::node::Error),
+    Model(#[from] crate::model::node::Error),
     /// Node model property error: {0}
-    ModelProperty(#[from] crate::models::node::property::Error),
+    ModelProperty(#[from] crate::model::node::property::Error),
     /// Node type model error: {0}
-    NodeType(#[from] crate::models::node::node_type::Error),
+    NodeType(#[from] crate::model::node::node_type::Error),
     /// No ResourceAffinity.
     NoResourceAffinity,
     /// Node org error: {0}
-    Org(#[from] crate::models::org::Error),
+    Org(#[from] crate::model::org::Error),
     /// Failed to parse BlockchainId: {0}
     ParseBlockchainId(uuid::Error),
     /// Failed to parse HostId: {0}
@@ -96,15 +96,15 @@ pub enum Error {
     /// Failed to parse IpNetwork: {0}
     ParseIpNetwork(ipnetwork::IpNetworkError),
     /// Unable to parse node version: {0}
-    ParseNodeVersion(crate::models::node::node_type::Error),
+    ParseNodeVersion(crate::model::node::node_type::Error),
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
     /// Blockchain property not found: {0}
     PropertyNotFound(String),
     /// Node region error: {0}
-    Region(#[from] crate::models::region::Error),
+    Region(#[from] crate::model::region::Error),
     /// Node report error: {0}
-    Report(#[from] crate::models::node::report::Error),
+    Report(#[from] crate::model::node::report::Error),
     /// Node resource error: {0}
     Resource(#[from] crate::auth::resource::Error),
     /// Node search failed: {0}
@@ -122,7 +122,7 @@ pub enum Error {
     /// Attempt to update status by {1} {2} of node `{0}`, which doesn't exist.
     UpdateStatusMissingNode(NodeId, ResourceType, ResourceId),
     /// Node user error: {0}
-    User(#[from] crate::models::user::Error),
+    User(#[from] crate::model::user::Error),
 }
 
 impl From<Error> for Status {

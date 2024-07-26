@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::database::Conn;
 use crate::grpc::{api, common};
-use crate::models::schema::{blockchain_properties, sql_types};
+use crate::model::schema::{blockchain_properties, sql_types};
 
 use super::{BlockchainId, BlockchainNodeTypeId, BlockchainVersion, BlockchainVersionId};
 

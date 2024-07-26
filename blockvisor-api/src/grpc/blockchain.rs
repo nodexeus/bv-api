@@ -11,13 +11,13 @@ use tracing::{error, warn};
 use crate::auth::rbac::{BlockchainAdminPerm, BlockchainPerm};
 use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
-use crate::models::blockchain::{
+use crate::model::blockchain::{
     Blockchain, BlockchainFilter, BlockchainId, BlockchainNodeType, BlockchainNodeTypeId,
     BlockchainProperty, BlockchainSearch, BlockchainSort, BlockchainVersion, BlockchainVersionId,
     NewBlockchainNodeType, NewProperty, NewVersion, NodeStats,
 };
-use crate::models::node::{NodeType, NodeVersion};
-use crate::models::Region;
+use crate::model::node::{NodeType, NodeVersion};
+use crate::model::Region;
 use crate::storage::image::ImageId;
 use crate::storage::Storage;
 use crate::util::{HashVec, NanosUtc};
@@ -30,15 +30,15 @@ pub enum Error {
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
     /// Blockchain model error: {0}
-    Blockchain(#[from] crate::models::blockchain::Error),
+    Blockchain(#[from] crate::model::blockchain::Error),
     /// Blockchain node type error: {0}
-    BlockchainNodeType(#[from] crate::models::blockchain::node_type::Error),
+    BlockchainNodeType(#[from] crate::model::blockchain::node_type::Error),
     /// Blockchain version error: {0}
-    BlockchainVersion(#[from] crate::models::blockchain::version::Error),
+    BlockchainVersion(#[from] crate::model::blockchain::version::Error),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
     /// Blockchain command failed: {0}
-    Command(#[from] crate::models::command::Error),
+    Command(#[from] crate::model::command::Error),
     /// Blockchain command failed: {0}
     CommandGrpc(#[from] crate::grpc::command::Error),
     /// Diesel failure: {0}
@@ -52,7 +52,7 @@ pub enum Error {
     /// This blockchain config has a negative price: {0}
     NegativePrice(i64),
     /// Blockchain node error: {0}
-    Node(#[from] crate::models::node::Error),
+    Node(#[from] crate::model::node::Error),
     /// Unable to cast node count from i64 to u64: {0}
     NodeCount(std::num::TryFromIntError),
     /// Unable to cast active node count from i64 to u64: {0}
@@ -64,11 +64,11 @@ pub enum Error {
     /// Unable to cast failed node count from i64 to u64: {0}
     NodeCountFailed(std::num::TryFromIntError),
     /// Blockchain node log error: {0}
-    NodeLog(#[from] crate::models::node::log::Error),
+    NodeLog(#[from] crate::model::node::log::Error),
     /// The node type already exists.
     NodeTypeExists,
     /// Blockchain node type error: {0}
-    NodeType(#[from] crate::models::node::node_type::Error),
+    NodeType(#[from] crate::model::node::node_type::Error),
     /// This blockchain config has no associated pricing.
     NoPricing,
     /// Failed to parse BlockchainId: {0}
@@ -78,9 +78,9 @@ pub enum Error {
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
     /// Blockchain property error: {0}
-    Property(#[from] crate::models::blockchain::property::Error),
+    Property(#[from] crate::model::blockchain::property::Error),
     /// Region error: {0}
-    Region(#[from] crate::models::region::Error),
+    Region(#[from] crate::model::region::Error),
     /// Blockchain search failed: {0}
     SearchOperator(crate::util::search::Error),
     /// Sort order: {0}

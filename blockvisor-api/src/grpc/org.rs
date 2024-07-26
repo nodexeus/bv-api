@@ -1,6 +1,5 @@
 use std::cmp::max;
 use std::collections::HashSet;
-use std::num::TryFromIntError;
 
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
@@ -16,10 +15,9 @@ use crate::auth::rbac::{
 use crate::auth::resource::{OrgId, UserId};
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
-use crate::models::org::{NewOrg, OrgFilter, OrgSearch, OrgSort, UpdateOrg};
-use crate::models::rbac::{OrgUsers, RbacUser};
-use crate::models::{Address, Invitation, NewAddress, Org, Token, User};
-use crate::stripe::api::IdOrObject;
+use crate::model::org::{NewOrg, OrgFilter, OrgSearch, OrgSort, UpdateOrg};
+use crate::model::rbac::{OrgUsers, RbacUser};
+use crate::model::{Address, Invitation, NewAddress, Org, Token, User};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::org_service_server::OrgService;
@@ -28,7 +26,7 @@ use super::{api, common, Grpc};
 #[derive(Debug, Display, Error)]
 pub enum Error {
     /// Address error: {0}
-    Address(#[from] crate::models::address::Error),
+    Address(#[from] crate::model::address::Error),
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
     /// Failed to remove user from org with permission `org-remove-self`, user to remove is not self
@@ -44,13 +42,11 @@ pub enum Error {
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
     /// Org invitation error: {0}
-    Invitation(#[from] crate::models::invitation::Error),
+    Invitation(#[from] crate::model::invitation::Error),
     /// The request is missing the `address` fields.
     MissingAddress,
     /// Org model error: {0}
-    Model(#[from] crate::models::org::Error),
-    /// Negative price encountered:
-    NegativePrice(TryFromIntError),
+    Model(#[from] crate::model::org::Error),
     /// Org `{0}` has no owner.
     NoOwner(OrgId),
     /// No customer exists in stripe for org `{0}`.
@@ -66,7 +62,7 @@ pub enum Error {
     /// Failed to parse UserId: {0}
     ParseUserId(uuid::Error),
     /// Org rbac error: {0}
-    Rbac(#[from] crate::models::rbac::Error),
+    Rbac(#[from] crate::model::rbac::Error),
     /// Org resource error: {0}
     Resource(#[from] crate::auth::resource::Error),
     /// Cannot remove last owner from an org.
@@ -77,12 +73,16 @@ pub enum Error {
     SortOrder(crate::util::search::Error),
     /// Stripe error: {0}
     Stripe(#[from] crate::stripe::Error),
+    /// Stripe currency error: {0}
+    StripeCurrency(#[from] crate::stripe::api::currency::Error),
+    /// Stripe iurrency error: {0}
+    StripeInvoice(#[from] crate::stripe::api::invoice::Error),
     /// Org token error: {0}
-    Token(#[from] crate::models::token::Error),
+    Token(#[from] crate::model::token::Error),
     /// The requested sort field is unknown.
     UnknownSortField,
     /// Org user error: {0}
-    User(#[from] crate::models::user::Error),
+    User(#[from] crate::model::user::Error),
 }
 
 impl From<Error> for Status {
@@ -93,9 +93,8 @@ impl From<Error> for Status {
             ClaimsNotUser | DeletePersonal | CanOnlyRemoveSelf => {
                 Status::permission_denied("Access denied.")
             }
-            ConvertNoOrg | Diesel(_) | ParseMax(_) | Stripe(_) => {
-                Status::internal("Internal error.")
-            }
+            ConvertNoOrg | Diesel(_) | ParseMax(_) | Stripe(_) | StripeCurrency(_)
+            | StripeInvoice(_) => Status::internal("Internal error."),
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
@@ -104,7 +103,6 @@ impl From<Error> for Status {
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
             MissingAddress => Status::failed_precondition("User has no address."),
-            NegativePrice(_) => Status::internal("Negative price encountered"),
             NoOwner(_) => Status::failed_precondition("Org has no owner."),
             NoStripeCustomer(_) => Status::failed_precondition("No customer for that org."),
             NoStripeSubscription(_) => Status::failed_precondition("No subscription for that org."),
@@ -489,7 +487,7 @@ async fn list_payment_methods(
             org_id: Some(org_id.to_string()),
             user_id: pm.metadata.and_then(|meta| meta.get("user_id").cloned()),
             details: Some(api::BillingDetails {
-                address: pm.billing_details.address.map(common::Address::from_stripe),
+                address: pm.billing_details.address.map(common::Address::from),
                 email: pm.billing_details.email,
                 name: pm.billing_details.name,
                 phone: pm.billing_details.phone,
@@ -535,8 +533,7 @@ async fn billing_details(
     };
 
     Ok(api::OrgServiceBillingDetailsResponse {
-        currency: common::Currency::from_stripe(subscription.currency)
-            .unwrap_or(common::Currency::Usd) as i32,
+        currency: common::Currency::try_from(subscription.currency)? as i32,
         current_period_start: chrono::DateTime::from_timestamp(
             subscription.current_period_start.0,
             0,
@@ -625,7 +622,7 @@ async fn set_address(
             existing.update(&mut write).await?;
         }
         None
-        | Some(Err(crate::models::address::Error::FindById(_, diesel::result::Error::NotFound))) => {
+        | Some(Err(crate::model::address::Error::FindById(_, diesel::result::Error::NotFound))) => {
             let new_address = NewAddress::new(
                 address.city.as_deref(),
                 address.country.as_deref(),
@@ -678,7 +675,7 @@ async fn get_invoices(
     let invoices = write.ctx.stripe.get_invoices(customer_id).await?;
     let invoices = invoices
         .into_iter()
-        .map(api::Invoice::from_stripe)
+        .map(api::Invoice::try_from)
         .collect::<Result<_, _>>()?;
     Ok(api::OrgServiceGetInvoicesResponse { invoices })
 }
@@ -810,122 +807,5 @@ impl api::OrgServiceListRequest {
             search,
             sort,
         })
-    }
-}
-
-impl api::Invoice {
-    fn from_stripe(value: crate::stripe::api::invoice::Invoice) -> Result<Self, Error> {
-        Ok(Self {
-            number: value.number,
-            created_at: value
-                .created
-                .and_then(|value| chrono::DateTime::from_timestamp(value.0, 0))
-                .map(NanosUtc::from)
-                .map(Into::into),
-            discount: value.discount.map(api::Discount::from_stripe),
-            pdf_url: value.invoice_pdf,
-            line_items: value
-                .lines
-                .map(|lines| lines.data)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|item| {
-                    Ok(api::LineItem {
-                        subtotal: item.amount.try_into().map_err(Error::NegativePrice)?,
-                        total: item
-                            .price
-                            .and_then(|p| p.unit_amount)
-                            .map(|amount| amount.try_into().map_err(Error::NegativePrice))
-                            .transpose()?,
-                        description: item.description,
-                        start: item
-                            .period
-                            .as_ref()
-                            .and_then(|p| p.start.as_ref())
-                            .and_then(|start| chrono::DateTime::from_timestamp(start.0, 0))
-                            .map(NanosUtc::from)
-                            .map(Into::into),
-                        end: item
-                            .period
-                            .as_ref()
-                            .and_then(|p| p.end.as_ref())
-                            .and_then(|end| chrono::DateTime::from_timestamp(end.0, 0))
-                            .map(NanosUtc::from)
-                            .map(Into::into),
-                        plan: item.plan.and_then(|plan| plan.nickname),
-                        proration: item.proration,
-                        quantity: item.quantity,
-                        discounts: item
-                            .discounts
-                            .unwrap_or_default()
-                            .into_iter()
-                            .filter_map(|id_or_discount| match id_or_discount {
-                                IdOrObject::Id(id) => {
-                                    tracing::warn!("Stripe discount not expanded! {id}");
-                                    None
-                                }
-                                IdOrObject::Object(discount) => Some(api::LineItemDiscount {
-                                    name: discount.coupon.name,
-                                    amount: Some(common::Amount {
-                                        currency: discount
-                                            .coupon
-                                            .currency
-                                            .and_then(common::Currency::from_stripe)
-                                            .unwrap_or(common::Currency::Unspecified)
-                                            as i32,
-                                        value: discount.coupon.amount_off.unwrap_or(0),
-                                    }),
-                                }),
-                            })
-                            .collect(),
-                    })
-                })
-                .collect::<Result<_, Error>>()?,
-            status: value
-                .status
-                .map(|status| api::InvoiceStatus::from_stripe(status) as i32),
-            subtotal: value
-                .subtotal
-                .map(|sub| sub.try_into().map_err(Error::NegativePrice))
-                .transpose()?,
-            total: value
-                .total
-                .map(|tot| tot.try_into().map_err(Error::NegativePrice))
-                .transpose()?,
-        })
-    }
-}
-
-impl api::Discount {
-    fn from_stripe(value: crate::stripe::api::discount::Discount) -> Self {
-        Self {
-            name: value.coupon.name,
-        }
-    }
-}
-
-impl common::Address {
-    fn from_stripe(value: crate::stripe::api::address::Address) -> Self {
-        Self {
-            city: value.city,
-            country: value.country,
-            line1: value.line1,
-            line2: value.line2,
-            postal_code: value.postal_code,
-            state: value.state,
-        }
-    }
-}
-
-impl api::InvoiceStatus {
-    pub const fn from_stripe(value: crate::stripe::api::invoice::InvoiceStatus) -> Self {
-        use crate::stripe::api::invoice::InvoiceStatus::*;
-        match value {
-            Draft => api::InvoiceStatus::Draft,
-            Open => api::InvoiceStatus::Open,
-            Paid => api::InvoiceStatus::Paid,
-            Uncollectible => api::InvoiceStatus::Uncollectible,
-            Void => api::InvoiceStatus::Void,
-        }
     }
 }

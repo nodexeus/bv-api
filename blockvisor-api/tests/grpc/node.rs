@@ -1,7 +1,7 @@
 use blockvisor_api::grpc::{api, common};
-use blockvisor_api::models::command::{Command, CommandType};
-use blockvisor_api::models::node::Node;
-use blockvisor_api::models::schema;
+use blockvisor_api::model::command::{Command, CommandType};
+use blockvisor_api::model::node::Node;
+use blockvisor_api::model::schema;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use tonic::transport::Channel;

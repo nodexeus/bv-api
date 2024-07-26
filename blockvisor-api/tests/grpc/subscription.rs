@@ -1,6 +1,6 @@
 use blockvisor_api::auth::resource::{OrgId, UserId};
 use blockvisor_api::grpc::api;
-use blockvisor_api::models::{Org, SubscriptionId};
+use blockvisor_api::model::{Org, SubscriptionId};
 use tonic::transport::Channel;
 
 use crate::setup::helper::traits::SocketRpc;

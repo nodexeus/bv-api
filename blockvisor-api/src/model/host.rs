@@ -61,15 +61,15 @@ pub enum Error {
     /// Failed to increment node count for host `{0}`: {1}
     IncrementNode(HostId, diesel::result::Error),
     /// Host ip address error: {0}
-    IpAddress(#[from] crate::models::ip_address::Error),
+    IpAddress(#[from] crate::model::ip_address::Error),
     /// Failed to get node counts for host: {0}
     NodeCounts(diesel::result::Error),
     /// Nothing to update.
     NoUpdate,
     /// Host org error: {0}
-    Org(#[from] crate::models::org::Error),
+    Org(#[from] crate::model::org::Error),
     /// Host pagination: {0}
-    Paginate(#[from] crate::models::paginate::Error),
+    Paginate(#[from] crate::model::paginate::Error),
     /// Failed to parse host ip address: {0}
     ParseIp(std::net::AddrParseError),
     /// Host region error: {0}

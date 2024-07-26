@@ -15,9 +15,9 @@ use crate::auth::rbac::MetricsPerm;
 use crate::auth::resource::{HostId, NodeId};
 use crate::auth::Authorize;
 use crate::database::{Transaction, WriteConn};
-use crate::models::host::UpdateHostMetrics;
-use crate::models::node::{NodeJob, UpdateNodeMetrics};
-use crate::models::{Host, Node};
+use crate::model::host::UpdateHostMetrics;
+use crate::model::node::{NodeJob, UpdateNodeMetrics};
+use crate::model::{Host, Node};
 use crate::util::HashVec;
 
 use super::api::metrics_service_server::MetricsService;
@@ -36,7 +36,7 @@ pub enum Error {
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
     /// Metrics host error: {0}
-    Host(#[from] crate::models::host::Error),
+    Host(#[from] crate::model::host::Error),
     /// Metrics host grpc error: {0}
     HostGrpc(#[from] crate::grpc::host::Error),
     /// Failed to parse network received: {0}
@@ -48,7 +48,7 @@ pub enum Error {
     /// Failed to parse NodeId: {0}
     ParseNodeId(uuid::Error),
     /// Node metrics error: {0}
-    Node(#[from] crate::models::node::Error),
+    Node(#[from] crate::model::node::Error),
     /// Grpc node metrics error: {0}
     NodeGrpc(#[from] crate::grpc::node::Error),
     /// Failed to parse current data sync progress: {0}

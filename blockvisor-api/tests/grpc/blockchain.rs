@@ -1,6 +1,6 @@
 use blockvisor_api::database::seed::{BLOCKCHAIN_ID, BLOCKCHAIN_NODE_TYPE, BLOCKCHAIN_VERSION};
 use blockvisor_api::grpc::{api, common};
-use blockvisor_api::models::NodeType;
+use blockvisor_api::model::NodeType;
 use tonic::transport::Channel;
 use uuid::Uuid;
 

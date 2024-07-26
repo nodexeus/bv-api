@@ -8,8 +8,8 @@ use thiserror::Error;
 use tonic::Status;
 
 use crate::database::Conn;
-use crate::models::rbac::{RbacPerm, RbacUser};
-use crate::models::{Host, Node};
+use crate::model::rbac::{RbacPerm, RbacUser};
+use crate::model::{Host, Node};
 use crate::util::SecondsUtc;
 
 use super::rbac::{Access, Perm, Perms, Roles};
@@ -26,17 +26,17 @@ pub enum Error {
     /// Claims `{0:?}` does not have visibility of the target UserId ({1}).
     EnsureUser(Resource, UserId),
     /// Failed to check claims for host: {0},
-    Host(#[from] crate::models::host::Error),
+    Host(#[from] crate::model::host::Error),
     /// Permission `{0}` not held by {1}
     MissingPerm(Perm, Resource),
     /// Failed to check claims for node: {0},
-    Node(#[from] crate::models::node::Error),
+    Node(#[from] crate::model::node::Error),
     /// Failed to check claims for org: {0},
-    Org(#[from] crate::models::org::Error),
+    Org(#[from] crate::model::org::Error),
     /// Failed to check RBAC claims: {0},
-    Rbac(#[from] crate::models::rbac::Error),
+    Rbac(#[from] crate::model::rbac::Error),
     /// Failed to check claims for user: {0},
-    User(#[from] crate::models::user::Error),
+    User(#[from] crate::model::user::Error),
 }
 
 impl From<Error> for Status {

@@ -20,7 +20,7 @@ use url::Url;
 
 use crate::config::storage::{BucketConfig, Config};
 use crate::grpc::api;
-use crate::models::node::NodeType;
+use crate::model::node::NodeType;
 
 use self::client::Client;
 use self::image::ImageId;

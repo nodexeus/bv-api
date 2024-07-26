@@ -1,3 +1,5 @@
+use crate::grpc::api;
+
 /// The resource representing a Stripe "Discount".
 ///
 /// For more details see <https://stripe.com/docs/api/discounts/object>
@@ -100,6 +102,14 @@ pub struct Coupon {
     /// Taking account of the above properties, whether this coupon can still be applied to a
     /// customer.
     pub valid: Option<bool>,
+}
+
+impl From<Discount> for api::Discount {
+    fn from(discount: Discount) -> Self {
+        api::Discount {
+            name: discount.coupon.name,
+        }
+    }
 }
 
 /// An enum representing the possible values of an `Coupon`'s `duration` field.

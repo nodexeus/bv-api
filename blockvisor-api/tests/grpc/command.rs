@@ -1,9 +1,9 @@
 use blockvisor_api::auth::resource::NodeId;
 use blockvisor_api::grpc::api;
-use blockvisor_api::models::command::{Command, CommandType, ExitCode, NewCommand};
-use blockvisor_api::models::host::Host;
-use blockvisor_api::models::node::UpdateNode;
-use blockvisor_api::models::Node;
+use blockvisor_api::model::command::{Command, CommandType, ExitCode, NewCommand};
+use blockvisor_api::model::host::Host;
+use blockvisor_api::model::node::UpdateNode;
+use blockvisor_api::model::Node;
 use tonic::transport::Channel;
 
 use crate::setup::helper::traits::SocketRpc;

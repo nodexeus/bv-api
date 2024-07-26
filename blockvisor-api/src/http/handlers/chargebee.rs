@@ -19,27 +19,27 @@ use crate::config::Context;
 use crate::database::{Transaction, WriteConn};
 use crate::grpc::{api, command};
 use crate::http::response::{bad_params, failed, not_found, ok_custom};
-use crate::models::command::NewCommand;
-use crate::models::{CommandType, Host, Node, Subscription};
+use crate::model::command::NewCommand;
+use crate::model::{CommandType, Host, Node, Subscription};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
     /// Chargebee command: {0}
-    Command(#[from] crate::models::command::Error),
+    Command(#[from] crate::model::command::Error),
     /// Chargebee database error: {0}
     Database(#[from] diesel::result::Error),
     /// Chargebee gRPC command: {0}
     GrpcCommand(#[from] crate::grpc::command::Error),
     /// Host error: {0}
-    Host(#[from] crate::models::host::Error),
+    Host(#[from] crate::model::host::Error),
     /// Chargebee IpAddress: {0}
-    IpAddress(#[from] crate::models::ip_address::Error),
+    IpAddress(#[from] crate::model::ip_address::Error),
     /// Chargebee node: {0}
-    Node(#[from] crate::models::node::Error),
+    Node(#[from] crate::model::node::Error),
     /// Chargebee failed to parse IpAddr: {0}
     ParseIpAddr(std::net::AddrParseError),
     /// Chargebee subscription: {0}
-    Subscription(#[from] crate::models::subscription::Error),
+    Subscription(#[from] crate::model::subscription::Error),
 }
 
 impl From<Error> for tonic::Status {

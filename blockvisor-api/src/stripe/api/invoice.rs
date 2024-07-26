@@ -1,4 +1,25 @@
-#[derive(Debug, serde::Deserialize)]
+use std::num::TryFromIntError;
+
+use displaydoc::Display;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::grpc::{api, common};
+use crate::util::NanosUtc;
+
+use super::IdOrObject;
+
+#[derive(Debug, Display, Error)]
+pub enum Error {
+    /// Stripe invoice currency error: {0}
+    Currency(#[from] super::currency::Error),
+    /// LineItemDiscount is missing Currency.
+    DiscountMissingCurrency,
+    /// Negative price encountered:
+    NegativePrice(TryFromIntError),
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Invoice {
     /// Unique identifier for the object.
     ///
@@ -318,7 +339,7 @@ pub struct Invoice {
     pub webhooks_delivered_at: Option<super::Timestamp>,
 }
 
-#[derive(Copy, Clone, Debug, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InvoiceBillingReason {
     AutomaticPendingInvoiceItemInvoice,
@@ -332,20 +353,20 @@ pub enum InvoiceBillingReason {
     Upcoming,
 }
 
-#[derive(Copy, Clone, Debug, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CollectionMethod {
     ChargeAutomatically,
     SendInvoice,
 }
 
-#[derive(Copy, Clone, Debug, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CreateInvoiceFromInvoiceAction {
     Revision,
 }
 
-#[derive(Copy, Clone, Debug, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CreateInvoiceIssuerType {
     Account,
@@ -353,7 +374,7 @@ pub enum CreateInvoiceIssuerType {
     Self_,
 }
 
-#[derive(Copy, Clone, Debug, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InvoiceCustomerTaxExempt {
     Exempt,
@@ -361,7 +382,7 @@ pub enum InvoiceCustomerTaxExempt {
     Reverse,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct InvoicesResourceInvoiceTaxId {
     /// The type of the tax ID, one of `ad_nrt`, `ar_cuit`, `eu_vat`, `bo_tin`, `br_cnpj`, `br_cpf`,
     /// `cn_tin`, `co_nit`, `cr_tin`, `do_rcn`, `ec_ruc`, `eu_oss_vat`, `pe_ruc`, `ro_tin`,
@@ -378,7 +399,7 @@ pub struct InvoicesResourceInvoiceTaxId {
     pub value: Option<String>,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct InvoicesFromInvoice {
     /// The relation between this invoice and the cloned invoice.
     pub action: String,
@@ -386,7 +407,7 @@ pub struct InvoicesFromInvoice {
     pub invoice: super::IdOrObject<String, Box<Invoice>>,
 }
 
-#[derive(Copy, Clone, Debug, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InvoiceStatus {
     Draft,
@@ -396,7 +417,19 @@ pub enum InvoiceStatus {
     Void,
 }
 
-#[derive(Debug, serde::Serialize)]
+impl From<InvoiceStatus> for api::InvoiceStatus {
+    fn from(status: InvoiceStatus) -> Self {
+        match status {
+            InvoiceStatus::Draft => api::InvoiceStatus::Draft,
+            InvoiceStatus::Open => api::InvoiceStatus::Open,
+            InvoiceStatus::Paid => api::InvoiceStatus::Paid,
+            InvoiceStatus::Uncollectible => api::InvoiceStatus::Uncollectible,
+            InvoiceStatus::Void => api::InvoiceStatus::Void,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct ListInvoices<'a> {
     customer_id: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -435,7 +468,7 @@ impl super::StripeEndpoint for ListInvoices<'_> {
 }
 
 /// The resource representing a Stripe "InvoiceLineItem".
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct InvoiceLineItem {
     /// Unique identifier for the object.
     pub id: String,
@@ -505,8 +538,99 @@ pub struct InvoiceLineItem {
     pub unit_amount_excluding_tax: Option<String>,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Period {
     pub end: Option<super::Timestamp>,
     pub start: Option<super::Timestamp>,
+}
+
+impl TryFrom<Invoice> for api::Invoice {
+    type Error = Error;
+
+    fn try_from(invoice: Invoice) -> Result<Self, Self::Error> {
+        Ok(api::Invoice {
+            number: invoice.number,
+            created_at: invoice
+                .created
+                .and_then(|created| chrono::DateTime::from_timestamp(created.0, 0))
+                .map(NanosUtc::from)
+                .map(Into::into),
+            discount: invoice.discount.map(api::Discount::from),
+            pdf_url: invoice.invoice_pdf,
+            line_items: invoice
+                .lines
+                .map(|lines| lines.data)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|item| {
+                    Ok(api::LineItem {
+                        subtotal: item.amount.try_into().map_err(Error::NegativePrice)?,
+                        total: item
+                            .price
+                            .and_then(|p| p.unit_amount)
+                            .map(|amount| amount.try_into().map_err(Error::NegativePrice))
+                            .transpose()?,
+                        description: item.description,
+                        start: item
+                            .period
+                            .as_ref()
+                            .and_then(|p| p.start.as_ref())
+                            .and_then(|start| chrono::DateTime::from_timestamp(start.0, 0))
+                            .map(NanosUtc::from)
+                            .map(Into::into),
+                        end: item
+                            .period
+                            .as_ref()
+                            .and_then(|p| p.end.as_ref())
+                            .and_then(|end| chrono::DateTime::from_timestamp(end.0, 0))
+                            .map(NanosUtc::from)
+                            .map(Into::into),
+                        plan: item.plan.and_then(|plan| plan.nickname),
+                        proration: item.proration,
+                        quantity: item.quantity,
+                        discounts: item
+                            .discounts
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(|id_or_discount| match id_or_discount {
+                                IdOrObject::Id(id) => {
+                                    tracing::warn!("Stripe discount not expanded! {id}");
+                                    Ok(None::<api::LineItemDiscount>)
+                                }
+                                IdOrObject::Object(discount) => Ok(Some(api::LineItemDiscount {
+                                    name: discount.coupon.name,
+                                    amount: Some(common::Amount {
+                                        currency: discount
+                                            .coupon
+                                            .currency
+                                            .ok_or(Error::DiscountMissingCurrency)
+                                            .and_then(|c| {
+                                                common::Currency::try_from(c)
+                                                    .map_err(Error::Currency)
+                                            })?
+                                            as i32,
+                                        value: discount.coupon.amount_off.unwrap_or(0),
+                                    }),
+                                })),
+                            })
+                            .collect::<Result<Vec<_>, Error>>()?
+                            .into_iter()
+                            .flatten()
+                            .collect(),
+                    })
+                })
+                .collect::<Result<_, Error>>()?,
+            status: invoice
+                .status
+                .map(|status| api::InvoiceStatus::from(status) as i32),
+            subtotal: invoice
+                .subtotal
+                .map(|sub| sub.try_into().map_err(Error::NegativePrice))
+                .transpose()?,
+            total: invoice
+                .total
+                .map(|tot| tot.try_into().map_err(Error::NegativePrice))
+                .transpose()?,
+        })
+    }
 }

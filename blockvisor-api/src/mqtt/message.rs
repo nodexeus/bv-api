@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::auth::resource::{HostId, NodeId, OrgId};
 use crate::grpc::{api, common};
-use crate::models::{Host, Node, Org, User};
+use crate::model::{Host, Node, Org, User};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -304,7 +304,7 @@ mod tests {
 
     use crate::auth::rbac::access::tests::view_authz;
     use crate::config::Context;
-    use crate::models::{Command, CommandType};
+    use crate::model::{Command, CommandType};
 
     use super::*;
 

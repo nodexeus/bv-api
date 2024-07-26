@@ -18,8 +18,10 @@ pub mod price;
 pub mod setup_intent;
 pub mod subscription;
 
+use derive_more::{Deref, Display};
 use reqwest::Method;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 pub trait StripeEndpoint: Send + Sync + Sized {
     type Result: DeserializeOwned;
@@ -44,23 +46,23 @@ pub trait StripeEndpoint: Send + Sync + Sized {
 /// An id or object. By default stripe will return an id for most fields, but if more detail is
 /// necessary the `expand` parameter can be provided to ask for the id to be loaded as an object
 /// instead. For more details <https://stripe.com/docs/api/expanding_objects>.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum IdOrObject<Id, Object> {
     Id(Id),
     Object(Object),
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Timestamp(pub i64);
 
-#[derive(Debug, derive_more::Deref, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Deref, Serialize, Deserialize)]
 pub struct Metadata(std::collections::HashMap<String, String>);
 
-#[derive(Debug, derive_more::Display, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Display, Serialize, Deserialize)]
 pub struct PaymentMethodId(String);
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ListResponse<T> {
     pub object: String,
     pub url: String,

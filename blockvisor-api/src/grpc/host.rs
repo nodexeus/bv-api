@@ -14,12 +14,12 @@ use crate::auth::resource::{HostId, OrgId, UserId};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
-use crate::models::command::NewCommand;
-use crate::models::host::{
+use crate::model::command::NewCommand;
+use crate::model::host::{
     ConnectionStatus, Host, HostFilter, HostSearch, HostSort, HostType, ManagedBy, MonthlyCostUsd,
     NewHost, UpdateHost,
 };
-use crate::models::{Blockchain, CommandType, IpAddress, Node, Org, Region, RegionId, Token};
+use crate::model::{Blockchain, CommandType, IpAddress, Node, Org, Region, RegionId, Token};
 use crate::storage::image::ImageId;
 use crate::util::{HashVec, NanosUtc};
 
@@ -31,11 +31,11 @@ pub enum Error {
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
     /// Host blockchain error: {0}
-    Blockchain(#[from] crate::models::blockchain::Error),
+    Blockchain(#[from] crate::model::blockchain::Error),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
     /// Host command error: {0}
-    Command(#[from] crate::models::command::Error),
+    Command(#[from] crate::model::command::Error),
     /// Host command API error: {0}
     CommandApi(#[from] crate::grpc::command::Error),
     /// Failed to parse cpu count: {0}
@@ -49,13 +49,13 @@ pub enum Error {
     /// This host cannot be deleted because it still has nodes.
     HasNodes,
     /// Host model error: {0}
-    Host(#[from] crate::models::host::Error),
+    Host(#[from] crate::model::host::Error),
     /// Host token error: {0}
-    HostProvisionByToken(crate::models::token::Error),
+    HostProvisionByToken(crate::model::token::Error),
     /// Invalid value for ManagedBy enum: {0}.
     InvalidManagedBy(i32),
     /// Host model error: {0}
-    IpAddress(#[from] crate::models::ip_address::Error),
+    IpAddress(#[from] crate::model::ip_address::Error),
     /// Host JWT failure: {0}
     Jwt(#[from] crate::auth::token::jwt::Error),
     /// Looking is missing org id: {0}
@@ -65,9 +65,9 @@ pub enum Error {
     /// Missing org_id for host provisioning token. This should not happen.
     MissingTokenOrgId,
     /// Node model error: {0}
-    Node(#[from] crate::models::node::Error),
+    Node(#[from] crate::model::node::Error),
     /// Host org error: {0}
-    Org(#[from] crate::models::org::Error),
+    Org(#[from] crate::model::org::Error),
     /// Failed to parse BlockchainId: {0}
     ParseBlockchainId(uuid::Error),
     /// Failed to parse HostId: {0}
@@ -85,7 +85,7 @@ pub enum Error {
     /// Host Refresh token failure: {0}
     Refresh(#[from] crate::auth::token::refresh::Error),
     /// Host region error: {0}
-    Region(#[from] crate::models::region::Error),
+    Region(#[from] crate::model::region::Error),
     /// Host search failed: {0}
     SearchOperator(crate::util::search::Error),
     /// Sort order: {0}

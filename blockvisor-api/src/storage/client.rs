@@ -156,7 +156,7 @@ mod tests {
     use mockall::predicate::eq;
 
     use crate::config::storage::{BucketConfig, Config};
-    use crate::models::NodeType;
+    use crate::model::NodeType;
     use crate::storage::image::ImageId;
     use crate::storage::{manifest::DownloadManifest, Storage};
 

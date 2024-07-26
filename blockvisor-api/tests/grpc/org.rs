@@ -5,8 +5,8 @@ use blockvisor_api::auth::rbac::InvitationPerm;
 use blockvisor_api::auth::resource::ResourceEntry;
 use blockvisor_api::database::seed;
 use blockvisor_api::grpc::api::{self, invitation_service_client};
-use blockvisor_api::models::invitation::NewInvitation;
-use blockvisor_api::models::org::Org;
+use blockvisor_api::model::invitation::NewInvitation;
+use blockvisor_api::model::org::Org;
 
 use crate::setup::helper::traits::SocketRpc;
 use crate::setup::TestServer;

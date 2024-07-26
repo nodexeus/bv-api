@@ -1,8 +1,8 @@
 use diesel_derive_enum::DbEnum;
 
 use crate::grpc::api;
-use crate::models::schema::sql_types;
-use crate::models::Region;
+use crate::model::schema::sql_types;
+use crate::model::Region;
 
 /// This struct contains fields by which we can customize which host to pick when starting a new
 /// node. The fields are sorted by precendence from top to bottom, i.e. if the `similarity` field
@@ -31,7 +31,7 @@ impl NodeScheduler {
     /// ```
     ///
     /// This string in intented to be embedded into the query used in
-    /// `models::Host::host_candidates`.
+    /// `model::Host::host_candidates`.
     pub fn order_clause(&self) -> String {
         let mut clause = "ORDER BY \n    ".to_string();
         if let Some(similarity) = &self.similarity {

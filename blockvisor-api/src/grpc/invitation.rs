@@ -11,9 +11,9 @@ use crate::auth::resource::{OrgId, Resource, ResourceType};
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::email::Recipient;
-use crate::models::invitation::{Invitation, InvitationFilter, NewInvitation};
-use crate::models::org::Org;
-use crate::models::user::User;
+use crate::model::invitation::{Invitation, InvitationFilter, NewInvitation};
+use crate::model::org::Org;
+use crate::model::user::User;
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::invitation_service_server::InvitationService;
@@ -50,11 +50,11 @@ pub enum Error {
     /// Claims data is missing email address.
     MissingEmail,
     /// Invitation model error: {0}
-    Model(#[from] crate::models::invitation::Error),
+    Model(#[from] crate::model::invitation::Error),
     /// Node token not valid for invitation.
     NodeClaims,
     /// Invitation org error: {0}
-    Org(#[from] crate::models::org::Error),
+    Org(#[from] crate::model::org::Error),
     /// Failed to parse InvitationId: {0}
     ParseId(uuid::Error),
     /// Failed to parse `invited_by`: {0}
@@ -64,7 +64,7 @@ pub enum Error {
     /// Invitation resource error: {0}
     Resource(#[from] crate::auth::resource::Error),
     /// Invitation user error: {0}
-    User(#[from] crate::models::user::Error),
+    User(#[from] crate::model::user::Error),
     /// Wrong email for invitation.
     WrongEmail,
     /// Wrong org for invitation.
@@ -183,7 +183,7 @@ async fn create(
                 .await?;
         }
 
-        Err(crate::models::user::Error::FindByEmail(_, NotFound)) => {
+        Err(crate::model::user::Error::FindByEmail(_, NotFound)) => {
             let recipient = Recipient {
                 email: &invitation.invitee_email,
                 first_name: "",

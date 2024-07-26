@@ -65,15 +65,15 @@ pub enum Error {
     /// User is not confirmed.
     NotConfirmed,
     /// User org model error: {0}
-    Org(#[from] crate::models::org::Error),
+    Org(#[from] crate::model::org::Error),
     /// User pagination: {0}
-    Paginate(#[from] crate::models::paginate::Error),
+    Paginate(#[from] crate::model::paginate::Error),
     /// Failed to parse password hash: {0}
     ParseHash(password_hash::Error),
     /// Failed to parse Salt: {0}
     ParseSalt(password_hash::Error),
     /// User RBAC error: {0}
-    Rbac(#[from] crate::models::rbac::Error),
+    Rbac(#[from] crate::model::rbac::Error),
     /// Failed to update user: {0}
     Update(diesel::result::Error),
     /// Failed to update user `{0}`: {1}

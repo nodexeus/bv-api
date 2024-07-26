@@ -1,4 +1,4 @@
-use crate::models;
+use crate::model::{Org, User};
 
 /// The resource representing a Stripe "Customer".
 ///
@@ -113,8 +113,8 @@ struct InvoiceSettings<'a> {
 
 impl<'a> CreateCustomer<'a> {
     pub fn new(
-        org: &'a models::Org,
-        user: &'a models::User,
+        org: &'a Org,
+        user: &'a User,
         payment_method_id: Option<&'a super::PaymentMethodId>,
     ) -> Self {
         Self {
