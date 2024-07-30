@@ -212,14 +212,22 @@ pub struct CreateSubscription<'a> {
     price_id: &'a super::price::PriceId,
     #[serde(rename = "items[0][quantity]")]
     quantity: u64,
+    proration_behavior: &'static str,
+    billing_cycle_anchor: super::Timestamp,
 }
 
 impl<'a> CreateSubscription<'a> {
-    pub const fn new(customer_id: &'a str, price_id: &'a super::price::PriceId) -> Self {
+    pub fn new(
+        customer_id: &'a str,
+        price_id: &'a super::price::PriceId,
+        first_invoice: chrono::DateTime<chrono::Utc>,
+    ) -> Self {
         Self {
             customer: customer_id,
             price_id,
             quantity: 1,
+            proration_behavior: "create_prorations",
+            billing_cycle_anchor: first_invoice.into(),
         }
     }
 }

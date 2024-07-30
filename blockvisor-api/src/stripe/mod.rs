@@ -4,6 +4,7 @@ mod client;
 use std::sync::Arc;
 
 use api::subscription::SubscriptionItemId;
+use chrono::Datelike;
 use displaydoc::Display;
 use thiserror::Error;
 
@@ -17,6 +18,8 @@ use self::api::{address, customer, invoice, payment_method, price, setup_intent,
 pub enum Error {
     /// Failed to create stripe Client: {0}
     AttachPaymentMethod(client::Error),
+    /// Error handling datetimes
+    Chrono,
     /// Failed to create stripe Client: {0}
     CreateClient(client::Error),
     /// Failed to create stripe customer: {0}
@@ -218,7 +221,17 @@ impl Payment for Stripe {
         customer_id: &str,
         price_id: &price::PriceId,
     ) -> Result<subscription::Subscription, Error> {
-        let req = subscription::CreateSubscription::new(customer_id, price_id);
+        // We send our invoices at 04:00 GMT on the first of the month.
+        let first_invoice = chrono::Utc::now()
+            .date_naive()
+            .with_day(1)
+            .ok_or(Error::Chrono)?
+            .and_hms_opt(4, 0, 0)
+            .ok_or(Error::Chrono)?
+            .checked_add_months(chrono::Months::new(1))
+            .ok_or(Error::Chrono)?
+            .and_utc();
+        let req = subscription::CreateSubscription::new(customer_id, price_id, first_invoice);
         self.client
             .request(&req)
             .await

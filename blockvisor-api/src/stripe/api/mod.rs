@@ -53,8 +53,14 @@ pub enum IdOrObject<Id, Object> {
     Object(Object),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Timestamp(pub i64);
+
+impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
+    fn from(value: chrono::DateTime<chrono::Utc>) -> Self {
+        Self(value.timestamp())
+    }
+}
 
 #[derive(Debug, Deref, Serialize, Deserialize)]
 pub struct Metadata(std::collections::HashMap<String, String>);
