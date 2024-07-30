@@ -549,7 +549,7 @@ async fn billing_details(
             .map(|item| api::BillingItem {
                 name: item.price.as_ref().and_then(|price| price.nickname.clone()),
                 unit_amount: item.price.as_ref().and_then(|price| price.unit_amount),
-                quantity: item.quantity,
+                quantity: Some(item.quantity),
             })
             .collect(),
     })

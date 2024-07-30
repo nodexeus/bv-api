@@ -19,25 +19,29 @@ pub enum Error {
     AttachPaymentMethod(client::Error),
     /// Failed to create stripe Client: {0}
     CreateClient(client::Error),
-    /// Failed to create stripe customer for org {0}, user {1}, payment: {2:?}: {3}
-    CreateCustomer(OrgId, UserId, Option<api::PaymentMethodId>, client::Error),
+    /// Failed to create stripe customer: {0}
+    CreateCustomer(client::Error),
     /// Failed to create stripe setup intent: {0}
     CreateSetupIntent(client::Error),
     /// Failed to create stripe subscription: {0}
     CreateSubscription(client::Error),
     /// Failed to create stripe subscription item: {0}
     CreateSubscriptionItem(client::Error),
-    /// Failed to delete stripe susbcription item: {0}
+    /// Failed to delete stripe subscription item: {0}
     DeleteSubscriptionItem(client::Error),
     /// Failed to get address: {0}
     GetAddress(client::Error),
     /// Failed to get invoices: {0}
     GetInvoices(client::Error),
+    /// Failed to get subscription item: {0}
+    GetSubscriptionItem(client::Error),
     /// Failed to delete address: {0}
     DeleteAddress(client::Error),
+    /// Failed to find subscription items: {0}
+    FindSubscriptionItems(client::Error),
     /// Failed to list stripe payment methods: {0}
     ListPaymentMethods(client::Error),
-    /// Failed to list stripe susbcriptions: {0}
+    /// Failed to list stripe subscriptions: {0}
     ListSubscriptions(client::Error),
     /// No address found for the current customer.
     NoAddress,
@@ -49,6 +53,8 @@ pub enum Error {
     SearchPrices(client::Error),
     /// Failed to set address: {0}
     SetAddress(client::Error),
+    /// Failed to update subscription item: {0}
+    UpdateSubscriptionItem(client::Error),
 }
 
 pub struct Stripe {
@@ -97,8 +103,27 @@ pub trait Payment {
 
     async fn create_subscription_item(
         &self,
-        susbcription_id: &subscription::SubscriptionId,
+        subscription_id: &subscription::SubscriptionId,
         price_id: &price::PriceId,
+    ) -> Result<subscription::SubscriptionItem, Error>;
+
+    async fn get_subscription_item(
+        &self,
+        item_id: &subscription::SubscriptionItemId,
+    ) -> Result<subscription::SubscriptionItem, Error>;
+
+    /// Find a subscription item within a specific subscription, with the subscription identified by
+    /// the subscription id, and the item within identified by the price_id.
+    async fn find_subscription_item(
+        &self,
+        subscription_id: &subscription::SubscriptionId,
+        price_id: &price::PriceId,
+    ) -> Result<Option<subscription::SubscriptionItem>, Error>;
+
+    async fn update_subscription_item(
+        &self,
+        item_id: &subscription::SubscriptionItemId,
+        quantity: u64,
     ) -> Result<subscription::SubscriptionItem, Error>;
 
     async fn delete_subscription_item(
@@ -160,7 +185,7 @@ impl Payment for Stripe {
         self.client
             .request(&customer)
             .await
-            .map_err(|err| Error::CreateCustomer(org.id, user.id, payment_method_id.cloned(), err))
+            .map_err(Error::CreateCustomer)
     }
 
     async fn attach_payment_method(
@@ -223,14 +248,55 @@ impl Payment for Stripe {
 
     async fn create_subscription_item(
         &self,
-        susbcription_id: &subscription::SubscriptionId,
+        subscription_id: &subscription::SubscriptionId,
         price_id: &price::PriceId,
     ) -> Result<subscription::SubscriptionItem, Error> {
-        let req = subscription::CreateSubscriptionItem::new(susbcription_id, price_id);
+        let req = subscription::CreateSubscriptionItem::new(subscription_id, price_id);
         self.client
             .request(&req)
             .await
             .map_err(Error::CreateSubscriptionItem)
+    }
+
+    async fn get_subscription_item(
+        &self,
+        item_id: &subscription::SubscriptionItemId,
+    ) -> Result<subscription::SubscriptionItem, Error> {
+        let req = subscription::GetSubscriptionItem::new(item_id);
+        self.client
+            .request(&req)
+            .await
+            .map_err(Error::GetSubscriptionItem)
+    }
+
+    async fn find_subscription_item(
+        &self,
+        subscription_id: &subscription::SubscriptionId,
+        price_id: &price::PriceId,
+    ) -> Result<Option<subscription::SubscriptionItem>, Error> {
+        let req = subscription::ListSubscriptionItems::new(subscription_id);
+        let items = self
+            .client
+            .request(&req)
+            .await
+            .map_err(Error::FindSubscriptionItems)?;
+        // TODO: this is silly, find a better way
+        Ok(items
+            .data
+            .into_iter()
+            .find(|item| item.price.as_ref().map(|price| &price.id) == Some(price_id)))
+    }
+
+    async fn update_subscription_item(
+        &self,
+        item_id: &subscription::SubscriptionItemId,
+        quantity: u64,
+    ) -> Result<subscription::SubscriptionItem, Error> {
+        let req = subscription::UpdateSubscriptionItem::new(item_id, quantity);
+        self.client
+            .request(&req)
+            .await
+            .map_err(Error::UpdateSubscriptionItem)
     }
 
     async fn delete_subscription_item(
@@ -384,11 +450,38 @@ pub mod tests {
 
         async fn create_subscription_item(
             &self,
-            susbcription_id: &subscription::SubscriptionId,
+            subscription_id: &subscription::SubscriptionId,
             price_id: &price::PriceId,
         ) -> Result<subscription::SubscriptionItem, Error> {
             self.stripe
-                .create_subscription_item(susbcription_id, price_id)
+                .create_subscription_item(subscription_id, price_id)
+                .await
+        }
+
+        async fn get_subscription_item(
+            &self,
+            item_id: &subscription::SubscriptionItemId,
+        ) -> Result<subscription::SubscriptionItem, Error> {
+            self.stripe.get_subscription_item(item_id).await
+        }
+
+        async fn find_subscription_item(
+            &self,
+            subscription_id: &subscription::SubscriptionId,
+            price_id: &price::PriceId,
+        ) -> Result<Option<subscription::SubscriptionItem>, Error> {
+            self.stripe
+                .find_subscription_item(subscription_id, price_id)
+                .await
+        }
+
+        async fn update_subscription_item(
+            &self,
+            item_id: &subscription::SubscriptionItemId,
+            quantity: u64,
+        ) -> Result<subscription::SubscriptionItem, Error> {
+            self.stripe
+                .update_subscription_item(item_id, quantity)
                 .await
         }
 
@@ -484,6 +577,16 @@ pub mod tests {
             .mock("GET", mockito::Matcher::Regex("^/v1/subscriptions".into()))
             .with_status(200)
             .with_body(mock_subscriptions())
+            .create_async()
+            .await;
+
+        server
+            .mock(
+                "GET",
+                mockito::Matcher::Regex("^/v1/subscription_items".into()),
+            )
+            .with_status(200)
+            .with_body(mock_subscription_items())
             .create_async()
             .await;
 
@@ -1032,6 +1135,53 @@ pub mod tests {
                 }
               },
               "trial_start": null
+            }
+          ]
+        }"#
+    }
+
+    const fn mock_subscription_items() -> &'static str {
+        r#"{
+          "object": "list",
+          "url": "/v1/subscription_items",
+          "has_more": false,
+          "data": [
+            {
+              "id": "si_OCgWsGlqpbN4EP",
+              "object": "subscription_item",
+              "billing_thresholds": null,
+              "created": 1688507587,
+              "metadata": {},
+              "price": {
+                "id": "price_1NQH9iLkdIwHu7ix3tkaSxhj",
+                "object": "price",
+                "active": true,
+                "billing_scheme": "per_unit",
+                "created": 1688507586,
+                "currency": "usd",
+                "custom_unit_amount": null,
+                "livemode": false,
+                "lookup_key": null,
+                "metadata": {},
+                "nickname": null,
+                "product": "prod_OCgWE6cbwiSu27",
+                "recurring": {
+                  "aggregate_usage": null,
+                  "interval": "month",
+                  "interval_count": 1,
+                  "trial_period_days": null,
+                  "usage_type": "licensed"
+                },
+                "tax_behavior": "unspecified",
+                "tiers_mode": null,
+                "transform_quantity": null,
+                "type": "recurring",
+                "unit_amount": 1000,
+                "unit_amount_decimal": "1000"
+              },
+              "quantity": 1,
+              "subscription": "sub_1NQH9iLkdIwHu7ixxhHui9yi",
+              "tax_rates": []
             }
           ]
         }"#
