@@ -916,21 +916,18 @@ async fn create_subscription_item(
         .ok_or_else(|| Error::NoStripeCustomer(org.id))?;
 
     let price = stripe.get_price(sku).await?;
-    if let Some(subscription) = dbg!(stripe.get_subscription(stripe_customer_id).await)? {
+    if let Some(subscription) = stripe.get_subscription(stripe_customer_id).await? {
         // If there is a subscription, we either need to increment the `quantity` of an existing
         // `item`, or we need to create a new item.
-        if let Some(item) = dbg!(
-            stripe
-                .find_subscription_item(&subscription.id, &price.id)
-                .await
-        )? {
+        if let Some(item) = stripe
+            .find_subscription_item(&subscription.id, &price.id)
+            .await?
+        {
             // We found an item, so we will increase it's quantity by 1. Note that if no
             // quantity is set, that is equivalent to the quantity being 1.
-            let item = dbg!(
-                stripe
-                    .update_subscription_item(&item.id, dbg!(item.quantity + 1))
-                    .await
-            )?;
+            let item = stripe
+                .update_subscription_item(&item.id, item.quantity + 1)
+                .await?;
             Ok(item)
         } else {
             // Since the subscription existed, but no item for the current `sku` already

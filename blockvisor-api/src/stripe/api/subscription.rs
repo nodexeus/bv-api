@@ -361,15 +361,12 @@ impl super::StripeEndpoint for ListSubscriptionItems<'_> {
 #[derive(Debug, serde::Serialize)]
 pub struct UpdateSubscriptionItem<'a> {
     id: &'a SubscriptionItemId,
-    quantity: Option<u64>,
+    quantity: u64,
 }
 
 impl<'a> UpdateSubscriptionItem<'a> {
     pub const fn new(id: &'a SubscriptionItemId, quantity: u64) -> Self {
-        Self {
-            id,
-            quantity: Some(quantity),
-        }
+        Self { id, quantity }
     }
 }
 
@@ -382,6 +379,10 @@ impl super::StripeEndpoint for UpdateSubscriptionItem<'_> {
 
     fn path(&self) -> String {
         format!("subscription_items/{}", self.id)
+    }
+
+    fn body(&self) -> Option<&Self> {
+        Some(self)
     }
 }
 
