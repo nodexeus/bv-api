@@ -360,6 +360,7 @@ impl super::StripeEndpoint for ListSubscriptionItems<'_> {
 
 #[derive(Debug, serde::Serialize)]
 pub struct UpdateSubscriptionItem<'a> {
+    #[serde(skip_serializing)]
     id: &'a SubscriptionItemId,
     quantity: u64,
 }
