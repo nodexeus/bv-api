@@ -383,13 +383,11 @@ impl super::StripeEndpoint for ListSubscriptionItems<'_> {
 pub struct UpdateSubscriptionItem<'a> {
     #[serde(skip_serializing)]
     subscription_id: &'a SubscriptionId,
-    items: [UpdateSubscriptionItemInner<'a>; 1],
-}
-
-#[derive(Debug, serde::Serialize)]
-struct UpdateSubscriptionItemInner<'a> {
-    id: &'a SubscriptionItemId,
+    #[serde(rename = "items[0][id]")]
+    item_id: &'a SubscriptionItemId,
+    #[serde(rename = "items[0][quantity]")]
     quantity: u64,
+    proration_behavior: &'static str,
 }
 
 impl<'a> UpdateSubscriptionItem<'a> {
@@ -400,10 +398,9 @@ impl<'a> UpdateSubscriptionItem<'a> {
     ) -> Self {
         Self {
             subscription_id,
-            items: [UpdateSubscriptionItemInner {
-                id: item_id,
-                quantity,
-            }],
+            item_id,
+            quantity,
+            proration_behavior: "always_invoice",
         }
     }
 }
