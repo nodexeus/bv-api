@@ -386,8 +386,7 @@ pub struct UpdateSubscriptionItem<'a> {
     #[serde(skip_serializing)]
     item_id: &'a SubscriptionItemId,
     quantity: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    proration_behavior: Option<&'static str>,
+    proration_behavior: &'static str,
 }
 
 #[derive(Clone, Copy)]
@@ -397,15 +396,17 @@ pub enum QuantityModification {
 }
 
 impl<'a> UpdateSubscriptionItem<'a> {
-    pub fn new(item_id: &'a SubscriptionItemId, modification: QuantityModification) -> Self {
+    pub const fn new(item_id: &'a SubscriptionItemId, modification: QuantityModification) -> Self {
         Self {
             item_id,
             quantity: match modification {
                 QuantityModification::Increment { current_quantity } => current_quantity + 1,
                 QuantityModification::Decrement { current_quantity } => current_quantity - 1,
             },
-            proration_behavior: matches!(modification, QuantityModification::Increment { .. })
-                .then_some("always_invoice"),
+            proration_behavior: match modification {
+                QuantityModification::Increment { .. } => "always_invoice",
+                QuantityModification::Decrement { .. } => "none",
+            },
         }
     }
 }
