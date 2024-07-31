@@ -298,6 +298,7 @@ pub struct CreateSubscriptionItem<'a> {
     subscription: &'a SubscriptionId,
     price: &'a super::price::PriceId,
     quantity: u64,
+    proration_behaviour: &'static str,
 }
 
 impl<'a> CreateSubscriptionItem<'a> {
@@ -309,6 +310,7 @@ impl<'a> CreateSubscriptionItem<'a> {
             subscription: subscription_id,
             price,
             quantity: 1,
+            proration_behaviour: "always_invoice",
         }
     }
 }
@@ -382,8 +384,6 @@ impl super::StripeEndpoint for ListSubscriptionItems<'_> {
 #[derive(Debug, serde::Serialize)]
 pub struct UpdateSubscriptionItem<'a> {
     #[serde(skip_serializing)]
-    subscription_id: &'a SubscriptionId,
-    #[serde(rename = "items[0][id]")]
     item_id: &'a SubscriptionItemId,
     #[serde(rename = "items[0][quantity]")]
     quantity: u64,
@@ -391,13 +391,8 @@ pub struct UpdateSubscriptionItem<'a> {
 }
 
 impl<'a> UpdateSubscriptionItem<'a> {
-    pub const fn new(
-        subscription_id: &'a SubscriptionId,
-        item_id: &'a SubscriptionItemId,
-        quantity: u64,
-    ) -> Self {
+    pub const fn new(item_id: &'a SubscriptionItemId, quantity: u64) -> Self {
         Self {
-            subscription_id,
             item_id,
             quantity,
             proration_behavior: "always_invoice",
@@ -413,7 +408,7 @@ impl super::StripeEndpoint for UpdateSubscriptionItem<'_> {
     }
 
     fn path(&self) -> String {
-        format!("subscriptions/{}", self.subscription_id)
+        format!("subscription_items/{}", self.item_id)
     }
 
     fn body(&self) -> Option<&Self> {
