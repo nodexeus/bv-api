@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
@@ -20,7 +20,7 @@ use crate::model::blockchain::{
 };
 use crate::model::command::NewCommand;
 use crate::model::node::{
-    self, ContainerStatus, FilteredIpAddr, NewNode, Node, NodeCount, NodeFilter, NodeJob,
+    ContainerStatus, FilteredIpAddr, NewNode, Node, NodeCount, NodeFilter, NodeJob,
     NodeJobProgress, NodeJobStatus, NodeProperty, NodeReport, NodeScheduler, NodeSearch, NodeSort,
     NodeStatus, NodeType, NodeVersion, StakingStatus, SyncStatus, UpdateNode,
 };
@@ -71,6 +71,8 @@ pub enum Error {
     IpAddress(#[from] crate::model::ip_address::Error),
     /// Failed to parse mem size bytes: {0}
     MemSize(std::num::TryFromIntError),
+    /// No node ids given.
+    MissingIds,
     /// Missing placement.
     MissingPlacement,
     /// Missing blockchain property id: {0}.
@@ -117,6 +119,10 @@ pub enum Error {
     SyncCurrent(std::num::TryFromIntError),
     /// Failed to parse total data sync progress: {0}
     SyncTotal(std::num::TryFromIntError),
+    /// Not all nodes to upgrade are for the same blockchain.
+    UpgradeBlockchain,
+    /// Not all nodes to upgrade are for the same node type.
+    UpgradeNodeType,
     /// The requested sort field is unknown.
     UnknownSortField,
     /// Attempt to update status by {1} {2} of node `{0}`, which doesn't exist.
@@ -137,6 +143,7 @@ impl From<Error> for Status {
             DenyIps(_) => Status::invalid_argument("deny_ips"),
             DiskSize(_) => Status::invalid_argument("disk_size_bytes"),
             MemSize(_) => Status::invalid_argument("mem_size_bytes"),
+            MissingIds => Status::invalid_argument("ids"),
             MissingPlacement => Status::invalid_argument("placement"),
             NoResourceAffinity => Status::invalid_argument("resource"),
             ParseBlockchainId(_) => Status::invalid_argument("blockchain_id"),
@@ -149,6 +156,8 @@ impl From<Error> for Status {
             SyncCurrent(_) => Status::invalid_argument("data_sync_progress_current"),
             SyncTotal(_) => Status::invalid_argument("data_sync_progress_total"),
             UnknownSortField => Status::invalid_argument("sort.field"),
+            UpgradeBlockchain => Status::failed_precondition("Same blockchain."),
+            UpgradeNodeType => Status::failed_precondition("Same node type."),
             UpdateStatusMissingNode(_, _, _) => Status::not_found("No such node"),
             Auth(err) => err.into(),
             AuthToken(err) => err.into(),
@@ -395,15 +404,70 @@ async fn create(
     Ok(api::NodeServiceCreateResponse { nodes })
 }
 
+async fn upgrade(
+    req: api::NodeServiceUpgradeRequest,
+    meta: MetadataMap,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::NodeServiceUpgradeResponse, Error> {
+    let ids = req
+        .ids
+        .iter()
+        .map(|id| id.parse().map_err(Error::ParseId))
+        .collect::<Result<HashSet<_>, _>>()?;
+    if ids.is_empty() {
+        return Err(Error::MissingIds);
+    }
+
+    let authz = write
+        .auth_or_all(&meta, NodeAdminPerm::Upgrade, NodePerm::Upgrade, &ids)
+        .await?;
+
+    let nodes = Node::by_ids(&ids, &mut write).await?;
+    let (blockchain_id, node_type) = (nodes[0].blockchain_id, nodes[0].node_type);
+    if !nodes.iter().all(|node| node.blockchain_id == blockchain_id) {
+        return Err(Error::UpgradeBlockchain);
+    } else if !nodes.iter().all(|node| node.node_type == node_type) {
+        return Err(Error::UpgradeNodeType);
+    }
+
+    let blockchain = Blockchain::by_id(blockchain_id, &authz, &mut write).await?;
+    let node_type =
+        BlockchainNodeType::by_node_type(blockchain.id, node_type, &authz, &mut write).await?;
+    let new_version =
+        BlockchainVersion::by_node_type_version(node_type.id, &req.version, &mut write).await?;
+
+    let update = UpdateNode {
+        version: Some(NodeVersion::new(&new_version.version).map_err(Error::ParseNodeVersion)?),
+        ..Default::default()
+    };
+
+    for node in nodes {
+        let node = node.update(&update, &mut write).await?;
+        let cmd = NewCommand::node(&node, CommandType::NodeUpgrade)?
+            .create(&mut write)
+            .await?;
+        let cmd = api::Command::from_model(&cmd, &authz, &mut write).await?;
+        write.mqtt(cmd);
+    }
+
+    Ok(api::NodeServiceUpgradeResponse {})
+}
+
 async fn update_config(
     req: api::NodeServiceUpdateConfigRequest,
     meta: MetadataMap,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceUpdateConfigResponse, Error> {
-    let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
-    let node = Node::by_id(node_id, &mut write).await?;
+    let ids = req
+        .ids
+        .iter()
+        .map(|id| id.parse().map_err(Error::ParseId))
+        .collect::<Result<HashSet<_>, _>>()?;
+    if ids.is_empty() {
+        return Err(Error::MissingIds);
+    }
 
-    let authz = if req.org_id.is_some() {
+    let authz = if req.new_org_id.is_some() {
         let perms = [NodeAdminPerm::UpdateConfig, NodeAdminPerm::Transfer];
         write.auth_all(&meta, perms).await?
     } else {
@@ -412,60 +476,30 @@ async fn update_config(
                 &meta,
                 NodeAdminPerm::UpdateConfig,
                 NodePerm::UpdateConfig,
-                node_id,
+                &ids,
             )
             .await?
     };
 
-    let node = node.update(req.as_update()?, &mut write).await?;
-    let updated = NewCommand::node(&node, CommandType::NodeUpdate)?
-        .create(&mut write)
-        .await?;
-    let cmd = api::Command::from_model(&updated, &authz, &mut write).await?;
+    let nodes = Node::by_ids(&ids, &mut write).await?;
+    let update = req.as_update()?;
 
-    let node = api::Node::from_model(node, &authz, &mut write).await?;
-    let updated_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
-    let updated = api::NodeMessage::updated(node, updated_by);
+    for node in nodes {
+        let node = node.update(&update, &mut write).await?;
+        let updated = NewCommand::node(&node, CommandType::NodeUpdate)?
+            .create(&mut write)
+            .await?;
 
-    write.mqtt(cmd);
-    write.mqtt(updated);
+        let cmd = api::Command::from_model(&updated, &authz, &mut write).await?;
+        let node = api::Node::from_model(node, &authz, &mut write).await?;
+        let updated_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
+        let updated = api::NodeMessage::updated(node, updated_by);
+
+        write.mqtt(cmd);
+        write.mqtt(updated);
+    }
 
     Ok(api::NodeServiceUpdateConfigResponse {})
-}
-
-async fn upgrade(
-    req: api::NodeServiceUpgradeRequest,
-    meta: MetadataMap,
-    mut write: WriteConn<'_, '_>,
-) -> Result<api::NodeServiceUpgradeResponse, Error> {
-    let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
-    let node = Node::by_id(node_id, &mut write).await?;
-
-    let authz = write
-        .auth_or_all(&meta, NodeAdminPerm::Upgrade, NodePerm::Upgrade, node_id)
-        .await?;
-
-    let blockchain = Blockchain::by_id(node.blockchain_id, &authz, &mut write).await?;
-    let node_type =
-        BlockchainNodeType::by_node_type(blockchain.id, node.node_type, &authz, &mut write).await?;
-    let new_version =
-        BlockchainVersion::by_node_type_version(node_type.id, &req.version, &mut write).await?;
-
-    // node.version = NodeVersion::new(&new_version.version);
-    let update = UpdateNode {
-        version: Some(NodeVersion::new(&new_version.version).map_err(Error::ParseNodeVersion)?),
-        ..Default::default()
-    };
-    let node = node.update(update, &mut write).await?;
-
-    let cmd = NewCommand::node(&node, CommandType::NodeUpgrade)?
-        .create(&mut write)
-        .await?;
-    let cmd = api::Command::from_model(&cmd, &authz, &mut write).await?;
-
-    write.mqtt(cmd);
-
-    Ok(api::NodeServiceUpgradeResponse {})
 }
 
 async fn update_status(
@@ -473,36 +507,34 @@ async fn update_status(
     meta: MetadataMap,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceUpdateStatusResponse, Error> {
-    let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
-    let node = match Node::by_id(node_id, &mut write).await {
-        Err(node::Error::FindById(_, diesel::result::Error::NotFound)) => {
-            let token = (&meta).try_into()?;
-            let claims = write.ctx.auth.claims(&token, &mut write).await?;
-            return Err(Error::UpdateStatusMissingNode(
-                node_id,
-                claims.resource_entry.resource_type,
-                claims.resource_entry.resource_id,
-            ));
-        }
-        Err(e) => return Err(e.into()),
-        Ok(node) => node,
-    };
+    let ids = req
+        .ids
+        .iter()
+        .map(|id| id.parse().map_err(Error::ParseId))
+        .collect::<Result<HashSet<_>, _>>()?;
+    if ids.is_empty() {
+        return Err(Error::MissingIds);
+    }
 
     let authz = write
         .auth_or_all(
             &meta,
             NodeAdminPerm::UpdateStatus,
             NodePerm::UpdateStatus,
-            node_id,
+            &ids,
         )
         .await?;
 
-    let node = node.update(req.as_update()?, &mut write).await?;
-    let node = api::Node::from_model(node, &authz, &mut write).await?;
+    let nodes = Node::by_ids(&ids, &mut write).await?;
+    let update = req.as_update()?;
 
-    let updated_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
-    let updated = api::NodeMessage::updated(node, updated_by);
-    write.mqtt(updated);
+    for node in nodes {
+        let node = node.update(&update, &mut write).await?;
+        let node = api::Node::from_model(node, &authz, &mut write).await?;
+        let updated_by = common::EntityUpdate::from_resource(&authz, &mut write).await?;
+        let updated = api::NodeMessage::updated(node, updated_by);
+        write.mqtt(updated);
+    }
 
     Ok(api::NodeServiceUpdateStatusResponse {})
 }
@@ -523,7 +555,7 @@ async fn delete(
         node_status: Some(NodeStatus::DeletePending),
         ..Default::default()
     };
-    let node = node.update(update, &mut write).await?;
+    let node = node.update(&update, &mut write).await?;
     Node::delete(node.id, &mut write).await?;
 
     // Send delete node command
@@ -1078,20 +1110,9 @@ impl api::NodeServiceListRequest {
 
 impl api::NodeServiceUpdateConfigRequest {
     pub fn as_update(&self) -> Result<UpdateNode<'_>, Error> {
-        let allow_ips: Vec<FilteredIpAddr> = self
-            .allow_ips
-            .iter()
-            .map(api::FilteredIpAddr::as_model)
-            .collect();
-        let deny_ips: Vec<FilteredIpAddr> = self
-            .deny_ips
-            .iter()
-            .map(api::FilteredIpAddr::as_model)
-            .collect();
-
         Ok(UpdateNode {
             org_id: self
-                .org_id
+                .new_org_id
                 .as_deref()
                 .map(str::parse)
                 .transpose()
@@ -1109,8 +1130,6 @@ impl api::NodeServiceUpdateConfigRequest {
             container_status: None,
             self_update: self.self_update,
             address: None,
-            allow_ips: Some(serde_json::to_value(allow_ips).map_err(Error::AllowIps)?),
-            deny_ips: Some(serde_json::to_value(deny_ips).map_err(Error::DenyIps)?),
             note: self.note.as_deref(),
         })
     }
@@ -1133,8 +1152,6 @@ impl api::NodeServiceUpdateStatusRequest {
             container_status: Some(self.container_status().into()),
             self_update: None,
             address: self.address.as_deref(),
-            allow_ips: None,
-            deny_ips: None,
             note: None,
         })
     }

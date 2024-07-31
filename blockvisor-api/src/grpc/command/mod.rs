@@ -257,7 +257,7 @@ async fn ack_node_transition(
         node_status: Some(next_status),
         ..Default::default()
     };
-    let node = node.update(update, write).await?;
+    let node = node.update(&update, write).await?;
 
     let node = api::Node::from_model(node, authz, write)
         .await

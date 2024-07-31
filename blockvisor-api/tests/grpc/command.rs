@@ -68,11 +68,9 @@ async fn responds_ok_for_pending() {
         container_status: None,
         self_update: None,
         address: None,
-        allow_ips: None,
-        deny_ips: None,
         note: None,
     };
-    node.update(update, &mut conn).await.unwrap();
+    node.update(&update, &mut conn).await.unwrap();
 
     let cmd = create_command(&test, node_id, CommandType::NodeCreate).await;
     let host = Host::by_id(cmd.host_id, &mut conn).await.unwrap();

@@ -58,17 +58,9 @@ async fn responds_ok_for_update_config() {
     let jwt = test.host_jwt();
     let node_id = test.seed().node.id;
     let req = api::NodeServiceUpdateConfigRequest {
-        id: node_id.to_string(),
+        ids: vec![node_id.to_string()],
         self_update: Some(true),
-        allow_ips: vec![api::FilteredIpAddr {
-            ip: "127.0.0.1".to_string(),
-            description: Some("wow so allowed".to_string()),
-        }],
-        deny_ips: vec![api::FilteredIpAddr {
-            ip: "127.0.0.2".to_string(),
-            description: Some("wow so denied".to_string()),
-        }],
-        org_id: None,
+        new_org_id: None,
         note: Some("milk, eggs, bread and copious snacks".to_string()),
         display_name: Some("<script>alert('XSS');</script>".to_string()),
     };
@@ -82,14 +74,6 @@ async fn responds_ok_for_update_config() {
 
     // Some assertions that the update actually worked
     assert!(node.self_update);
-
-    let allowed = node.allow_ips().unwrap()[0].clone();
-    assert_eq!(allowed.ip, "127.0.0.1");
-    assert_eq!(allowed.description.unwrap(), "wow so allowed");
-
-    let denied = node.deny_ips().unwrap()[0].clone();
-    assert_eq!(denied.ip, "127.0.0.2");
-    assert_eq!(denied.description.unwrap(), "wow so denied");
 
     assert_eq!(
         node.note,
@@ -226,11 +210,9 @@ async fn responds_invalid_argument_with_invalid_data_for_create() {
 async fn responds_ok_with_valid_data_for_update_config() {
     let test = TestServer::new().await;
     let req = api::NodeServiceUpdateConfigRequest {
-        id: test.seed().node.id.to_string(),
+        ids: vec![test.seed().node.id.to_string()],
         self_update: Some(false),
-        allow_ips: vec![],
-        deny_ips: vec![],
-        org_id: None,
+        new_org_id: None,
         note: None,
         display_name: None,
     };
@@ -268,7 +250,7 @@ async fn responds_permission_denied_with_member_token_for_update_status() {
 
     let jwt = test.member_jwt().await;
     let req = api::NodeServiceUpdateStatusRequest {
-        id: test.seed().node.id.to_string(),
+        ids: vec![test.seed().node.id.to_string()],
         version: Some("v2".to_string()),
         container_status: None,
         address: Some("address".to_string()),
@@ -284,8 +266,7 @@ async fn responds_permission_denied_with_member_token_for_update_status() {
 async fn responds_internal_with_invalid_data_for_update_config() {
     let test = TestServer::new().await;
     let req = api::NodeServiceUpdateConfigRequest {
-        // This is an invalid uuid so the api call should fail.
-        id: "wowowow".to_string(),
+        ids: vec!["not-valid".to_string()],
         ..Default::default()
     };
     let status = test
@@ -301,7 +282,7 @@ async fn responds_not_found_with_invalid_id_for_update_config() {
     let test = TestServer::new().await;
     let req = api::NodeServiceUpdateConfigRequest {
         // This uuid will not exist, so the api call should fail.
-        id: Uuid::new_v4().to_string(),
+        ids: vec![Uuid::new_v4().to_string()],
         ..Default::default()
     };
     let status = test

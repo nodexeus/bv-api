@@ -82,7 +82,7 @@ async fn delete_node_success(succeeded_cmd: &Command, write: &mut WriteConn<'_, 
         ..Default::default()
     };
     let node = node
-        .update(update, write)
+        .update(&update, write)
         .await
         .map_err(|err| error!("Failed to delete node {node_id} for command {command_id}: {err}"))?;
     Node::delete(node.id, write)
