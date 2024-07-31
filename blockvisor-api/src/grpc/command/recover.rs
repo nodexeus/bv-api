@@ -158,7 +158,7 @@ async fn recover_created(
         ..Default::default()
     };
     let node = node
-        .update(update, write)
+        .update(&update, write)
         .await
         .map_err(Error::UpdateNode)?;
     write

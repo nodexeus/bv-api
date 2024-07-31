@@ -223,12 +223,12 @@ impl Node {
             .map_err(|err| Error::FindById(id, err))
     }
 
-    pub async fn by_ids(ids: HashSet<NodeId>, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
+    pub async fn by_ids(ids: &HashSet<NodeId>, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
         nodes::table
             .filter(nodes::id.eq_any(ids.iter()))
             .get_results(conn)
             .await
-            .map_err(|err| Error::FindByIds(ids, err))
+            .map_err(|err| Error::FindByIds(ids.clone(), err))
     }
 
     pub async fn by_org_id(org_id: OrgId, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
@@ -278,7 +278,7 @@ impl Node {
             .map_err(Error::NodeProperty)
     }
 
-    pub async fn update(self, update: UpdateNode<'_>, conn: &mut Conn<'_>) -> Result<Node, Error> {
+    pub async fn update(self, update: &UpdateNode<'_>, conn: &mut Conn<'_>) -> Result<Node, Error> {
         if let Some(new_org_id) = update.org_id {
             if new_org_id != self.org_id {
                 let new_node_log = NewNodeLog {
@@ -993,8 +993,6 @@ pub struct UpdateNode<'a> {
     pub container_status: Option<ContainerStatus>,
     pub self_update: Option<bool>,
     pub address: Option<&'a str>,
-    pub allow_ips: Option<serde_json::Value>,
-    pub deny_ips: Option<serde_json::Value>,
     pub note: Option<&'a str>,
 }
 
