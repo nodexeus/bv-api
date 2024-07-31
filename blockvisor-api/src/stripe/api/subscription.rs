@@ -155,7 +155,7 @@ pub struct SubscriptionItem {
     #[serde(default = "default_quantity")]
     pub quantity: u64,
     /// The `subscription` this `subscription_item` belongs to.
-    pub subscription: SubscriptionId,
+    pub subscription: Option<SubscriptionId>,
 }
 
 const fn default_quantity() -> u64 {

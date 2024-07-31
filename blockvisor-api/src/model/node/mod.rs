@@ -116,6 +116,8 @@ pub enum Error {
     NoMatchingHost,
     /// Org with id `{0}` has no customer in stripe.
     NoStripeCustomer(OrgId),
+    /// Stripe responded with a susbcription item that has no subscription id set.
+    NoSubscriptionId,
     /// Newly created subscription has no items.
     NoSubscriptionItem,
     /// Cannot launch node without a region.
@@ -329,14 +331,11 @@ impl Node {
                 .get_subscription_item(&stripe_item_id)
                 .await?;
             if item.quantity > 1 {
+                let subscription_id = item.subscription.as_ref().ok_or(Error::NoSubscriptionId)?;
                 write
                     .ctx
                     .stripe
-                    .update_subscription_item(
-                        &item.subscription,
-                        &stripe_item_id,
-                        item.quantity - 1,
-                    )
+                    .update_subscription_item(subscription_id, &stripe_item_id, item.quantity - 1)
                     .await?;
             } else {
                 write
