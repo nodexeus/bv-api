@@ -298,7 +298,7 @@ pub struct CreateSubscriptionItem<'a> {
     subscription: &'a SubscriptionId,
     price: &'a super::price::PriceId,
     quantity: u64,
-    proration_behaviour: &'static str,
+    proration_behavior: &'static str,
 }
 
 impl<'a> CreateSubscriptionItem<'a> {
@@ -310,7 +310,7 @@ impl<'a> CreateSubscriptionItem<'a> {
             subscription: subscription_id,
             price,
             quantity: 1,
-            proration_behaviour: "always_invoice",
+            proration_behavior: "always_invoice",
         }
     }
 }
