@@ -18,7 +18,7 @@ use thiserror::Error;
 use tonic::Status;
 use validator::Validate;
 
-use crate::auth::rbac::Role;
+use crate::auth::rbac::{OrgRole, Role};
 use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
 use crate::email::Language;
@@ -56,6 +56,8 @@ pub enum Error {
     FindByIds(HashSet<UserId>, diesel::result::Error),
     /// Failed to find users with role {1} in org {0}: {2}
     FindByOrgRole(OrgId, Role, diesel::result::Error),
+    /// Failed to find owner for org {0}: {1}
+    FindOwner(OrgId, diesel::result::Error),
     /// Failed to check if user `{0}` is confirmed: {1}
     IsConfirmed(UserId, diesel::result::Error),
     /// Login failed because no email was found.
@@ -64,6 +66,8 @@ pub enum Error {
     MissingHash,
     /// User is not confirmed.
     NotConfirmed,
+    /// Org {0} has no owner
+    NoOwner(OrgId),
     /// User org model error: {0}
     Org(#[from] crate::model::org::Error),
     /// User pagination: {0}
@@ -165,6 +169,25 @@ impl User {
             .get_results(conn)
             .await
             .map_err(|err| Error::FindByOrgRole(org_id, role, err))
+    }
+
+    pub async fn owner(org_id: OrgId, conn: &mut Conn<'_>) -> Result<Self, Error> {
+        let owner_roles = [
+            Role::Org(OrgRole::Owner).to_string(),
+            Role::Org(OrgRole::Personal).to_string(),
+        ];
+        let mut owners = Self::not_deleted()
+            .inner_join(user_roles::table)
+            .filter(user_roles::org_id.eq(org_id))
+            .filter(user_roles::role.eq_any(owner_roles))
+            .select(users::all_columns)
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::FindOwner(org_id, err))?;
+        if owners.len() != 1 {
+            tracing::warn!("Org {org_id} has {} owners!", owners.len());
+        }
+        owners.pop().ok_or(Error::NoOwner(org_id))
     }
 
     pub fn verify_password(&self, password: &str) -> Result<(), Error> {

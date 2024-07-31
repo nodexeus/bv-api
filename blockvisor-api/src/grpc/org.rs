@@ -9,9 +9,7 @@ use tonic::metadata::MetadataMap;
 use tonic::{Request, Response, Status};
 use tracing::{debug, error};
 
-use crate::auth::rbac::{
-    OrgAddressPerm, OrgAdminPerm, OrgBillingPerm, OrgPerm, OrgProvisionPerm, OrgRole, Role,
-};
+use crate::auth::rbac::{OrgAddressPerm, OrgAdminPerm, OrgBillingPerm, OrgPerm, OrgProvisionPerm};
 use crate::auth::resource::{OrgId, UserId};
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
@@ -586,10 +584,7 @@ async fn set_address(
     let (org, customer_id) = if let Some(customer_id) = org.stripe_customer_id.clone() {
         (org, customer_id)
     } else {
-        let owner = User::by_org_role(org_id, Role::Org(OrgRole::Owner), &mut write)
-            .await?
-            .pop()
-            .ok_or_else(|| Error::NoOwner(org_id))?;
+        let owner = User::owner(org_id, &mut write).await?;
         let customer_id = write
             .ctx
             .stripe
