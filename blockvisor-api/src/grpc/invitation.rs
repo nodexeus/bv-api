@@ -6,7 +6,7 @@ use tonic::metadata::MetadataMap;
 use tonic::{Request, Response, Status};
 use tracing::error;
 
-use crate::auth::rbac::InvitationPerm;
+use crate::auth::rbac::{InvitationAdminPerm, InvitationPerm};
 use crate::auth::resource::{OrgId, Resource, ResourceType};
 use crate::auth::Authorize;
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
@@ -149,7 +149,14 @@ async fn create(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::InvitationServiceCreateResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
-    let authz = write.auth(&meta, InvitationPerm::Create, org_id).await?;
+    let authz = write
+        .auth_or_all(
+            &meta,
+            InvitationAdminPerm::Create,
+            InvitationPerm::Create,
+            org_id,
+        )
+        .await?;
 
     if Invitation::has_open_invite(org_id, &req.invitee_email, &mut write).await? {
         return Err(Error::AlreadyInvited);

@@ -158,6 +158,10 @@ define_perms! {
         Revoke,
     }
 
+    InvitationAdmin => {
+        Create,
+    }
+
     Kernel => {
         Retrieve,
     }
