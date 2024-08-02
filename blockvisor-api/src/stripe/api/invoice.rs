@@ -1,18 +1,18 @@
+use std::collections::HashMap;
+
 use displaydoc::Display;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::grpc::{api, common};
+use crate::grpc::api;
 use crate::util::NanosUtc;
-
-use super::IdOrObject;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Stripe invoice currency error: {0}
+    /// Currency error: {0}
     Currency(#[from] super::currency::Error),
-    /// LineItemDiscount is missing Currency.
-    DiscountMissingCurrency,
+    /// Discount error: {0}
+    Discount(#[from] super::discount::Error),
 }
 
 #[derive(Debug, Deserialize)]
@@ -318,7 +318,7 @@ pub struct Invoice {
     /// Total after discounts and taxes.
     pub total: Option<i64>,
     // /// The aggregate amounts calculated per discount across all line items.
-    // pub total_discount_amounts: Option<Vec<DiscountsResourceDiscountAmount>>,
+    pub total_discount_amounts: Option<Vec<super::discount::DiscountAmount>>,
     /// The integer amount in cents (or local equivalent) representing the total amount of the
     /// invoice including all discounts but excluding all tax.
     pub total_excluding_tax: Option<i64>,
@@ -436,7 +436,7 @@ pub struct ListInvoices<'a> {
 
 impl<'a> ListInvoices<'a> {
     pub fn new(customer_id: &'a str, expand_discounts: bool) -> Self {
-        let expand = expand_discounts.then_some("data.lines.data.discounts");
+        let expand = expand_discounts.then_some("data.total_discount_amounts.discount");
         Self {
             customer: customer_id,
             expand,
@@ -545,6 +545,30 @@ impl TryFrom<Invoice> for api::Invoice {
     type Error = Error;
 
     fn try_from(invoice: Invoice) -> Result<Self, Self::Error> {
+        let discount_amounts = match &invoice.total_discount_amounts {
+            Some(discounts) => discounts.iter().map(|da| (&da.discount.id, da)).collect(),
+            None => HashMap::new(),
+        };
+
+        let convert_discounts = |discounts: Vec<
+            super::IdOrObject<String, super::discount::Discount>,
+        >| {
+            discounts.iter()
+                .map(|id_or_discount| match id_or_discount {
+                    super::IdOrObject::Id(id) => id,
+                    super::IdOrObject::Object(discount) => &discount.id,
+                })
+                .filter_map(|id| {
+                    discount_amounts.get(id).or_else(|| {
+                        tracing::warn!("Discount {id} referenced in response but not in `total_discount_amounts`");
+                        None
+                    })
+                })
+                .map(std::ops::Deref::deref)
+                .map(api::Discount::try_from)
+                .collect::<Result<_, _>>()
+        };
+
         Ok(api::Invoice {
             number: invoice.number,
             created_at: invoice
@@ -552,7 +576,7 @@ impl TryFrom<Invoice> for api::Invoice {
                 .and_then(|created| chrono::DateTime::from_timestamp(created.0, 0))
                 .map(NanosUtc::from)
                 .map(Into::into),
-            discount: invoice.discount.map(api::Discount::from),
+            discount: convert_discounts(invoice.discounts.unwrap_or_default())?,
             pdf_url: invoice.invoice_pdf,
             line_items: invoice
                 .lines
@@ -581,34 +605,7 @@ impl TryFrom<Invoice> for api::Invoice {
                         plan: item.plan.and_then(|plan| plan.nickname),
                         proration: item.proration,
                         quantity: item.quantity,
-                        discounts: item
-                            .discounts
-                            .unwrap_or_default()
-                            .into_iter()
-                            .map(|id_or_discount| match id_or_discount {
-                                IdOrObject::Id(id) => {
-                                    tracing::warn!("Stripe discount not expanded! {id}");
-                                    Ok(None::<api::LineItemDiscount>)
-                                }
-                                IdOrObject::Object(discount) => Ok(Some(api::LineItemDiscount {
-                                    name: discount.coupon.name,
-                                    amount: Some(common::Amount {
-                                        currency: discount
-                                            .coupon
-                                            .currency
-                                            .map(common::Currency::try_from)
-                                            .transpose()
-                                            .map_err(Error::Currency)?
-                                            .unwrap_or(common::Currency::Usd)
-                                            as i32,
-                                        value: discount.coupon.amount_off.unwrap_or(0),
-                                    }),
-                                })),
-                            })
-                            .collect::<Result<Vec<_>, Error>>()?
-                            .into_iter()
-                            .flatten()
-                            .collect(),
+                        discounts: convert_discounts(item.discounts.unwrap_or_default())?,
                     })
                 })
                 .collect::<Result<_, Error>>()?,
