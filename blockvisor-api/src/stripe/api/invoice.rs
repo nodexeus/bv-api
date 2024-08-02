@@ -596,11 +596,10 @@ impl TryFrom<Invoice> for api::Invoice {
                                         currency: discount
                                             .coupon
                                             .currency
-                                            .ok_or(Error::DiscountMissingCurrency)
-                                            .and_then(|c| {
-                                                common::Currency::try_from(c)
-                                                    .map_err(Error::Currency)
-                                            })?
+                                            .map(common::Currency::try_from)
+                                            .transpose()
+                                            .map_err(Error::Currency)?
+                                            .unwrap_or(common::Currency::Usd)
                                             as i32,
                                         value: discount.coupon.amount_off.unwrap_or(0),
                                     }),
