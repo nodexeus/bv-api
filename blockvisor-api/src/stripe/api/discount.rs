@@ -1,4 +1,12 @@
-use crate::grpc::api;
+use crate::grpc::{api, common};
+use displaydoc::Display;
+use thiserror::Error;
+
+#[derive(Debug, Display, Error)]
+pub enum Error {
+    /// Currency error: {0}.
+    Currency(#[from] super::currency::Error),
+}
 
 /// The resource representing a Stripe "Discount".
 ///
@@ -105,11 +113,30 @@ pub struct Coupon {
     pub valid: Option<bool>,
 }
 
-impl From<Discount> for api::Discount {
-    fn from(discount: Discount) -> Self {
-        api::Discount {
-            name: discount.coupon.name,
-        }
+#[derive(Debug, serde::Deserialize)]
+pub struct DiscountAmount {
+    pub(super) amount: i64,
+    pub(super) discount: super::discount::Discount,
+}
+
+impl TryFrom<&DiscountAmount> for api::Discount {
+    type Error = Error;
+
+    fn try_from(discount_amount: &DiscountAmount) -> Result<Self, Error> {
+        Ok(api::Discount {
+            name: discount_amount.discount.coupon.name.clone(),
+            amount: Some(common::Amount {
+                currency: discount_amount
+                    .discount
+                    .coupon
+                    .currency
+                    .map(common::Currency::try_from)
+                    .transpose()
+                    .map_err(Error::Currency)?
+                    .unwrap_or(common::Currency::Usd) as i32,
+                value: discount_amount.amount,
+            }),
+        })
     }
 }
 
