@@ -576,7 +576,7 @@ impl TryFrom<Invoice> for api::Invoice {
                 .and_then(|created| chrono::DateTime::from_timestamp(created.0, 0))
                 .map(NanosUtc::from)
                 .map(Into::into),
-            discount: convert_discounts(invoice.discounts.unwrap_or_default())?,
+            discounts: convert_discounts(invoice.discounts.unwrap_or_default())?,
             pdf_url: invoice.invoice_pdf,
             line_items: invoice
                 .lines
