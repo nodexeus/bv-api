@@ -143,7 +143,8 @@ impl Blockchain {
             "main" | "mainnet" => "MN",
             "test" | "testnet" => "TN",
             other => &other[0..std::cmp::min(other.len(), 3)],
-        };
+        }
+        .to_uppercase();
         let region = region
             .pricing_tier
             .as_deref()
