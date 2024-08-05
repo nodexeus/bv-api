@@ -130,8 +130,8 @@ impl Blockchain {
         region: &super::Region,
     ) -> Result<String, Error> {
         // FMN - hardcoded for Nodes (Fully-Managed Node)
-        // BLASTGETH - Node ticker (Blast Geth)
-        // A - Node Type (archive)
+        // BLASTGETH-A - Node ticker (Blast Geth)
+        //           ^ A - Node Type (archive)
         // MN - Net type (mainnet)
         // USW1 - Region (US west)
         // USD - hardcoded for now
@@ -149,7 +149,7 @@ impl Blockchain {
             .pricing_tier
             .as_deref()
             .ok_or_else(|| Error::RegionWithoutPricing(region.id))?;
-        Ok(format!("FMN-{blockchain}-A-{network}-{region}-USD-M"))
+        Ok(format!("FMN-{blockchain}-{network}-{region}-USD-M"))
     }
 }
 
