@@ -584,7 +584,14 @@ impl TryFrom<Invoice> for api::Invoice {
                 .unwrap_or_default()
                 .into_iter()
                 .map(|item| {
+                    let discounts = convert_discounts(item.discounts.unwrap_or_default())?;
                     Ok(api::LineItem {
+                        total: item.amount
+                            - discounts
+                                .iter()
+                                .filter_map(|discount| discount.amount.as_ref())
+                                .map(|amount| amount.value)
+                                .sum::<i64>(),
                         subtotal: item.amount,
                         unit_amount: item.price.and_then(|p| p.unit_amount),
                         description: item.description,
@@ -605,7 +612,7 @@ impl TryFrom<Invoice> for api::Invoice {
                         plan: item.plan.and_then(|plan| plan.nickname),
                         proration: item.proration,
                         quantity: item.quantity,
-                        discounts: convert_discounts(item.discounts.unwrap_or_default())?,
+                        discounts,
                     })
                 })
                 .collect::<Result<_, Error>>()?,
