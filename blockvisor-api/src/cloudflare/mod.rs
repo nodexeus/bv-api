@@ -183,7 +183,7 @@ pub mod tests {
         ApiSuccess {
             result: DnsRecord {
                 meta: Meta { auto_added: false },
-                locked: false,
+                locked: None,
                 name: "test".into(),
                 ttl: 1,
                 zone_id: "zone_id".into(),
