@@ -42,8 +42,8 @@ pub enum Error {
     ParseCookieHeader(tonic::metadata::errors::ToStrError),
     /// Failed to create refresh cookie: {0}
     RefreshCookie(tonic::metadata::errors::InvalidMetadataValue),
-    /// The refresh token has expired.
-    TokenExpired,
+    /// The refresh token for resource {0} has expired.
+    TokenExpired(String),
 }
 
 impl From<Error> for Status {
@@ -106,7 +106,13 @@ impl Cipher {
                 }
 
                 match err.into_kind() {
-                    ErrorKind::ExpiredSignature => Err(Error::TokenExpired),
+                    ErrorKind::ExpiredSignature => {
+                        let refresh = self.decode_expired(encoded).ok();
+                        Err(Error::TokenExpired(refresh.map_or_else(
+                            || "unknown".to_string(),
+                            |r| format!("type: {:?}, id: {}", r.resource_type(), r.resource_id()),
+                        )))
+                    }
                     kind => Err(Error::Decode(kind)),
                 }
             })?;

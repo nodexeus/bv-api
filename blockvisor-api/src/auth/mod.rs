@@ -218,16 +218,7 @@ impl Auth {
         self.cipher
             .refresh
             .decode(&cookie.encoded)
-            .map_err(|e| match e {
-                token::refresh::Error::TokenExpired => {
-                    let refresh = self.cipher.refresh.decode_expired(&cookie.encoded).ok();
-                    Error::ExpiredRefresh(refresh.map_or_else(
-                        || "unknown".to_string(),
-                        |r| format!("type: {:?}, id: {}", r.resource_type(), r.resource_id()),
-                    ))
-                }
-                other => Error::DecodeRefresh(other),
-            })
+            .map_err(Error::DecodeRefresh)
     }
 
     /// Try to get a `Refresh` token from the request headers.
