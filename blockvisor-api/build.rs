@@ -13,17 +13,23 @@ fn main() -> Result<()> {
     #[cfg(not(any(test, feature = "integration-test")))]
     let builder = tonic_build::configure();
 
+    let includes: Vec<_> = PROTO_DIRS
+        .iter()
+        .filter(|dir| std::path::Path::new(dir).exists())
+        .collect();
     builder
         .build_server(true)
         .enum_attribute("command", "#[allow(clippy::large_enum_variant)]")
-        .compile(&proto_files()?, PROTO_DIRS)
+        .compile(&proto_files()?, &includes)
         .context("Failed to compile protos")
 }
 
 fn proto_files() -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for dir in PROTO_DIRS {
-        find_recursive(Path::new(dir), &mut files)?;
+        if std::path::Path::new(dir).exists() {
+            find_recursive(Path::new(dir), &mut files)?;
+        }
     }
     Ok(files)
 }
