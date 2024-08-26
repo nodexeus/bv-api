@@ -126,6 +126,8 @@ impl Client for aws_sdk_s3::Client {
 
     async fn download_url(&self, bucket: &str, key: &str, expires: Duration) -> Result<Url, Error> {
         let key = key.to_lowercase();
+        // Note: https://developers.cloudflare.com/r2/api/s3/presigned-urls/
+        let expires = expires.min(Duration::from_secs(604_800)); // 7 days:
         let config = PresigningConfig::expires_in(expires).map_err(Error::PresigningConfig)?;
 
         self.get_object()
@@ -139,6 +141,8 @@ impl Client for aws_sdk_s3::Client {
 
     async fn upload_url(&self, bucket: &str, key: &str, expires: Duration) -> Result<Url, Error> {
         let key = key.to_lowercase();
+        // Note: https://developers.cloudflare.com/r2/api/s3/presigned-urls/
+        let expires = expires.min(Duration::from_secs(604_800)); // 7 days:
         let config = PresigningConfig::expires_in(expires).map_err(Error::PresigningConfig)?;
 
         self.put_object()
