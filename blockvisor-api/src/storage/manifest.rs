@@ -32,32 +32,6 @@ pub struct DownloadManifest {
     pub chunks: Vec<ArchiveChunk>,
 }
 
-impl TryFrom<api::DownloadManifest> for DownloadManifest {
-    type Error = Error;
-
-    fn try_from(manifest: api::DownloadManifest) -> Result<Self, Self::Error> {
-        Ok(DownloadManifest {
-            total_size: manifest.total_size,
-            compression: manifest.compression.map(TryInto::try_into).transpose()?,
-            chunks: manifest
-                .chunks
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?,
-        })
-    }
-}
-
-impl From<DownloadManifest> for api::DownloadManifest {
-    fn from(manifest: DownloadManifest) -> Self {
-        api::DownloadManifest {
-            total_size: manifest.total_size,
-            compression: manifest.compression.map(Into::into),
-            chunks: manifest.chunks.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArchiveChunk {
     pub key: String,
@@ -189,33 +163,6 @@ impl From<Compression> for api::Compression {
 
         api::Compression {
             compression: Some(inner),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct UploadManifest {
-    pub slots: Vec<UploadSlot>,
-}
-
-impl TryFrom<api::UploadManifest> for UploadManifest {
-    type Error = Error;
-
-    fn try_from(manifest: api::UploadManifest) -> Result<Self, Self::Error> {
-        Ok(UploadManifest {
-            slots: manifest
-                .slots
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?,
-        })
-    }
-}
-
-impl From<UploadManifest> for api::UploadManifest {
-    fn from(manifest: UploadManifest) -> Self {
-        api::UploadManifest {
-            slots: manifest.slots.into_iter().map(Into::into).collect(),
         }
     }
 }

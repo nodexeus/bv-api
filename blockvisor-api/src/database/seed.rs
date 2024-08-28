@@ -316,10 +316,10 @@ async fn create_nodes(
 async fn setup_rbac(conn: &mut Conn<'_>) {
     super::create_roles_and_perms(conn).await.unwrap();
 
-    let queries = vec![
-        "
+    let query = "
         insert into role_permissions (role, permission)
         values
+        -- blockjoy-admin --
         ('blockjoy-admin', 'auth-admin-list-permissions'),
         ('blockjoy-admin', 'blockchain-admin-add-node-type'),
         ('blockjoy-admin', 'blockchain-admin-add-version'),
@@ -329,8 +329,8 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('blockjoy-admin', 'command-admin-list'),
         ('blockjoy-admin', 'host-admin-get'),
         ('blockjoy-admin', 'host-admin-list'),
-        ('blockjoy-admin', 'host-admin-update'),
         ('blockjoy-admin', 'host-admin-regions'),
+        ('blockjoy-admin', 'host-admin-update'),
         ('blockjoy-admin', 'invitation-admin-create'),
         ('blockjoy-admin', 'mqtt-admin-acl'),
         ('blockjoy-admin', 'node-admin-create'),
@@ -341,9 +341,9 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('blockjoy-admin', 'node-admin-restart'),
         ('blockjoy-admin', 'node-admin-start'),
         ('blockjoy-admin', 'node-admin-stop'),
+        ('blockjoy-admin', 'node-admin-transfer'),
         ('blockjoy-admin', 'node-admin-update-config'),
         ('blockjoy-admin', 'node-admin-update-status'),
-        ('blockjoy-admin', 'node-admin-transfer'),
         ('blockjoy-admin', 'org-admin-get'),
         ('blockjoy-admin', 'org-admin-list'),
         ('blockjoy-admin', 'org-admin-update'),
@@ -351,52 +351,40 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('blockjoy-admin', 'org-billing-list-payment-methods'),
         ('blockjoy-admin', 'user-admin-filter'),
         ('blockjoy-admin', 'user-admin-get'),
-        ('blockjoy-admin', 'user-admin-update');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        ('blockjoy-admin', 'user-admin-update'),
+        -- api-key-user --
+        ('api-key-user', 'user-billing-delete'),
+        ('api-key-user', 'user-billing-get'),
+        ('api-key-user', 'user-billing-update'),
         ('api-key-user', 'user-create'),
         ('api-key-user', 'user-delete'),
         ('api-key-user', 'user-filter'),
         ('api-key-user', 'user-get'),
-        ('api-key-user', 'user-update'),
-        ('api-key-user', 'user-billing-delete'),
-        ('api-key-user', 'user-billing-get'),
-        ('api-key-user', 'user-billing-update'),
         ('api-key-user', 'user-settings-delete'),
         ('api-key-user', 'user-settings-get'),
-        ('api-key-user', 'user-settings-update');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        ('api-key-user', 'user-settings-update'),
+        ('api-key-user', 'user-update'),
+        -- api-key-org --
         ('api-key-org', 'org-create'),
         ('api-key-org', 'org-get'),
         ('api-key-org', 'org-list'),
-        ('api-key-org', 'org-update'),
         ('api-key-org', 'org-provision-get-token'),
-        ('api-key-org', 'org-provision-reset-token');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        ('api-key-org', 'org-provision-reset-token'),
+        ('api-key-org', 'org-update'),
+        -- api-key-host --
+        ('api-key-host', 'host-billing-get'),
         ('api-key-host', 'host-create'),
         ('api-key-host', 'host-delete'),
         ('api-key-host', 'host-get'),
         ('api-key-host', 'host-list'),
+        ('api-key-host', 'host-provision-create'),
+        ('api-key-host', 'host-provision-get'),
         ('api-key-host', 'host-regions'),
         ('api-key-host', 'host-restart'),
         ('api-key-host', 'host-start'),
         ('api-key-host', 'host-stop'),
         ('api-key-host', 'host-update'),
-        ('api-key-host', 'host-billing-get'),
-        ('api-key-host', 'host-provision-create'),
-        ('api-key-host', 'host-provision-get');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        -- api-key-node --
         ('api-key-node', 'api-key-create'),
         ('api-key-node', 'api-key-delete'),
         ('api-key-node', 'api-key-list'),
@@ -423,29 +411,17 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('api-key-node', 'node-restart'),
         ('api-key-node', 'node-start'),
         ('api-key-node', 'node-stop'),
+        ('api-key-node', 'node-update-config'),
         ('api-key-node', 'node-upgrade'),
-        ('api-key-node', 'node-update-config');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        -- email-invitation --
         ('email-invitation', 'invitation-accept'),
         ('email-invitation', 'invitation-decline'),
-        ('email-invitation', 'user-create');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
-        ('email-registration-confirmation', 'auth-confirm');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
-        ('email-reset-password', 'auth-update-password');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        ('email-invitation', 'user-create'),
+        -- email-registration-confirmation --
+        ('email-registration-confirmation', 'auth-confirm'),
+        -- email-reset-password --
+        ('email-reset-password', 'auth-update-password'),
+        -- grpc-login --
         ('grpc-login', 'api-key-create'),
         ('grpc-login', 'api-key-delete'),
         ('grpc-login', 'api-key-list'),
@@ -456,9 +432,9 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-login', 'auth-update-ui-password'),
         ('grpc-login', 'babel-notify'),
         ('grpc-login', 'blockchain-get'),
+        ('grpc-login', 'blockchain-get-pricing'),
         ('grpc-login', 'blockchain-list'),
         ('grpc-login', 'blockchain-view-public'),
-        ('grpc-login', 'blockchain-get-pricing'),
         ('grpc-login', 'bundle-list-bundle-versions'),
         ('grpc-login', 'bundle-retrieve'),
         ('grpc-login', 'command-ack'),
@@ -482,27 +458,24 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-login', 'org-provision-get-token'),
         ('grpc-login', 'org-provision-reset-token'),
         ('grpc-login', 'subscription-list'),
+        ('grpc-login', 'user-billing-delete'),
+        ('grpc-login', 'user-billing-get'),
+        ('grpc-login', 'user-billing-update'),
         ('grpc-login', 'user-create'),
         ('grpc-login', 'user-delete'),
         ('grpc-login', 'user-filter'),
         ('grpc-login', 'user-get'),
-        ('grpc-login', 'user-update'),
-        ('grpc-login', 'user-billing-delete'),
-        ('grpc-login', 'user-billing-get'),
-        ('grpc-login', 'user-billing-update'),
         ('grpc-login', 'user-settings-delete'),
         ('grpc-login', 'user-settings-get'),
-        ('grpc-login', 'user-settings-update');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        ('grpc-login', 'user-settings-update'),
+        ('grpc-login', 'user-update'),
+        -- grpc-new-host --
         ('grpc-new-host', 'auth-refresh'),
         ('grpc-new-host', 'babel-notify'),
-        ('grpc-new-host', 'blockchain-archive-get-download'),
-        ('grpc-new-host', 'blockchain-archive-has-download'),
-        ('grpc-new-host', 'blockchain-archive-get-upload'),
-        ('grpc-new-host', 'blockchain-archive-put-download'),
+        ('grpc-new-host', 'blockchain-archive-get-download-chunks'),
+        ('grpc-new-host', 'blockchain-archive-get-download-metadata'),
+        ('grpc-new-host', 'blockchain-archive-get-upload-slots'),
+        ('grpc-new-host', 'blockchain-archive-put-download-manifest'),
         ('grpc-new-host', 'blockchain-get'),
         ('grpc-new-host', 'blockchain-get-image'),
         ('grpc-new-host', 'blockchain-get-plugin'),
@@ -536,42 +509,33 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-new-host', 'node-restart'),
         ('grpc-new-host', 'node-start'),
         ('grpc-new-host', 'node-stop'),
-        ('grpc-new-host', 'node-upgrade'),
         ('grpc-new-host', 'node-update-config'),
-        ('grpc-new-host', 'node-update-status');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
-        ('org-owner', 'org-delete');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        ('grpc-new-host', 'node-update-status'),
+        ('grpc-new-host', 'node-upgrade'),
+        -- org-owner --
+        ('org-owner', 'org-delete'),
+        -- org-admin --
         ('org-admin', 'host-billing-get'),
         ('org-admin', 'invitation-create'),
         ('org-admin', 'invitation-revoke'),
-        ('org-admin', 'org-remove-member'),
-        ('org-admin', 'org-update'),
         ('org-admin', 'org-billing-init-card'),
         ('org-admin', 'org-billing-list-payment-methods'),
+        ('org-admin', 'org-remove-member'),
+        ('org-admin', 'org-update'),
         ('org-admin', 'subscription-create'),
         ('org-admin', 'subscription-delete'),
-        ('org-admin', 'subscription-update');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        ('org-admin', 'subscription-update'),
+        -- org-member --
         ('org-member', 'host-create'),
         ('org-member', 'host-delete'),
         ('org-member', 'host-get'),
         ('org-member', 'host-list'),
+        ('org-member', 'host-provision-create'),
+        ('org-member', 'host-provision-get'),
         ('org-member', 'host-regions'),
         ('org-member', 'host-restart'),
         ('org-member', 'host-start'),
         ('org-member', 'host-stop'),
-        ('org-member', 'host-provision-create'),
-        ('org-member', 'host-provision-get'),
         ('org-member', 'node-create'),
         ('org-member', 'node-delete'),
         ('org-member', 'node-get'),
@@ -580,30 +544,27 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('org-member', 'node-restart'),
         ('org-member', 'node-start'),
         ('org-member', 'node-stop'),
-        ('org-member', 'node-upgrade'),
         ('org-member', 'node-update-config'),
+        ('org-member', 'node-upgrade'),
         ('org-member', 'org-create'),
         ('org-member', 'org-get'),
         ('org-member', 'org-list'),
-        ('org-member', 'org-remove-self'),
         ('org-member', 'org-provision-get-token'),
         ('org-member', 'org-provision-reset-token'),
-        ('org-member', 'subscription-get');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        ('org-member', 'org-remove-self'),
+        ('org-member', 'subscription-get'),
+        -- org-personal --
         ('org-personal', 'host-billing-get'),
         ('org-personal', 'host-create'),
         ('org-personal', 'host-delete'),
         ('org-personal', 'host-get'),
         ('org-personal', 'host-list'),
+        ('org-personal', 'host-provision-create'),
+        ('org-personal', 'host-provision-get'),
         ('org-personal', 'host-regions'),
         ('org-personal', 'host-restart'),
         ('org-personal', 'host-start'),
         ('org-personal', 'host-stop'),
-        ('org-personal', 'host-provision-create'),
-        ('org-personal', 'host-provision-get'),
         ('org-personal', 'node-delete'),
         ('org-personal', 'node-get'),
         ('org-personal', 'node-list'),
@@ -611,8 +572,8 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('org-personal', 'node-restart'),
         ('org-personal', 'node-start'),
         ('org-personal', 'node-stop'),
-        ('org-personal', 'node-upgrade'),
         ('org-personal', 'node-update-config'),
+        ('org-personal', 'node-upgrade'),
         ('org-personal', 'org-create'),
         ('org-personal', 'org-get'),
         ('org-personal', 'org-list'),
@@ -622,19 +583,10 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('org-personal', 'subscription-create'),
         ('org-personal', 'subscription-delete'),
         ('org-personal', 'subscription-get'),
-        ('org-personal', 'subscription-update');
-        ",
-        "
-        insert into role_permissions (role, permission)
-        values
+        ('org-personal', 'subscription-update'),
+        -- view-developer-preview --
         ('view-developer-preview', 'blockchain-view-development');
-        ",
-    ];
+        ";
 
-    for query in queries {
-        diesel::sql_query(query)
-            .execute(conn)
-            .await
-            .unwrap_or_else(|e| panic!("`{query}` failed with: {e}"));
-    }
+    diesel::sql_query(query).execute(conn).await.unwrap();
 }

@@ -24,7 +24,7 @@ use crate::model::node::NodeType;
 
 use self::client::Client;
 use self::image::ImageId;
-use self::manifest::{DownloadManifest, UploadManifest, UploadSlot};
+use self::manifest::{ArchiveChunk, DownloadManifest, UploadSlot};
 use self::metadata::BlockchainMetadata;
 
 pub const CREDENTIALS: &str = "blockvisor-api credentials provider";
@@ -40,12 +40,14 @@ pub enum Error {
     Client(#[from] client::Error),
     /// No download manifest found for `{0:?}` in network {1}.
     DownloadManifest(ImageId, String),
-    /// No manifest found for image `{0:?}`, version: `{1:?}`, network `{2}`.
-    FindManifest(ImageId, Option<Version>, String),
     /// Storage image error: {0}
     Image(#[from] image::Error),
     /// Storage metadata error: {0}
     Metadata(#[from] metadata::Error),
+    /// Missing chunk index: {0}
+    MissingChunk(usize),
+    /// No data versions found.
+    NoDataVersion,
     /// Failed to parse manifest: {0}
     ParseManifest(serde_json::Error),
     /// Failed to parse storage bytes as UTF8: {0}
@@ -65,10 +67,11 @@ impl From<Error> for Status {
             )) if matches!(err.err(), GetObjectError::NoSuchKey(_)) => {
                 Status::not_found(format!("No rhai script at `{bucket}:{file}`"))
             }
-            DownloadManifest(_, _) | FindManifest(_, _, _) => Status::not_found("Not found."),
+            DownloadManifest(_, _) | NoDataVersion => Status::not_found("Not found."),
             Metadata(crate::storage::metadata::Error::CompileScript(_, _)) => {
                 Status::internal("Failed to compile script")
             }
+            MissingChunk(_) => Status::failed_precondition("Unknown chunk index."),
             Client(_) | Image(_) | Metadata(_) | ParseManifest(_) | ParseUtf8(_)
             | SerializeManifest(_) => Status::internal("Internal error."),
         }
@@ -205,55 +208,101 @@ impl Storage {
         Ok(idents)
     }
 
-    /// Find the most recent download manifest (<= `image.node_version`)
-    /// and generates the download URLs which may have expired.
-    pub async fn generate_download_manifest(
+    /// Fetch and parse an image `DownloadManifest`.
+    ///
+    /// If `node_version` is Some then it overrides `image.node_version`.
+    /// If `data_version` is None then it uses the latest data version.
+    pub async fn download_manifest(
         &self,
         image: &ImageId,
+        node_version: Option<&Version>,
         network: &str,
-    ) -> Result<DownloadManifest, Error> {
-        let mut manifest = self
-            .find_download_manifest_blueprint(image, network)
-            .await?;
-        let download_gb = manifest.chunks.iter().map(|c| c.size).sum::<u64>() / 1_000_000_000;
-        let expires = Duration::from_secs(self.expiration.as_secs().max(30 * download_gb));
-        for chunk in &mut manifest.chunks {
-            let url = self
-                .client
-                .download_url(&self.bucket.archive, &chunk.key, expires)
-                .await?;
-            chunk.url = Some(url);
-        }
+        data_version: Option<u64>,
+    ) -> Result<(DownloadManifest, u64), Error> {
+        let data_version = if let Some(version) = data_version {
+            version
+        } else {
+            let mut versions = self.data_versions(image, node_version, network).await?;
+            versions.pop().ok_or(Error::NoDataVersion)?
+        };
 
-        Ok(manifest)
+        let key = format!(
+            "{protocol}/{node_type}/{node_version}/{network}/{data_version}/{MANIFEST_FILE}",
+            protocol = image.protocol,
+            node_type = image.node_type,
+            node_version = node_version
+                .map(ToString::to_string)
+                .as_deref()
+                .unwrap_or(image.node_version.as_str())
+        );
+
+        let manifest = self.read_manifest(&key).await?;
+        Ok((manifest, data_version))
     }
 
-    /// Find the most recent download manifest (<= `image.node_version`) blueprint.
-    pub async fn find_download_manifest_blueprint(
+    /// Regenerate the download URLs for the requested `DownloadManifest` chunks.
+    pub async fn refresh_download_manifest(
+        &self,
+        image: &ImageId,
+        network: &str,
+        data_version: u64,
+        chunk_indexes: &[usize],
+    ) -> Result<Vec<ArchiveChunk>, Error> {
+        let (manifest, _) = self
+            .download_manifest(image, None, network, Some(data_version))
+            .await?;
+        let expires = Duration::from_secs(self.expiration.as_secs());
+
+        let mut chunks = Vec::with_capacity(chunk_indexes.len());
+        for &index in chunk_indexes {
+            let mut chunk = manifest
+                .chunks
+                .get(index)
+                .ok_or(Error::MissingChunk(index))?
+                .clone();
+            chunk.url = self
+                .client
+                .download_url(&self.bucket.archive, &chunk.key, expires)
+                .await
+                .map(Some)?;
+            chunks.push(chunk);
+        }
+
+        Ok(chunks)
+    }
+
+    /// Find the most recent download manifest (<= `image.node_version`).
+    pub async fn latest_download_manifest(
         &self,
         image: &ImageId,
         network: &str,
     ) -> Result<DownloadManifest, Error> {
-        let node_version = image.semver()?;
-        let node_versions = self.node_versions(image).await?;
-        let mut versions = node_versions.iter().rev();
+        let max_version = image.semver()?;
+        let mut node_versions = self.node_versions(image).await?;
 
-        let manifest = loop {
-            let Some(version) = versions.next() else {
+        loop {
+            let Some(ref node_version) = node_versions.pop() else {
                 return Err(Error::DownloadManifest(image.clone(), network.into()));
             };
 
-            if *version <= node_version {
-                match self.find_manifest(image, Some(version), network).await {
-                    Ok(manifest) => break manifest,
-                    Err(err) => warn!("Manifest not found: {err:#}"),
+            if *node_version <= max_version {
+                for data_version in self
+                    .data_versions(image, Some(node_version), network)
+                    .await?
+                {
+                    match self
+                        .download_manifest(image, Some(node_version), network, Some(data_version))
+                        .await
+                    {
+                        Ok((manifest, _)) => return Ok(manifest),
+                        Err(err) => warn!("Failed to find manifest: {err:#}"),
+                    }
                 }
             }
-        };
-        Ok(manifest)
+        }
     }
 
-    /// Find all node versions for some image `protocol` and `node_type`.
+    /// Returns a descending order list of node versions for an image.
     async fn node_versions(&self, image: &ImageId) -> Result<Vec<Version>, Error> {
         let path = format!("{}/{}/", image.protocol, image.node_type);
         let keys = self.client.list(&self.bucket.archive, &path).await?;
@@ -263,58 +312,24 @@ impl Storage {
             .filter_map(|key| last_segment(key).and_then(|segment| Version::parse(segment).ok()))
             .collect::<Vec<_>>();
 
-        versions.sort();
+        versions.sort_by(|a, b| b.cmp(a));
         Ok(versions)
     }
 
-    /// Find the most recent download manifest for some image and network type.
+    /// Return a descending order list of data versions for an image.
     ///
-    /// If `version` is Some then it is used instead of `image.node_version`.
-    async fn find_manifest(
-        &self,
-        image: &ImageId,
-        version: Option<&Version>,
-        network: &str,
-    ) -> Result<DownloadManifest, Error> {
-        let data_versions = self.data_versions(image, version, network).await?;
-        for data_version in data_versions.iter().rev() {
-            let key = format!(
-                "{protocol}/{node_type}/{version}/{network}/{data_version}/{MANIFEST_FILE}",
-                protocol = image.protocol,
-                node_type = image.node_type,
-                version = version
-                    .map(ToString::to_string)
-                    .as_deref()
-                    .unwrap_or(image.node_version.as_str())
-            );
-
-            match self.read_manifest(&key).await {
-                Ok(manifest) => return Ok(manifest),
-                Err(err) => warn!("Invalid manifest at `{key}`: {err:#}"),
-            }
-        }
-
-        Err(Error::FindManifest(
-            image.clone(),
-            version.cloned(),
-            network.into(),
-        ))
-    }
-
-    /// Return an ordered list of data versions for an image.
-    ///
-    /// If `version` is Some then it is used instead of `image.node_version`.
+    /// If `node_version` is Some then it overrides `image.node_version`.
     async fn data_versions(
         &self,
         image: &ImageId,
-        version: Option<&Version>,
+        node_version: Option<&Version>,
         network: &str,
     ) -> Result<Vec<u64>, Error> {
         let path = format!(
-            "{protocol}/{node_type}/{version}/{network}/",
+            "{protocol}/{node_type}/{node_version}/{network}/",
             protocol = image.protocol,
             node_type = image.node_type,
-            version = version
+            node_version = node_version
                 .map(ToString::to_string)
                 .as_deref()
                 .unwrap_or(image.node_version.as_str())
@@ -326,7 +341,7 @@ impl Storage {
             .filter_map(|ver| last_segment(&ver).and_then(|segment| segment.parse::<u64>().ok()))
             .collect();
 
-        versions.sort_unstable();
+        versions.sort_by(|a, b| b.cmp(a));
         Ok(versions)
     }
 
@@ -336,8 +351,8 @@ impl Storage {
         network: &str,
         manifest: &DownloadManifest,
     ) -> Result<(), Error> {
-        let versions = self.data_versions(image, None, network).await?;
-        let data_version = versions.last().unwrap_or(&0);
+        let mut versions = self.data_versions(image, None, network).await?;
+        let data_version = versions.pop().unwrap_or_default();
 
         let key = format!(
             "{protocol}/{node_type}/{node_version}/{network}/{data_version}/{MANIFEST_FILE}",
@@ -353,30 +368,30 @@ impl Storage {
             .map_err(Into::into)
     }
 
-    pub async fn upload_manifest(
+    pub async fn upload_slots(
         &self,
         image: &ImageId,
         network: &str,
         data_version: Option<u64>,
-        upload_slots: u32,
+        slot_indexes: &[usize],
         expires: Duration,
-    ) -> Result<UploadManifest, Error> {
+    ) -> Result<(Vec<UploadSlot>, u64), Error> {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let versions = self.data_versions(image, None, network).await?;
-            versions.last().unwrap_or(&0) + 1
+            let mut versions = self.data_versions(image, None, network).await?;
+            versions.pop().unwrap_or_default() + 1
         };
 
         let path = format!(
-            "{protocol}/{node_type}/{min_node_version}/{network}/{data_version}",
+            "{protocol}/{node_type}/{node_version}/{network}/{data_version}",
             protocol = image.protocol,
             node_type = image.node_type.to_string().to_lowercase(),
-            min_node_version = image.node_version,
+            node_version = image.node_version,
         );
 
-        let mut slots = Vec::with_capacity(upload_slots as usize);
-        for index in 0..upload_slots {
+        let mut slots = Vec::with_capacity(slot_indexes.len());
+        for index in slot_indexes {
             let key = format!("{path}/data.part_{index}");
             let url = self
                 .client
@@ -385,7 +400,7 @@ impl Storage {
             slots.push(UploadSlot { key, url });
         }
 
-        Ok(UploadManifest { slots })
+        Ok((slots, data_version))
     }
 }
 

@@ -10,6 +10,9 @@ use displaydoc::Display;
 use thiserror::Error;
 use url::Url;
 
+// Max expiry from: https://developers.cloudflare.com/r2/api/s3/presigned-urls/
+const MAX_URL_EXPIRY: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
 #[mockall::automock]
 #[tonic::async_trait]
 pub trait Client: Send + Sync {
@@ -126,8 +129,7 @@ impl Client for aws_sdk_s3::Client {
 
     async fn download_url(&self, bucket: &str, key: &str, expires: Duration) -> Result<Url, Error> {
         let key = key.to_lowercase();
-        // Note: https://developers.cloudflare.com/r2/api/s3/presigned-urls/
-        let expires = expires.min(Duration::from_secs(604_800)); // 7 days:
+        let expires = expires.min(MAX_URL_EXPIRY);
         let config = PresigningConfig::expires_in(expires).map_err(Error::PresigningConfig)?;
 
         self.get_object()
@@ -141,8 +143,7 @@ impl Client for aws_sdk_s3::Client {
 
     async fn upload_url(&self, bucket: &str, key: &str, expires: Duration) -> Result<Url, Error> {
         let key = key.to_lowercase();
-        // Note: https://developers.cloudflare.com/r2/api/s3/presigned-urls/
-        let expires = expires.min(Duration::from_secs(604_800)); // 7 days:
+        let expires = expires.min(MAX_URL_EXPIRY);
         let config = PresigningConfig::expires_in(expires).map_err(Error::PresigningConfig)?;
 
         self.put_object()
@@ -192,13 +193,13 @@ mod tests {
         let mut client = MockClient::new();
         client
             .expect_list()
-            .with(eq("archive"), eq("test_chain/Node/"))
+            .with(eq("archive"), eq("test_chain/Node/1.2.3/test/"))
             .once()
             .returning(|_, _| Err(Error::Unexpected("some client error")));
 
         let storage = Storage::new(&dummy_config(), client);
         let result = storage
-            .generate_download_manifest(&test_image(), "test")
+            .download_manifest(&test_image(), None, "test", None)
             .await;
 
         assert_eq!(
@@ -212,12 +213,12 @@ mod tests {
         let mut client = MockClient::new();
         client
             .expect_list()
-            .with(eq("archive"), eq("test_chain/Node/"))
+            .with(eq("archive"), eq("test_chain/Node/1.2.3/test/"))
             .once()
             .returning(|_, _| Ok(vec![]));
         client
             .expect_list()
-            .with(eq("archive"), eq("test_chain/Node/"))
+            .with(eq("archive"), eq("test_chain/Node/1.2.3/test/"))
             .once()
             .returning(|_, _| {
                 Ok(vec![
@@ -228,22 +229,15 @@ mod tests {
             });
 
         let storage = Storage::new(&dummy_config(), client);
+        let result = storage
+            .download_manifest(&test_image(), None, "test", None)
+            .await;
+        assert_eq!(result.unwrap_err().to_string(), "No data versions found.");
 
         let result = storage
-            .generate_download_manifest(&test_image(), "test")
+            .download_manifest(&test_image(), None, "test", None)
             .await;
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            r#"No download manifest found for `ImageId { protocol: "test_chain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
-        );
-
-        let result = storage
-            .generate_download_manifest(&test_image(), "test")
-            .await;
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            r#"No download manifest found for `ImageId { protocol: "test_chain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
-        );
+        assert_eq!(result.unwrap_err().to_string(), "No data versions found.");
     }
 
     #[tokio::test]
@@ -251,7 +245,7 @@ mod tests {
         let mut client = MockClient::new();
         client
             .expect_list()
-            .with(eq("archive"), eq("test_chain/Node/"))
+            .with(eq("archive"), eq("test_chain/Node/1.2.3/test/"))
             .once()
             .returning(|_, _| {
                 Ok(vec![
@@ -261,42 +255,17 @@ mod tests {
                     "test_chain/node/1.2.3/".to_owned(),
                 ])
             });
-        client
-            .expect_list()
-            .with(eq("archive"), eq("test_chain/Node/1.2.3/test/"))
-            .once()
-            .returning(|_, _| Ok(vec![]));
-        client
-            .expect_list()
-            .with(eq("archive"), eq("test_chain/Node/0.0.1/test/"))
-            .once()
-            .returning(|_, _| Ok(vec![]));
 
         let storage = Storage::new(&dummy_config(), client);
         let result = storage
-            .generate_download_manifest(&test_image(), "test")
+            .download_manifest(&test_image(), None, "test", None)
             .await;
-
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            r#"No download manifest found for `ImageId { protocol: "test_chain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
-        );
+        assert_eq!(result.unwrap_err().to_string(), "No data versions found.");
     }
 
     #[tokio::test]
-    async fn test_download_manifest_no_manifest_or_invalid() {
+    async fn test_download_manifest_invalid_manifest() {
         let mut client = MockClient::new();
-        client
-            .expect_list()
-            .with(eq("archive"), eq("test_chain/Node/"))
-            .once()
-            .returning(|_, _| {
-                Ok(vec![
-                    "test_chain/node/invalid/".to_owned(),
-                    "test_chain/node/9.0.1/".to_owned(),
-                    "test_chain/node/1.2.3/".to_owned(),
-                ])
-            });
         client
             .expect_list()
             .with(eq("archive"), eq("test_chain/Node/1.2.3/test/"))
@@ -311,20 +280,16 @@ mod tests {
         client
             .expect_read_key()
             .once()
-            .returning(|_, _| Err(Error::Unexpected("no file")));
-        client
-            .expect_read_key()
-            .once()
             .returning(|_, _| Ok(b"invalid manifest content".to_vec()));
 
         let storage = Storage::new(&dummy_config(), client);
         let result = storage
-            .generate_download_manifest(&test_image(), "test")
+            .download_manifest(&test_image(), None, "test", None)
             .await;
 
         assert_eq!(
             result.unwrap_err().to_string(),
-            r#"No download manifest found for `ImageId { protocol: "test_chain", node_type: Node, node_version: NodeVersion("1.2.3") }` in network test."#,
+            "Failed to parse manifest: expected value at line 1 column 1"
         );
     }
 
@@ -333,32 +298,27 @@ mod tests {
         let mut client = MockClient::new();
         client
             .expect_list()
-            .with(eq("archive"), eq("test_chain/Node/"))
+            .with(eq("archive"), eq("test_chain/Node/1.2.3/test/"))
             .once()
-            .returning(|_, _| Ok(vec!["test_chain/node/1.1.1/".to_owned()]));
-        client
-            .expect_list()
-            .with(eq("archive"), eq("test_chain/Node/1.1.1/test/"))
-            .once()
-            .returning(|_, _| Ok(vec!["test_chain/node/1.1.1/test/2/".to_owned()]));
+            .returning(|_, _| Ok(vec!["test_chain/node/1.2.3/test/456/".to_owned()]));
         client
             .expect_read_key()
             .once()
             .returning(|_, _| Ok(br#"{"total_size": 128,"chunks": []}"#.to_vec()));
 
+        let expected = DownloadManifest {
+            total_size: 128,
+            compression: None,
+            chunks: vec![],
+        };
+
         let storage = Storage::new(&dummy_config(), client);
-        let manifest = storage
-            .generate_download_manifest(&test_image(), "test")
+        let (manifest, data_version) = storage
+            .download_manifest(&test_image(), None, "test", None)
             .await
             .unwrap();
 
-        assert_eq!(
-            manifest,
-            DownloadManifest {
-                total_size: 128,
-                compression: None,
-                chunks: vec![],
-            }
-        );
+        assert_eq!(manifest, expected);
+        assert_eq!(data_version, 456);
     }
 }
