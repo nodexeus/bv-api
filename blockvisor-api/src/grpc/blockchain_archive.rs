@@ -25,8 +25,6 @@ pub enum Error {
     Auth(#[from] crate::auth::Error),
     /// Failed to parse chunk index: {0}
     ChunkIndex(std::num::TryFromIntError),
-    /// Number of chunks not u32: {0}
-    ChunkSize(std::num::TryFromIntError),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
     /// Diesel failure: {0}
@@ -35,6 +33,8 @@ pub enum Error {
     MissingId,
     /// Failed to parse ArchiveChunk: {0}
     ParseChunk(crate::storage::manifest::Error),
+    /// Failed to parse UploadSlot: {0}
+    ParseSlot(crate::storage::manifest::Error),
     /// Failed to parse Compression: {0}
     ParseCompression(crate::storage::manifest::Error),
     /// Failed to parse ImageId: {0}
@@ -54,9 +54,10 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            ChunkSize(_) | Diesel(_) | Storage(_) => Status::internal("Internal error."),
+            Diesel(_) | Storage(_) => Status::internal("Internal error."),
             MissingId | ParseImageId(_) => Status::invalid_argument("id"),
             ParseChunk(_) => Status::invalid_argument("chunks"),
+            ParseSlot(_) => Status::invalid_argument("slots"),
             ParseCompression(_) => Status::invalid_argument("compression"),
             ChunkIndex(_) | TooManyChunks => Status::out_of_range("chunk_indexes"),
             SlotIndex(_) | TooManySlots => Status::out_of_range("slot_indexes"),
@@ -115,17 +116,17 @@ async fn get_download_metadata(
 
     let id = req.id.ok_or(Error::MissingId)?;
     let image = ImageId::try_from(id).map_err(Error::ParseImageId)?;
-    let (manifest, data_version) = read
+    let (header, data_version) = read
         .ctx
         .storage
-        .download_manifest(&image, None, &req.network, req.data_version)
+        .download_manifest_header(&image, None, &req.network, req.data_version)
         .await?;
 
     Ok(api::BlockchainArchiveServiceGetDownloadMetadataResponse {
         data_version,
-        total_size: manifest.total_size,
-        compression: manifest.compression.map(Into::into),
-        chunks: u32::try_from(manifest.chunks.len()).map_err(Error::ChunkSize)?,
+        total_size: header.total_size,
+        compression: header.compression.map(Into::into),
+        chunks: header.chunks,
     })
 }
 
@@ -156,7 +157,10 @@ async fn get_download_chunks(
         .await?;
 
     Ok(api::BlockchainArchiveServiceGetDownloadChunksResponse {
-        chunks: chunks.into_iter().map(Into::into).collect(),
+        chunks: chunks
+            .into_iter()
+            .map(|chunk| chunk.try_into().map_err(Error::ParseChunk))
+            .collect::<Result<_, _>>()?,
     })
 }
 
@@ -190,7 +194,10 @@ async fn get_upload_slots(
 
     Ok(api::BlockchainArchiveServiceGetUploadSlotsResponse {
         data_version,
-        slots: slots.into_iter().map(Into::into).collect(),
+        slots: slots
+            .into_iter()
+            .map(|slot| slot.try_into().map_err(Error::ParseSlot))
+            .collect::<Result<_, _>>()?,
     })
 }
 
@@ -220,7 +227,7 @@ async fn put_download_manifest(
 
     read.ctx
         .storage
-        .save_download_manifest(&image, &req.network, &manifest)
+        .save_download_manifest(&image, &req.network, manifest)
         .await?;
 
     Ok(api::BlockchainArchiveServicePutDownloadManifestResponse {})

@@ -15,16 +15,27 @@ pub enum Error {
     ChecksumSha1(Vec<u8>),
     /// Unexpected SHA256 checksum bytes: {0:x?}
     ChecksumSha256(Vec<u8>),
+    /// Failed to parse chunk index: {0}
+    ChunkIndex(std::num::TryFromIntError),
+    /// Failed to parse ChunksLen: {0}
+    ChunksLen(std::num::TryFromIntError),
     /// Missing Checksum.
     MissingChecksum,
+    /// Missing chunk index. This should not happen.
+    MissingChunkIndex,
     /// Missing Compression type.
     MissingCompression,
     /// Failed to parse ArchiveChunk URL: {0}
     ParseArchiveUrl(url::ParseError),
     /// Failed to parse upload URL: {0}
     ParseUploadUrl(url::ParseError),
+    /// Failed to parse slot index: {0}
+    SlotIndex(std::num::TryFromIntError),
 }
 
+/// `DownloadManifest` is the legacy storage format.
+///
+/// `ManifestHeader` and `ManifestBody` should now be preferred.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DownloadManifest {
     pub total_size: u64,
@@ -33,7 +44,40 @@ pub struct DownloadManifest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManifestHeader {
+    pub total_size: u64,
+    pub compression: Option<Compression>,
+    pub chunks: u32,
+}
+
+impl TryFrom<&DownloadManifest> for ManifestHeader {
+    type Error = Error;
+
+    fn try_from(manifest: &DownloadManifest) -> Result<Self, Self::Error> {
+        Ok(ManifestHeader {
+            total_size: manifest.total_size,
+            compression: manifest.compression,
+            chunks: u32::try_from(manifest.chunks.len()).map_err(Error::ChunksLen)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManifestBody {
+    pub chunks: Vec<ArchiveChunk>,
+}
+
+impl From<DownloadManifest> for ManifestBody {
+    fn from(manifest: DownloadManifest) -> Self {
+        ManifestBody {
+            chunks: manifest.chunks,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArchiveChunk {
+    pub index: Option<usize>,
     pub key: String,
     #[serde(deserialize_with = "deserialize_option_url")]
     pub url: Option<Url>,
@@ -47,6 +91,7 @@ impl TryFrom<api::ArchiveChunk> for ArchiveChunk {
 
     fn try_from(chunk: api::ArchiveChunk) -> Result<Self, Self::Error> {
         Ok(ArchiveChunk {
+            index: Some(usize::try_from(chunk.index).map_err(Error::ChunkIndex)?),
             key: chunk.key,
             url: chunk
                 .url
@@ -59,15 +104,19 @@ impl TryFrom<api::ArchiveChunk> for ArchiveChunk {
     }
 }
 
-impl From<ArchiveChunk> for api::ArchiveChunk {
-    fn from(chunk: ArchiveChunk) -> Self {
-        api::ArchiveChunk {
+impl TryFrom<ArchiveChunk> for api::ArchiveChunk {
+    type Error = Error;
+
+    fn try_from(chunk: ArchiveChunk) -> Result<Self, Self::Error> {
+        Ok(api::ArchiveChunk {
+            index: u32::try_from(chunk.index.ok_or(Error::MissingChunkIndex)?)
+                .map_err(Error::ChunkIndex)?,
             key: chunk.key,
             url: chunk.url.map(|url| url.to_string()),
             checksum: Some(chunk.checksum.into()),
             size: chunk.size,
             destinations: chunk.destinations.into_iter().map(Into::into).collect(),
-        }
+        })
     }
 }
 
@@ -169,6 +218,7 @@ impl From<Compression> for api::Compression {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UploadSlot {
+    pub index: usize,
     pub key: String,
     pub url: Url,
 }
@@ -178,18 +228,22 @@ impl TryFrom<api::UploadSlot> for UploadSlot {
 
     fn try_from(slot: api::UploadSlot) -> Result<Self, Self::Error> {
         Ok(UploadSlot {
+            index: usize::try_from(slot.index).map_err(Error::SlotIndex)?,
             key: slot.key,
             url: slot.url.parse().map_err(Error::ParseUploadUrl)?,
         })
     }
 }
 
-impl From<UploadSlot> for api::UploadSlot {
-    fn from(slot: UploadSlot) -> Self {
-        api::UploadSlot {
+impl TryFrom<UploadSlot> for api::UploadSlot {
+    type Error = Error;
+
+    fn try_from(slot: UploadSlot) -> Result<Self, Self::Error> {
+        Ok(api::UploadSlot {
+            index: u32::try_from(slot.index).map_err(Error::SlotIndex)?,
             key: slot.key,
             url: slot.url.to_string(),
-        }
+        })
     }
 }
 

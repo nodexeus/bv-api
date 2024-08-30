@@ -37,6 +37,8 @@ pub enum Error {
     DownloadUrl(String, SdkError<GetObjectError>),
     /// Failed to list path `{0}`: {1:?}
     ListPath(String, SdkError<ListObjectsV2Error>),
+    /// Bucket `{0}` does not contain key `{1}`
+    MissingKey(String, String),
     /// Failed to parse URL from PresignedRequest: {0}
     ParseRequestUrl(url::ParseError),
     /// Failed to create presigned config: {0}
@@ -103,7 +105,12 @@ impl Client for aws_sdk_s3::Client {
             .key(&key)
             .send()
             .await
-            .map_err(|err| Error::ReadKey(bucket.into(), key.clone(), err))?;
+            .map_err(|err| match err {
+                SdkError::ServiceError(e) if matches!(e.err(), GetObjectError::NoSuchKey(_)) => {
+                    Error::MissingKey(bucket.into(), key.clone())
+                }
+                _ => Error::ReadKey(bucket.into(), key.clone(), err),
+            })?;
 
         response
             .body
@@ -163,7 +170,8 @@ mod tests {
     use crate::config::storage::{BucketConfig, Config};
     use crate::model::NodeType;
     use crate::storage::image::ImageId;
-    use crate::storage::{manifest::DownloadManifest, Storage};
+    use crate::storage::manifest::ManifestHeader;
+    use crate::storage::Storage;
 
     use super::*;
 
@@ -199,7 +207,7 @@ mod tests {
 
         let storage = Storage::new(&dummy_config(), client);
         let result = storage
-            .download_manifest(&test_image(), None, "test", None)
+            .download_manifest_header(&test_image(), None, "test", None)
             .await;
 
         assert_eq!(
@@ -230,12 +238,12 @@ mod tests {
 
         let storage = Storage::new(&dummy_config(), client);
         let result = storage
-            .download_manifest(&test_image(), None, "test", None)
+            .download_manifest_header(&test_image(), None, "test", None)
             .await;
         assert_eq!(result.unwrap_err().to_string(), "No data versions found.");
 
         let result = storage
-            .download_manifest(&test_image(), None, "test", None)
+            .download_manifest_body(&test_image(), None, "test", None)
             .await;
         assert_eq!(result.unwrap_err().to_string(), "No data versions found.");
     }
@@ -258,7 +266,7 @@ mod tests {
 
         let storage = Storage::new(&dummy_config(), client);
         let result = storage
-            .download_manifest(&test_image(), None, "test", None)
+            .download_manifest_header(&test_image(), None, "test", None)
             .await;
         assert_eq!(result.unwrap_err().to_string(), "No data versions found.");
     }
@@ -284,12 +292,12 @@ mod tests {
 
         let storage = Storage::new(&dummy_config(), client);
         let result = storage
-            .download_manifest(&test_image(), None, "test", None)
+            .download_manifest_header(&test_image(), None, "test", None)
             .await;
 
         assert_eq!(
             result.unwrap_err().to_string(),
-            "Failed to parse manifest: expected value at line 1 column 1"
+            "Failed to parse ManifestHeader: expected value at line 1 column 1"
         );
     }
 
@@ -304,17 +312,17 @@ mod tests {
         client
             .expect_read_key()
             .once()
-            .returning(|_, _| Ok(br#"{"total_size": 128,"chunks": []}"#.to_vec()));
+            .returning(|_, _| Ok(br#"{"total_size": 128,"chunks": 5}"#.to_vec()));
 
-        let expected = DownloadManifest {
+        let expected = ManifestHeader {
             total_size: 128,
             compression: None,
-            chunks: vec![],
+            chunks: 5,
         };
 
         let storage = Storage::new(&dummy_config(), client);
         let (manifest, data_version) = storage
-            .download_manifest(&test_image(), None, "test", None)
+            .download_manifest_header(&test_image(), None, "test", None)
             .await
             .unwrap();
 
