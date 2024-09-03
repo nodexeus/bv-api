@@ -13,27 +13,40 @@ use crate::database::{ReadConn, Transaction};
 use crate::grpc::api::blockchain_archive_service_server::BlockchainArchiveService;
 use crate::grpc::{api, Grpc};
 use crate::storage::image::ImageId;
+use crate::storage::manifest::DownloadManifest;
 
-const DEFAULT_EXPIRES: u32 = 60 * 60 * 24 * 7; // 7d
+const DEFAULT_EXPIRES: u32 = 7 * 24 * 60 * 60;
+const MAX_CHUNK_INDEXES: usize = 100;
+const MAX_SLOT_INDEXES: usize = 100;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
+    /// Failed to parse chunk index: {0}
+    ChunkIndex(std::num::TryFromIntError),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
-    /// Storage failed: {0}
-    Storage(#[from] crate::storage::Error),
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
-    /// Missing DownloadManifest.
-    MissingDownloadManifest,
     /// Missing blockchain id.
     MissingId,
+    /// Failed to parse ArchiveChunk: {0}
+    ParseChunk(crate::storage::manifest::Error),
+    /// Failed to parse UploadSlot: {0}
+    ParseSlot(crate::storage::manifest::Error),
+    /// Failed to parse Compression: {0}
+    ParseCompression(crate::storage::manifest::Error),
     /// Failed to parse ImageId: {0}
     ParseImageId(crate::storage::image::Error),
-    /// Failed to parse DownloadManifest: {0}
-    ParseDownloadManifest(crate::storage::manifest::Error),
+    /// Failed to parse slot index: {0}
+    SlotIndex(std::num::TryFromIntError),
+    /// Storage failed: {0}
+    Storage(#[from] crate::storage::Error),
+    /// Too many chunk indexes requested.
+    TooManyChunks,
+    /// Too many slot indexes requested.
+    TooManySlots,
 }
 
 impl From<Error> for Status {
@@ -42,10 +55,12 @@ impl From<Error> for Status {
         error!("{err}");
         match err {
             Diesel(_) | Storage(_) => Status::internal("Internal error."),
-            MissingDownloadManifest | ParseDownloadManifest(_) => {
-                Status::invalid_argument("manifest")
-            }
             MissingId | ParseImageId(_) => Status::invalid_argument("id"),
+            ParseChunk(_) => Status::invalid_argument("chunks"),
+            ParseSlot(_) => Status::invalid_argument("slots"),
+            ParseCompression(_) => Status::invalid_argument("compression"),
+            ChunkIndex(_) | TooManyChunks => Status::out_of_range("chunk_indexes"),
+            SlotIndex(_) | TooManySlots => Status::out_of_range("slot_indexes"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
         }
@@ -54,21 +69,30 @@ impl From<Error> for Status {
 
 #[tonic::async_trait]
 impl BlockchainArchiveService for Grpc {
-    async fn get_download_manifest(
+    async fn get_download_metadata(
         &self,
-        req: Request<api::BlockchainArchiveServiceGetDownloadManifestRequest>,
-    ) -> Result<Response<api::BlockchainArchiveServiceGetDownloadManifestResponse>, Status> {
+        req: Request<api::BlockchainArchiveServiceGetDownloadMetadataRequest>,
+    ) -> Result<Response<api::BlockchainArchiveServiceGetDownloadMetadataResponse>, Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_download_manifest(req, meta, read).scope_boxed())
+        self.read(|read| get_download_metadata(req, meta, read).scope_boxed())
             .await
     }
 
-    async fn get_upload_manifest(
+    async fn get_download_chunks(
         &self,
-        req: Request<api::BlockchainArchiveServiceGetUploadManifestRequest>,
-    ) -> Result<Response<api::BlockchainArchiveServiceGetUploadManifestResponse>, Status> {
+        req: Request<api::BlockchainArchiveServiceGetDownloadChunksRequest>,
+    ) -> Result<Response<api::BlockchainArchiveServiceGetDownloadChunksResponse>, Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_upload_manifest(req, meta, read).scope_boxed())
+        self.read(|read| get_download_chunks(req, meta, read).scope_boxed())
+            .await
+    }
+
+    async fn get_upload_slots(
+        &self,
+        req: Request<api::BlockchainArchiveServiceGetUploadSlotsRequest>,
+    ) -> Result<Response<api::BlockchainArchiveServiceGetUploadSlotsResponse>, Status> {
+        let (meta, _, req) = req.into_parts();
+        self.read(|read| get_upload_slots(req, meta, read).scope_boxed())
             .await
     }
 
@@ -80,81 +104,100 @@ impl BlockchainArchiveService for Grpc {
         self.read(|read| put_download_manifest(req, meta, read).scope_boxed())
             .await
     }
-
-    async fn has_blockchain_archive(
-        &self,
-        req: Request<api::BlockchainArchiveServiceHasBlockchainArchiveRequest>,
-    ) -> Result<Response<api::BlockchainArchiveServiceHasBlockchainArchiveResponse>, Status> {
-        let (meta, _, req) = req.into_parts();
-        self.read(|read| has_download_manifest(req, meta, read).scope_boxed())
-            .await
-    }
 }
 
-async fn has_download_manifest(
-    req: api::BlockchainArchiveServiceHasBlockchainArchiveRequest,
+async fn get_download_metadata(
+    req: api::BlockchainArchiveServiceGetDownloadMetadataRequest,
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
-) -> Result<api::BlockchainArchiveServiceHasBlockchainArchiveResponse, Error> {
-    read.auth_all(&meta, BlockchainArchivePerm::HasDownload)
+) -> Result<api::BlockchainArchiveServiceGetDownloadMetadataResponse, Error> {
+    read.auth_all(&meta, BlockchainArchivePerm::GetDownloadMetadata)
         .await?;
 
     let id = req.id.ok_or(Error::MissingId)?;
     let image = ImageId::try_from(id).map_err(Error::ParseImageId)?;
-    let has_manifest = !matches!(
-        read.ctx
-            .storage
-            .find_download_manifest_blueprint(&image, &req.network)
-            .await,
-        Err(crate::storage::Error::DownloadManifest(..))
-    );
-
-    Ok(api::BlockchainArchiveServiceHasBlockchainArchiveResponse {
-        available: has_manifest,
-    })
-}
-
-async fn get_download_manifest(
-    req: api::BlockchainArchiveServiceGetDownloadManifestRequest,
-    meta: MetadataMap,
-    mut read: ReadConn<'_, '_>,
-) -> Result<api::BlockchainArchiveServiceGetDownloadManifestResponse, Error> {
-    read.auth_all(&meta, BlockchainArchivePerm::GetDownload)
-        .await?;
-
-    let id = req.id.ok_or(Error::MissingId)?;
-    let image = ImageId::try_from(id).map_err(Error::ParseImageId)?;
-    let manifest = read
+    let (header, data_version) = read
         .ctx
         .storage
-        .generate_download_manifest(&image, &req.network)
+        .download_manifest_header(&image, None, &req.network, req.data_version)
         .await?;
 
-    Ok(api::BlockchainArchiveServiceGetDownloadManifestResponse {
-        manifest: Some(manifest.into()),
+    Ok(api::BlockchainArchiveServiceGetDownloadMetadataResponse {
+        data_version,
+        total_size: header.total_size,
+        compression: header.compression.map(Into::into),
+        chunks: header.chunks,
     })
 }
 
-async fn get_upload_manifest(
-    req: api::BlockchainArchiveServiceGetUploadManifestRequest,
+async fn get_download_chunks(
+    req: api::BlockchainArchiveServiceGetDownloadChunksRequest,
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
-) -> Result<api::BlockchainArchiveServiceGetUploadManifestResponse, Error> {
-    read.auth_all(&meta, BlockchainArchivePerm::GetUpload)
+) -> Result<api::BlockchainArchiveServiceGetDownloadChunksResponse, Error> {
+    read.auth_all(&meta, BlockchainArchivePerm::GetDownloadChunks)
+        .await?;
+
+    let id = req.id.ok_or(Error::MissingId)?;
+    let image = ImageId::try_from(id).map_err(Error::ParseImageId)?;
+
+    if req.chunk_indexes.len() > MAX_CHUNK_INDEXES {
+        return Err(Error::TooManyChunks);
+    }
+
+    let indexes = req
+        .chunk_indexes
+        .iter()
+        .map(|i| usize::try_from(*i).map_err(Error::ChunkIndex))
+        .collect::<Result<Vec<_>, _>>()?;
+    let chunks = read
+        .ctx
+        .storage
+        .refresh_download_manifest(&image, &req.network, req.data_version, &indexes)
+        .await?;
+
+    Ok(api::BlockchainArchiveServiceGetDownloadChunksResponse {
+        chunks: chunks
+            .into_iter()
+            .map(|chunk| chunk.try_into().map_err(Error::ParseChunk))
+            .collect::<Result<_, _>>()?,
+    })
+}
+
+async fn get_upload_slots(
+    req: api::BlockchainArchiveServiceGetUploadSlotsRequest,
+    meta: MetadataMap,
+    mut read: ReadConn<'_, '_>,
+) -> Result<api::BlockchainArchiveServiceGetUploadSlotsResponse, Error> {
+    read.auth_all(&meta, BlockchainArchivePerm::GetUploadSlots)
         .await?;
 
     let id = req.id.ok_or(Error::MissingId)?;
     let image = ImageId::try_from(id).map_err(Error::ParseImageId)?;
     let expires = Duration::from_secs(req.url_expires.unwrap_or(DEFAULT_EXPIRES).into());
 
-    let manifest = read
+    if req.slot_indexes.len() > MAX_SLOT_INDEXES {
+        return Err(Error::TooManySlots);
+    }
+
+    let indexes = req
+        .slot_indexes
+        .iter()
+        .map(|i| usize::try_from(*i).map_err(Error::SlotIndex))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let (slots, data_version) = read
         .ctx
         .storage
-        .upload_manifest(&image, &req.network, req.data_version, req.slots, expires)
+        .upload_slots(&image, &req.network, req.data_version, &indexes, expires)
         .await?;
 
-    Ok(api::BlockchainArchiveServiceGetUploadManifestResponse {
-        manifest: Some(manifest.into()),
+    Ok(api::BlockchainArchiveServiceGetUploadSlotsResponse {
+        data_version,
+        slots: slots
+            .into_iter()
+            .map(|slot| slot.try_into().map_err(Error::ParseSlot))
+            .collect::<Result<_, _>>()?,
     })
 }
 
@@ -163,17 +206,28 @@ async fn put_download_manifest(
     meta: MetadataMap,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainArchiveServicePutDownloadManifestResponse, Error> {
-    read.auth_all(&meta, BlockchainArchivePerm::PutDownload)
+    read.auth_all(&meta, BlockchainArchivePerm::PutDownloadManifest)
         .await?;
 
     let id = req.id.ok_or(Error::MissingId)?;
     let image = ImageId::try_from(id).map_err(Error::ParseImageId)?;
-    let manifest = req.manifest.ok_or(Error::MissingDownloadManifest)?;
-    let manifest = manifest.try_into().map_err(Error::ParseDownloadManifest)?;
+    let manifest = DownloadManifest {
+        total_size: req.total_size,
+        compression: req
+            .compression
+            .map(TryInto::try_into)
+            .transpose()
+            .map_err(Error::ParseCompression)?,
+        chunks: req
+            .chunks
+            .into_iter()
+            .map(|chunk| chunk.try_into().map_err(Error::ParseChunk))
+            .collect::<Result<Vec<_>, _>>()?,
+    };
 
     read.ctx
         .storage
-        .save_download_manifest(&image, &req.network, &manifest)
+        .save_download_manifest(&image, &req.network, manifest)
         .await?;
 
     Ok(api::BlockchainArchiveServicePutDownloadManifestResponse {})

@@ -93,10 +93,10 @@ define_perms! {
     }
 
     BlockchainArchive => {
-        GetDownload,
-        GetUpload,
-        PutDownload,
-        HasDownload,
+        GetDownloadMetadata,
+        GetDownloadChunks,
+        GetUploadSlots,
+        PutDownloadManifest,
     }
 
     Bundle => {

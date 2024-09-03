@@ -8,14 +8,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use aws_sdk_s3::config::{Credentials, Region};
-use aws_sdk_s3::error::SdkError;
-use aws_sdk_s3::operation::get_object::GetObjectError;
 use displaydoc::Display;
 use rhai::Engine;
 use semver::Version;
 use thiserror::Error;
 use tonic::Status;
-use tracing::warn;
 use url::Url;
 
 use crate::config::storage::{BucketConfig, Config};
@@ -24,7 +21,7 @@ use crate::model::node::NodeType;
 
 use self::client::Client;
 use self::image::ImageId;
-use self::manifest::{DownloadManifest, UploadManifest, UploadSlot};
+use self::manifest::{ArchiveChunk, DownloadManifest, ManifestBody, ManifestHeader, UploadSlot};
 use self::metadata::BlockchainMetadata;
 
 pub const CREDENTIALS: &str = "blockvisor-api credentials provider";
@@ -32,6 +29,8 @@ pub const BABEL_IMAGE_FILE: &str = "blockjoy.gz";
 pub const BUNDLE_FILE: &str = "bvd-bundle.tgz";
 pub const KERNEL_FILE: &str = "kernel.gz";
 pub const MANIFEST_FILE: &str = "manifest.json";
+pub const MANIFEST_HEADER: &str = "manifest-header.json";
+pub const MANIFEST_BODY: &str = "manifest-body.json";
 pub const RHAI_FILE: &str = "babel.rhai";
 
 #[derive(Debug, Display, Error)]
@@ -40,37 +39,51 @@ pub enum Error {
     Client(#[from] client::Error),
     /// No download manifest found for `{0:?}` in network {1}.
     DownloadManifest(ImageId, String),
-    /// No manifest found for image `{0:?}`, version: `{1:?}`, network `{2}`.
-    FindManifest(ImageId, Option<Version>, String),
     /// Storage image error: {0}
     Image(#[from] image::Error),
+    /// Storage manifest error: {0}
+    Manifest(#[from] manifest::Error),
     /// Storage metadata error: {0}
     Metadata(#[from] metadata::Error),
-    /// Failed to parse manifest: {0}
+    /// Missing chunk index: {0}
+    MissingChunk(usize),
+    /// No data versions found.
+    NoDataVersion,
+    /// Failed to parse DownloadManifest: {0}
     ParseManifest(serde_json::Error),
+    /// Failed to parse ManifestHeader: {0}
+    ParseManifestHeader(serde_json::Error),
+    /// Failed to parse ManifestBody: {0}
+    ParseManifestBody(serde_json::Error),
     /// Failed to parse storage bytes as UTF8: {0}
     ParseUtf8(std::string::FromUtf8Error),
-    /// Failed to serialize DownloadManifest: {0}
-    SerializeManifest(serde_json::Error),
+    /// Failed to serialize ManifestBody: {0}
+    SerializeBody(serde_json::Error),
+    /// Failed to serialize ManifestHeader: {0}
+    SerializeHeader(serde_json::Error),
 }
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
         match err {
-            Client(crate::storage::client::Error::ReadKey(
-                bucket,
-                file,
-                SdkError::ServiceError(err),
-            )) if matches!(err.err(), GetObjectError::NoSuchKey(_)) => {
-                Status::not_found(format!("No rhai script at `{bucket}:{file}`"))
+            Client(client::Error::MissingKey(_, _)) | DownloadManifest(_, _) | NoDataVersion => {
+                Status::not_found("Not found.")
             }
-            DownloadManifest(_, _) | FindManifest(_, _, _) => Status::not_found("Not found."),
             Metadata(crate::storage::metadata::Error::CompileScript(_, _)) => {
                 Status::internal("Failed to compile script")
             }
-            Client(_) | Image(_) | Metadata(_) | ParseManifest(_) | ParseUtf8(_)
-            | SerializeManifest(_) => Status::internal("Internal error."),
+            MissingChunk(_) => Status::failed_precondition("Unknown chunk index."),
+            Client(_)
+            | Image(_)
+            | Manifest(_)
+            | Metadata(_)
+            | ParseManifest(_)
+            | ParseManifestHeader(_)
+            | ParseManifestBody(_)
+            | ParseUtf8(_)
+            | SerializeBody(_)
+            | SerializeHeader(_) => Status::internal("Internal error."),
         }
     }
 }
@@ -124,7 +137,21 @@ impl Storage {
             .and_then(|bytes| String::from_utf8(bytes).map_err(Error::ParseUtf8))
     }
 
-    async fn read_manifest(&self, key: &str) -> Result<DownloadManifest, Error> {
+    async fn read_manifest_header(&self, key: &str) -> Result<ManifestHeader, Error> {
+        self.read_string(&self.bucket.archive, key)
+            .await
+            .and_then(|manifest| {
+                serde_json::from_str(&manifest).map_err(Error::ParseManifestHeader)
+            })
+    }
+
+    async fn read_manifest_body(&self, key: &str) -> Result<ManifestBody, Error> {
+        self.read_string(&self.bucket.archive, key)
+            .await
+            .and_then(|manifest| serde_json::from_str(&manifest).map_err(Error::ParseManifestBody))
+    }
+
+    async fn read_download_manifest(&self, key: &str) -> Result<DownloadManifest, Error> {
         self.read_string(&self.bucket.archive, key)
             .await
             .and_then(|manifest| serde_json::from_str(&manifest).map_err(Error::ParseManifest))
@@ -205,116 +232,138 @@ impl Storage {
         Ok(idents)
     }
 
-    /// Find the most recent download manifest (<= `image.node_version`)
-    /// and generates the download URLs which may have expired.
-    pub async fn generate_download_manifest(
+    /// Fetch and parse a download manifest header.
+    ///
+    /// If `node_version` is Some then it overrides `image.node_version`.
+    /// If `data_version` is None then it uses the latest data version.
+    pub async fn download_manifest_header(
+        &self,
+        image: &ImageId,
+        node_version: Option<&Version>,
+        network: &str,
+        data_version: Option<u64>,
+    ) -> Result<(ManifestHeader, u64), Error> {
+        let data_version = if let Some(version) = data_version {
+            version
+        } else {
+            let mut versions = self.data_versions(image, node_version, network).await?;
+            versions.pop().ok_or(Error::NoDataVersion)?
+        };
+
+        let prefix = format!(
+            "{protocol}/{node_type}/{node_version}/{network}/{data_version}",
+            protocol = image.protocol,
+            node_type = image.node_type,
+            node_version = node_version
+                .map(ToString::to_string)
+                .as_deref()
+                .unwrap_or(image.node_version.as_str())
+        );
+
+        let header_key = format!("{prefix}/{MANIFEST_HEADER}");
+        let header = match self.read_manifest_header(&header_key).await {
+            Ok(header) => header,
+            Err(Error::Client(client::Error::MissingKey(_, _))) => {
+                let fallback_key = format!("{prefix}/{MANIFEST_FILE}");
+                self.read_download_manifest(&fallback_key)
+                    .await
+                    .and_then(|ref manifest| manifest.try_into().map_err(Into::into))?
+            }
+            Err(err) => return Err(err),
+        };
+
+        Ok((header, data_version))
+    }
+
+    /// Fetch and parse a download manifest body.
+    ///
+    /// If `node_version` is Some then it overrides `image.node_version`.
+    /// If `data_version` is None then it uses the latest data version.
+    async fn download_manifest_body(
+        &self,
+        image: &ImageId,
+        node_version: Option<&Version>,
+        network: &str,
+        data_version: Option<u64>,
+    ) -> Result<(ManifestBody, u64), Error> {
+        let data_version = if let Some(version) = data_version {
+            version
+        } else {
+            let mut versions = self.data_versions(image, node_version, network).await?;
+            versions.pop().ok_or(Error::NoDataVersion)?
+        };
+
+        let prefix = format!(
+            "{protocol}/{node_type}/{node_version}/{network}/{data_version}",
+            protocol = image.protocol,
+            node_type = image.node_type,
+            node_version = node_version
+                .map(ToString::to_string)
+                .as_deref()
+                .unwrap_or(image.node_version.as_str())
+        );
+
+        let body_key = format!("{prefix}/{MANIFEST_BODY}");
+        let body = match self.read_manifest_body(&body_key).await {
+            Ok(header) => header,
+            Err(Error::Client(client::Error::MissingKey(_, _))) => {
+                let fallback_key = format!("{prefix}/{MANIFEST_FILE}");
+                self.read_download_manifest(&fallback_key)
+                    .await
+                    .map(Into::into)?
+            }
+            Err(err) => return Err(err),
+        };
+
+        Ok((body, data_version))
+    }
+
+    /// Regenerate the download URLs for the requested `DownloadManifest` chunks.
+    pub async fn refresh_download_manifest(
         &self,
         image: &ImageId,
         network: &str,
-    ) -> Result<DownloadManifest, Error> {
-        let mut manifest = self
-            .find_download_manifest_blueprint(image, network)
+        data_version: u64,
+        chunk_indexes: &[usize],
+    ) -> Result<Vec<ArchiveChunk>, Error> {
+        let (manifest, _) = self
+            .download_manifest_body(image, None, network, Some(data_version))
             .await?;
-        let download_gb = manifest.chunks.iter().map(|c| c.size).sum::<u64>() / 1_000_000_000;
-        let expires = Duration::from_secs(self.expiration.as_secs().max(30 * download_gb));
-        for chunk in &mut manifest.chunks {
-            let url = self
+        let expires = Duration::from_secs(self.expiration.as_secs());
+
+        let mut chunks = Vec::with_capacity(chunk_indexes.len());
+        for &index in chunk_indexes {
+            let mut chunk = manifest
+                .chunks
+                .get(index)
+                .ok_or(Error::MissingChunk(index))?
+                .clone();
+            chunk.index = Some(index);
+            chunk.url = self
                 .client
                 .download_url(&self.bucket.archive, &chunk.key, expires)
-                .await?;
-            chunk.url = Some(url);
+                .await
+                .map(Some)?;
+            chunks.push(chunk);
         }
 
-        Ok(manifest)
+        Ok(chunks)
     }
 
-    /// Find the most recent download manifest (<= `image.node_version`) blueprint.
-    pub async fn find_download_manifest_blueprint(
-        &self,
-        image: &ImageId,
-        network: &str,
-    ) -> Result<DownloadManifest, Error> {
-        let node_version = image.semver()?;
-        let node_versions = self.node_versions(image).await?;
-        let mut versions = node_versions.iter().rev();
-
-        let manifest = loop {
-            let Some(version) = versions.next() else {
-                return Err(Error::DownloadManifest(image.clone(), network.into()));
-            };
-
-            if *version <= node_version {
-                match self.find_manifest(image, Some(version), network).await {
-                    Ok(manifest) => break manifest,
-                    Err(err) => warn!("Manifest not found: {err:#}"),
-                }
-            }
-        };
-        Ok(manifest)
-    }
-
-    /// Find all node versions for some image `protocol` and `node_type`.
-    async fn node_versions(&self, image: &ImageId) -> Result<Vec<Version>, Error> {
-        let path = format!("{}/{}/", image.protocol, image.node_type);
-        let keys = self.client.list(&self.bucket.archive, &path).await?;
-
-        let mut versions = keys
-            .iter()
-            .filter_map(|key| last_segment(key).and_then(|segment| Version::parse(segment).ok()))
-            .collect::<Vec<_>>();
-
-        versions.sort();
-        Ok(versions)
-    }
-
-    /// Find the most recent download manifest for some image and network type.
+    /// Return a descending order list of data versions for an image.
     ///
-    /// If `version` is Some then it is used instead of `image.node_version`.
-    async fn find_manifest(
-        &self,
-        image: &ImageId,
-        version: Option<&Version>,
-        network: &str,
-    ) -> Result<DownloadManifest, Error> {
-        let data_versions = self.data_versions(image, version, network).await?;
-        for data_version in data_versions.iter().rev() {
-            let key = format!(
-                "{protocol}/{node_type}/{version}/{network}/{data_version}/{MANIFEST_FILE}",
-                protocol = image.protocol,
-                node_type = image.node_type,
-                version = version
-                    .map(ToString::to_string)
-                    .as_deref()
-                    .unwrap_or(image.node_version.as_str())
-            );
-
-            match self.read_manifest(&key).await {
-                Ok(manifest) => return Ok(manifest),
-                Err(err) => warn!("Invalid manifest at `{key}`: {err:#}"),
-            }
-        }
-
-        Err(Error::FindManifest(
-            image.clone(),
-            version.cloned(),
-            network.into(),
-        ))
-    }
-
-    /// Return an ordered list of data versions for an image.
-    ///
-    /// If `version` is Some then it is used instead of `image.node_version`.
+    /// If `node_version` is Some then it overrides `image.node_version`.
     async fn data_versions(
         &self,
         image: &ImageId,
-        version: Option<&Version>,
+        node_version: Option<&Version>,
         network: &str,
     ) -> Result<Vec<u64>, Error> {
         let path = format!(
-            "{protocol}/{node_type}/{version}/{network}/",
+            "{protocol}/{node_type}/{node_version}/{network}/",
             protocol = image.protocol,
             node_type = image.node_type,
-            version = version
+            node_version = node_version
                 .map(ToString::to_string)
                 .as_deref()
                 .unwrap_or(image.node_version.as_str())
@@ -326,7 +375,7 @@ impl Storage {
             .filter_map(|ver| last_segment(&ver).and_then(|segment| segment.parse::<u64>().ok()))
             .collect();
 
-        versions.sort_unstable();
+        versions.sort_by(|a, b| b.cmp(a));
         Ok(versions)
     }
 
@@ -334,58 +383,67 @@ impl Storage {
         &self,
         image: &ImageId,
         network: &str,
-        manifest: &DownloadManifest,
+        manifest: DownloadManifest,
     ) -> Result<(), Error> {
-        let versions = self.data_versions(image, None, network).await?;
-        let data_version = versions.last().unwrap_or(&0);
+        let mut versions = self.data_versions(image, None, network).await?;
+        let data_version = versions.pop().unwrap_or_default();
 
-        let key = format!(
-            "{protocol}/{node_type}/{node_version}/{network}/{data_version}/{MANIFEST_FILE}",
+        let prefix = format!(
+            "{protocol}/{node_type}/{node_version}/{network}/{data_version}",
             protocol = image.protocol,
             node_type = image.node_type,
             node_version = image.node_version,
         );
-        let data = serde_json::to_vec(manifest).map_err(Error::SerializeManifest)?;
 
+        let header_key = format!("{prefix}/{MANIFEST_HEADER}");
+        let header: ManifestHeader = (&manifest).try_into()?;
+        let header_data = serde_json::to_vec(&header).map_err(Error::SerializeHeader)?;
         self.client
-            .write_key(&self.bucket.archive, &key, data)
+            .write_key(&self.bucket.archive, &header_key, header_data)
+            .await?;
+
+        let body_key = format!("{prefix}/{MANIFEST_BODY}");
+        let body: ManifestBody = manifest.into();
+        let body_data = serde_json::to_vec(&body).map_err(Error::SerializeBody)?;
+        self.client
+            .write_key(&self.bucket.archive, &body_key, body_data)
             .await
             .map_err(Into::into)
     }
 
-    pub async fn upload_manifest(
+    pub async fn upload_slots(
         &self,
         image: &ImageId,
         network: &str,
         data_version: Option<u64>,
-        upload_slots: u32,
+        slot_indexes: &[usize],
         expires: Duration,
-    ) -> Result<UploadManifest, Error> {
+    ) -> Result<(Vec<UploadSlot>, u64), Error> {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let versions = self.data_versions(image, None, network).await?;
-            versions.last().unwrap_or(&0) + 1
+            let mut versions = self.data_versions(image, None, network).await?;
+            versions.pop().unwrap_or_default() + 1
         };
 
         let path = format!(
-            "{protocol}/{node_type}/{min_node_version}/{network}/{data_version}",
+            "{protocol}/{node_type}/{node_version}/{network}/{data_version}",
             protocol = image.protocol,
             node_type = image.node_type.to_string().to_lowercase(),
-            min_node_version = image.node_version,
+            node_version = image.node_version,
         );
 
-        let mut slots = Vec::with_capacity(upload_slots as usize);
-        for index in 0..upload_slots {
+        let mut slots = Vec::with_capacity(slot_indexes.len());
+        for &index in slot_indexes {
             let key = format!("{path}/data.part_{index}");
             let url = self
                 .client
                 .upload_url(&self.bucket.archive, &key, expires)
                 .await?;
-            slots.push(UploadSlot { key, url });
+            slots.push(UploadSlot { index, key, url });
         }
 
-        Ok(UploadManifest { slots })
+        Ok((slots, data_version))
     }
 }
 
