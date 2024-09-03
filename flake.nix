@@ -30,7 +30,7 @@
               openssl
               pgcli
               pkg-config
-              postgresql # TODO: libpq from https://github.com/NixOS/nixpkgs/pull/294504
+              postgresql.lib
               protobuf
             ];
           };
