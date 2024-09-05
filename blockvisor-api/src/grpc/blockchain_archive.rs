@@ -228,7 +228,7 @@ async fn put_download_manifest(
 
     read.ctx
         .storage
-        .save_download_manifest(&image, &req.network, manifest)
+        .save_download_manifest(&image, &req.network, req.data_version, manifest)
         .await?;
 
     Ok(api::BlockchainArchiveServicePutDownloadManifestResponse {})

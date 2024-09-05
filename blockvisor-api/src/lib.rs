@@ -24,6 +24,10 @@
     clippy::too_many_lines,
     clippy::use_self
 )]
+#![cfg_attr(
+    any(test, feature = "integration-test"),
+    allow(clippy::wildcard_imports)
+)]
 
 #[macro_use]
 extern crate maplit;

@@ -445,12 +445,10 @@ impl Storage {
         &self,
         image: &ImageId,
         network: &str,
+        data_version: u64,
         manifest: DownloadManifest,
     ) -> Result<(), Error> {
         let node_version = image.semver()?;
-        let mut versions = self.data_versions(image, &node_version, network).await?;
-        let data_version = versions.pop().unwrap_or_default();
-
         let prefix = format!(
             "{protocol}/{node_type}/{node_version}/{network}/{data_version}",
             protocol = image.protocol,
