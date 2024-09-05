@@ -119,7 +119,7 @@ async fn get_download_metadata(
     let (header, data_version) = read
         .ctx
         .storage
-        .download_manifest_header(&image, None, &req.network, req.data_version)
+        .find_download_manifest_header(&image, &req.network, req.data_version)
         .await?;
 
     Ok(api::BlockchainArchiveServiceGetDownloadMetadataResponse {
