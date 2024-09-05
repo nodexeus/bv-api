@@ -54,7 +54,7 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Diesel(_) | Storage(_) => Status::internal("Internal error."),
+            Diesel(_) => Status::internal("Internal error."),
             MissingId | ParseImageId(_) => Status::invalid_argument("id"),
             ParseChunk(_) => Status::invalid_argument("chunks"),
             ParseSlot(_) => Status::invalid_argument("slots"),
@@ -63,6 +63,7 @@ impl From<Error> for Status {
             SlotIndex(_) | TooManySlots => Status::out_of_range("slot_indexes"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
+            Storage(err) => err.into(),
         }
     }
 }

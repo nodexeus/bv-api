@@ -38,8 +38,10 @@ pub const RHAI_FILE: &str = "babel.rhai";
 pub enum Error {
     /// Storage client error: {0}
     Client(#[from] client::Error),
-    /// Failed to find download manifest for `{0:?}` in network {1}.
-    FindDownloadManifest(ImageId, String),
+    /// Failed to find download manifest body for `{0:?}` and network `{1}`.
+    FindManifestBody(ImageId, String),
+    /// Failed to find download manifest header for `{0:?}` and network `{1}`.
+    FindManifestHeader(ImageId, String),
     /// Storage image error: {0}
     Image(#[from] image::Error),
     /// Storage manifest error: {0}
@@ -52,10 +54,10 @@ pub enum Error {
     NoDataVersion,
     /// Failed to parse DownloadManifest: {0}
     ParseManifest(serde_json::Error),
-    /// Failed to parse ManifestHeader: {0}
-    ParseManifestHeader(serde_json::Error),
     /// Failed to parse ManifestBody: {0}
     ParseManifestBody(serde_json::Error),
+    /// Failed to parse ManifestHeader: {0}
+    ParseManifestHeader(serde_json::Error),
     /// Failed to parse storage bytes as UTF8: {0}
     ParseUtf8(std::string::FromUtf8Error),
     /// Failed to serialize ManifestBody: {0}
@@ -69,7 +71,8 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             Client(client::Error::MissingKey(_, _))
-            | FindDownloadManifest(_, _)
+            | FindManifestBody(_, _)
+            | FindManifestHeader(_, _)
             | NoDataVersion => Status::not_found("Not found."),
             Metadata(crate::storage::metadata::Error::CompileScript(_, _)) => {
                 Status::internal("Failed to compile script")
@@ -80,8 +83,8 @@ impl From<Error> for Status {
             | Manifest(_)
             | Metadata(_)
             | ParseManifest(_)
-            | ParseManifestHeader(_)
             | ParseManifestBody(_)
+            | ParseManifestHeader(_)
             | ParseUtf8(_)
             | SerializeBody(_)
             | SerializeHeader(_) => Status::internal("Internal error."),
@@ -248,7 +251,7 @@ impl Storage {
 
         loop {
             let Some(version) = versions.next() else {
-                return Err(Error::FindDownloadManifest(image.clone(), network.into()));
+                return Err(Error::FindManifestHeader(image.clone(), network.into()));
             };
 
             if *version <= node_version {
@@ -316,7 +319,7 @@ impl Storage {
 
         loop {
             let Some(version) = versions.next() else {
-                return Err(Error::FindDownloadManifest(image.clone(), network.into()));
+                return Err(Error::FindManifestBody(image.clone(), network.into()));
             };
 
             if *version <= node_version {
