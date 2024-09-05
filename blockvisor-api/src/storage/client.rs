@@ -206,8 +206,9 @@ mod tests {
             .returning(|_, _| Err(Error::Unexpected("some client error")));
 
         let storage = Storage::new(&dummy_config(), client);
+        let node_version = "1.2.3".parse().unwrap();
         let result = storage
-            .download_manifest_header(&test_image(), None, "test", None)
+            .download_manifest_header(&test_image(), &node_version, "test", None)
             .await;
 
         assert_eq!(
@@ -237,13 +238,14 @@ mod tests {
             });
 
         let storage = Storage::new(&dummy_config(), client);
+        let node_version = "1.2.3".parse().unwrap();
         let result = storage
-            .download_manifest_header(&test_image(), None, "test", None)
+            .download_manifest_header(&test_image(), &node_version, "test", None)
             .await;
         assert_eq!(result.unwrap_err().to_string(), "No data versions found.");
 
         let result = storage
-            .download_manifest_body(&test_image(), None, "test", None)
+            .download_manifest_body(&test_image(), &node_version, "test", None)
             .await;
         assert_eq!(result.unwrap_err().to_string(), "No data versions found.");
     }
@@ -265,8 +267,9 @@ mod tests {
             });
 
         let storage = Storage::new(&dummy_config(), client);
+        let node_version = "1.2.3".parse().unwrap();
         let result = storage
-            .download_manifest_header(&test_image(), None, "test", None)
+            .download_manifest_header(&test_image(), &node_version, "test", None)
             .await;
         assert_eq!(result.unwrap_err().to_string(), "No data versions found.");
     }
@@ -291,8 +294,9 @@ mod tests {
             .returning(|_, _| Ok(b"invalid manifest content".to_vec()));
 
         let storage = Storage::new(&dummy_config(), client);
+        let node_version = "1.2.3".parse().unwrap();
         let result = storage
-            .download_manifest_header(&test_image(), None, "test", None)
+            .download_manifest_header(&test_image(), &node_version, "test", None)
             .await;
 
         assert_eq!(
@@ -321,8 +325,9 @@ mod tests {
         };
 
         let storage = Storage::new(&dummy_config(), client);
+        let node_version = "1.2.3".parse().unwrap();
         let (manifest, data_version) = storage
-            .download_manifest_header(&test_image(), None, "test", None)
+            .download_manifest_header(&test_image(), &node_version, "test", None)
             .await
             .unwrap();
 
