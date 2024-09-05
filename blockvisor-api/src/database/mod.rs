@@ -372,7 +372,7 @@ pub mod tests {
 
             // First we connect to the main db to run the `CREATE DATABASE` query.
             let mut conn = AsyncPgConnection::establish(&main_db_url).await.unwrap();
-            diesel::sql_query(&format!("CREATE DATABASE {test_db_name};"))
+            diesel::sql_query(format!("CREATE DATABASE {test_db_name};"))
                 .execute(&mut conn)
                 .await
                 .unwrap();
@@ -420,7 +420,7 @@ pub mod tests {
 
         async fn tear_down(test_db_name: String, main_db_url: String) {
             let mut conn = AsyncPgConnection::establish(&main_db_url).await.unwrap();
-            diesel::sql_query(&format!("DROP DATABASE {test_db_name}"))
+            diesel::sql_query(format!("DROP DATABASE {test_db_name}"))
                 .execute(&mut conn)
                 .await
                 .unwrap();

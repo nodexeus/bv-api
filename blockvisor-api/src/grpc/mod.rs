@@ -76,7 +76,7 @@ struct Grpc {
 }
 
 impl Grpc {
-    fn new(context: Arc<Context>) -> Self {
+    const fn new(context: Arc<Context>) -> Self {
         Grpc { context }
     }
 }
