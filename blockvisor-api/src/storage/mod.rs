@@ -246,11 +246,10 @@ impl Storage {
         data_version: Option<u64>,
     ) -> Result<(ManifestHeader, u64), Error> {
         let node_version = image.semver()?;
-        let node_versions = self.node_versions(image).await?;
-        let mut versions = node_versions.into_iter().rev();
+        let mut node_versions = self.node_versions(image).await?;
 
         loop {
-            let Some(version) = versions.next() else {
+            let Some(version) = node_versions.pop() else {
                 return Err(Error::FindManifestHeader(image.clone(), network.into()));
             };
 
@@ -314,11 +313,10 @@ impl Storage {
         data_version: Option<u64>,
     ) -> Result<(ManifestBody, u64), Error> {
         let node_version = image.semver()?;
-        let node_versions = self.node_versions(image).await?;
-        let mut versions = node_versions.into_iter().rev();
+        let mut node_versions = self.node_versions(image).await?;
 
         loop {
-            let Some(version) = versions.next() else {
+            let Some(version) = node_versions.pop() else {
                 return Err(Error::FindManifestBody(image.clone(), network.into()));
             };
 
@@ -418,7 +416,7 @@ impl Storage {
         Ok(versions)
     }
 
-    /// Return a descending order list of data versions for an image.
+    /// Returns an ordered list of data versions for an image.
     async fn data_versions(
         &self,
         image: &ImageId,
@@ -437,7 +435,7 @@ impl Storage {
             .filter_map(|ver| last_segment(&ver).and_then(|segment| segment.parse::<u64>().ok()))
             .collect();
 
-        versions.sort_by(|a, b| b.cmp(a));
+        versions.sort_unstable();
         Ok(versions)
     }
 
