@@ -247,16 +247,16 @@ impl Storage {
     ) -> Result<(ManifestHeader, u64), Error> {
         let node_version = image.semver()?;
         let node_versions = self.node_versions(image).await?;
-        let mut versions = node_versions.iter();
+        let mut versions = node_versions.into_iter().rev();
 
         loop {
             let Some(version) = versions.next() else {
                 return Err(Error::FindManifestHeader(image.clone(), network.into()));
             };
 
-            if *version <= node_version {
+            if version <= node_version {
                 match self
-                    .download_manifest_header(image, version, network, data_version)
+                    .download_manifest_header(image, &version, network, data_version)
                     .await
                 {
                     Ok((header, data_version)) => return Ok((header, data_version)),
@@ -315,16 +315,16 @@ impl Storage {
     ) -> Result<(ManifestBody, u64), Error> {
         let node_version = image.semver()?;
         let node_versions = self.node_versions(image).await?;
-        let mut versions = node_versions.iter();
+        let mut versions = node_versions.into_iter().rev();
 
         loop {
             let Some(version) = versions.next() else {
                 return Err(Error::FindManifestBody(image.clone(), network.into()));
             };
 
-            if *version <= node_version {
+            if version <= node_version {
                 match self
-                    .download_manifest_body(image, version, network, data_version)
+                    .download_manifest_body(image, &version, network, data_version)
                     .await
                 {
                     Ok((body, data_version)) => return Ok((body, data_version)),
@@ -404,7 +404,7 @@ impl Storage {
         Ok(chunks)
     }
 
-    /// Returns a descending order list of node versions for an image.
+    /// Returns an ordered list of node versions for an image.
     async fn node_versions(&self, image: &ImageId) -> Result<Vec<Version>, Error> {
         let path = format!("{}/{}/", image.protocol, image.node_type);
         let keys = self.client.list(&self.bucket.archive, &path).await?;
@@ -414,7 +414,7 @@ impl Storage {
             .filter_map(|key| last_segment(key).and_then(|segment| Version::parse(segment).ok()))
             .collect::<Vec<_>>();
 
-        versions.sort_by(|a, b| b.cmp(a));
+        versions.sort();
         Ok(versions)
     }
 
