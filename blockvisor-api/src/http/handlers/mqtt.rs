@@ -35,8 +35,11 @@ pub enum Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
+        use crate::auth::Error::{ExpiredJwt, ExpiredRefresh};
         use Error::*;
-        error!("{self}");
+        if !matches!(self, Error::Auth(ExpiredJwt(_) | ExpiredRefresh(_))) {
+            error!("{self}");
+        }
         match self {
             Auth(_) | Handler(handler::Error::Claims(_)) | ParseRequestToken(_) => {
                 response::unauthorized().into_response()
