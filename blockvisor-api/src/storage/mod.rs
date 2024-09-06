@@ -278,8 +278,9 @@ impl Storage {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let mut versions = self.data_versions(image, node_version, network).await?;
-            versions.pop().ok_or(Error::NoDataVersion)?
+            self.latest_data_version(image, node_version, network, true)
+                .await?
+                .ok_or(Error::NoDataVersion)?
         };
 
         let prefix = format!(
@@ -345,8 +346,9 @@ impl Storage {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let mut versions = self.data_versions(image, node_version, network).await?;
-            versions.pop().ok_or(Error::NoDataVersion)?
+            self.latest_data_version(image, node_version, network, true)
+                .await?
+                .ok_or(Error::NoDataVersion)?
         };
 
         let prefix = format!(
@@ -409,10 +411,16 @@ impl Storage {
 
         let mut versions = keys
             .iter()
-            .filter_map(|key| last_segment(key).and_then(|segment| Version::parse(segment).ok()))
+            .filter_map(|key| {
+                key.trim_end_matches('/')
+                    .rsplit('/')
+                    .next()
+                    .and_then(|node_version| Version::parse(node_version).ok())
+            })
             .collect::<Vec<_>>();
 
         versions.sort();
+        versions.dedup();
         Ok(versions)
     }
 
@@ -429,14 +437,59 @@ impl Storage {
             node_type = image.node_type,
         );
 
-        let data_versions = self.client.list(&self.bucket.archive, &path).await?;
-        let mut versions: Vec<_> = data_versions
+        let keys = self.client.list(&self.bucket.archive, &path).await?;
+        let mut versions: Vec<_> = keys
             .into_iter()
-            .filter_map(|ver| last_segment(&ver).and_then(|segment| segment.parse::<u64>().ok()))
+            .filter_map(|key| {
+                key.trim_end_matches('/')
+                    .rsplit('/')
+                    .next()
+                    .and_then(|data_version| data_version.parse::<u64>().ok())
+            })
             .collect();
 
         versions.sort_unstable();
+        versions.dedup();
         Ok(versions)
+    }
+
+    /// Returns the latest data version for an image.
+    async fn latest_data_version(
+        &self,
+        image: &ImageId,
+        node_version: &Version,
+        network: &str,
+        has_manifest: bool,
+    ) -> Result<Option<u64>, Error> {
+        let mut versions = self.data_versions(image, node_version, network).await?;
+
+        loop {
+            let data_version = match versions.pop() {
+                Some(version) if has_manifest => version,
+                Some(version) => return Ok(Some(version)),
+                None => return Ok(None),
+            };
+
+            let prefix = format!(
+                "{protocol}/{node_type}/{node_version}/{network}/{data_version}",
+                protocol = image.protocol,
+                node_type = image.node_type,
+            );
+
+            let header = format!("{prefix}/{MANIFEST_HEADER}");
+            match self.client.read_key(&self.bucket.archive, &header).await {
+                Ok(_bytes) => return Ok(Some(data_version)),
+                Err(client::Error::MissingKey(_, _)) => {
+                    let fallback = format!("{prefix}/{MANIFEST_FILE}");
+                    match self.client.read_key(&self.bucket.archive, &fallback).await {
+                        Ok(_bytes) => return Ok(Some(data_version)),
+                        Err(client::Error::MissingKey(_, _)) => (),
+                        Err(err) => warn!("Failed to read key `{fallback}`: {err}"),
+                    }
+                }
+                Err(err) => warn!("Failed to read key `{header}`: {err}"),
+            }
+        }
     }
 
     pub async fn save_download_manifest(
@@ -453,18 +506,19 @@ impl Storage {
             node_type = image.node_type,
         );
 
-        let header_key = format!("{prefix}/{MANIFEST_HEADER}");
         let header: ManifestHeader = (&manifest).try_into()?;
-        let header_data = serde_json::to_vec(&header).map_err(Error::SerializeHeader)?;
-        self.client
-            .write_key(&self.bucket.archive, &header_key, header_data)
-            .await?;
+        let body: ManifestBody = manifest.into();
 
         let body_key = format!("{prefix}/{MANIFEST_BODY}");
-        let body: ManifestBody = manifest.into();
         let body_data = serde_json::to_vec(&body).map_err(Error::SerializeBody)?;
         self.client
             .write_key(&self.bucket.archive, &body_key, body_data)
+            .await?;
+
+        let header_key = format!("{prefix}/{MANIFEST_HEADER}");
+        let header_data = serde_json::to_vec(&header).map_err(Error::SerializeHeader)?;
+        self.client
+            .write_key(&self.bucket.archive, &header_key, header_data)
             .await
             .map_err(Into::into)
     }
@@ -481,8 +535,10 @@ impl Storage {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let mut versions = self.data_versions(image, &node_version, network).await?;
-            versions.pop().unwrap_or_default() + 1
+            self.latest_data_version(image, &node_version, network, false)
+                .await?
+                .unwrap_or_default()
+                + 1
         };
 
         let path = format!(
@@ -503,10 +559,6 @@ impl Storage {
 
         Ok((slots, data_version))
     }
-}
-
-fn last_segment(key: &str) -> Option<&str> {
-    key.trim_end_matches('/').rsplit('/').next()
 }
 
 #[cfg(any(test, feature = "integration-test"))]
