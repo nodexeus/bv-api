@@ -290,7 +290,6 @@ mod tests {
             });
         client
             .expect_read_key()
-            .once()
             .returning(|_, _| Ok(b"invalid manifest content".to_vec()));
 
         let storage = Storage::new(&dummy_config(), client);
@@ -315,7 +314,6 @@ mod tests {
             .returning(|_, _| Ok(vec!["test_chain/node/1.2.3/test/456/".to_owned()]));
         client
             .expect_read_key()
-            .once()
             .returning(|_, _| Ok(br#"{"total_size": 128,"chunks": 5}"#.to_vec()));
 
         let expected = ManifestHeader {
