@@ -1042,6 +1042,14 @@ pub struct UpdateNodeMetrics {
 }
 
 impl UpdateNodeMetrics {
+    pub async fn apply(&self, conn: &mut Conn<'_>) -> Result<Node, Error> {
+        diesel::update(Node::not_deleted().find(self.id))
+            .set(self)
+            .get_result(conn)
+            .await
+            .map_err(|err| Error::UpdateMetrics(err, self.id))
+    }
+
     pub async fn update_metrics(
         mut updates: Vec<Self>,
         conn: &mut Conn<'_>,
@@ -1051,13 +1059,10 @@ impl UpdateNodeMetrics {
 
         let mut results = Vec::with_capacity(updates.len());
         for update in updates.into_iter().filter(Self::has_field) {
-            let updated = diesel::update(Node::not_deleted().find(update.id))
-                .set(&update)
-                .get_result(conn)
-                .await
-                .map_err(|err| Error::UpdateMetrics(err, update.id))?;
+            let updated = update.apply(conn).await?;
             results.push(updated);
         }
+
         Ok(results)
     }
 
