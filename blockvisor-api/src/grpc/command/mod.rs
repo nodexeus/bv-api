@@ -64,6 +64,8 @@ pub enum Error {
     RetryHint(std::num::TryFromIntError),
     /// Resource error: {0}
     Resource(#[from] crate::auth::resource::Error),
+    /// Command success error: {0}
+    Success(#[from] self::success::Error),
 }
 
 impl From<Error> for Status {
@@ -89,6 +91,7 @@ impl From<Error> for Status {
             Host(err) => err.into(),
             Node(err) => err.into(),
             Resource(err) => err.into(),
+            Success(err) => err.into(),
         }
     }
 }
@@ -161,13 +164,19 @@ async fn update(
 ) -> Result<api::CommandServiceUpdateResponse, Error> {
     let id = req.id.parse().map_err(Error::ParseId)?;
     let command = Command::by_id(id, &mut write).await?;
-    let authz = write
-        .auth(&meta, CommandPerm::Update, command.host_id)
-        .await?;
+
+    let mut resources = vec![Resource::from(command.host_id)];
+    if let Some(node_id) = command.node_id {
+        resources.push(Resource::from(node_id));
+    }
+    let authz = write.auth(&meta, CommandPerm::Update, &resources).await?;
 
     let updated = UpdateCommand::from_request(req)?.update(&mut write).await?;
+    let cmd = api::Command::from_model(&updated, &authz, &mut write).await?;
+    write.mqtt(cmd.clone());
+
     match updated.exit_code {
-        Some(ExitCode::Ok) => success::register(&updated, &authz, &mut write).await,
+        Some(ExitCode::Ok) => success::register(&updated, &authz, &mut write).await?,
         Some(_) => recover::recover(&updated, &authz, &mut write)
             .await
             .unwrap_or_default()
@@ -175,9 +184,6 @@ async fn update(
             .for_each(|cmd| write.mqtt(cmd)),
         None => (),
     };
-
-    let cmd = api::Command::from_model(&updated, &authz, &mut write).await?;
-    write.mqtt(cmd.clone());
 
     Ok(api::CommandServiceUpdateResponse { command: Some(cmd) })
 }

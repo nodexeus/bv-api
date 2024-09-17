@@ -1,49 +1,73 @@
-//! This module contains code regarding registering successful commands.
+use displaydoc::Display;
+use thiserror::Error;
+use tonic::Status;
 
-use tracing::error;
-
+use crate::auth::resource::NodeId;
 use crate::auth::AuthZ;
 use crate::database::WriteConn;
 use crate::grpc::api;
 use crate::model::blockchain::Blockchain;
-use crate::model::command::{Command, CommandType, NewCommand};
-use crate::model::node::{NewNodeLog, Node, NodeLogEvent, NodeStatus, UpdateNode};
+use crate::model::command::{Command, CommandId, CommandType, NewCommand};
+use crate::model::node::{
+    NewNodeLog, Node, NodeLogEvent, NodeStatus, UpdateNode, UpdateNodeMetrics,
+};
 
-type Result = std::result::Result<(), ()>;
-
-/// Some endpoints require some additional action from us when we recieve a
-/// success message back from blockvisord.
-///
-/// For now this is limited to creating a `node_logs` entry when `CreateNode`
-/// has succeeded, but this may expand over time.
-pub(super) async fn register(
-    succeeded_cmd: &Command,
-    authz: &AuthZ,
-    write: &mut WriteConn<'_, '_>,
-) {
-    let _ = match succeeded_cmd.command_type {
-        CommandType::NodeCreate => create_node_success(succeeded_cmd, authz, write).await,
-        CommandType::NodeDelete => delete_node_success(succeeded_cmd, write).await,
-        _ => return,
-    };
+#[derive(Debug, Display, Error)]
+pub enum Error {
+    /// Command success blockchain error: {0}
+    Blockchain(#[from] crate::model::blockchain::Error),
+    /// Command success model error: {0}
+    Command(#[from] crate::model::command::Error),
+    /// Command `{0}` failedto delete node `{1}`: {2}
+    DeleteNode(CommandId, NodeId, crate::model::node::Error),
+    /// Failed to serialize JSON: {0}
+    Json(serde_json::Error),
+    /// Command `{0}` is missing the `NodeId`.
+    MissingNodeId(CommandId),
+    /// Failed to write a NodeStart command to MQTT: {0}
+    MqttStart(Box<super::Error>),
+    /// Command success node error: {0}
+    Node(#[from] crate::model::node::Error),
 }
 
-/// In case of a successful node deployment, we are expected to write `node_logs` entry to the
-/// database. The `event` we pass in is `Succeeded`. Afterwards, we will start the node.
-async fn create_node_success(
-    succeeded_cmd: &Command,
+impl From<Error> for Status {
+    fn from(err: Error) -> Self {
+        use Error::*;
+        match err {
+            Json(_) => Status::internal("Internal error."),
+            MissingNodeId(_) => Status::invalid_argument("node_id"),
+            DeleteNode(_, _, err) => err.into(),
+            MqttStart(err) => (*err).into(),
+            Blockchain(err) => err.into(),
+            Command(err) => err.into(),
+            Node(err) => err.into(),
+        }
+    }
+}
+
+/// Take additional action after receiving `ExitCode::Ok` from blockvisor.
+pub(super) async fn register(
+    cmd: &Command,
     authz: &AuthZ,
     write: &mut WriteConn<'_, '_>,
-) -> Result {
-    let node_id = succeeded_cmd
-        .node_id
-        .ok_or_else(|| error!("`CreateNode` command has no node id!"))?;
-    let node = Node::by_id(node_id, write)
-        .await
-        .map_err(|err| error!("Could not get node for node_id {node_id}: {err}"))?;
-    let blockchain = Blockchain::by_id(node.blockchain_id, authz, write)
-        .await
-        .map_err(|err| error!("Could not get blockchain for node {node_id}: {err}"))?;
+) -> Result<(), Error> {
+    match cmd.command_type {
+        CommandType::NodeCreate => node_created(cmd, authz, write).await,
+        CommandType::NodeUpgrade => node_upgraded(cmd, write).await,
+        CommandType::NodeDelete => node_deleted(cmd, write).await,
+        _ => Ok(()),
+    }
+}
+
+/// After NodeCreate, write a log and send a start command.
+async fn node_created(
+    cmd: &Command,
+    authz: &AuthZ,
+    write: &mut WriteConn<'_, '_>,
+) -> Result<(), Error> {
+    let node_id = cmd.node_id.ok_or_else(|| Error::MissingNodeId(cmd.id))?;
+    let node = Node::by_id(node_id, write).await?;
+    let blockchain = Blockchain::by_id(node.blockchain_id, authz, write).await?;
 
     let new_log = NewNodeLog {
         host_id: node.host_id,
@@ -57,36 +81,51 @@ async fn create_node_success(
     };
     let _ = new_log.create(write).await;
 
-    let start_notif = NewCommand::node(&node, CommandType::NodeRestart)
-        .map_err(|err| error!("Command error: {err}"))?
+    let start_cmd = NewCommand::node(&node, CommandType::NodeStart)?
         .create(write)
+        .await?;
+    let start_api = api::Command::from_model(&start_cmd, authz, write)
         .await
-        .map_err(|err| error!("Could not insert new command into database: {err}"))?;
-    let start_cmd = api::Command::from_model(&start_notif, authz, write)
-        .await
-        .map_err(|err| error!("Could not serialize new command to gRPC message: {err}"))?;
-    write.mqtt(start_cmd);
+        .map_err(|err| Error::MqttStart(Box::new(err)))?;
+    write.mqtt(start_api);
+
     Ok(())
 }
 
-async fn delete_node_success(succeeded_cmd: &Command, write: &mut WriteConn<'_, '_>) -> Result {
-    let command_id = succeeded_cmd.id;
-    let node = succeeded_cmd
+/// After NodeUpgrade, clear out any old jobs.
+async fn node_upgraded(cmd: &Command, write: &mut WriteConn<'_, '_>) -> Result<(), Error> {
+    let node_id = cmd.node_id.ok_or_else(|| Error::MissingNodeId(cmd.id))?;
+    let update = UpdateNodeMetrics {
+        id: node_id,
+        block_height: None,
+        block_age: None,
+        staking_status: None,
+        consensus: None,
+        node_status: None,
+        sync_status: None,
+        jobs: Some(serde_json::from_str("[]").map_err(Error::Json)?),
+    };
+    let _updated = update.apply(write).await?;
+
+    Ok(())
+}
+
+/// After NodeDelete, set the node status to deleted.
+async fn node_deleted(cmd: &Command, write: &mut WriteConn<'_, '_>) -> Result<(), Error> {
+    let node = cmd
         .node(write)
-        .await
-        .map_err(|err| error!("Can't query node for command {command_id}: {err}!"))?
-        .ok_or_else(|| error!("`DeleteNode` command {command_id} has no node!"))?;
-    let node_id = node.id;
+        .await?
+        .ok_or_else(|| Error::MissingNodeId(cmd.id))?;
+
     let update = UpdateNode {
         node_status: Some(NodeStatus::Deleted),
         ..Default::default()
     };
-    let node = node
-        .update(&update, write)
-        .await
-        .map_err(|err| error!("Failed to delete node {node_id} for command {command_id}: {err}"))?;
+    let node = node.update(&update, write).await?;
+
     Node::delete(node.id, write)
         .await
-        .map_err(|err| error!("Failed to delete node {node_id} for command {command_id}: {err}"))?;
+        .map_err(|err| Error::DeleteNode(cmd.id, node.id, err))?;
+
     Ok(())
 }
