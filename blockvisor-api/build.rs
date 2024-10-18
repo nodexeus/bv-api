@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     builder
         .build_server(true)
         .enum_attribute("command", "#[allow(clippy::large_enum_variant)]")
-        .compile(&proto_files()?, &includes)
+        .compile_protos(&proto_files()?, &includes)
         .context("Failed to compile protos")
 }
 
