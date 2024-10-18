@@ -1,5 +1,5 @@
 use axum::http::{Request, StatusCode};
-use hyper::Body;
+use http_body_util::Empty;
 use tower::ServiceExt;
 
 use blockvisor_api::config::Context;
@@ -27,7 +27,7 @@ async fn test_possible_routes() {
             .method(method)
             .header("content-type", "application/json")
             .uri(route)
-            .body(Body::empty())
+            .body(Empty::new())
             .unwrap();
 
         let resp = http::router(&context).oneshot(req).await.unwrap();
