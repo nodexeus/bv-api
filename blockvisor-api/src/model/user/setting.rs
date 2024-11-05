@@ -4,10 +4,10 @@ use diesel_async::RunQueryDsl;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::Status;
 
 use crate::auth::resource::UserId;
 use crate::database::Conn;
+use crate::grpc::Status;
 use crate::model::schema::user_settings;
 
 #[derive(Debug, Display, Error)]

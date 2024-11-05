@@ -37,7 +37,6 @@ use ipnetwork::IpNetwork;
 use petname::{Generator, Petnames};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tonic::Status;
 use tracing::warn;
 
 use crate::auth::rbac::BillingPerm;
@@ -47,6 +46,7 @@ use crate::auth::resource::{
 use crate::auth::AuthZ;
 use crate::database::{Conn, WriteConn};
 use crate::grpc::api;
+use crate::grpc::Status;
 use crate::storage::image::ImageId;
 use crate::stripe::api::subscription::SubscriptionItem;
 use crate::stripe::Payment;
@@ -164,7 +164,7 @@ impl From<Error> for Status {
             | FindById(_, NotFound)
             | FindByIds(_, NotFound)
             | UpgradeableByType(_, _, NotFound) => Status::not_found("Not found."),
-            NoMatchingHost => Status::resource_exhausted("No matching host."),
+            NoMatchingHost => Status::failed_precondition("No matching host."),
             Org(err) => err.into(),
             Paginate(err) => err.into(),
             _ => Status::internal("Internal error."),

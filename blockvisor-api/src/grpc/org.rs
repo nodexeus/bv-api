@@ -5,8 +5,7 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use futures::future::OptionFuture;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::{debug, error};
 
 use crate::auth::rbac::{OrgAddressPerm, OrgAdminPerm, OrgBillingPerm, OrgPerm, OrgProvisionPerm};
@@ -19,7 +18,7 @@ use crate::model::{Address, Invitation, NewAddress, Org, Token, User};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::org_service_server::OrgService;
-use super::{api, common, Grpc};
+use super::{api, common, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -89,7 +88,7 @@ impl From<Error> for Status {
         error!("{err}");
         match err {
             ClaimsNotUser | DeletePersonal | CanOnlyRemoveSelf => {
-                Status::permission_denied("Access denied.")
+                Status::forbidden("Access denied.")
             }
             ConvertNoOrg | Diesel(_) | ParseMax(_) | Stripe(_) | StripeCurrency(_)
             | StripeInvoice(_) => Status::internal("Internal error."),
@@ -122,140 +121,142 @@ impl OrgService for Grpc {
     async fn create(
         &self,
         req: Request<api::OrgServiceCreateRequest>,
-    ) -> Result<Response<api::OrgServiceCreateResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceCreateResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| create(req, meta, write).scope_boxed())
+        self.write(|write| create(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn get(
         &self,
         req: Request<api::OrgServiceGetRequest>,
-    ) -> Result<Response<api::OrgServiceGetResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceGetResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get(req, meta, read).scope_boxed()).await
+        self.read(|read| get(req, meta.into(), read).scope_boxed())
+            .await
     }
 
     async fn list(
         &self,
         req: Request<api::OrgServiceListRequest>,
-    ) -> Result<Response<api::OrgServiceListResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceListResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list(req, meta, read).scope_boxed()).await
+        self.read(|read| list(req, meta.into(), read).scope_boxed())
+            .await
     }
 
     async fn update(
         &self,
         req: Request<api::OrgServiceUpdateRequest>,
-    ) -> Result<Response<api::OrgServiceUpdateResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceUpdateResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| update(req, meta, write).scope_boxed())
+        self.write(|write| update(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn delete(
         &self,
         req: Request<api::OrgServiceDeleteRequest>,
-    ) -> Result<Response<api::OrgServiceDeleteResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceDeleteResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| delete(req, meta, write).scope_boxed())
+        self.write(|write| delete(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn remove_member(
         &self,
         req: Request<api::OrgServiceRemoveMemberRequest>,
-    ) -> Result<Response<api::OrgServiceRemoveMemberResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceRemoveMemberResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| remove_member(req, meta, write).scope_boxed())
+        self.write(|write| remove_member(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn get_provision_token(
         &self,
         req: Request<api::OrgServiceGetProvisionTokenRequest>,
-    ) -> Result<Response<api::OrgServiceGetProvisionTokenResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceGetProvisionTokenResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_provision_token(req, meta, read).scope_boxed())
+        self.read(|read| get_provision_token(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn reset_provision_token(
         &self,
         req: Request<api::OrgServiceResetProvisionTokenRequest>,
-    ) -> Result<Response<api::OrgServiceResetProvisionTokenResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceResetProvisionTokenResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| reset_provision_token(req, meta, write).scope_boxed())
+        self.write(|write| reset_provision_token(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn init_card(
         &self,
         req: Request<api::OrgServiceInitCardRequest>,
-    ) -> Result<Response<api::OrgServiceInitCardResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceInitCardResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| init_card(req, meta, write).scope_boxed())
+        self.write(|write| init_card(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn list_payment_methods(
         &self,
         req: Request<api::OrgServiceListPaymentMethodsRequest>,
-    ) -> Result<Response<api::OrgServiceListPaymentMethodsResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceListPaymentMethodsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list_payment_methods(req, meta, read).scope_boxed())
+        self.read(|read| list_payment_methods(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn billing_details(
         &self,
         req: Request<api::OrgServiceBillingDetailsRequest>,
-    ) -> Result<Response<api::OrgServiceBillingDetailsResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceBillingDetailsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| billing_details(req, meta, read).scope_boxed())
+        self.read(|read| billing_details(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn get_address(
         &self,
         req: Request<api::OrgServiceGetAddressRequest>,
-    ) -> Result<Response<api::OrgServiceGetAddressResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceGetAddressResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_address(req, meta, read).scope_boxed())
+        self.read(|read| get_address(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn set_address(
         &self,
         req: Request<api::OrgServiceSetAddressRequest>,
-    ) -> Result<Response<api::OrgServiceSetAddressResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceSetAddressResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| set_address(req, meta, read).scope_boxed())
+        self.read(|read| set_address(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn delete_address(
         &self,
         req: Request<api::OrgServiceDeleteAddressRequest>,
-    ) -> Result<Response<api::OrgServiceDeleteAddressResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceDeleteAddressResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| delete_address(req, meta, read).scope_boxed())
+        self.read(|read| delete_address(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn get_invoices(
         &self,
         req: Request<api::OrgServiceGetInvoicesRequest>,
-    ) -> Result<Response<api::OrgServiceGetInvoicesResponse>, Status> {
+    ) -> Result<Response<api::OrgServiceGetInvoicesResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_invoices(req, meta, read).scope_boxed())
+        self.read(|read| get_invoices(req, meta.into(), read).scope_boxed())
             .await
     }
 }
 
-async fn create(
+pub async fn create(
     req: api::OrgServiceCreateRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::OrgServiceCreateResponse, Error> {
     let authz = write.auth_all(&meta, OrgPerm::Create).await?;
@@ -276,9 +277,9 @@ async fn create(
     Ok(api::OrgServiceCreateResponse { org: Some(org) })
 }
 
-async fn get(
+pub async fn get(
     req: api::OrgServiceGetRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceGetResponse, Error> {
     let org_id: OrgId = req.id.parse().map_err(Error::ParseId)?;
@@ -291,9 +292,9 @@ async fn get(
     Ok(api::OrgServiceGetResponse { org: Some(org) })
 }
 
-async fn list(
+pub async fn list(
     req: api::OrgServiceListRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceListResponse, Error> {
     let filter = req.into_filter()?;
@@ -309,9 +310,9 @@ async fn list(
     Ok(api::OrgServiceListResponse { orgs, org_count })
 }
 
-async fn update(
+pub async fn update(
     req: api::OrgServiceUpdateRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::OrgServiceUpdateResponse, Error> {
     let org_id: OrgId = req.id.parse().map_err(Error::ParseId)?;
@@ -334,9 +335,9 @@ async fn update(
     Ok(api::OrgServiceUpdateResponse {})
 }
 
-async fn delete(
+pub async fn delete(
     req: api::OrgServiceDeleteRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::OrgServiceDeleteResponse, Error> {
     let org_id: OrgId = req.id.parse().map_err(Error::ParseId)?;
@@ -361,9 +362,9 @@ async fn delete(
     Ok(api::OrgServiceDeleteResponse {})
 }
 
-async fn remove_member(
+pub async fn remove_member(
     req: api::OrgServiceRemoveMemberRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::OrgServiceRemoveMemberResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -410,9 +411,9 @@ async fn remove_member(
     Ok(api::OrgServiceRemoveMemberResponse {})
 }
 
-async fn get_provision_token(
+pub async fn get_provision_token(
     req: api::OrgServiceGetProvisionTokenRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceGetProvisionTokenResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -426,9 +427,9 @@ async fn get_provision_token(
     })
 }
 
-async fn reset_provision_token(
+pub async fn reset_provision_token(
     req: api::OrgServiceResetProvisionTokenRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::OrgServiceResetProvisionTokenResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -444,9 +445,9 @@ async fn reset_provision_token(
     })
 }
 
-async fn init_card(
+pub async fn init_card(
     req: api::OrgServiceInitCardRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::OrgServiceInitCardResponse, Error> {
     let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
@@ -463,9 +464,9 @@ async fn init_card(
     Ok(api::OrgServiceInitCardResponse { client_secret })
 }
 
-async fn list_payment_methods(
+pub async fn list_payment_methods(
     req: api::OrgServiceListPaymentMethodsRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceListPaymentMethodsResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -504,9 +505,9 @@ async fn list_payment_methods(
     Ok(api::OrgServiceListPaymentMethodsResponse { methods })
 }
 
-async fn billing_details(
+pub async fn billing_details(
     req: api::OrgServiceBillingDetailsRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceBillingDetailsResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -554,9 +555,9 @@ async fn billing_details(
     })
 }
 
-async fn get_address(
+pub async fn get_address(
     req: api::OrgServiceGetAddressRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceGetAddressResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -571,9 +572,9 @@ async fn get_address(
     })
 }
 
-async fn set_address(
+pub async fn set_address(
     req: api::OrgServiceSetAddressRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceSetAddressResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -633,9 +634,9 @@ async fn set_address(
     Ok(api::OrgServiceSetAddressResponse {})
 }
 
-async fn delete_address(
+pub async fn delete_address(
     req: api::OrgServiceDeleteAddressRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceDeleteAddressResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -649,9 +650,9 @@ async fn delete_address(
     Ok(api::OrgServiceDeleteAddressResponse {})
 }
 
-async fn get_invoices(
+pub async fn get_invoices(
     req: api::OrgServiceGetInvoicesRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: ReadConn<'_, '_>,
 ) -> Result<api::OrgServiceGetInvoicesResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;

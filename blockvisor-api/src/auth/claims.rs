@@ -5,9 +5,9 @@ use derive_more::Deref;
 use displaydoc::Display;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tonic::Status;
 
 use crate::database::Conn;
+use crate::grpc::Status;
 use crate::model::rbac::{RbacPerm, RbacUser};
 use crate::model::{Host, Node};
 use crate::util::SecondsUtc;
@@ -44,11 +44,9 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             EnsureHost(..) | EnsureNode(..) | EnsureOrg(..) | EnsureUser(..) => {
-                Status::permission_denied("Access denied.")
+                Status::forbidden("Access denied.")
             }
-            MissingPerm(perm, _) => {
-                Status::permission_denied(format!("Missing permission: {perm}"))
-            }
+            MissingPerm(perm, _) => Status::forbidden(format!("Missing permission: {perm}")),
             Host(err) => err.into(),
             Node(err) => err.into(),
             Org(err) => err.into(),

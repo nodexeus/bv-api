@@ -14,13 +14,12 @@ use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display;
 use ipnetwork::IpNetwork;
 use thiserror::Error;
-use tonic::Status;
 
 use crate::auth::rbac::HostBillingPerm;
 use crate::auth::resource::{HostId, OrgId, UserId};
 use crate::auth::AuthZ;
 use crate::database::Conn;
-use crate::grpc::{api, common};
+use crate::grpc::{api, common, Status};
 use crate::storage::metadata::HardwareRequirements;
 use crate::util::{SearchOperator, SortOrder};
 

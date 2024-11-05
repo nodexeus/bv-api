@@ -20,6 +20,9 @@ fn main() -> Result<()> {
     builder
         .build_server(true)
         .enum_attribute("command", "#[allow(clippy::large_enum_variant)]")
+        .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
+        .compile_well_known_types(true)
+        .extern_path(".google.protobuf", "::prost_wkt_types")
         .compile_protos(&proto_files()?, &includes)
         .context("Failed to compile protos")
 }

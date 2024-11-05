@@ -1,8 +1,7 @@
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::{error, warn};
 
 use crate::auth::claims::{Claims, Expirable, Granted};
@@ -15,7 +14,7 @@ use crate::database::{Transaction, WriteConn};
 use crate::model::{Host, Node, Org, User};
 
 use super::api::auth_service_server::AuthService;
-use super::{api, Grpc};
+use super::{api, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -63,10 +62,10 @@ impl From<Error> for Status {
         error!("{err}");
         match err {
             ClaimsNotUser | Jwt(_) | ParseToken(_) | RefreshResource => {
-                Status::permission_denied("Access denied.")
+                Status::forbidden("Access denied.")
             }
             Diesel(_) | Email(_) => Status::internal("Internal error."),
-            NotBearer => Status::unauthenticated("Not bearer."),
+            NotBearer => Status::unauthorized("Not bearer."),
             NoRefresh => Status::invalid_argument("No refresh token."),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
@@ -87,70 +86,70 @@ impl AuthService for Grpc {
     async fn login(
         &self,
         req: Request<api::AuthServiceLoginRequest>,
-    ) -> Result<Response<api::AuthServiceLoginResponse>, Status> {
+    ) -> Result<Response<api::AuthServiceLoginResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| login(req, meta, write).scope_boxed())
+        self.write(|write| login(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn confirm(
         &self,
         req: Request<api::AuthServiceConfirmRequest>,
-    ) -> Result<Response<api::AuthServiceConfirmResponse>, Status> {
+    ) -> Result<Response<api::AuthServiceConfirmResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| confirm(req, meta, write).scope_boxed())
+        self.write(|write| confirm(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn refresh(
         &self,
         req: Request<api::AuthServiceRefreshRequest>,
-    ) -> Result<Response<api::AuthServiceRefreshResponse>, Status> {
+    ) -> Result<Response<api::AuthServiceRefreshResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| refresh(req, meta, write).scope_boxed())
+        self.write(|write| refresh(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn reset_password(
         &self,
         req: Request<api::AuthServiceResetPasswordRequest>,
-    ) -> Result<Response<api::AuthServiceResetPasswordResponse>, Status> {
+    ) -> Result<Response<api::AuthServiceResetPasswordResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| reset_password(req, meta, write).scope_boxed())
+        self.write(|write| reset_password(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn update_password(
         &self,
         req: Request<api::AuthServiceUpdatePasswordRequest>,
-    ) -> Result<Response<api::AuthServiceUpdatePasswordResponse>, Status> {
+    ) -> Result<Response<api::AuthServiceUpdatePasswordResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| update_password(req, meta, write).scope_boxed())
+        self.write(|write| update_password(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn update_ui_password(
         &self,
         req: Request<api::AuthServiceUpdateUiPasswordRequest>,
-    ) -> Result<Response<api::AuthServiceUpdateUiPasswordResponse>, Status> {
+    ) -> Result<Response<api::AuthServiceUpdateUiPasswordResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| update_ui_password(req, meta, write).scope_boxed())
+        self.write(|write| update_ui_password(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn list_permissions(
         &self,
         req: Request<api::AuthServiceListPermissionsRequest>,
-    ) -> Result<Response<api::AuthServiceListPermissionsResponse>, Status> {
+    ) -> Result<Response<api::AuthServiceListPermissionsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| list_permissions(req, meta, write).scope_boxed())
+        self.write(|write| list_permissions(req, meta.into(), write).scope_boxed())
             .await
     }
 }
 
-async fn login(
+pub async fn login(
     req: api::AuthServiceLoginRequest,
-    _: MetadataMap,
+    _: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceLoginResponse, Error> {
     // No auth claims are required as the password is checked instead.
@@ -170,9 +169,9 @@ async fn login(
     })
 }
 
-async fn confirm(
+pub async fn confirm(
     _: api::AuthServiceConfirmRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceConfirmResponse, Error> {
     let authz = write.auth_all(&meta, AuthPerm::Confirm).await?;
@@ -193,9 +192,9 @@ async fn confirm(
     })
 }
 
-async fn refresh(
+pub async fn refresh(
     req: api::AuthServiceRefreshRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceRefreshResponse, Error> {
     let claims = match req.token.parse().map_err(Error::ParseToken)? {
@@ -247,9 +246,9 @@ async fn refresh(
 
 /// This endpoint triggers the sending of the reset-password email. The actual resetting is
 /// then done through the `update` function.
-async fn reset_password(
+pub async fn reset_password(
     req: api::AuthServiceResetPasswordRequest,
-    _: MetadataMap,
+    _: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceResetPasswordResponse, Error> {
     // We are going to query the user and send them an email, but when something goes wrong we
@@ -268,9 +267,9 @@ async fn reset_password(
     Ok(api::AuthServiceResetPasswordResponse {})
 }
 
-async fn update_password(
+pub async fn update_password(
     req: api::AuthServiceUpdatePasswordRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceUpdatePasswordResponse, Error> {
     let authz = write.auth_all(&meta, AuthPerm::UpdatePassword).await?;
@@ -284,9 +283,9 @@ async fn update_password(
     Ok(api::AuthServiceUpdatePasswordResponse {})
 }
 
-async fn update_ui_password(
+pub async fn update_ui_password(
     req: api::AuthServiceUpdateUiPasswordRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceUpdateUiPasswordResponse, Error> {
     let user_id = req.user_id.parse().map_err(Error::ParseUserId)?;
@@ -303,9 +302,9 @@ async fn update_ui_password(
     Ok(api::AuthServiceUpdateUiPasswordResponse {})
 }
 
-async fn list_permissions(
+pub async fn list_permissions(
     req: api::AuthServiceListPermissionsRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceListPermissionsResponse, Error> {
     let user_id = req.user_id.parse().map_err(Error::ParseUserId)?;

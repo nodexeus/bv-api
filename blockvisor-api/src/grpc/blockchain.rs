@@ -4,8 +4,7 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use futures_util::future::join_all;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::{error, warn};
 
 use crate::auth::rbac::{BlockchainAdminPerm, BlockchainPerm};
@@ -23,7 +22,7 @@ use crate::storage::Storage;
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::blockchain_service_server::BlockchainService;
-use super::{api, common, Grpc};
+use super::{api, common, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -143,86 +142,88 @@ impl BlockchainService for Grpc {
     async fn get(
         &self,
         req: Request<api::BlockchainServiceGetRequest>,
-    ) -> Result<Response<api::BlockchainServiceGetResponse>, Status> {
+    ) -> Result<Response<api::BlockchainServiceGetResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get(req, meta, read).scope_boxed()).await
+        self.read(|read| get(req, meta.into(), read).scope_boxed())
+            .await
     }
 
     async fn get_image(
         &self,
         req: Request<api::BlockchainServiceGetImageRequest>,
-    ) -> Result<Response<api::BlockchainServiceGetImageResponse>, Status> {
+    ) -> Result<Response<api::BlockchainServiceGetImageResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_image(req, meta, read).scope_boxed())
+        self.read(|read| get_image(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn get_plugin(
         &self,
         req: Request<api::BlockchainServiceGetPluginRequest>,
-    ) -> Result<Response<api::BlockchainServiceGetPluginResponse>, Status> {
+    ) -> Result<Response<api::BlockchainServiceGetPluginResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_plugin(req, meta, read).scope_boxed())
+        self.read(|read| get_plugin(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn get_requirements(
         &self,
         req: Request<api::BlockchainServiceGetRequirementsRequest>,
-    ) -> Result<Response<api::BlockchainServiceGetRequirementsResponse>, Status> {
+    ) -> Result<Response<api::BlockchainServiceGetRequirementsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_requirements(req, meta, read).scope_boxed())
+        self.read(|read| get_requirements(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn list(
         &self,
         req: Request<api::BlockchainServiceListRequest>,
-    ) -> Result<Response<api::BlockchainServiceListResponse>, Status> {
+    ) -> Result<Response<api::BlockchainServiceListResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list(req, meta, read).scope_boxed()).await
+        self.read(|read| list(req, meta.into(), read).scope_boxed())
+            .await
     }
 
     async fn list_image_versions(
         &self,
         req: Request<api::BlockchainServiceListImageVersionsRequest>,
-    ) -> Result<Response<api::BlockchainServiceListImageVersionsResponse>, Status> {
+    ) -> Result<Response<api::BlockchainServiceListImageVersionsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list_image_versions(req, meta, read).scope_boxed())
+        self.read(|read| list_image_versions(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn add_node_type(
         &self,
         req: Request<api::BlockchainServiceAddNodeTypeRequest>,
-    ) -> Result<Response<api::BlockchainServiceAddNodeTypeResponse>, Status> {
+    ) -> Result<Response<api::BlockchainServiceAddNodeTypeResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| add_node_type(req, meta, write).scope_boxed())
+        self.write(|write| add_node_type(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn add_version(
         &self,
         req: Request<api::BlockchainServiceAddVersionRequest>,
-    ) -> Result<Response<api::BlockchainServiceAddVersionResponse>, Status> {
+    ) -> Result<Response<api::BlockchainServiceAddVersionResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| add_version(req, meta, write).scope_boxed())
+        self.write(|write| add_version(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn pricing(
         &self,
         req: Request<api::BlockchainServicePricingRequest>,
-    ) -> Result<Response<api::BlockchainServicePricingResponse>, Status> {
+    ) -> Result<Response<api::BlockchainServicePricingResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| pricing(req, meta, read).scope_boxed())
+        self.read(|read| pricing(req, meta.into(), read).scope_boxed())
             .await
     }
 }
 
-async fn get(
+pub async fn get(
     req: api::BlockchainServiceGetRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServiceGetResponse, Error> {
     let authz = match read.auth_all(&meta, BlockchainAdminPerm::Get).await {
@@ -253,9 +254,9 @@ async fn get(
     })
 }
 
-async fn get_image(
+pub async fn get_image(
     req: api::BlockchainServiceGetImageRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServiceGetImageResponse, Error> {
     read.auth_all(&meta, BlockchainPerm::GetImage).await?;
@@ -271,9 +272,9 @@ async fn get_image(
     })
 }
 
-async fn get_plugin(
+pub async fn get_plugin(
     req: api::BlockchainServiceGetPluginRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServiceGetPluginResponse, Error> {
     read.auth_all(&meta, BlockchainPerm::GetPlugin).await?;
@@ -292,9 +293,9 @@ async fn get_plugin(
     })
 }
 
-async fn get_requirements(
+pub async fn get_requirements(
     req: api::BlockchainServiceGetRequirementsRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServiceGetRequirementsResponse, Error> {
     read.auth_all(&meta, BlockchainPerm::GetRequirements)
@@ -311,9 +312,9 @@ async fn get_requirements(
     })
 }
 
-async fn list(
+pub async fn list(
     req: api::BlockchainServiceListRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServiceListResponse, Error> {
     let authz = match read.auth_all(&meta, BlockchainAdminPerm::List).await {
@@ -346,9 +347,9 @@ async fn list(
     })
 }
 
-async fn list_image_versions(
+pub async fn list_image_versions(
     req: api::BlockchainServiceListImageVersionsRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServiceListImageVersionsResponse, Error> {
     let _ = read
@@ -363,9 +364,9 @@ async fn list_image_versions(
 }
 
 /// Add a new `NodeType` to an existing blockchain.
-async fn add_node_type(
+pub async fn add_node_type(
     req: api::BlockchainServiceAddNodeTypeRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::BlockchainServiceAddNodeTypeResponse, Error> {
     write
@@ -391,9 +392,9 @@ async fn add_node_type(
 ///
 /// The transaction will fail if it can't retrieve storage networks from:
 /// `{blockchain}/{node_type}/{version}/babel.rhai`
-async fn add_version(
+pub async fn add_version(
     req: api::BlockchainServiceAddVersionRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::BlockchainServiceAddVersionResponse, Error> {
     let authz = write
@@ -437,9 +438,9 @@ async fn add_version(
     })
 }
 
-async fn pricing(
+pub async fn pricing(
     req: api::BlockchainServicePricingRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainServicePricingResponse, Error> {
     let authz = read.auth_all(&meta, BlockchainPerm::GetPricing).await?;

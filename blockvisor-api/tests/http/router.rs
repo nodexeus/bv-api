@@ -13,12 +13,12 @@ async fn test_possible_routes() {
         // Non nested routes
         ("/health", "GET", StatusCode::OK),
         // MQTT routes
-        ("/mqtt/auth", "POST", StatusCode::BAD_REQUEST),
-        ("/mqtt/acl", "POST", StatusCode::BAD_REQUEST),
+        ("/mqtt/auth", "POST", StatusCode::UNPROCESSABLE_ENTITY),
+        ("/mqtt/acl", "POST", StatusCode::UNPROCESSABLE_ENTITY),
         (
             "/chargebee/callback/asdfasdf",
             "POST",
-            StatusCode::BAD_REQUEST,
+            StatusCode::NOT_FOUND,
         ),
     ];
 

@@ -7,11 +7,10 @@ use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
-use tonic::Status;
 use uuid::Uuid;
 
 use crate::database::Conn;
-use crate::grpc::{api, common};
+use crate::grpc::{api, common, Status};
 use crate::model::schema::{blockchain_properties, sql_types};
 
 use super::{BlockchainId, BlockchainNodeTypeId, BlockchainVersion, BlockchainVersionId};

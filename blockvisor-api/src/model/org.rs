@@ -11,12 +11,12 @@ use diesel::sql_types::Bool;
 use diesel_async::RunQueryDsl;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::Status;
 
 use crate::auth::rbac::OrgRole;
 use crate::auth::rbac::Role;
 use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
+use crate::grpc::Status;
 use crate::stripe::api::customer::CustomerId;
 use crate::util::{SearchOperator, SortOrder};
 

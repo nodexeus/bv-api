@@ -3,8 +3,7 @@ use std::time::Duration;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::error;
 
 use crate::auth::rbac::BlockchainArchivePerm;
@@ -14,6 +13,8 @@ use crate::grpc::api::blockchain_archive_service_server::BlockchainArchiveServic
 use crate::grpc::{api, Grpc};
 use crate::storage::image::ImageId;
 use crate::storage::manifest::DownloadManifest;
+
+use super::{Metadata, Status};
 
 const DEFAULT_EXPIRES: u32 = 7 * 24 * 60 * 60;
 const MAX_CHUNK_INDEXES: usize = 100;
@@ -73,43 +74,46 @@ impl BlockchainArchiveService for Grpc {
     async fn get_download_metadata(
         &self,
         req: Request<api::BlockchainArchiveServiceGetDownloadMetadataRequest>,
-    ) -> Result<Response<api::BlockchainArchiveServiceGetDownloadMetadataResponse>, Status> {
+    ) -> Result<Response<api::BlockchainArchiveServiceGetDownloadMetadataResponse>, tonic::Status>
+    {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_download_metadata(req, meta, read).scope_boxed())
+        self.read(|read| get_download_metadata(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn get_download_chunks(
         &self,
         req: Request<api::BlockchainArchiveServiceGetDownloadChunksRequest>,
-    ) -> Result<Response<api::BlockchainArchiveServiceGetDownloadChunksResponse>, Status> {
+    ) -> Result<Response<api::BlockchainArchiveServiceGetDownloadChunksResponse>, tonic::Status>
+    {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_download_chunks(req, meta, read).scope_boxed())
+        self.read(|read| get_download_chunks(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn get_upload_slots(
         &self,
         req: Request<api::BlockchainArchiveServiceGetUploadSlotsRequest>,
-    ) -> Result<Response<api::BlockchainArchiveServiceGetUploadSlotsResponse>, Status> {
+    ) -> Result<Response<api::BlockchainArchiveServiceGetUploadSlotsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get_upload_slots(req, meta, read).scope_boxed())
+        self.read(|read| get_upload_slots(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn put_download_manifest(
         &self,
         req: Request<api::BlockchainArchiveServicePutDownloadManifestRequest>,
-    ) -> Result<Response<api::BlockchainArchiveServicePutDownloadManifestResponse>, Status> {
+    ) -> Result<Response<api::BlockchainArchiveServicePutDownloadManifestResponse>, tonic::Status>
+    {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| put_download_manifest(req, meta, read).scope_boxed())
+        self.read(|read| put_download_manifest(req, meta.into(), read).scope_boxed())
             .await
     }
 }
 
-async fn get_download_metadata(
+pub async fn get_download_metadata(
     req: api::BlockchainArchiveServiceGetDownloadMetadataRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainArchiveServiceGetDownloadMetadataResponse, Error> {
     read.auth_all(&meta, BlockchainArchivePerm::GetDownloadMetadata)
@@ -131,9 +135,9 @@ async fn get_download_metadata(
     })
 }
 
-async fn get_download_chunks(
+pub async fn get_download_chunks(
     req: api::BlockchainArchiveServiceGetDownloadChunksRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainArchiveServiceGetDownloadChunksResponse, Error> {
     read.auth_all(&meta, BlockchainArchivePerm::GetDownloadChunks)
@@ -165,9 +169,9 @@ async fn get_download_chunks(
     })
 }
 
-async fn get_upload_slots(
+pub async fn get_upload_slots(
     req: api::BlockchainArchiveServiceGetUploadSlotsRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainArchiveServiceGetUploadSlotsResponse, Error> {
     read.auth_all(&meta, BlockchainArchivePerm::GetUploadSlots)
@@ -202,9 +206,9 @@ async fn get_upload_slots(
     })
 }
 
-async fn put_download_manifest(
+pub async fn put_download_manifest(
     req: api::BlockchainArchiveServicePutDownloadManifestRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BlockchainArchiveServicePutDownloadManifestResponse, Error> {
     read.auth_all(&meta, BlockchainArchivePerm::PutDownloadManifest)

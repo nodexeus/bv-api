@@ -4,8 +4,7 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use futures_util::future::OptionFuture;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::error;
 use uuid::Uuid;
 
@@ -31,7 +30,7 @@ use crate::util::{HashVec, NanosUtc};
 
 use super::api::node_placement::Placement;
 use super::api::node_service_server::NodeService;
-use super::{api, common, Grpc};
+use super::{api, common, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -187,104 +186,106 @@ impl NodeService for Grpc {
     async fn create(
         &self,
         req: Request<api::NodeServiceCreateRequest>,
-    ) -> Result<Response<api::NodeServiceCreateResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceCreateResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| create(req, meta, write).scope_boxed())
+        self.write(|write| create(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn get(
         &self,
         req: Request<api::NodeServiceGetRequest>,
-    ) -> Result<Response<api::NodeServiceGetResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceGetResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get(req, meta, read).scope_boxed()).await
+        self.read(|read| get(req, meta.into(), read).scope_boxed())
+            .await
     }
 
     async fn list(
         &self,
         req: Request<api::NodeServiceListRequest>,
-    ) -> Result<Response<api::NodeServiceListResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceListResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list(req, meta, read).scope_boxed()).await
+        self.read(|read| list(req, meta.into(), read).scope_boxed())
+            .await
     }
 
     async fn upgrade(
         &self,
         req: Request<api::NodeServiceUpgradeRequest>,
-    ) -> Result<Response<api::NodeServiceUpgradeResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceUpgradeResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| upgrade(req, meta, write).scope_boxed())
+        self.write(|write| upgrade(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn update_config(
         &self,
         req: Request<api::NodeServiceUpdateConfigRequest>,
-    ) -> Result<Response<api::NodeServiceUpdateConfigResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceUpdateConfigResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| update_config(req, meta, write).scope_boxed())
+        self.write(|write| update_config(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn update_status(
         &self,
         req: Request<api::NodeServiceUpdateStatusRequest>,
-    ) -> Result<Response<api::NodeServiceUpdateStatusResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceUpdateStatusResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| update_status(req, meta, write).scope_boxed())
+        self.write(|write| update_status(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn delete(
         &self,
         req: Request<api::NodeServiceDeleteRequest>,
-    ) -> Result<Response<api::NodeServiceDeleteResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceDeleteResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| delete(req, meta, write).scope_boxed())
+        self.write(|write| delete(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn report(
         &self,
         req: Request<api::NodeServiceReportRequest>,
-    ) -> Result<Response<api::NodeServiceReportResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceReportResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| report(req, meta, write).scope_boxed())
+        self.write(|write| report(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn start(
         &self,
         req: Request<api::NodeServiceStartRequest>,
-    ) -> Result<Response<api::NodeServiceStartResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceStartResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| start(req, meta, write).scope_boxed())
+        self.write(|write| start(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn stop(
         &self,
         req: Request<api::NodeServiceStopRequest>,
-    ) -> Result<Response<api::NodeServiceStopResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceStopResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| stop(req, meta, write).scope_boxed())
+        self.write(|write| stop(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn restart(
         &self,
         req: Request<api::NodeServiceRestartRequest>,
-    ) -> Result<Response<api::NodeServiceRestartResponse>, Status> {
+    ) -> Result<Response<api::NodeServiceRestartResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| restart(req, meta, write).scope_boxed())
+        self.write(|write| restart(req, meta.into(), write).scope_boxed())
             .await
     }
 }
 
-async fn get(
+pub async fn get(
     req: api::NodeServiceGetRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::NodeServiceGetResponse, Error> {
     let node_id = req.id.parse().map_err(Error::ParseId)?;
@@ -299,9 +300,9 @@ async fn get(
     })
 }
 
-async fn list(
+pub async fn list(
     req: api::NodeServiceListRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::NodeServiceListResponse, Error> {
     let filter = req.into_filter()?;
@@ -318,9 +319,9 @@ async fn list(
     Ok(api::NodeServiceListResponse { nodes, node_count })
 }
 
-async fn create(
+pub async fn create(
     req: api::NodeServiceCreateRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceCreateResponse, Error> {
     let org_id = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -404,9 +405,9 @@ async fn create(
     Ok(api::NodeServiceCreateResponse { nodes })
 }
 
-async fn upgrade(
+pub async fn upgrade(
     req: api::NodeServiceUpgradeRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceUpgradeResponse, Error> {
     let ids = req
@@ -453,9 +454,9 @@ async fn upgrade(
     Ok(api::NodeServiceUpgradeResponse {})
 }
 
-async fn update_config(
+pub async fn update_config(
     req: api::NodeServiceUpdateConfigRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceUpdateConfigResponse, Error> {
     let ids = req
@@ -502,9 +503,9 @@ async fn update_config(
     Ok(api::NodeServiceUpdateConfigResponse {})
 }
 
-async fn update_status(
+pub async fn update_status(
     req: api::NodeServiceUpdateStatusRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceUpdateStatusResponse, Error> {
     let ids = req
@@ -539,9 +540,9 @@ async fn update_status(
     Ok(api::NodeServiceUpdateStatusResponse {})
 }
 
-async fn delete(
+pub async fn delete(
     req: api::NodeServiceDeleteRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceDeleteResponse, Error> {
     let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
@@ -572,9 +573,9 @@ async fn delete(
     Ok(api::NodeServiceDeleteResponse {})
 }
 
-async fn report(
+pub async fn report(
     req: api::NodeServiceReportRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceReportResponse, Error> {
     let node_id: NodeId = req.node_id.parse().map_err(Error::ParseId)?;
@@ -592,9 +593,9 @@ async fn report(
     })
 }
 
-async fn start(
+pub async fn start(
     req: api::NodeServiceStartRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceStartResponse, Error> {
     let node_id: NodeId = req.id.parse().map_err(Error::ParseId)?;
@@ -614,9 +615,9 @@ async fn start(
     Ok(api::NodeServiceStartResponse {})
 }
 
-async fn stop(
+pub async fn stop(
     req: api::NodeServiceStopRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceStopResponse, Error> {
     let node_id = req.id.parse().map_err(Error::ParseId)?;
@@ -636,9 +637,9 @@ async fn stop(
     Ok(api::NodeServiceStopResponse {})
 }
 
-async fn restart(
+pub async fn restart(
     req: api::NodeServiceRestartRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::NodeServiceRestartResponse, Error> {
     let node_id = req.id.parse().map_err(Error::ParseId)?;

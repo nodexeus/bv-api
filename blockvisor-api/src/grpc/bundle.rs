@@ -1,8 +1,7 @@
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::error;
 
 use crate::auth::rbac::BundlePerm;
@@ -10,6 +9,8 @@ use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction};
 use crate::grpc::api::bundle_service_server::BundleService;
 use crate::grpc::{api, common, Grpc};
+
+use super::{Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -45,35 +46,35 @@ impl BundleService for Grpc {
     async fn retrieve(
         &self,
         req: Request<api::BundleServiceRetrieveRequest>,
-    ) -> Result<Response<api::BundleServiceRetrieveResponse>, Status> {
+    ) -> Result<Response<api::BundleServiceRetrieveResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| retrieve(req, meta, read).scope_boxed())
+        self.read(|read| retrieve(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn list_bundle_versions(
         &self,
         req: Request<api::BundleServiceListBundleVersionsRequest>,
-    ) -> Result<Response<api::BundleServiceListBundleVersionsResponse>, Status> {
+    ) -> Result<Response<api::BundleServiceListBundleVersionsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list_bundle_versions(req, meta, read).scope_boxed())
+        self.read(|read| list_bundle_versions(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn delete(
         &self,
         req: Request<api::BundleServiceDeleteRequest>,
-    ) -> Result<Response<api::BundleServiceDeleteResponse>, Status> {
+    ) -> Result<Response<api::BundleServiceDeleteResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| delete(req, meta, read).scope_boxed())
+        self.read(|read| delete(req, meta.into(), read).scope_boxed())
             .await
     }
 }
 
 /// Retrieve image for specific version and state.
-async fn retrieve(
+pub async fn retrieve(
     req: api::BundleServiceRetrieveRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BundleServiceRetrieveResponse, Error> {
     read.auth_all(&meta, BundlePerm::Retrieve).await?;
@@ -89,9 +90,9 @@ async fn retrieve(
 }
 
 /// List all available bundle versions.
-async fn list_bundle_versions(
+pub async fn list_bundle_versions(
     _: api::BundleServiceListBundleVersionsRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BundleServiceListBundleVersionsResponse, Error> {
     read.auth_all(&meta, BundlePerm::ListBundleVersions).await?;
@@ -101,9 +102,9 @@ async fn list_bundle_versions(
 }
 
 /// Delete bundle from storage.
-async fn delete(
+pub async fn delete(
     _: api::BundleServiceDeleteRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::BundleServiceDeleteResponse, Error> {
     read.auth_all(&meta, BundlePerm::Delete).await?;

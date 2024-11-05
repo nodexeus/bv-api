@@ -7,9 +7,8 @@ use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
 use semver::Version;
 use thiserror::Error;
-use tonic::Status;
 
-use crate::grpc::common;
+use crate::grpc::{common, Status};
 use crate::model::schema::sql_types;
 
 #[derive(Debug, DisplayDoc, Error)]

@@ -7,10 +7,10 @@ use diesel_async::RunQueryDsl;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
-use tonic::Status;
 use uuid::Uuid;
 
 use crate::database::Conn;
+use crate::grpc::Status;
 
 use super::schema::regions;
 

@@ -22,8 +22,7 @@ use rustls::{CertificateError, ClientConfig, DigitallySignedStruct, RootCertStor
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio_postgres_rustls::MakeRustlsConnect;
-use tonic::metadata::{AsciiMetadataValue, MetadataMap};
-use tonic::{Response, Status};
+use tonic::metadata::AsciiMetadataValue;
 use tracing::warn;
 
 use crate::auth::rbac::Perms;
@@ -31,6 +30,7 @@ use crate::auth::resource::Resources;
 use crate::auth::{self, AuthZ, Authorize};
 use crate::config::database::Config;
 use crate::config::Context;
+use crate::grpc::{self, Metadata, ResponseMessage, Status};
 use crate::model::rbac::{RbacPerm, RbacRole};
 use crate::mqtt::Message;
 
@@ -46,19 +46,39 @@ pub(crate) trait Transaction {
     /// Run a non-transactional closure to read from the database.
     ///
     /// Note that the function parameter constraints are not strictly necessary
-    /// but mimic `Transaction::write` to make it easy to switch between each.
-    async fn read<'a, F, T, E>(&'a self, f: F) -> Result<Response<T>, Status>
+    /// but mimic `Transaction::write` to make it easy to switch between each.=
+    async fn read<'a, F, Response, ResponseInner, ErrInner, ErrOuter>(
+        &'a self,
+        f: F,
+    ) -> Result<Response, ErrOuter>
     where
-        F: for<'c> FnOnce(ReadConn<'c, 'a>) -> ScopedBoxFuture<'a, 'c, Result<T, E>> + Send + 'a,
-        T: Send + 'a,
-        E: std::error::Error + From<diesel::result::Error> + Into<Status> + Send + 'a;
+        F: for<'c> FnOnce(
+                ReadConn<'c, 'a>,
+            ) -> ScopedBoxFuture<'a, 'c, Result<ResponseInner, ErrInner>>
+            + Send
+            + 'a,
+        Response: ResponseMessage<ResponseInner>,
+        ResponseInner: Send + 'a,
+        ErrInner: std::error::Error + From<diesel::result::Error> + Send + 'a,
+        Status: From<ErrInner>,
+        ErrOuter: From<Status> + From<Error>;
 
     /// Run a transactional closure to write to the database.
-    async fn write<'a, F, T, E>(&'a self, f: F) -> Result<Response<T>, Status>
+    async fn write<'a, F, Response, ResponseInner, ErrInner, ErrOuter>(
+        &'a self,
+        f: F,
+    ) -> Result<Response, ErrOuter>
     where
-        F: for<'c> FnOnce(WriteConn<'c, 'a>) -> ScopedBoxFuture<'a, 'c, Result<T, E>> + Send + 'a,
-        T: Send + 'a,
-        E: std::error::Error + From<diesel::result::Error> + Into<Status> + Send + 'a;
+        F: for<'c> FnOnce(
+                WriteConn<'c, 'a>,
+            ) -> ScopedBoxFuture<'a, 'c, Result<ResponseInner, ErrInner>>
+            + Send
+            + 'a,
+        Response: ResponseMessage<ResponseInner>,
+        ResponseInner: Send + 'a,
+        ErrInner: std::error::Error + From<diesel::result::Error> + Send + 'a,
+        Status: From<ErrInner>,
+        ErrOuter: From<Status> + From<Error>;
 }
 
 #[derive(Debug, Display, Error)]
@@ -83,6 +103,25 @@ impl From<Error> for Status {
     }
 }
 
+impl From<Error> for tonic::Status {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::BuildPool(_err) => tonic::Status::internal("Failed to create db pool"),
+            Error::CreatePerms(err) => {
+                let status: Status = err.into();
+                status.into()
+            }
+            Error::CreateRoles(err) => {
+                let status: Status = err.into();
+                status.into()
+            }
+            Error::PoolConnection(_err) => {
+                tonic::Status::internal("Failed to create db connection")
+            }
+        }
+    }
+}
+
 /// A `Conn` is an open connection to the database from the `Pool`.
 #[derive(Deref, DerefMut)]
 pub struct Conn<'c>(PooledConnection<'c, AsyncPgConnection>);
@@ -99,7 +138,7 @@ pub struct ReadConn<'c, 't> {
 impl<'c, 't> Authorize for ReadConn<'c, 't> {
     async fn authorize(
         &mut self,
-        meta: &MetadataMap,
+        meta: &grpc::Metadata,
         perms: Perms,
         resources: Option<Resources>,
     ) -> Result<AuthZ, auth::Error> {
@@ -128,7 +167,7 @@ pub struct WriteConn<'c, 't> {
 impl<'c, 't> Authorize for WriteConn<'c, 't> {
     async fn authorize(
         &mut self,
-        meta: &MetadataMap,
+        meta: &grpc::Metadata,
         perms: Perms,
         resources: Option<Resources>,
     ) -> Result<AuthZ, auth::Error> {
@@ -198,24 +237,44 @@ impl<C> Transaction for C
 where
     C: AsRef<Context> + Send + Sync,
 {
-    async fn read<'a, F, T, E>(&'a self, f: F) -> Result<Response<T>, Status>
+    async fn read<'a, F, Response, ResponseInner, ErrInner, ErrOuter>(
+        &'a self,
+        f: F,
+    ) -> Result<Response, ErrOuter>
     where
-        F: for<'c> FnOnce(ReadConn<'c, 'a>) -> ScopedBoxFuture<'a, 'c, Result<T, E>> + Send + 'a,
-        T: Send + 'a,
-        E: std::error::Error + From<diesel::result::Error> + Into<Status> + Send + 'a,
+        F: for<'c> FnOnce(
+                ReadConn<'c, 'a>,
+            ) -> ScopedBoxFuture<'a, 'c, Result<ResponseInner, ErrInner>>
+            + Send
+            + 'a,
+        Response: ResponseMessage<ResponseInner>,
+        ResponseInner: Send + 'a,
+        ErrInner: std::error::Error + From<diesel::result::Error> + Send + 'a,
+        Status: From<ErrInner>,
+        ErrOuter: From<Status> + From<Error>,
     {
         let ctx = self.as_ref();
         let conn = &mut ctx.conn().await?;
         let read = ReadConn { conn, ctx };
-
-        f(read).await.map(Response::new).map_err(Into::into)
+        let response = f(read).await.map_err(Status::from)?;
+        Ok(Response::construct(response, Metadata::new()))
     }
 
-    async fn write<'a, F, T, E>(&'a self, f: F) -> Result<Response<T>, Status>
+    async fn write<'a, F, Response, ResponseInner, ErrInner, ErrOuter>(
+        &'a self,
+        f: F,
+    ) -> Result<Response, ErrOuter>
     where
-        F: for<'c> FnOnce(WriteConn<'c, 'a>) -> ScopedBoxFuture<'a, 'c, Result<T, E>> + Send + 'a,
-        T: Send + 'a,
-        E: std::error::Error + From<diesel::result::Error> + Into<Status> + Send + 'a,
+        F: for<'c> FnOnce(
+                WriteConn<'c, 'a>,
+            ) -> ScopedBoxFuture<'a, 'c, Result<ResponseInner, ErrInner>>
+            + Send
+            + 'a,
+        Response: ResponseMessage<ResponseInner>,
+        ResponseInner: Send + 'a,
+        ErrInner: std::error::Error + From<diesel::result::Error> + Send + 'a,
+        Status: From<ErrInner>,
+        ErrOuter: From<Status> + From<Error>,
     {
         let ctx = self.as_ref();
         let conn = &mut ctx.conn().await?;
@@ -234,7 +293,7 @@ where
                 f(write).scope_boxed()
             })
             .await
-            .map_err(Into::into)?;
+            .map_err(Status::from)?;
 
         while let Some(msg) = mqtt_rx.recv().await {
             if let Err(err) = ctx.notifier.send(msg).await {
@@ -242,12 +301,12 @@ where
             }
         }
 
-        let mut meta = MetadataMap::new();
+        let mut meta = Metadata::new();
         while let Some((key, val)) = meta_rx.recv().await {
-            meta.insert(key, val);
+            meta.insert_grpc(key, val);
         }
 
-        Ok(Response::from_parts(meta, response, Default::default()))
+        Ok(Response::construct(response, meta))
     }
 }
 

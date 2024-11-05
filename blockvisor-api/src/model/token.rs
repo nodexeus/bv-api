@@ -10,11 +10,11 @@ use displaydoc::Display;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 use thiserror::Error;
-use tonic::Status;
 use uuid::Uuid;
 
 use crate::auth::resource::{OrgId, ResourceId, ResourceType, UserId};
 use crate::database::Conn;
+use crate::grpc::Status;
 
 use super::schema::{sql_types, tokens};
 

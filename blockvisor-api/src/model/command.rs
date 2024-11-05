@@ -9,12 +9,12 @@ use diesel_derive_enum::DbEnum;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
-use tonic::Status;
 use uuid::Uuid;
 
 use crate::auth::resource::{HostId, NodeId};
 use crate::database::Conn;
 use crate::grpc::api;
+use crate::grpc::Status;
 
 use super::schema::{commands, sql_types};
 use super::{Host, Node};

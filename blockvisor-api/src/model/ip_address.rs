@@ -8,11 +8,11 @@ use diesel_async::RunQueryDsl;
 use displaydoc::Display;
 use ipnetwork::IpNetwork;
 use thiserror::Error;
-use tonic::Status;
 use uuid::Uuid;
 
 use crate::auth::resource::HostId;
 use crate::database::Conn;
+use crate::grpc::Status;
 
 use super::schema::{ip_addresses, nodes};
 

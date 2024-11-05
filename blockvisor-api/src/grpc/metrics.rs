@@ -4,8 +4,7 @@ use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use itertools::Itertools;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::error;
 
 use crate::auth::rbac::MetricsPerm;
@@ -18,7 +17,7 @@ use crate::model::{Host, Node};
 use crate::util::HashVec;
 
 use super::api::metrics_service_server::MetricsService;
-use super::{api, common, Grpc};
+use super::{api, common, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -121,40 +120,40 @@ impl MetricsService for Grpc {
     async fn node(
         &self,
         req: Request<api::MetricsServiceNodeRequest>,
-    ) -> Result<Response<api::MetricsServiceNodeResponse>, Status> {
+    ) -> Result<Response<api::MetricsServiceNodeResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        let outcome = self
-            .write(|write| node(req, meta, write).scope_boxed())
-            .await?;
-        match outcome.into_inner() {
+        let outcome: Result<Response<RespOrError<api::MetricsServiceNodeResponse>>, tonic::Status> =
+            self.write(|write| node(req, meta.into(), write).scope_boxed())
+                .await;
+        match outcome?.into_inner() {
             RespOrError::Resp(resp) => Ok(tonic::Response::new(resp)),
-            RespOrError::Error(error) => Err(error.into()),
+            RespOrError::Error(error) => Err(Status::from(error).into()),
         }
     }
 
     async fn host(
         &self,
         req: Request<api::MetricsServiceHostRequest>,
-    ) -> Result<Response<api::MetricsServiceHostResponse>, Status> {
+    ) -> Result<Response<api::MetricsServiceHostResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        let outcome = self
-            .write(|write| host(req, meta, write).scope_boxed())
-            .await?;
-        match outcome.into_inner() {
+        let outcome: Result<Response<RespOrError<api::MetricsServiceHostResponse>>, tonic::Status> =
+            self.write(|write| host(req, meta.into(), write).scope_boxed())
+                .await;
+        match outcome?.into_inner() {
             RespOrError::Resp(resp) => Ok(tonic::Response::new(resp)),
-            RespOrError::Error(error) => Err(error.into()),
+            RespOrError::Error(error) => Err(Status::from(error).into()),
         }
     }
 }
 
-enum RespOrError<T> {
+pub enum RespOrError<T> {
     Resp(T),
     Error(Error),
 }
 
-async fn node(
+pub async fn node(
     req: api::MetricsServiceNodeRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<RespOrError<api::MetricsServiceNodeResponse>, Error> {
     // First we split our map of `node_id`: `update info` into two vectors, so we can parse and
@@ -217,9 +216,9 @@ async fn node(
     }
 }
 
-async fn host(
+pub async fn host(
     req: api::MetricsServiceHostRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<RespOrError<api::MetricsServiceHostResponse>, Error> {
     let updates = req

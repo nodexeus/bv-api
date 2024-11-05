@@ -5,8 +5,7 @@ use cidr::IpCidr;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::{error, warn};
 
 use crate::auth::rbac::{CommandAdminPerm, CommandPerm};
@@ -15,12 +14,14 @@ use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::grpc::api::command_service_server::CommandService;
 use crate::grpc::common::{FirewallAction, FirewallDirection, FirewallProtocol, FirewallRule};
-use crate::grpc::{api, common, Grpc};
+use crate::grpc::{api, common, Grpc, Status};
 use crate::model::blockchain::{Blockchain, BlockchainProperty, BlockchainVersion};
 use crate::model::command::{CommandFilter, ExitCode, UpdateCommand};
 use crate::model::node::{NodeStatus, UpdateNode};
 use crate::model::{Command, CommandType, Host, Node};
 use crate::util::NanosUtc;
+
+use super::Metadata;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -105,42 +106,43 @@ impl CommandService for Grpc {
     async fn list(
         &self,
         req: Request<api::CommandServiceListRequest>,
-    ) -> Result<Response<api::CommandServiceListResponse>, Status> {
+    ) -> Result<Response<api::CommandServiceListResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list(req, meta, read).scope_boxed()).await
+        self.read(|read| list(req, meta.into(), read).scope_boxed())
+            .await
     }
 
     async fn update(
         &self,
         req: Request<api::CommandServiceUpdateRequest>,
-    ) -> Result<Response<api::CommandServiceUpdateResponse>, Status> {
+    ) -> Result<Response<api::CommandServiceUpdateResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| update(req, meta, write).scope_boxed())
+        self.write(|write| update(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn ack(
         &self,
         req: Request<api::CommandServiceAckRequest>,
-    ) -> Result<Response<api::CommandServiceAckResponse>, Status> {
+    ) -> Result<Response<api::CommandServiceAckResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| ack(req, meta, write).scope_boxed())
+        self.write(|write| ack(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn pending(
         &self,
         req: Request<api::CommandServicePendingRequest>,
-    ) -> Result<Response<api::CommandServicePendingResponse>, Status> {
+    ) -> Result<Response<api::CommandServicePendingResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| pending(req, meta, read).scope_boxed())
+        self.read(|read| pending(req, meta.into(), read).scope_boxed())
             .await
     }
 }
 
 async fn list(
     req: api::CommandServiceListRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::CommandServiceListResponse, Error> {
     let filter = req.as_filter()?;
@@ -163,7 +165,7 @@ async fn list(
 
 async fn update(
     req: api::CommandServiceUpdateRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::CommandServiceUpdateResponse, Error> {
     let id = req.id.parse().map_err(Error::ParseId)?;
@@ -194,7 +196,7 @@ async fn update(
 
 async fn ack(
     req: api::CommandServiceAckRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::CommandServiceAckResponse, Error> {
     let id = req.id.parse().map_err(Error::ParseId)?;
@@ -218,7 +220,7 @@ async fn ack(
 
 async fn pending(
     req: api::CommandServicePendingRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::CommandServicePendingResponse, Error> {
     let host_id = req.host_id.parse().map_err(Error::ParseHostId)?;

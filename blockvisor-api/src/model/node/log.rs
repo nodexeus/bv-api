@@ -6,11 +6,11 @@ use diesel_async::RunQueryDsl;
 use diesel_derive_enum::DbEnum;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::Status;
 use uuid::Uuid;
 
 use crate::auth::resource::{HostId, NodeId, OrgId};
 use crate::database::Conn;
+use crate::grpc::Status;
 use crate::model::schema::{node_logs, sql_types};
 use crate::model::{BlockchainId, Host};
 

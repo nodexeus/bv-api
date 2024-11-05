@@ -9,11 +9,11 @@ use diesel_async::RunQueryDsl;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
-use tonic::Status;
 use uuid::Uuid;
 
 use crate::auth::AuthZ;
 use crate::database::Conn;
+use crate::grpc::Status;
 use crate::model::node::{NodeType, NodeVersion};
 use crate::model::schema::{blockchain_node_types, blockchain_versions};
 

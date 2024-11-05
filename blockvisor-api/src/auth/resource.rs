@@ -8,11 +8,10 @@ use displaydoc::Display as DisplayDoc;
 use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
 use thiserror::Error;
-use tonic::Status;
 use uuid::Uuid;
 
 use crate::database::Conn;
-use crate::grpc::common;
+use crate::grpc::{common, Status};
 use crate::model::schema::sql_types;
 use crate::model::User;
 

@@ -2,8 +2,7 @@ use diesel::result::Error::NotFound;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::error;
 
 use crate::auth::rbac::{InvitationAdminPerm, InvitationPerm};
@@ -17,7 +16,7 @@ use crate::model::user::User;
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::invitation_service_server::InvitationService;
-use super::{api, common, Grpc};
+use super::{api, common, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -78,7 +77,7 @@ impl From<Error> for Status {
         match err {
             Diesel(_) | Email(_) | Message(_) => Status::internal("Internal error."),
             ClaimsNotUser | ClaimsNotUserOrOrg | HostClaims | ListResource | MissingEmail
-            | NodeClaims | WrongEmail | WrongOrg => Status::permission_denied("Access denied."),
+            | NodeClaims | WrongEmail | WrongOrg => Status::forbidden("Access denied."),
             AlreadyAccepted => Status::failed_precondition("Already accepted."),
             AlreadyDeclined => Status::failed_precondition("Already declined."),
             AlreadyInvited => Status::failed_precondition("Already invited."),
@@ -101,51 +100,52 @@ impl InvitationService for Grpc {
     async fn create(
         &self,
         req: Request<api::InvitationServiceCreateRequest>,
-    ) -> Result<Response<api::InvitationServiceCreateResponse>, Status> {
+    ) -> Result<Response<api::InvitationServiceCreateResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| create(req, meta, write).scope_boxed())
+        self.write(|write| create(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn list(
         &self,
         req: Request<api::InvitationServiceListRequest>,
-    ) -> Result<Response<api::InvitationServiceListResponse>, Status> {
+    ) -> Result<Response<api::InvitationServiceListResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list(req, meta, read).scope_boxed()).await
+        self.read(|read| list(req, meta.into(), read).scope_boxed())
+            .await
     }
 
     async fn accept(
         &self,
         req: Request<api::InvitationServiceAcceptRequest>,
-    ) -> Result<Response<api::InvitationServiceAcceptResponse>, Status> {
+    ) -> Result<Response<api::InvitationServiceAcceptResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| accept(req, meta, write).scope_boxed())
+        self.write(|write| accept(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn decline(
         &self,
         req: Request<api::InvitationServiceDeclineRequest>,
-    ) -> Result<Response<api::InvitationServiceDeclineResponse>, Status> {
+    ) -> Result<Response<api::InvitationServiceDeclineResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| decline(req, meta, write).scope_boxed())
+        self.write(|write| decline(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn revoke(
         &self,
         req: Request<api::InvitationServiceRevokeRequest>,
-    ) -> Result<Response<api::InvitationServiceRevokeResponse>, Status> {
+    ) -> Result<Response<api::InvitationServiceRevokeResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| revoke(req, meta, write).scope_boxed())
+        self.write(|write| revoke(req, meta.into(), write).scope_boxed())
             .await
     }
 }
 
-async fn create(
+pub async fn create(
     req: api::InvitationServiceCreateRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::InvitationServiceCreateResponse, Error> {
     let org_id: OrgId = req.org_id.parse().map_err(Error::ParseOrgId)?;
@@ -219,9 +219,9 @@ async fn create(
     })
 }
 
-async fn list(
+pub async fn list(
     req: api::InvitationServiceListRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::InvitationServiceListResponse, Error> {
     let resource: Resource = if let Some(org_id) = &req.org_id {
@@ -254,9 +254,9 @@ async fn list(
     Ok(api::InvitationServiceListResponse { invitations })
 }
 
-async fn accept(
+pub async fn accept(
     req: api::InvitationServiceAcceptRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::InvitationServiceAcceptResponse, Error> {
     let id = req.invitation_id.parse().map_err(Error::ParseId)?;
@@ -298,9 +298,9 @@ async fn accept(
     Ok(api::InvitationServiceAcceptResponse {})
 }
 
-async fn decline(
+pub async fn decline(
     req: api::InvitationServiceDeclineRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::InvitationServiceDeclineResponse, Error> {
     let id = req.invitation_id.parse().map_err(Error::ParseId)?;
@@ -342,9 +342,9 @@ async fn decline(
     Ok(api::InvitationServiceDeclineResponse {})
 }
 
-async fn revoke(
+pub async fn revoke(
     req: api::InvitationServiceRevokeRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::InvitationServiceRevokeResponse, Error> {
     let id = req.invitation_id.parse().map_err(Error::ParseId)?;

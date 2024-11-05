@@ -7,13 +7,13 @@ use jsonwebtoken::errors::ErrorKind;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tonic::metadata::{AsciiMetadataValue, MetadataMap};
-use tonic::Status;
+use tonic::metadata::AsciiMetadataValue;
 use tracing::warn;
 
 use crate::auth::claims::Expirable;
 use crate::auth::resource::{Resource, ResourceEntry, ResourceId, ResourceType};
 use crate::config::token::{RefreshSecret, RefreshSecrets};
+use crate::grpc::{Metadata, Status};
 
 const ALGORITHM: Algorithm = Algorithm::HS512;
 const COOKIE_HEADER: &str = "cookie";
@@ -39,7 +39,7 @@ pub enum Error {
     /// Missing `{COOKIE_REFRESH:?}` in `{COOKIE_HEADER:?}`.
     MissingCookieRefresh,
     /// Failed to parse `{COOKIE_HEADER:?}` as string: {0}
-    ParseCookieHeader(tonic::metadata::errors::ToStrError),
+    ParseCookieHeader(hyper::header::ToStrError),
     /// Failed to create refresh cookie: {0}
     RefreshCookie(tonic::metadata::errors::InvalidMetadataValue),
     /// The refresh token for resource {0} has expired.
@@ -51,10 +51,10 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             EmptyCookieRefresh | MissingCookieExpires => {
-                Status::unauthenticated("Invalid refresh cookie.")
+                Status::unauthorized("Invalid refresh cookie.")
             }
             MissingCookieHeader | MissingCookieRefresh => {
-                Status::unauthenticated("Missing refresh cookie.")
+                Status::unauthorized("Missing refresh cookie.")
             }
             _ => Status::internal("Internal error."),
         }
@@ -214,11 +214,11 @@ impl RequestCookie {
     }
 }
 
-impl TryFrom<&MetadataMap> for RequestCookie {
+impl TryFrom<&Metadata> for RequestCookie {
     type Error = Error;
 
-    fn try_from(meta: &MetadataMap) -> Result<Self, Self::Error> {
-        meta.get(COOKIE_HEADER)
+    fn try_from(meta: &Metadata) -> Result<Self, Self::Error> {
+        meta.get_http(COOKIE_HEADER)
             .ok_or(Error::MissingCookieHeader)?
             .to_str()
             .map_err(Error::ParseCookieHeader)?
@@ -275,9 +275,11 @@ impl FromStr for RequestCookie {
 
 #[cfg(test)]
 mod tests {
+    use axum::http::HeaderValue;
     use uuid::Uuid;
 
     use crate::config::Context;
+    use crate::grpc::Metadata;
     use crate::util::SecondsUtc;
 
     use super::*;
@@ -300,12 +302,12 @@ mod tests {
     async fn test_empty_refresh() {
         let ctx = Context::from_default_toml().await.unwrap();
 
-        let mut meta = MetadataMap::new();
-        meta.insert(COOKIE_HEADER, ";refresh=".parse().unwrap());
+        let mut meta = Metadata::new();
+        meta.insert_http(COOKIE_HEADER, ";refresh=".parse::<HeaderValue>().unwrap());
         assert!(ctx.auth.refresh(&meta).is_err());
 
-        let mut meta = MetadataMap::new();
-        meta.insert(COOKIE_HEADER, "refresh=;".parse().unwrap());
+        let mut meta = Metadata::new();
+        meta.insert_http(COOKIE_HEADER, "refresh=;".parse::<HeaderValue>().unwrap());
         assert!(ctx.auth.refresh(&meta).is_err());
     }
 
@@ -314,9 +316,9 @@ mod tests {
         let ctx = Context::from_default_toml().await.unwrap();
         let refresh = Refresh::from_now(seconds(60), Resource::Host(Uuid::new_v4().into()));
 
-        let mut meta = MetadataMap::new();
+        let mut meta = Metadata::new();
         let cookie = ctx.auth.cipher.refresh.cookie(&refresh).unwrap();
-        meta.insert(COOKIE_HEADER, cookie.header().unwrap());
+        meta.insert_grpc(COOKIE_HEADER, cookie.header().unwrap());
 
         let result = ctx.auth.refresh(&meta).unwrap();
         assert_eq!(result.resource_id, refresh.resource_id);
@@ -330,11 +332,11 @@ mod tests {
         let refresh = Refresh::from_now(seconds(60), user_id);
         let encoded = ctx.auth.cipher.refresh.encode(&refresh).unwrap();
 
-        let mut meta = MetadataMap::new();
-        meta.insert(
+        let mut meta = Metadata::new();
+        meta.insert_http(
             COOKIE_HEADER,
             format!("other_meta=v1; refresh={}; another=v2; ", *encoded)
-                .parse()
+                .parse::<HeaderValue>()
                 .unwrap(),
         );
         ctx.auth.refresh(&meta).unwrap();

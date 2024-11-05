@@ -12,12 +12,11 @@ use displaydoc::Display;
 use rhai::Engine;
 use semver::Version;
 use thiserror::Error;
-use tonic::Status;
 use tracing::warn;
 use url::Url;
 
 use crate::config::storage::{BucketConfig, Config};
-use crate::grpc::api;
+use crate::grpc::{api, Status};
 use crate::model::node::NodeType;
 
 use self::client::Client;

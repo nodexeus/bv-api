@@ -22,14 +22,13 @@ use diesel_derive_enum::DbEnum;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
-use tonic::Status;
 use uuid::Uuid;
 
 use crate::auth::rbac::{BlockchainAdminPerm, BlockchainPerm};
 use crate::auth::resource::OrgId;
 use crate::auth::AuthZ;
 use crate::database::Conn;
-use crate::grpc::api;
+use crate::grpc::{api, Status};
 use crate::model::node::{ContainerStatus, NodeStatus, SyncStatus};
 use crate::model::schema::sql_types;
 use crate::util::{SearchOperator, SortOrder};

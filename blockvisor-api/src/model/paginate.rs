@@ -12,7 +12,8 @@ use diesel_async::methods::LoadQuery;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::Status;
+
+use crate::grpc::Status;
 
 pub trait Paginate: Sized {
     fn paginate(self, limit: u64, offset: u64) -> Result<Paginated<Self>, Error>;

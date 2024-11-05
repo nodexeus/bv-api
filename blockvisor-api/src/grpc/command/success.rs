@@ -1,11 +1,10 @@
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::Status;
 
 use crate::auth::resource::NodeId;
 use crate::auth::AuthZ;
 use crate::database::WriteConn;
-use crate::grpc::api;
+use crate::grpc::{api, Status};
 use crate::model::blockchain::Blockchain;
 use crate::model::command::{Command, CommandId, CommandType, NewCommand};
 use crate::model::node::{

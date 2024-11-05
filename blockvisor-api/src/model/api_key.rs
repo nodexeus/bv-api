@@ -5,11 +5,11 @@ use diesel::result::Error::{DatabaseError, NotFound};
 use diesel_async::RunQueryDsl;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::Status;
 
 use crate::auth::resource::{Resource, ResourceEntry, ResourceId, ResourceType, UserId};
 use crate::auth::token::api_key::{BearerSecret, KeyHash, KeyId, Salt, Secret};
 use crate::database::{Conn, WriteConn};
+use crate::grpc::Status;
 
 use super::schema::api_keys;
 

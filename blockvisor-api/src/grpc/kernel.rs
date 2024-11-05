@@ -1,8 +1,7 @@
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::error;
 
 use crate::auth::rbac::KernelPerm;
@@ -10,6 +9,8 @@ use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction};
 use crate::grpc::api::kernel_service_server::KernelService;
 use crate::grpc::{api, common, Grpc};
+
+use super::{Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -43,25 +44,25 @@ impl KernelService for Grpc {
     async fn retrieve(
         &self,
         req: Request<api::KernelServiceRetrieveRequest>,
-    ) -> Result<Response<api::KernelServiceRetrieveResponse>, Status> {
+    ) -> Result<Response<api::KernelServiceRetrieveResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| retrieve_kernel_(req, meta, read).scope_boxed())
+        self.read(|read| retrieve_kernel(req, meta.into(), read).scope_boxed())
             .await
     }
 
     async fn list_kernel_versions(
         &self,
         req: Request<api::KernelServiceListKernelVersionsRequest>,
-    ) -> Result<Response<api::KernelServiceListKernelVersionsResponse>, Status> {
+    ) -> Result<Response<api::KernelServiceListKernelVersionsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list_kernel_versions(req, meta, read).scope_boxed())
+        self.read(|read| list_kernel_versions(req, meta.into(), read).scope_boxed())
             .await
     }
 }
 
-async fn retrieve_kernel_(
+pub async fn retrieve_kernel(
     req: api::KernelServiceRetrieveRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::KernelServiceRetrieveResponse, Error> {
     read.auth_all(&meta, KernelPerm::Retrieve).await?;
@@ -76,9 +77,9 @@ async fn retrieve_kernel_(
     })
 }
 
-async fn list_kernel_versions(
+pub async fn list_kernel_versions(
     _: api::KernelServiceListKernelVersionsRequest,
-    _: MetadataMap,
+    _: Metadata,
     read: ReadConn<'_, '_>,
 ) -> Result<api::KernelServiceListKernelVersionsResponse, Error> {
     let identifiers = read.ctx.storage.list_kernels().await?;

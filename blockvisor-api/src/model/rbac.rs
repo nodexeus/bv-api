@@ -9,7 +9,6 @@ use diesel::result::Error::{DatabaseError, NotFound};
 use diesel_async::RunQueryDsl;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::Status;
 
 use crate::auth::rbac::BlockjoyRole;
 use crate::auth::rbac::OrgRole;
@@ -17,6 +16,7 @@ use crate::auth::rbac::ViewRole;
 use crate::auth::rbac::{Perm, Role};
 use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
+use crate::grpc::Status;
 
 use super::schema::{permissions, role_permissions, roles, user_roles};
 
@@ -82,7 +82,7 @@ impl From<Error> for Status {
             | FindUserRolesForOrgIds(_, NotFound)
             | NothingDeleted
             | NothingInserted => Status::not_found("Not found."),
-            UserNotInOrg(..) => Status::permission_denied("Permission denied."),
+            UserNotInOrg(..) => Status::forbidden("Permission denied."),
             _ => Status::internal("Internal error."),
         }
     }

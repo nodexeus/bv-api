@@ -7,9 +7,9 @@ use std::str::FromStr;
 use derive_more::{Deref, From};
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::{metadata::MetadataMap, Status};
 
 use crate::config::token::SecretConfig;
+use crate::grpc::{Metadata, Status};
 
 use self::api_key::{KeyId, Secret};
 
@@ -23,7 +23,7 @@ pub enum Error {
     /// Missing `{AUTH_HEADER:?}` request header.
     MissingAuthHeader,
     /// Failed to parse `{AUTH_HEADER:?}` as string: {0}
-    ParseAuthHeader(tonic::metadata::errors::ToStrError),
+    ParseAuthHeader(hyper::header::ToStrError),
     /// Failed to parse KeyId: {0}
     ParseKeyId(api_key::Error),
     /// Failed to parse Secret: {0}
@@ -35,9 +35,9 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             AuthHeaderPrefix | ParseAuthHeader(_) | ParseKeyId(_) | ParseSecret(_) => {
-                Status::unauthenticated("Bad auth header.")
+                Status::unauthorized("Bad auth header.")
             }
-            MissingAuthHeader => Status::unauthenticated("Missing auth header."),
+            MissingAuthHeader => Status::unauthorized("Missing auth header."),
         }
     }
 }
@@ -62,11 +62,11 @@ pub enum RequestToken {
     Bearer(BearerToken),
 }
 
-impl TryFrom<&MetadataMap> for RequestToken {
+impl TryFrom<&Metadata> for RequestToken {
     type Error = Error;
 
-    fn try_from(meta: &MetadataMap) -> Result<Self, Self::Error> {
-        meta.get(AUTH_HEADER)
+    fn try_from(meta: &Metadata) -> Result<Self, Self::Error> {
+        meta.get_http(AUTH_HEADER)
             .ok_or(Error::MissingAuthHeader)?
             .to_str()
             .map_err(Error::ParseAuthHeader)?

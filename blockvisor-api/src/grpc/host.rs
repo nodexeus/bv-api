@@ -4,8 +4,7 @@ use std::collections::{HashMap, HashSet};
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
-use tonic::metadata::MetadataMap;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response};
 use tracing::error;
 
 use crate::auth::claims::Claims;
@@ -24,7 +23,7 @@ use crate::storage::image::ImageId;
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::host_service_server::HostService;
-use super::{api, common, Grpc};
+use super::{api, common, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -105,7 +104,7 @@ impl From<Error> for Status {
             | ParseNodeCount(_) | Refresh(_) => Status::internal("Internal error."),
             CpuCount(_) | DiskSize(_) | MemSize(_) => Status::out_of_range("Host resource."),
             HasNodes => Status::failed_precondition("This host still has nodes."),
-            HostProvisionByToken(_) => Status::permission_denied("Invalid token."),
+            HostProvisionByToken(_) => Status::forbidden("Invalid token."),
             ParseBlockchainId(_) => Status::invalid_argument("blockchain_id"),
             ParseId(_) => Status::invalid_argument("id"),
             ParseIp(_) => Status::invalid_argument("ips"),
@@ -136,86 +135,88 @@ impl HostService for Grpc {
     async fn create(
         &self,
         req: Request<api::HostServiceCreateRequest>,
-    ) -> Result<Response<api::HostServiceCreateResponse>, Status> {
+    ) -> Result<Response<api::HostServiceCreateResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| create(req, meta, write).scope_boxed())
+        self.write(|write| create(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn get(
         &self,
         req: Request<api::HostServiceGetRequest>,
-    ) -> Result<Response<api::HostServiceGetResponse>, Status> {
+    ) -> Result<Response<api::HostServiceGetResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get(req, meta, read).scope_boxed()).await
+        self.read(|read| get(req, meta.into(), read).scope_boxed())
+            .await
     }
 
     async fn list(
         &self,
         req: Request<api::HostServiceListRequest>,
-    ) -> Result<Response<api::HostServiceListResponse>, Status> {
+    ) -> Result<Response<api::HostServiceListResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list(req, meta, read).scope_boxed()).await
+        self.read(|read| list(req, meta.into(), read).scope_boxed())
+            .await
     }
 
     async fn update(
         &self,
         req: Request<api::HostServiceUpdateRequest>,
-    ) -> Result<Response<api::HostServiceUpdateResponse>, Status> {
+    ) -> Result<Response<api::HostServiceUpdateResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| update(req, meta, write).scope_boxed())
+        self.write(|write| update(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn delete(
         &self,
         req: Request<api::HostServiceDeleteRequest>,
-    ) -> Result<Response<api::HostServiceDeleteResponse>, Status> {
+    ) -> Result<Response<api::HostServiceDeleteResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| delete(req, meta, write).scope_boxed())
+        self.write(|write| delete(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn start(
         &self,
         req: Request<api::HostServiceStartRequest>,
-    ) -> Result<Response<api::HostServiceStartResponse>, Status> {
+    ) -> Result<Response<api::HostServiceStartResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| start(req, meta, write).scope_boxed())
+        self.write(|write| start(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn stop(
         &self,
         req: Request<api::HostServiceStopRequest>,
-    ) -> Result<Response<api::HostServiceStopResponse>, Status> {
+    ) -> Result<Response<api::HostServiceStopResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| stop(req, meta, write).scope_boxed())
+        self.write(|write| stop(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn restart(
         &self,
         req: Request<api::HostServiceRestartRequest>,
-    ) -> Result<Response<api::HostServiceRestartResponse>, Status> {
+    ) -> Result<Response<api::HostServiceRestartResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| restart(req, meta, write).scope_boxed())
+        self.write(|write| restart(req, meta.into(), write).scope_boxed())
             .await
     }
 
     async fn regions(
         &self,
         req: Request<api::HostServiceRegionsRequest>,
-    ) -> Result<Response<api::HostServiceRegionsResponse>, Status> {
+    ) -> Result<Response<api::HostServiceRegionsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| regions(req, meta, read).scope_boxed())
+        self.read(|read| regions(req, meta.into(), read).scope_boxed())
             .await
     }
 }
 
-async fn create(
+pub async fn create(
     req: api::HostServiceCreateRequest,
-    _: MetadataMap,
+    _: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceCreateResponse, Error> {
     let token = Token::host_provision_by_token(&req.provision_token, &mut write)
@@ -267,9 +268,9 @@ async fn create(
     })
 }
 
-async fn get(
+pub async fn get(
     req: api::HostServiceGetRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::HostServiceGetResponse, Error> {
     let id = req.id.parse().map_err(Error::ParseId)?;
@@ -283,9 +284,9 @@ async fn get(
     Ok(api::HostServiceGetResponse { host: Some(host) })
 }
 
-async fn list(
+pub async fn list(
     req: api::HostServiceListRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::HostServiceListResponse, Error> {
     let filter = req.into_filter()?;
@@ -302,9 +303,9 @@ async fn list(
     Ok(api::HostServiceListResponse { hosts, host_count })
 }
 
-async fn update(
+pub async fn update(
     req: api::HostServiceUpdateRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceUpdateResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
@@ -328,9 +329,9 @@ async fn update(
     Ok(api::HostServiceUpdateResponse {})
 }
 
-async fn delete(
+pub async fn delete(
     req: api::HostServiceDeleteRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceDeleteResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
@@ -345,9 +346,9 @@ async fn delete(
     Ok(api::HostServiceDeleteResponse {})
 }
 
-async fn start(
+pub async fn start(
     req: api::HostServiceStartRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceStartResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
@@ -363,9 +364,9 @@ async fn start(
     Ok(api::HostServiceStartResponse {})
 }
 
-async fn stop(
+pub async fn stop(
     req: api::HostServiceStopRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceStopResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
@@ -381,9 +382,9 @@ async fn stop(
     Ok(api::HostServiceStopResponse {})
 }
 
-async fn restart(
+pub async fn restart(
     req: api::HostServiceRestartRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceRestartResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
@@ -399,9 +400,9 @@ async fn restart(
     Ok(api::HostServiceRestartResponse {})
 }
 
-async fn regions(
+pub async fn regions(
     req: api::HostServiceRegionsRequest,
-    meta: MetadataMap,
+    meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::HostServiceRegionsResponse, Error> {
     let (org_id, authz) = if let Some(org_id) = &req.org_id {
