@@ -458,6 +458,16 @@ from
 where
   deleted_at is null;
 
+delete from ip_addresses
+where id in (
+    select
+      i.id
+    from
+      ip_addresses i
+      inner join hosts h on i.host_id = h.id
+    where
+      h.deleted_at is not null);
+
 alter table ip_addresses
   drop constraint ip_addresses_host_id_fkey;
 
@@ -470,6 +480,27 @@ alter table ip_addresses
 create index idx_ip_addresses_host_id on ip_addresses using btree (host_id);
 
 drop index idx_commands_host_id;
+
+delete from commands
+where id in (
+    select
+      c.id
+    from
+      commands c
+      inner join hosts h on c.host_id = h.id
+    where
+      h.deleted_at is not null);
+
+delete from commands
+where id in (
+    select
+      c.id
+    from
+      commands c
+      inner join nodes n on c.node_id = n.id
+    where
+      c.node_id is not null
+      and n.deleted_at is not null);
 
 alter table commands
   drop constraint commands_node_id_fkey;
@@ -486,6 +517,16 @@ alter table commands
 create index idx_commands_host_id on commands using btree (host_id);
 
 create index idx_commands_node_id on commands using btree (node_id);
+
+delete from node_reports
+where id in (
+    select
+      r.id
+    from
+      node_reports r
+      inner join nodes n on r.node_id = n.id
+    where
+      n.deleted_at is not null);
 
 alter table node_reports
   drop constraint node_reports_node_id_fkey;
