@@ -9,6 +9,9 @@ alter table blockchain_properties rename to blockchain_properties_old;
 
 alter table hosts rename to hosts_old;
 
+alter table ip_addresses
+  drop constraint ip_addresses_host_id_fkey;
+
 alter table nodes rename to nodes_old;
 
 alter index idx_nodes_org_id rename to idx_nodes_old_org_id;
@@ -256,17 +259,6 @@ create index idx_hosts_org_id on hosts using btree (org_id);
 
 create index idx_hosts_region_id on hosts using btree (region_id);
 
-alter table ip_addresses
-  drop constraint ip_addresses_host_id_fkey;
-
-alter table ip_addresses
-  add constraint fk_ip_addresses_host_id foreign key (host_id) references hosts (id) on delete cascade;
-
-alter table ip_addresses
-  alter column host_id set not null;
-
-create index idx_ip_addresses_host_id on ip_addresses using btree (host_id);
-
 create table nodes (
   id uuid primary key default uuid_generate_v4 (),
   node_name text not null unique,
@@ -494,3 +486,11 @@ select
   deleted_at
 from
   nodes_old;
+
+alter table ip_addresses
+  add constraint fk_ip_addresses_host_id foreign key (host_id) references hosts (id) on delete cascade;
+
+alter table ip_addresses
+  alter column host_id set not null;
+
+create index idx_ip_addresses_host_id on ip_addresses using btree (host_id);
