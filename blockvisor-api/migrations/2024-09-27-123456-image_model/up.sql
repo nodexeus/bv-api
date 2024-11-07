@@ -313,18 +313,6 @@ create index idx_nodes_protocol_version_id on nodes using btree (protocol_versio
 
 create index idx_nodes_scheduler_region_id on nodes using btree (scheduler_region_id);
 
-alter table node_reports
-  drop constraint node_reports_node_id_fkey;
-
-alter table node_reports
-  add constraint fk_node_reports_node_id foreign key (node_id) references nodes (id);
-
-alter table node_reports rename column created_by_resource to created_by_type;
-
-alter table node_reports rename column created_by to created_by_id;
-
-create index idx_node_reports_node_id on node_reports using btree (node_id);
-
 create table node_logs (
   id uuid primary key default uuid_generate_v4 (),
   node_id uuid not null references nodes (id),
@@ -494,3 +482,15 @@ alter table commands
 create index idx_commands_host_id on commands using btree (host_id);
 
 create index idx_commands_node_id on commands using btree (node_id);
+
+alter table node_reports
+  drop constraint node_reports_node_id_fkey;
+
+alter table node_reports
+  add constraint fk_node_reports_node_id foreign key (node_id) references nodes (id);
+
+alter table node_reports rename column created_by_resource to created_by_type;
+
+alter table node_reports rename column created_by to created_by_id;
+
+create index idx_node_reports_node_id on node_reports using btree (node_id);
