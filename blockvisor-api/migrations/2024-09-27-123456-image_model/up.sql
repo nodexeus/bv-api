@@ -9,9 +9,6 @@ alter table blockchain_properties rename to blockchain_properties_old;
 
 alter table hosts rename to hosts_old;
 
-alter table ip_addresses
-  drop constraint ip_addresses_host_id_fkey;
-
 alter table nodes rename to nodes_old;
 
 alter index idx_nodes_org_id rename to idx_nodes_old_org_id;
@@ -316,24 +313,6 @@ create index idx_nodes_protocol_version_id on nodes using btree (protocol_versio
 
 create index idx_nodes_scheduler_region_id on nodes using btree (scheduler_region_id);
 
-drop index idx_commands_host_id;
-
-alter table commands
-  drop constraint commands_node_id_fkey;
-
-alter table commands
-  drop constraint fk_host_commands_hosts;
-
-alter table commands
-  add constraint fk_commands_host_id foreign key (host_id) references hosts (id) on delete cascade;
-
-alter table commands
-  add constraint fk_commands_node_id foreign key (node_id) references nodes (id);
-
-create index idx_commands_host_id on commands using btree (host_id);
-
-create index idx_commands_node_id on commands using btree (node_id);
-
 alter table node_reports
   drop constraint node_reports_node_id_fkey;
 
@@ -488,9 +467,30 @@ from
   nodes_old;
 
 alter table ip_addresses
-  add constraint fk_ip_addresses_host_id foreign key (host_id) references hosts (id) on delete cascade;
+  drop constraint ip_addresses_host_id_fkey;
+
+alter table ip_addresses
+  add constraint fk_ip_addresses_host_id foreign key (host_id) references hosts (id);
 
 alter table ip_addresses
   alter column host_id set not null;
 
 create index idx_ip_addresses_host_id on ip_addresses using btree (host_id);
+
+drop index idx_commands_host_id;
+
+alter table commands
+  drop constraint commands_node_id_fkey;
+
+alter table commands
+  drop constraint fk_host_commands_hosts;
+
+alter table commands
+  add constraint fk_commands_host_id foreign key (host_id) references hosts (id);
+
+alter table commands
+  add constraint fk_commands_node_id foreign key (node_id) references nodes (id);
+
+create index idx_commands_host_id on commands using btree (host_id);
+
+create index idx_commands_node_id on commands using btree (node_id);
