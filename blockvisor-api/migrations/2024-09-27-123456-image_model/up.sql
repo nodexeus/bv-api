@@ -411,7 +411,9 @@ select
   created_at,
   deleted_at
 from
-  hosts_old;
+  hosts_old
+where
+  deleted_at is null;
 
 insert into nodes (id, node_name, display_name, old_node_id, org_id, host_id, image_id, config_id, protocol_id, protocol_version_id, semantic_version, auto_upgrade, node_state, jobs, note, tags, ip_address, ip_gateway, p2p_address, dns_id, dns_name, cpu_cores, memory_bytes, disk_bytes, block_height, block_age, consensus, scheduler_similarity, scheduler_resource, scheduler_region_id, stripe_item_id, created_by_type, created_by_id, created_at, updated_at, deleted_at)
 select
@@ -452,7 +454,9 @@ select
   updated_at,
   deleted_at
 from
-  nodes_old;
+  nodes_old
+where
+  deleted_at is null;
 
 alter table ip_addresses
   drop constraint ip_addresses_host_id_fkey;
