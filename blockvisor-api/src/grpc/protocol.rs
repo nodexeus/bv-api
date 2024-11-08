@@ -485,11 +485,11 @@ pub async fn list_protocols(
         sort,
     };
 
-    let (protocols, _) = filter.query(&authz, &mut read).await?;
+    let (protocols, total) = filter.query(&authz, &mut read).await?;
     let mut protocols = api::Protocol::from_models(protocols, &authz, &mut read).await?;
     protocols.sort_by_cached_key(|chain| chain.name.clone());
 
-    Ok(api::ProtocolServiceListProtocolsResponse { protocols })
+    Ok(api::ProtocolServiceListProtocolsResponse { protocols, total })
 }
 
 pub async fn list_versions(

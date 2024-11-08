@@ -443,10 +443,10 @@ pub async fn list(
         .await?
     };
 
-    let (nodes, _) = filter.query(&mut read).await?;
+    let (nodes, total) = filter.query(&mut read).await?;
     let nodes = api::Node::from_models(nodes, &authz, &mut read).await?;
 
-    Ok(api::NodeServiceListResponse { nodes })
+    Ok(api::NodeServiceListResponse { nodes, total })
 }
 
 pub async fn report_status(

@@ -23,7 +23,7 @@ pub trait Paginate: Sized {
 impl<Q> Paginate for Q {
     fn paginate(self, limit: u64, offset: u64) -> Result<Paginated<Self>, Error> {
         let (limit, empty) = match i64::try_from(limit).map_err(Error::Limit)? {
-            // at least 1 row is needed for the correct count,
+            // at least 1 row is needed for the correct total,
             0 => (1, true),
             n => (n, false),
         };
@@ -40,24 +40,24 @@ impl<Q> Paginate for Q {
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to parse row count as u64: {0}
-    Count(std::num::TryFromIntError),
     /// Failed to parse row limit as i64: {0}
     Limit(std::num::TryFromIntError),
     /// Failed to parse row offset as i64: {0}
     Offset(std::num::TryFromIntError),
     /// Failed to run paginated query: {0}
     Query(diesel::result::Error),
+    /// Failed to parse row total as u64: {0}
+    Total(std::num::TryFromIntError),
 }
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
         match err {
+            Query(NotFound) => Status::not_found("Not found."),
+            Query(_) | Total(_) => Status::internal("Internal error."),
             Limit(_) => Status::invalid_argument("limit"),
             Offset(_) => Status::invalid_argument("offset"),
-            Query(NotFound) => Status::not_found("Not found."),
-            Query(_) | Count(_) => Status::internal("Internal error."),
         }
     }
 }
@@ -88,8 +88,8 @@ impl<Q> Paginated<Q> {
             let empty = self.empty;
 
             let data = self.load::<(T, i64)>(conn).await.map_err(Error::Query)?;
-            let count = data.get(0).map_or(0, |x| x.1);
-            let count = u64::try_from(count).map_err(Error::Count)?;
+            let total = data.get(0).map_or(0, |x| x.1);
+            let total = u64::try_from(total).map_err(Error::Total)?;
 
             let rows = if empty {
                 vec![]
@@ -97,7 +97,7 @@ impl<Q> Paginated<Q> {
                 data.into_iter().map(|x| x.0).collect()
             };
 
-            Ok((rows, count))
+            Ok((rows, total))
         }
     }
 }

@@ -200,10 +200,10 @@ pub async fn list(
         read.auth(&meta, UserAdminPerm::Filter).await?
     };
 
-    let (users, _) = filter.query(&mut read).await?;
+    let (users, total) = filter.query(&mut read).await?;
     let users = users.into_iter().map(Into::into).collect();
 
-    Ok(api::UserServiceListResponse { users })
+    Ok(api::UserServiceListResponse { users, total })
 }
 
 pub async fn update(

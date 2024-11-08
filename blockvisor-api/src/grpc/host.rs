@@ -330,10 +330,10 @@ pub async fn list(
             .await?
     };
 
-    let (hosts, _) = filter.query(&mut read).await?;
+    let (hosts, total) = filter.query(&mut read).await?;
     let hosts = api::Host::from_hosts(hosts, &mut read).await?;
 
-    Ok(api::HostServiceListResponse { hosts })
+    Ok(api::HostServiceListResponse { hosts, total })
 }
 
 pub async fn update(

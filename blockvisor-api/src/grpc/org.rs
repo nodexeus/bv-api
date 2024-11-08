@@ -300,10 +300,10 @@ pub async fn list(
         read.auth(&meta, OrgAdminPerm::List).await?
     };
 
-    let (orgs, _) = filter.query(&mut read).await?;
+    let (orgs, total) = filter.query(&mut read).await?;
     let orgs = api::Org::from_models(&orgs, &mut read).await?;
 
-    Ok(api::OrgServiceListResponse { orgs })
+    Ok(api::OrgServiceListResponse { orgs, total })
 }
 
 pub async fn update(
