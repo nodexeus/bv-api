@@ -21,20 +21,36 @@
       ];
 
       perSystem =
-        { pkgs, system, ... }:
+        {
+          pkgs,
+          system,
+          ...
+        }:
         {
           formatter = nixpkgs.legacyPackages.${system}.nixfmt-rfc-style;
 
-          devShells.default = pkgs.mkShell {
-            packages = with pkgs; [
-              openssl
-              pgcli
-              pgformatter
-              pkg-config
-              postgresql.lib
-              protobuf
-            ];
-          };
+          devShells.default =
+            let
+              inherit (pkgs.stdenv) isDarwin;
+
+              packages = with pkgs; [
+                openssl
+                pgcli
+                pgformatter
+                pkg-config
+                postgresql.lib
+                protobuf
+              ];
+
+              darwinPackages = with pkgs; [
+                darwin.apple_sdk.frameworks.SystemConfiguration
+                libiconv
+              ];
+
+            in
+            pkgs.mkShell {
+              packages = packages ++ (if isDarwin then darwinPackages else [ ]);
+            };
         };
     };
 }
