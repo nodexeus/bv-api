@@ -349,6 +349,7 @@ pub async fn update(
         resources.push(Resource::from(org_id));
     };
 
+    // for public hosts, only a host api token has the host-update perm
     let _authz = write
         .auth_or_for(&meta, HostAdminPerm::Update, HostPerm::Update, &resources)
         .await?;
@@ -371,8 +372,7 @@ pub async fn update(
         None
     };
 
-    let update_host = UpdateHost {
-        id: req.host_id.parse().map_err(Error::ParseId)?,
+    let update = UpdateHost {
         network_name: req.network_name.as_deref(),
         display_name: req.display_name.as_deref(),
         region_id: region.map(|r| r.id),
@@ -395,8 +395,8 @@ pub async fn update(
             .transpose()?
             .flatten(),
     };
-    let updated = update_host.update(&mut write).await?;
-    let host = api::Host::from_host(updated, &mut write).await?;
+    let host = update.apply(id, &mut write).await?;
+    let host = api::Host::from_host(host, &mut write).await?;
 
     Ok(api::HostServiceUpdateResponse { host: Some(host) })
 }

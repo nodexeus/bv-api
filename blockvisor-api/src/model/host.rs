@@ -202,7 +202,7 @@ impl Host {
     }
 
     pub async fn add_node(node: &Node, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        diesel::update(hosts::table.filter(hosts::id.eq(node.host_id)))
+        diesel::update(hosts::table.find(node.host_id))
             .set((
                 hosts::node_count.eq(hosts::node_count + 1),
                 hosts::node_cpu_cores.eq(hosts::node_cpu_cores + node.cpu_cores),
@@ -215,7 +215,7 @@ impl Host {
     }
 
     pub async fn remove_node(node: &Node, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        diesel::update(hosts::table.filter(hosts::id.eq(node.host_id)))
+        diesel::update(hosts::table.find(node.host_id))
             .set((
                 hosts::node_count.eq(greatest(0, hosts::node_count - 1)),
                 hosts::node_cpu_cores.eq(greatest(0, hosts::node_cpu_cores - node.cpu_cores)),
@@ -387,10 +387,9 @@ impl NewHost<'_> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, AsChangeset)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, AsChangeset)]
 #[diesel(table_name = hosts)]
 pub struct UpdateHost<'a> {
-    pub id: HostId,
     pub network_name: Option<&'a str>,
     pub display_name: Option<&'a str>,
     pub region_id: Option<RegionId>,
@@ -408,41 +407,18 @@ pub struct UpdateHost<'a> {
 }
 
 impl UpdateHost<'_> {
-    pub const fn new(id: HostId) -> Self {
-        UpdateHost {
-            id,
-            network_name: None,
-            display_name: None,
-            region_id: None,
-            schedule_type: None,
-            connection_status: None,
-            os: None,
-            os_version: None,
-            bv_version: None,
-            ip_address: None,
-            ip_gateway: None,
-            cpu_cores: None,
-            memory_bytes: None,
-            disk_bytes: None,
-            tags: None,
-        }
-    }
-
     #[must_use]
     pub const fn with_connection_status(mut self, status: ConnectionStatus) -> Self {
         self.connection_status = Some(status);
         self
     }
 
-    pub async fn update(self, conn: &mut Conn<'_>) -> Result<Host, Error> {
-        if self == Self::new(self.id) {
+    pub async fn apply(self, id: HostId, conn: &mut Conn<'_>) -> Result<Host, Error> {
+        if self == Self::default() {
             return Err(Error::NoUpdate);
         }
 
-        let row = hosts::table
-            .find(self.id)
-            .filter(hosts::deleted_at.is_null());
-
+        let row = hosts::table.find(id).filter(hosts::deleted_at.is_null());
         diesel::update(row)
             .set((self, hosts::updated_at.eq(Utc::now())))
             .get_result(conn)

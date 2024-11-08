@@ -107,9 +107,9 @@ impl Notifier {
         let host_id = status.host_id.parse().map_err(Error::ParseHostId)?;
         let conn_status = status.connection_status().try_into()?;
 
-        UpdateHost::new(host_id)
+        UpdateHost::default()
             .with_connection_status(conn_status)
-            .update(&mut conn)
+            .apply(host_id, &mut conn)
             .await
             .map_err(Error::UpdateHostStatus)?;
 
