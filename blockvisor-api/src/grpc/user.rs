@@ -24,6 +24,10 @@ pub enum Error {
     Diesel(#[from] diesel::result::Error),
     /// User email error: {0}
     Email(#[from] crate::email::Error),
+    /// Failed to parse filter limit as i64: {0}
+    FilterLimit(std::num::TryFromIntError),
+    /// Failed to parse filter offset as i64: {0}
+    FilterOffset(std::num::TryFromIntError),
     /// Failed to parse UserId: {0}
     ParseId(uuid::Error),
     /// Failed to parse invitation id: {0}
@@ -50,6 +54,8 @@ impl From<Error> for Status {
         error!("{err}");
         match err {
             Diesel(_) | Email(_) | ParseInvitationId(_) => Status::internal("Internal error."),
+            FilterLimit(_) => Status::invalid_argument("limit"),
+            FilterOffset(_) => Status::invalid_argument("offset"),
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
@@ -349,10 +355,10 @@ impl api::UserServiceListRequest {
 
         Ok(UserFilter {
             org_id,
-            offset: self.offset,
-            limit: self.limit,
             search,
             sort,
+            limit: i64::try_from(self.limit).map_err(Error::FilterLimit)?,
+            offset: i64::try_from(self.offset).map_err(Error::FilterOffset)?,
         })
     }
 }

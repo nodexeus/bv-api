@@ -541,10 +541,10 @@ impl HostSort {
 pub struct HostFilter {
     pub org_ids: Vec<OrgId>,
     pub versions: Vec<String>,
-    pub offset: u64,
-    pub limit: u64,
     pub search: Option<HostSearch>,
     pub sort: VecDeque<HostSort>,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 impl HostFilter {

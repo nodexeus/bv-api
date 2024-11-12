@@ -45,6 +45,10 @@ pub enum Error {
     CommandGrpc(#[from] crate::grpc::command::Error),
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
+    /// Failed to parse filter limit as i64: {0}
+    FilterLimit(std::num::TryFromIntError),
+    /// Failed to parse filter offset as i64: {0}
+    FilterOffset(std::num::TryFromIntError),
     /// Node host error: {0}
     Host(#[from] crate::model::host::Error),
     /// Node image error: {0}
@@ -125,6 +129,8 @@ impl From<Error> for Status {
             Diesel(_) | Store(_) => Status::internal("Internal error."),
             BlockAge(_) => Status::invalid_argument("block_age"),
             BlockHeight(_) => Status::invalid_argument("block_height"),
+            FilterLimit(_) => Status::invalid_argument("limit"),
+            FilterOffset(_) => Status::invalid_argument("offset"),
             MissingIds => Status::invalid_argument("ids"),
             MissingPlacement => Status::invalid_argument("placement"),
             NoResourceAffinity => Status::invalid_argument("resource"),
@@ -979,8 +985,6 @@ impl api::NodeServiceListRequest {
 
         Ok(NodeFilter {
             org_ids,
-            offset: self.offset,
-            limit: self.limit,
             protocol_ids,
             host_ids,
             user_ids,
@@ -990,6 +994,8 @@ impl api::NodeServiceListRequest {
             semantic_versions: self.semantic_versions,
             search,
             sort,
+            limit: i64::try_from(self.limit).map_err(Error::FilterLimit)?,
+            offset: i64::try_from(self.offset).map_err(Error::FilterOffset)?,
         })
     }
 }

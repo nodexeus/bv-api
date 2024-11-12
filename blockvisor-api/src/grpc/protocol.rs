@@ -36,6 +36,10 @@ pub enum Error {
     CommandGrpc(#[from] crate::grpc::command::Error),
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
+    /// Failed to parse filter limit as i64: {0}
+    FilterLimit(std::num::TryFromIntError),
+    /// Failed to parse filter offset as i64: {0}
+    FilterOffset(std::num::TryFromIntError),
     /// Missing `api::Protocol` model output. This should not happen.
     MissingModel,
     /// Missing protocol.
@@ -88,6 +92,8 @@ impl From<Error> for Status {
             Diesel(_) | MissingModel | Store(_) | Stripe(_) | StripePrice(_) => {
                 Status::internal("Internal error.")
             }
+            FilterLimit(_) => Status::invalid_argument("limit"),
+            FilterOffset(_) => Status::invalid_argument("offset"),
             MissingProtocol => Status::invalid_argument("protocol"),
             MissingStatsFor => Status::invalid_argument("stats_for"),
             MissingVersionKey => Status::invalid_argument("version_key"),
@@ -479,10 +485,10 @@ pub async fn list_protocols(
 
     let filter = ProtocolFilter {
         org_ids: org_ids.clone(),
-        offset: req.offset,
-        limit: req.limit,
         search,
         sort,
+        limit: i64::try_from(req.limit).map_err(Error::FilterLimit)?,
+        offset: i64::try_from(req.offset).map_err(Error::FilterOffset)?,
     };
 
     let (protocols, total) = filter.query(&authz, &mut read).await?;

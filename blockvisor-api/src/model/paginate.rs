@@ -17,17 +17,16 @@ use thiserror::Error;
 use crate::grpc::Status;
 
 pub trait Paginate: Sized {
-    fn paginate(self, limit: u64, offset: u64) -> Result<Paginated<Self>, Error>;
+    fn paginate(self, limit: i64, offset: i64) -> Result<Paginated<Self>, Error>;
 }
 
 impl<Q> Paginate for Q {
-    fn paginate(self, limit: u64, offset: u64) -> Result<Paginated<Self>, Error> {
-        let (limit, empty) = match i64::try_from(limit).map_err(Error::Limit)? {
-            // at least 1 row is needed for the correct total,
-            0 => (1, true),
+    fn paginate(self, limit: i64, offset: i64) -> Result<Paginated<Self>, Error> {
+        // at least 1 row is needed for the correct total,
+        let (limit, empty) = match limit {
+            n if n < 1 => (1, true),
             n => (n, false),
         };
-        let offset = i64::try_from(offset).map_err(Error::Offset)?;
 
         Ok(Paginated {
             query: self,
@@ -40,10 +39,6 @@ impl<Q> Paginate for Q {
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Failed to parse row limit as i64: {0}
-    Limit(std::num::TryFromIntError),
-    /// Failed to parse row offset as i64: {0}
-    Offset(std::num::TryFromIntError),
     /// Failed to run paginated query: {0}
     Query(diesel::result::Error),
     /// Failed to parse row total as u64: {0}
@@ -56,8 +51,6 @@ impl From<Error> for Status {
         match err {
             Query(NotFound) => Status::not_found("Not found."),
             Query(_) | Total(_) => Status::internal("Internal error."),
-            Limit(_) => Status::invalid_argument("limit"),
-            Offset(_) => Status::invalid_argument("offset"),
         }
     }
 }
@@ -86,7 +79,6 @@ impl<Q> Paginated<Q> {
     {
         async move {
             let empty = self.empty;
-
             let data = self.load::<(T, i64)>(conn).await.map_err(Error::Query)?;
             let total = data.get(0).map_or(0, |x| x.1);
             let total = u64::try_from(total).map_err(Error::Total)?;

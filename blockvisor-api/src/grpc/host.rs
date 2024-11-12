@@ -42,6 +42,10 @@ pub enum Error {
     Diesel(#[from] diesel::result::Error),
     /// Failed to parse disk bytes: {0}
     DiskBytes(std::num::TryFromIntError),
+    /// Failed to parse filter limit as i64: {0}
+    FilterLimit(std::num::TryFromIntError),
+    /// Failed to parse filter offset as i64: {0}
+    FilterOffset(std::num::TryFromIntError),
     /// This host cannot be deleted because it still has nodes.
     HasNodes,
     /// Host model error: {0}
@@ -106,6 +110,8 @@ impl From<Error> for Status {
             }
             CpuCores(_) => Status::out_of_range("cpu_cores"),
             DiskBytes(_) => Status::out_of_range("disk_bytes"),
+            FilterLimit(_) => Status::invalid_argument("limit"),
+            FilterOffset(_) => Status::invalid_argument("offset"),
             HasNodes => Status::failed_precondition("This host still has nodes."),
             HostProvisionByToken(_) => Status::forbidden("Invalid token."),
             MemoryBytes(_) => Status::out_of_range("memory_bytes"),
@@ -726,10 +732,10 @@ impl api::HostServiceListRequest {
         Ok(HostFilter {
             org_ids,
             versions,
-            offset: self.offset,
-            limit: self.limit,
             search,
             sort,
+            limit: i64::try_from(self.limit).map_err(Error::FilterLimit)?,
+            offset: i64::try_from(self.offset).map_err(Error::FilterOffset)?,
         })
     }
 }

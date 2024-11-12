@@ -178,10 +178,10 @@ impl<'u> UpdateProtocol<'u> {
 #[derive(Debug)]
 pub struct ProtocolFilter {
     pub org_ids: HashSet<OrgId>,
-    pub offset: u64,
-    pub limit: u64,
     pub search: Option<ProtocolSearch>,
     pub sort: VecDeque<ProtocolSort>,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 impl ProtocolFilter {

@@ -339,10 +339,10 @@ impl UserSort {
 
 pub struct UserFilter {
     pub org_id: Option<OrgId>,
-    pub offset: u64,
-    pub limit: u64,
     pub search: Option<UserSearch>,
     pub sort: VecDeque<UserSort>,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 impl UserFilter {

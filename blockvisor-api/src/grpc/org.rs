@@ -37,6 +37,10 @@ pub enum Error {
     DeletePersonal,
     /// Diesel failure: {0}
     Diesel(#[from] diesel::result::Error),
+    /// Failed to parse filter limit as i64: {0}
+    FilterLimit(std::num::TryFromIntError),
+    /// Failed to parse filter offset as i64: {0}
+    FilterOffset(std::num::TryFromIntError),
     /// Org invitation error: {0}
     Invitation(#[from] crate::model::invitation::Error),
     /// The request is missing the `address` fields.
@@ -89,6 +93,11 @@ impl From<Error> for Status {
             ClaimsNotUser | DeletePersonal | RemoveNotSelf => Status::forbidden("Access denied."),
             ConvertNoOrg | Diesel(_) | ParseMax(_) | Stripe(_) | StripeCurrency(_)
             | StripeInvoice(_) => Status::internal("Internal error."),
+            FilterLimit(_) => Status::invalid_argument("limit"),
+            FilterOffset(_) => Status::invalid_argument("offset"),
+            MissingAddress => Status::failed_precondition("User has no address."),
+            NoStripeCustomer(_) => Status::failed_precondition("No customer for that org."),
+            NoStripeSubscription(_) => Status::failed_precondition("No subscription for that org."),
             ParseId(_) => Status::invalid_argument("id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseUserId(_) => Status::invalid_argument("user_id"),
@@ -96,9 +105,6 @@ impl From<Error> for Status {
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
-            MissingAddress => Status::failed_precondition("User has no address."),
-            NoStripeCustomer(_) => Status::failed_precondition("No customer for that org."),
-            NoStripeSubscription(_) => Status::failed_precondition("No subscription for that org."),
             Address(err) => err.into(),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
@@ -793,10 +799,10 @@ impl api::OrgServiceListRequest {
         Ok(OrgFilter {
             member_id,
             personal: self.personal,
-            offset: self.offset,
-            limit: self.limit,
             search,
             sort,
+            limit: i64::try_from(self.limit).map_err(Error::FilterLimit)?,
+            offset: i64::try_from(self.offset).map_err(Error::FilterOffset)?,
         })
     }
 }

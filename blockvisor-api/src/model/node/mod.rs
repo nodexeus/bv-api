@@ -984,8 +984,8 @@ pub struct NodeFilter {
     pub semantic_versions: Vec<String>,
     pub search: Option<NodeSearch>,
     pub sort: VecDeque<NodeSort>,
-    pub offset: u64,
-    pub limit: u64,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 impl NodeFilter {
