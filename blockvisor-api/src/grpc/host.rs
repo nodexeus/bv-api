@@ -51,6 +51,8 @@ pub enum Error {
     Host(#[from] crate::model::host::Error),
     /// Host token error: {0}
     HostProvisionByToken(crate::model::token::Error),
+    /// Invalid cost.
+    InvalidCost(super::BillingAmountError),
     /// Invalid value for ManagedBy enum: {0}.
     InvalidManagedBy(i32),
     /// Host model error: {0}
@@ -114,6 +116,7 @@ impl From<Error> for Status {
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
+            InvalidCost(_) => Status::invalid_argument("host.cost"),
             InvalidManagedBy(_) => Status::invalid_argument("managed_by"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
@@ -309,9 +312,15 @@ pub async fn update(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::HostServiceUpdateResponse, Error> {
     let id: HostId = req.id.parse().map_err(Error::ParseId)?;
-    write
-        .auth_or_all(&meta, HostAdminPerm::Update, HostPerm::Update, id)
-        .await?;
+
+    if req.cost.is_some() {
+        // Only admins can update the cost of a host.
+        write.auth(&meta, HostAdminPerm::Update, id).await?;
+    } else {
+        write
+            .auth_or_all(&meta, HostAdminPerm::Update, HostPerm::Update, id)
+            .await?;
+    }
     let host = Host::by_id(id, &mut write).await?;
 
     let region = if let Some(ref region) = req.region {
@@ -480,6 +489,7 @@ impl api::Host {
         let no_nodes = vec![];
         let billing_amount =
             authz.and_then(|authz| common::BillingAmount::from_model(&host, authz));
+        let cost = authz.and_then(|authz| common::BillingAmount::from_host(&host, authz));
 
         Ok(Self {
             id: host.id.to_string(),
@@ -511,6 +521,7 @@ impl api::Host {
             ),
             managed_by: api::ManagedBy::from_model(host.managed_by).into(),
             tags: Some(host.tags.into_iter().collect()),
+            cost,
         })
     }
 }
@@ -579,7 +590,7 @@ impl common::BillingAmount {
         Some(common::BillingAmount {
             amount: Some(common::Amount {
                 currency: common::Currency::Usd as i32,
-                value: host.monthly_cost_in_usd(authz)?,
+                amount_minor_units: host.monthly_cost_in_usd(authz)?,
             }),
             period: common::Period::Monthly as i32,
         })
@@ -592,7 +603,7 @@ impl common::BillingAmount {
                     .currency
                     .and_then(common::Currency::from_stripe)
                     .unwrap_or(common::Currency::Usd) as i32,
-                value: price.unit_amount?,
+                amount_minor_units: price.unit_amount?,
             }),
             period: common::Period::Monthly as i32,
         })
@@ -731,6 +742,10 @@ impl api::HostServiceUpdateRequest {
                 .update_tags
                 .as_ref()
                 .and_then(|ut| ut.as_update(host.tags.iter().flatten())),
+            cost: self
+                .cost
+                .map(|cost| cost.into_amount().map_err(Error::InvalidCost))
+                .transpose()?,
         })
     }
 }
