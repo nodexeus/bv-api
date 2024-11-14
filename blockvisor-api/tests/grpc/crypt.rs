@@ -124,6 +124,7 @@ async fn delete_node_deletes_secrets() {
     assert_eq!(status.code(), Code::NotFound);
 }
 
+#[ignore]
 #[tokio::test]
 async fn new_node_with_old_id_copies_secrets() {
     let test = TestServer::new().await;

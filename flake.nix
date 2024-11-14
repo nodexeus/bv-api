@@ -22,6 +22,7 @@
 
       perSystem =
         {
+          lib,
           pkgs,
           system,
           ...
@@ -31,6 +32,7 @@
 
           devShells.default =
             let
+              inherit (lib) optional;
               inherit (pkgs.stdenv) isDarwin;
 
               packages = with pkgs; [
@@ -49,7 +51,7 @@
 
             in
             pkgs.mkShell {
-              packages = packages ++ (if isDarwin then darwinPackages else [ ]);
+              packages = packages ++ optional isDarwin darwinPackages;
             };
         };
     };

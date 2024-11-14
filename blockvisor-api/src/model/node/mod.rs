@@ -333,6 +333,7 @@ impl Node {
             warn!("Failed to remove node dns: {err}");
         }
 
+        /*
         let prefix = format!("node/{id}/secret");
         let secrets = write.ctx.vault.read().await.list_path(&prefix).await?;
         if let Some(names) = secrets {
@@ -345,6 +346,7 @@ impl Node {
                 }
             }
         }
+        */
 
         if let Some(ref item_id) = node.stripe_item_id {
             write.ctx.stripe.remove_subscription(item_id).await?;
@@ -499,6 +501,7 @@ impl NewNode {
             ProtocolVersion::by_id(self.protocol_version_id, Some(self.org_id), authz, write)
                 .await?;
 
+        /*
         let secrets = if let Some(old_id) = self.old_node_id {
             let prefix = format!("node/{old_id}/secret");
             let names = write.ctx.vault.read().await.list_path(&prefix).await?;
@@ -521,6 +524,8 @@ impl NewNode {
         } else {
             None
         };
+        */
+        let secrets = None;
 
         let mut created = Vec::new();
         if let Some(counts) = node_counts {
@@ -584,7 +589,7 @@ impl NewNode {
         org: &Org,
         version: &ProtocolVersion,
         node_config: &NodeConfig,
-        secrets: Option<&HashMap<String, Vec<u8>>>,
+        _secrets: Option<&HashMap<String, Vec<u8>>>,
         created_by: Resource,
         authz: &AuthZ,
         mut write: &mut WriteConn<'_, '_>,
@@ -648,6 +653,7 @@ impl NewNode {
                     Org::add_node(self.org_id, write).await?;
                     Host::add_node(&node, write).await?;
 
+                    /*
                     if let Some(secrets) = secrets {
                         for (name, data) in secrets {
                             let path = format!("node/{}/secret/{name}", node.id);
@@ -655,6 +661,7 @@ impl NewNode {
                                 write.ctx.vault.read().await.set_bytes(&path, data).await?;
                         }
                     }
+                    */
 
                     return Ok(node);
                 }
