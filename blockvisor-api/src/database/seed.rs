@@ -409,6 +409,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('api-key-node', 'api-key-update'),
         ('api-key-node', 'blockchain-get'),
         ('api-key-node', 'blockchain-list'),
+        ('api-key-node', 'blockchain-view-public'),
         ('api-key-node', 'command-ack'),
         ('api-key-node', 'command-create'),
         ('api-key-node', 'command-get'),
