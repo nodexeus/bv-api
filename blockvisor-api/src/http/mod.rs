@@ -28,7 +28,7 @@ pub fn router(context: &Arc<Context>) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(OtelAxumLayer::default())
         // These are the endpoints that are also gRPC handlers
-        .nest("/v1/api_key", api_key::router(context.clone()))
+        .nest("/v1/api-key", api_key::router(context.clone()))
         .nest("/v1/archive", archive::router(context.clone()))
         .nest("/v1/auth", auth::router(context.clone()))
         .nest("/v1/bundle", bundle::router(context.clone()))
