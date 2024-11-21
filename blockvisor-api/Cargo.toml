@@ -46,7 +46,7 @@ opentelemetry-appender-tracing = "0.27"
 opentelemetry-http = "0.27"
 opentelemetry-otlp = { version = "0.27", features = ["logs", "metrics"] }
 opentelemetry-semantic-conventions = { version = "0.27", features = ["semconv_experimental"] }
-opentelemetry_sdk = { version = "0.27", features = ["logs", "metrics", "rt-tokio"] }
+opentelemetry_sdk = { version = "0.27", features = ["logs", "metrics", "rt-tokio", "rt-tokio-current-thread"] }
 password-hash = "0.5"
 paste = "1.0"
 petname = { version = "2.0", default-features = false, features = ["default-rng", "default-words"] }

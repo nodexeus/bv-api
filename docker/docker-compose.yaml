@@ -9,7 +9,7 @@ services:
     ports:
       - 25432:5432
     healthcheck:
-      test: ["CMD-SHELL", "sh -c 'pg_isready -U blockvisor -d blockvisor_db'"]
+      test: ["CMD-SHELL", "pg_isready -U blockvisor -d blockvisor_db"]
       interval: 3s
       timeout: 1s
       retries: 3
@@ -20,6 +20,29 @@ services:
       - 21883:1883
     volumes:
       - ./emqx:/opt/emqx/etc
+
+  opentelemetry:
+    image: otel/opentelemetry-collector:0.113.0
+    command: ["--config=/etc/collector.yaml"]
+    ports:
+      - 24317:4317
+      - 28889:8889
+    volumes:
+      - ./metrics/collector.yaml:/etc/collector.yaml
+
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    ports:
+      - 29090:9090
+    volumes:
+      - ./metrics/prometheus.yaml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    ports:
+      - 23000:3000
+    volumes:
+      - ./metrics/grafana.yaml:/etc/grafana/provisioning/datasources/prometheus.yaml
 
   vault:
     image: hashicorp/vault:1.17
