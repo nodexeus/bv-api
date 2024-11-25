@@ -27,7 +27,8 @@ environment = "dev"
 filter = "info,grpc_tests=debug,tower_http=off"
 
 [log.opentelemetry]
-endpoint = "http://localhost:4317"
+endpoint = "http://localhost:24317"
+export_interval = "100ms"
 
 [mqtt]
 server_address = "127.0.0.1"
