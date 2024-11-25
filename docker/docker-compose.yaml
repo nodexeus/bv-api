@@ -21,14 +21,14 @@ services:
     volumes:
       - ./emqx:/opt/emqx/etc
 
-  opentelemetry:
-    image: otel/opentelemetry-collector:0.113.0
-    command: ["--config=/etc/collector.yaml"]
+  grafana:
+    image: grafana/grafana:11.3.1
     ports:
-      - 24317:4317
-      - 28889:8889
+      - 23000:3000
     volumes:
-      - ./metrics/collector.yaml:/etc/collector.yaml
+      - ./metrics/grafana.yaml:/etc/grafana/provisioning/datasources/prometheus.yaml
+    depends_on:
+      - prometheus
 
   prometheus:
     image: prom/prometheus:v3.0.0
@@ -36,13 +36,33 @@ services:
       - 29090:9090
     volumes:
       - ./metrics/prometheus.yaml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - opentelemetry
 
-  grafana:
-    image: grafana/grafana:11.3.1
+  opentelemetry:
+    image: otel/opentelemetry-collector-contrib:0.113.0
+    command: ["--config=/etc/opentelemetry.yaml"]
     ports:
-      - 23000:3000
+      - 24317:4317
+      - 28889:8889
     volumes:
-      - ./metrics/grafana.yaml:/etc/grafana/provisioning/datasources/prometheus.yaml
+      - ./metrics/opentelemetry.yaml:/etc/opentelemetry.yaml
+    depends_on:
+      - loki
+      - tempo
+
+  loki:
+    image: grafana/loki:3.3.0
+    ports:
+      - 23100:3100
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    ports:
+      - 23200:3200
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./metrics/tempo.yaml:/etc/tempo/tempo.yaml
 
   vault:
     image: hashicorp/vault:1.17
