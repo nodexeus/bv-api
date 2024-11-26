@@ -43,15 +43,12 @@ use tonic::codec::CompressionEncoding;
 use tonic::metadata::AsciiMetadataValue;
 use tonic::transport::server::Router;
 use tonic::transport::Server;
-use tower::layer::util::{Identity, Stack};
-use tower_http::classify::{GrpcErrorsAsFailures, SharedClassifier};
 use tower_http::cors::{self, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 use crate::auth::rbac::{HostAdminPerm, NodeAdminPerm};
 use crate::auth::AuthZ;
 use crate::config::Context;
-use crate::database::Pool;
 use crate::model;
 
 use self::api::api_key_service_server::ApiKeyServiceServer;
@@ -256,12 +253,7 @@ macro_rules! gzip_service {
     };
 }
 
-type TraceServer = Stack<TraceLayer<SharedClassifier<GrpcErrorsAsFailures>>, Identity>;
-type MetricsServer = Stack<MetricsLayer, TraceServer>;
-type PoolServer = Stack<Extension<Pool>, MetricsServer>;
-type CorsServer = Stack<Stack<CorsLayer, PoolServer>, Identity>;
-
-pub fn server(context: &Arc<Context>) -> Router<CorsServer> {
+pub fn server(context: &Arc<Context>) -> Router<impl Clone> {
     let grpc = Grpc::new(context.clone());
 
     let cors_rules = CorsLayer::new()

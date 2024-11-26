@@ -417,7 +417,10 @@ pub async fn update(
             .map(|tags| tags.into_update(host.tags))
             .transpose()?
             .flatten(),
-        cost: req.cost.map(|cost| cost.into_amount()).transpose()?,
+        cost: req
+            .cost
+            .map(common::BillingAmount::into_amount)
+            .transpose()?,
     };
     let host = update.apply(id, &mut write).await?;
     let host = api::Host::from_host(host, Some(&authz), &mut write).await?;

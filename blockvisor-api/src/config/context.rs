@@ -13,6 +13,7 @@ use crate::mqtt::Notifier;
 use crate::store::{Store, Vault};
 use crate::stripe::{Stripe, Subscription};
 
+use super::log::Log;
 use super::Config;
 
 #[derive(Debug, Display, Error)]
@@ -31,6 +32,8 @@ pub enum Error {
     MissingDns,
     /// Builder is missing Email.
     MissingEmail,
+    /// Builder is missing Log.
+    MissingLog,
     /// Builder is missing Notifier.
     MissingNotifier,
     /// Builder is missing Pool.
@@ -63,6 +66,7 @@ pub struct Context {
     pub config: Arc<Config>,
     pub dns: Arc<Box<dyn Dns + Send + Sync + 'static>>,
     pub email: Arc<Email>,
+    pub log: Arc<Log>,
     pub notifier: Arc<Notifier>,
     pub pool: Pool,
     pub rng: Arc<Mutex<OsRng>>,
@@ -73,13 +77,13 @@ pub struct Context {
 
 impl Context {
     pub async fn new() -> Result<Arc<Self>, Error> {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let config = Config::new().map_err(Error::Config)?;
         Self::builder_from(config).await?.build()
     }
 
     pub async fn from_default_toml() -> Result<Arc<Self>, Error> {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let config = Config::from_default_toml().map_err(Error::Config)?;
         Self::builder_from(config).await?.build()
     }
@@ -88,6 +92,7 @@ impl Context {
         let auth = Auth::new(&config.token);
         let dns = Cloudflare::new(config.cloudflare.clone()).map_err(Error::Cloudflare)?;
         let email = Email::new(&config, auth.cipher.clone()).map_err(Error::Email)?;
+        let log = Log::new(&config.log);
         let pool = Pool::new(&config.database).await.map_err(Error::Pool)?;
         let notifier = Notifier::new(config.mqtt.options()?, pool.clone())
             .await
@@ -102,6 +107,7 @@ impl Context {
             .auth(auth)
             .dns(dns)
             .email(email)
+            .log(log)
             .notifier(notifier)
             .pool(pool)
             .store(store)
@@ -117,7 +123,7 @@ impl Context {
         use crate::store::tests::TestStore;
         use crate::stripe::tests::MockStripe;
 
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let config = Config::from_default_toml().map_err(Error::Config)?;
         let mut rng = OsRng;
         let db = TestDb::new(&config.database, &mut rng).await;
@@ -125,6 +131,7 @@ impl Context {
         let auth = Auth::new(&config.token);
         let dns = MockCloudflare::new(&mut rng).await;
         let email = Email::new_mocked(&config, auth.cipher.clone()).map_err(Error::Email)?;
+        let log = Log::new(&config.log);
         let pool = db.pool();
         let notifier = Notifier::new(config.mqtt.options()?, pool.clone())
             .await
@@ -139,6 +146,7 @@ impl Context {
             .auth(auth)
             .dns(dns)
             .email(email)
+            .log(log)
             .notifier(notifier)
             .pool(pool)
             .rng(rng)
@@ -158,6 +166,7 @@ pub struct Builder {
     config: Option<Config>,
     dns: Option<Box<dyn Dns + Send + Sync + 'static>>,
     email: Option<Email>,
+    log: Option<Arc<Log>>,
     notifier: Option<Arc<Notifier>>,
     pool: Option<Pool>,
     rng: Option<OsRng>,
@@ -173,6 +182,7 @@ impl Builder {
             config: self.config.ok_or(Error::MissingConfig).map(Arc::new)?,
             dns: self.dns.ok_or(Error::MissingDns).map(Arc::new)?,
             email: self.email.ok_or(Error::MissingEmail).map(Arc::new)?,
+            log: self.log.ok_or(Error::MissingLog)?,
             notifier: self.notifier.ok_or(Error::MissingNotifier)?,
             pool: self.pool.ok_or(Error::MissingPool)?,
             rng: Arc::new(Mutex::new(self.rng.unwrap_or_default())),
@@ -206,6 +216,12 @@ impl Builder {
     #[must_use]
     pub fn email(mut self, email: Email) -> Self {
         self.email = Some(email);
+        self
+    }
+
+    #[must_use]
+    pub fn log(mut self, log: Arc<Log>) -> Self {
+        self.log = Some(log);
         self
     }
 

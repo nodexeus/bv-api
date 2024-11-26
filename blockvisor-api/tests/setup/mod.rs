@@ -32,7 +32,6 @@ pub struct TestServer {
 impl TestServer {
     pub async fn new() -> Self {
         let (context, db) = Context::with_mocked().await.unwrap();
-        // let _ = context.config.log.try_start();
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();

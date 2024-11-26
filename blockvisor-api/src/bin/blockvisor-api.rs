@@ -10,15 +10,15 @@ use blockvisor_api::server;
 #[tokio::main]
 async fn main() -> Result<()> {
     let context = Context::new().await?;
-    context.config.log.start()?;
+    context.log.init()?;
 
     run_migrations(&context.config)?;
     setup_rbac(&context.pool).await?;
 
     info!("Starting server...");
-    server::start(context).await?;
+    server::start(context.clone()).await?;
 
-    opentelemetry::global::shutdown_tracer_provider();
+    context.log.shutdown().await?;
 
     Ok(())
 }

@@ -577,7 +577,10 @@ pub async fn update_config(
             .map(|tags| tags.into_update(node.tags))
             .transpose()?
             .flatten(),
-        cost: req.cost.map(|cost| cost.into_amount()).transpose()?,
+        cost: req
+            .cost
+            .map(common::BillingAmount::into_amount)
+            .transpose()?,
     };
     let updated = update.apply(node_id, &authz, &mut write).await?;
 

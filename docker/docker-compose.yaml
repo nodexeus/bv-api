@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     command: ["postgres", "-c", "log_statement=all"]
     environment:
       POSTGRES_DB: blockvisor_db
@@ -9,17 +9,60 @@ services:
     ports:
       - 25432:5432
     healthcheck:
-      test: ["CMD-SHELL", "sh -c 'pg_isready -U blockvisor -d blockvisor_db'"]
+      test: ["CMD-SHELL", "pg_isready -U blockvisor -d blockvisor_db"]
       interval: 3s
       timeout: 1s
       retries: 3
 
   emqx:
-    image: emqx/emqx-enterprise:5.3.0
+    image: emqx/emqx-enterprise:5.8.1
     ports:
       - 21883:1883
     volumes:
       - ./emqx:/opt/emqx/etc
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    ports:
+      - 23000:3000
+    volumes:
+      - ./metrics/grafana.yaml:/etc/grafana/provisioning/datasources/prometheus.yaml
+    depends_on:
+      - prometheus
+
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    ports:
+      - 29090:9090
+    volumes:
+      - ./metrics/prometheus.yaml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - opentelemetry
+
+  opentelemetry:
+    image: otel/opentelemetry-collector-contrib:0.113.0
+    command: ["--config=/etc/opentelemetry.yaml"]
+    ports:
+      - 24317:4317
+      - 28889:8889
+    volumes:
+      - ./metrics/opentelemetry.yaml:/etc/opentelemetry.yaml
+    depends_on:
+      - loki
+      - tempo
+
+  loki:
+    image: grafana/loki:3.3.0
+    ports:
+      - 23100:3100
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    ports:
+      - 23200:3200
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./metrics/tempo.yaml:/etc/tempo/tempo.yaml
 
   vault:
     image: hashicorp/vault:1.17
