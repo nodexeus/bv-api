@@ -71,6 +71,7 @@ struct HostServiceUpdateRequest {
     disk_bytes: Option<u64>,
     schedule_type: Option<i32>,
     update_tags: Option<common::UpdateTags>,
+    cost: Option<common::BillingAmount>,
 }
 
 async fn update(
@@ -92,6 +93,7 @@ async fn update(
         disk_bytes: req.disk_bytes,
         schedule_type: req.schedule_type,
         update_tags: req.update_tags,
+        cost: req.cost,
     };
     ctx.write(|write| grpc::host::update(req, headers.into(), write).scope_boxed())
         .await

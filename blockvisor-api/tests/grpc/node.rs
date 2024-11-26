@@ -130,6 +130,7 @@ async fn update_a_node_config() {
                 }],
             })),
         }),
+        cost: None,
     };
 
     // fails for unknown id

@@ -10,12 +10,13 @@ use diesel::result::Error::{DatabaseError, NotFound};
 use diesel::sql_types::{Bool, Nullable};
 use diesel_async::RunQueryDsl;
 use diesel_derive_enum::DbEnum;
+use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display;
 use thiserror::Error;
 
 use crate::auth::resource::{HostId, OrgId, Resource, ResourceId, ResourceType};
 use crate::database::Conn;
-use crate::grpc::{api, Status};
+use crate::grpc::{api, common, Status};
 use crate::util::sql::{self, greatest, IpNetwork, Tags, Version};
 use crate::util::{SearchOperator, SortOrder};
 
@@ -145,6 +146,7 @@ pub struct Host {
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
+    pub cost: Option<super::Amount>,
 }
 
 impl AsRef<Host> for Host {
@@ -404,6 +406,7 @@ pub struct UpdateHost<'a> {
     pub memory_bytes: Option<i64>,
     pub disk_bytes: Option<i64>,
     pub tags: Option<Tags>,
+    pub cost: Option<super::Amount>,
 }
 
 impl UpdateHost<'_> {
@@ -656,6 +659,33 @@ impl TryFrom<api::ScheduleType> for ScheduleType {
             api::ScheduleType::Automatic => Ok(ScheduleType::Automatic),
             api::ScheduleType::Manual => Ok(ScheduleType::Manual),
         }
+    }
+}
+
+/// The billing cost per month in USD for this host.
+///
+/// The inner cost is extracted via `Host::monthly_cost_in_usd`.
+#[derive(Clone, Copy, Debug, DieselNewType)]
+pub struct MonthlyCostUsd(i64);
+
+impl MonthlyCostUsd {
+    pub fn from_proto(billing: &common::BillingAmount) -> Result<Self, Error> {
+        let amount = match billing.amount {
+            Some(ref amount) => Ok(amount),
+            None => Err(Error::BillingMissingAmount),
+        }?;
+
+        match common::Currency::try_from(amount.currency) {
+            Ok(common::Currency::Usd) => Ok(()),
+            _ => Err(Error::BillingCurrencyUnknown),
+        }?;
+
+        match common::Period::try_from(billing.period) {
+            Ok(common::Period::Monthly) => Ok(()),
+            _ => Err(Error::BillingPeriodUnknown),
+        }?;
+
+        Ok(MonthlyCostUsd(amount.amount_minor_units))
     }
 }
 

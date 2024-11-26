@@ -1,5 +1,6 @@
 use displaydoc::Display;
 use thiserror::Error;
+use tracing::warn;
 
 use crate::auth::resource::NodeId;
 use crate::auth::AuthZ;
@@ -106,6 +107,10 @@ async fn node_deleted(cmd: &Command, write: &mut WriteConn<'_, '_>) -> Result<()
         .node(write)
         .await?
         .ok_or_else(|| Error::MissingNodeId(cmd.id))?;
+    if node.deleted_at.is_none() {
+        // TODO: This should go on a queue for inconsistencies that we register
+        warn!("Received a deleted confirmation for a node that is not deleted");
+    }
 
     let update = UpdateNodeState {
         node_state: Some(NodeState::Deleted),
@@ -115,7 +120,6 @@ async fn node_deleted(cmd: &Command, write: &mut WriteConn<'_, '_>) -> Result<()
         p2p_address: None,
     };
     let _ = update.apply(node.id, write).await?;
-    let _ = Node::delete(node.id, write).await?;
 
     Ok(())
 }

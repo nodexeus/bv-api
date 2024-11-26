@@ -72,6 +72,7 @@ async fn update_an_existing_host() {
         memory_bytes: None,
         disk_bytes: None,
         update_tags: None,
+        cost: None,
     };
 
     // fails without token

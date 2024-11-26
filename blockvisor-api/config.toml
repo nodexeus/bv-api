@@ -17,7 +17,7 @@ idle_timeout = "2m"
 [email]
 template_dir = "emails"
 sendgrid_api_key = "123"
-ui_base_url = "https://app.alpha.blockvisor.dev"
+ui_base_url = "https://app.dev.blockvisor.com"
 
 [grpc]
 request_concurrency_limit = 128

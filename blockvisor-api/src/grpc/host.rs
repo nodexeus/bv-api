@@ -11,7 +11,7 @@ use crate::auth::claims::Claims;
 use crate::auth::rbac::{GrpcRole, HostAdminPerm, HostPerm};
 use crate::auth::resource::{HostId, OrgId, Resource};
 use crate::auth::token::refresh::Refresh;
-use crate::auth::Authorize;
+use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::model::command::NewCommand;
 use crate::model::host::{
@@ -30,6 +30,8 @@ use super::{api, common, Grpc, Metadata, Status};
 pub enum Error {
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
+    /// Billing amount error: {0}
+    BillingAmount(#[from] super::BillingAmountError),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
     /// Host command error: {0}
@@ -54,6 +56,8 @@ pub enum Error {
     HostProvisionByToken(crate::model::token::Error),
     /// Host image error: {0}
     Image(#[from] crate::model::image::Error),
+    /// Invalid cost.
+    InvalidCost(super::BillingAmountError),
     /// Host ip address error: {0}
     IpAddress(#[from] crate::model::ip_address::Error),
     /// Host JWT failure: {0}
@@ -110,6 +114,7 @@ impl From<Error> for Status {
             }
             CpuCores(_) => Status::out_of_range("cpu_cores"),
             DiskBytes(_) => Status::out_of_range("disk_bytes"),
+            BillingAmount(_) => Status::invalid_argument("cost"),
             FilterLimit(_) => Status::invalid_argument("limit"),
             FilterOffset(_) => Status::invalid_argument("offset"),
             HasNodes => Status::failed_precondition("This host still has nodes."),
@@ -125,6 +130,7 @@ impl From<Error> for Status {
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
+            InvalidCost(_) => Status::invalid_argument("host.cost"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Command(err) => err.into(),
@@ -290,7 +296,7 @@ pub async fn create(
     let refresh = Refresh::from_now(expire_refresh, host.id);
     let encoded = write.ctx.auth.cipher.refresh.encode(&refresh)?;
 
-    let host = api::Host::from_host(host, &mut write).await?;
+    let host = api::Host::from_host(host, None, &mut write).await?;
 
     Ok(api::HostServiceCreateResponse {
         host: Some(host),
@@ -309,7 +315,7 @@ pub async fn get(
     let mut resources = vec![Resource::from(id)];
 
     let org_id = Host::org_id(id, &mut read).await?;
-    let _authz = if let Some(org_id) = org_id {
+    let authz = if let Some(org_id) = org_id {
         resources.push(Resource::from(org_id));
         read.auth_or_for(&meta, HostAdminPerm::Get, HostPerm::Get, &resources)
             .await?
@@ -318,7 +324,7 @@ pub async fn get(
     };
 
     let host = Host::by_id(id, org_id, &mut read).await?;
-    let host = api::Host::from_host(host, &mut read).await?;
+    let host = api::Host::from_host(host, Some(&authz), &mut read).await?;
 
     Ok(api::HostServiceGetResponse { host: Some(host) })
 }
@@ -329,7 +335,7 @@ pub async fn list(
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::HostServiceListResponse, Error> {
     let filter = req.into_filter()?;
-    let _authz = if filter.org_ids.is_empty() {
+    let authz = if filter.org_ids.is_empty() {
         read.auth(&meta, HostAdminPerm::List).await?
     } else {
         read.auth_or_for(&meta, HostAdminPerm::List, HostPerm::List, &filter.org_ids)
@@ -337,7 +343,7 @@ pub async fn list(
     };
 
     let (hosts, total) = filter.query(&mut read).await?;
-    let hosts = api::Host::from_hosts(hosts, &mut read).await?;
+    let hosts = api::Host::from_hosts(hosts, &authz, &mut read).await?;
 
     Ok(api::HostServiceListResponse { hosts, total })
 }
@@ -356,9 +362,20 @@ pub async fn update(
     };
 
     // for public hosts, only a host api token has the host-update perm
-    let _authz = write
-        .auth_or_for(&meta, HostAdminPerm::Update, HostPerm::Update, &resources)
-        .await?;
+    let authz = if req.cost.is_some() {
+        // Only admins can update the cost of a host.
+        write
+            .auth_for(
+                &meta,
+                [HostAdminPerm::Update, HostAdminPerm::Cost],
+                &resources,
+            )
+            .await?
+    } else {
+        write
+            .auth_or_for(&meta, HostAdminPerm::Update, HostPerm::Update, &resources)
+            .await?
+    };
     let host = Host::by_id(id, org_id, &mut write).await?;
 
     let bv_version = req
@@ -400,9 +417,10 @@ pub async fn update(
             .map(|tags| tags.into_update(host.tags))
             .transpose()?
             .flatten(),
+        cost: req.cost.map(|cost| cost.into_amount()).transpose()?,
     };
     let host = update.apply(id, &mut write).await?;
-    let host = api::Host::from_host(host, &mut write).await?;
+    let host = api::Host::from_host(host, Some(&authz), &mut write).await?;
 
     Ok(api::HostServiceUpdateResponse { host: Some(host) })
 }
@@ -567,23 +585,31 @@ pub async fn regions(
 }
 
 impl api::Host {
-    pub async fn from_host(host: Host, conn: &mut Conn<'_>) -> Result<Self, Error> {
+    pub async fn from_host(
+        host: Host,
+        authz: Option<&AuthZ>,
+        conn: &mut Conn<'_>,
+    ) -> Result<Self, Error> {
         let lookup = Lookup::from_host(&host, conn).await?;
-        Self::from_model(host, &lookup)
+        Self::from_model(host, &lookup, authz)
     }
 
-    pub async fn from_hosts(hosts: Vec<Host>, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
+    pub async fn from_hosts(
+        hosts: Vec<Host>,
+        authz: &AuthZ,
+        conn: &mut Conn<'_>,
+    ) -> Result<Vec<Self>, Error> {
         let lookup = Lookup::from_hosts(&hosts, conn).await?;
 
         let mut out = Vec::new();
         for host in hosts {
-            out.push(Self::from_model(host, &lookup)?);
+            out.push(Self::from_model(host, &lookup, Some(authz))?);
         }
 
         Ok(out)
     }
 
-    fn from_model(host: Host, lookup: &Lookup) -> Result<Self, Error> {
+    fn from_model(host: Host, lookup: &Lookup, authz: Option<&AuthZ>) -> Result<Self, Error> {
         let created_by = host.created_by();
         let org = host.org_id.and_then(|id| lookup.orgs.get(&id));
         let org_name = org.map(|org| org.name.clone());
@@ -601,6 +627,8 @@ impl api::Host {
                 assigned: nodes.iter().any(|node| node.ip_address == ip_address.ip),
             })
             .collect();
+
+        let cost = authz.and_then(|authz| common::BillingAmount::from_host(&host, authz));
 
         Ok(api::Host {
             host_id: host.id.to_string(),
@@ -624,6 +652,7 @@ impl api::Host {
             created_by: Some(common::Resource::from(created_by)),
             created_at: Some(NanosUtc::from(host.created_at).into()),
             updated_at: host.updated_at.map(|at| NanosUtc::from(at).into()),
+            cost,
         })
     }
 }

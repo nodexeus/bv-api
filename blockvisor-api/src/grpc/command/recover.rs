@@ -125,6 +125,7 @@ async fn node_create_failed(
         ip_gateway: Some(host.ip_gateway),
         note: None,
         tags: None,
+        cost: None,
     };
     let node = update
         .apply(node_id, authz, write)
