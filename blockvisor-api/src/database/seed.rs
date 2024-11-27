@@ -424,6 +424,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('blockjoy-admin', 'protocol-admin-get-protocol'),
         ('blockjoy-admin', 'protocol-admin-get-latest'),
         ('blockjoy-admin', 'protocol-admin-list-protocols'),
+        ('blockjoy-admin', 'protocol-admin-list-variants'),
         ('blockjoy-admin', 'protocol-admin-list-versions'),
         ('blockjoy-admin', 'protocol-admin-update-protocol'),
         ('blockjoy-admin', 'protocol-admin-update-version'),
@@ -605,6 +606,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-login', 'protocol-get-latest'),
         ('grpc-login', 'protocol-get-pricing'),
         ('grpc-login', 'protocol-list-protocols'),
+        ('grpc-login', 'protocol-list-variants'),
         ('grpc-login', 'protocol-list-versions'),
         ('grpc-login', 'protocol-view-public'),
         ('grpc-login', 'user-create'),
@@ -654,6 +656,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-new-host', 'protocol-get-protocol'),
         ('grpc-new-host', 'protocol-get-latest'),
         ('grpc-new-host', 'protocol-list-protocols'),
+        ('grpc-new-host', 'protocol-list-variants'),
         ('grpc-new-host', 'protocol-list-versions'),
         ('grpc-new-host', 'protocol-view-public'),
         -- org-owner --
