@@ -121,7 +121,7 @@ impl From<Error> for Status {
             HostProvisionByToken(_) => Status::forbidden("Invalid token."),
             MemoryBytes(_) => Status::out_of_range("memory_bytes"),
             ParseBvVersion(_) => Status::invalid_argument("bv_version"),
-            ParseId(_) => Status::invalid_argument("id"),
+            ParseId(_) => Status::invalid_argument("host_id"),
             ParseImageId(_) => Status::invalid_argument("image_id"),
             ParseIps(_) => Status::invalid_argument("ips"),
             ParseIpAddress(_) => Status::invalid_argument("ip_address"),

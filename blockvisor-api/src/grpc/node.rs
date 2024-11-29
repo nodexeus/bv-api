@@ -139,7 +139,7 @@ impl From<Error> for Status {
             NoResourceAffinity => Status::invalid_argument("resource"),
             ParseConfigId(_) => Status::invalid_argument("config_id"),
             ParseHostId(_) => Status::invalid_argument("host_id"),
-            ParseId(_) => Status::invalid_argument("id"),
+            ParseId(_) => Status::invalid_argument("node_id"),
             ParseImageId(_) => Status::invalid_argument("image_id"),
             ParseIp(_) => Status::invalid_argument("ip_addresses"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),

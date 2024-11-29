@@ -72,6 +72,8 @@ pub enum Error {
     RegionMissingPrice(RegionId),
     /// Protocol search failed: {0}
     SearchOperator(crate::util::search::Error),
+    /// The SKU `{0}` has no stripe price.
+    SkuMissingPrice(String),
     /// Sort order: {0}
     SortOrder(crate::util::search::Error),
     /// Store failed: {0}
@@ -97,11 +99,11 @@ impl From<Error> for Status {
             MissingProtocol => Status::invalid_argument("protocol"),
             MissingStatsFor => Status::invalid_argument("stats_for"),
             MissingVersionKey => Status::invalid_argument("version_key"),
-            ParseId(_) => Status::invalid_argument("id"),
+            ParseId(_) => Status::invalid_argument("protocol_id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
             ParseVersion(_) => Status::invalid_argument("protocol_version"),
             ParseVersionId(_) => Status::invalid_argument("protocol_version_id"),
-            RegionMissingPrice(_) => Status::not_found("Not found."),
+            RegionMissingPrice(_) | SkuMissingPrice(_) => Status::not_found("Not found."),
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
@@ -181,6 +183,15 @@ impl ProtocolService for Grpc {
     ) -> Result<Response<api::ProtocolServiceListProtocolsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
         self.read(|read| list_protocols(req, meta.into(), read).scope_boxed())
+            .await
+    }
+
+    async fn list_variants(
+        &self,
+        req: Request<api::ProtocolServiceListVariantsRequest>,
+    ) -> Result<Response<api::ProtocolServiceListVariantsResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.read(|read| list_variants(req, meta.into(), read).scope_boxed())
             .await
     }
 
@@ -325,7 +336,11 @@ pub async fn get_pricing(
     let sku = version
         .sku(&region)
         .ok_or(Error::RegionMissingPrice(region.id))?;
-    let price = read.ctx.stripe.get_price(&sku).await?;
+    let price = match read.ctx.stripe.get_price(&sku).await {
+        Ok(price) => Ok(price),
+        Err(crate::stripe::Error::NoPrice(_)) => Err(Error::SkuMissingPrice(sku)),
+        Err(err) => Err(err.into()),
+    }?;
 
     Ok(api::ProtocolServiceGetPricingResponse {
         billing_amount: Some(common::BillingAmount::try_from(&price)?),
@@ -496,6 +511,39 @@ pub async fn list_protocols(
     protocols.sort_by_cached_key(|chain| chain.name.clone());
 
     Ok(api::ProtocolServiceListProtocolsResponse { protocols, total })
+}
+
+pub async fn list_variants(
+    req: api::ProtocolServiceListVariantsRequest,
+    meta: Metadata,
+    mut read: ReadConn<'_, '_>,
+) -> Result<api::ProtocolServiceListVariantsResponse, Error> {
+    let protocol_id = req.protocol_id.parse().map_err(Error::ParseId)?;
+    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        (Some(org_id), [org_id].into())
+    } else {
+        (None, Resources::None)
+    };
+
+    let authz = read
+        .auth_or_for(
+            &meta,
+            ProtocolAdminPerm::ListVariants,
+            ProtocolPerm::ListVariants,
+            resources,
+        )
+        .await?;
+
+    let versions = ProtocolVersion::by_protocol_id(protocol_id, org_id, &authz, &mut read).await?;
+    let mut variant_keys = versions
+        .into_iter()
+        .map(|version| version.variant_key.into())
+        .collect::<Vec<_>>();
+    variant_keys.sort_unstable();
+    variant_keys.dedup();
+
+    Ok(api::ProtocolServiceListVariantsResponse { variant_keys })
 }
 
 pub async fn list_versions(
