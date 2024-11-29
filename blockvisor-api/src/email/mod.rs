@@ -231,7 +231,7 @@ pub struct Recipient<'r> {
     pub preferred_language: Option<Language>,
 }
 
-impl<'r> Recipient<'r> {
+impl Recipient<'_> {
     pub fn name(&self) -> String {
         format!("{} {}", self.first_name, self.last_name)
     }
