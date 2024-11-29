@@ -145,6 +145,7 @@ pub struct Host {
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
+    pub cost: Option<super::Amount>,
 }
 
 impl AsRef<Host> for Host {
@@ -404,6 +405,7 @@ pub struct UpdateHost<'a> {
     pub memory_bytes: Option<i64>,
     pub disk_bytes: Option<i64>,
     pub tags: Option<Tags>,
+    pub cost: Option<super::Amount>,
 }
 
 impl UpdateHost<'_> {

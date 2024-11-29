@@ -178,7 +178,7 @@ impl<'c, 't> Authorize for WriteConn<'c, 't> {
     }
 }
 
-impl<'c, 't> WriteConn<'c, 't> {
+impl WriteConn<'_, '_> {
     pub fn meta(&mut self, key: &'static str, val: AsciiMetadataValue) {
         // safety: meta_rx is open for the lifetime of WriteConn
         self.meta_tx.send((key, val)).expect("meta_rx");

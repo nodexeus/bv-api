@@ -45,10 +45,12 @@ use super::image::{Config, ConfigId, Image, ImageId, NodeConfig};
 use super::protocol::version::{ProtocolVersion, VersionId};
 use super::protocol::{Protocol, ProtocolId};
 use super::schema::nodes;
-use super::{Command, IpAddress, Org, Paginate, Region, RegionId};
+use super::{Amount, Command, IpAddress, Org, Paginate, Region, RegionId};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
+    /// Cannot delete node `{0}`, it is already deleted.
+    AlreadyDeleted(NodeId),
     /// Node Cloudflare error: {0}
     Cloudflare(#[from] crate::cloudflare::Error),
     /// Node Command error: {0}
@@ -91,6 +93,8 @@ pub enum Error {
     Image(#[from] crate::model::image::Error),
     /// Node ip address error: {0},
     IpAddress(#[from] crate::model::ip_address::Error),
+    /// The stripe `item` for this node doesn't have an associated `price`.
+    ItemWithoutPrice,
     /// Missing node-admin-transfer permission.
     MissingTransferPerm,
     /// Node log error: {0}
@@ -111,6 +115,8 @@ pub enum Error {
     ParseHostId(uuid::Error),
     /// Failed to parse IpAddr: {0}
     ParseIpAddr(std::net::AddrParseError),
+    /// The stripe `price` for this node doesn't have an associated `amount`.
+    PriceWithoutAmount,
     /// Node protocol error: {0}
     Protocol(#[from] crate::model::protocol::Error),
     /// Node protocol version error: {0}
@@ -225,6 +231,7 @@ pub struct Node {
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
+    pub cost: Option<super::Amount>,
 }
 
 impl Node {
@@ -311,7 +318,7 @@ impl Node {
     pub async fn delete(id: NodeId, write: &mut WriteConn<'_, '_>) -> Result<Node, Error> {
         let node = Node::deleted_by_id(id, write).await?;
         if node.deleted_at.is_some() {
-            return Ok(node);
+            return Err(Error::AlreadyDeleted(node.id));
         }
 
         Org::remove_node(node.org_id, write).await?;
@@ -610,17 +617,31 @@ impl NewNode {
             .await?
             .ok_or_else(|| Error::HostFreeIp(host.id))?;
 
-        let stripe_item_id = if authz.has_perm(BillingPerm::Exempt) {
-            None
+        // Users that have the billing-exempt permission or that are launching a node on their own
+        // host do not need billing.
+        let billing_exempt =
+            authz.has_perm(BillingPerm::Exempt) || host.org_id == Some(self.org_id);
+        let (stripe_item_id, price) = if billing_exempt {
+            (None, None)
         } else {
             let region = Region::by_id(host.region_id.ok_or(Error::NoRegion)?, write).await?;
             if let Some(sku) = version.sku(&region) {
                 let item = write.ctx.stripe.add_subscription(org, &sku).await?;
-                Some(item.id)
+                let price = item
+                    .price
+                    .ok_or(Error::ItemWithoutPrice)?
+                    .unit_amount
+                    .ok_or(Error::PriceWithoutAmount)?;
+                (Some(item.id), Some(price))
             } else {
-                None
+                (None, None)
             }
         };
+        let cost = price.map(|amount| super::Amount {
+            amount,
+            currency: super::Currency::Usd,
+            period: super::Period::Monthly,
+        });
 
         loop {
             let name = Petnames::small()
@@ -645,6 +666,7 @@ impl NewNode {
                     nodes::created_by_type.eq(created_by.typ()),
                     nodes::created_by_id.eq(created_by.id()),
                     nodes::created_at.eq(Utc::now()),
+                    nodes::cost.eq(&cost),
                 ))
                 .get_result::<Node>(&mut write)
                 .await
@@ -759,6 +781,7 @@ pub struct UpdateNode<'u> {
     pub ip_gateway: Option<IpNetwork>,
     pub note: Option<&'u str>,
     pub tags: Option<Tags>,
+    pub cost: Option<Amount>,
 }
 
 impl<'u> UpdateNode<'u> {

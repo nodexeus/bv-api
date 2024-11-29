@@ -67,7 +67,7 @@ pub struct CreateDnsRecord<'a> {
     pub params: CreateDnsRecordParams<'a>,
 }
 
-impl<'a> Endpoint for CreateDnsRecord<'a> {
+impl Endpoint for CreateDnsRecord<'_> {
     type Result = DnsRecord;
 
     fn method(&self) -> Method {
@@ -110,7 +110,7 @@ pub struct ListDnsRecords<'a> {
     pub params: ListDnsRecordsParams,
 }
 
-impl<'a> Endpoint for ListDnsRecords<'a> {
+impl Endpoint for ListDnsRecords<'_> {
     type Result = Vec<DnsRecord>;
 
     fn method(&self) -> Method {
@@ -161,7 +161,7 @@ pub struct UpdateDnsRecord<'a> {
     pub params: UpdateDnsRecordParams<'a>,
 }
 
-impl<'a> Endpoint for UpdateDnsRecord<'a> {
+impl Endpoint for UpdateDnsRecord<'_> {
     type Result = DnsRecord;
 
     fn method(&self) -> Method {
@@ -204,7 +204,7 @@ pub struct DeleteDnsRecord<'a> {
     pub identifier: &'a str,
 }
 
-impl<'a> Endpoint for DeleteDnsRecord<'a> {
+impl Endpoint for DeleteDnsRecord<'_> {
     type Result = DeleteDnsRecordResponse;
 
     fn method(&self) -> Method {

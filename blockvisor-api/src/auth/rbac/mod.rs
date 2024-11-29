@@ -126,6 +126,7 @@ define_perms! {
     }
 
     HostAdmin => {
+        Cost,
         Delete,
         Get,
         List,
@@ -200,6 +201,7 @@ define_perms! {
     }
 
     NodeAdmin => {
+        Cost,
         Create,
         Delete,
         Get,

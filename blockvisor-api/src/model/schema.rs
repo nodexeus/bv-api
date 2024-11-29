@@ -293,6 +293,7 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Nullable<Timestamptz>,
         deleted_at -> Nullable<Timestamptz>,
+        cost -> Nullable<Jsonb>,
     }
 }
 
@@ -334,6 +335,7 @@ diesel::table! {
         managed_by -> EnumScheduleType,
         node_count -> Int4,
         tags -> Array<Nullable<Text>>,
+        cost -> Nullable<Jsonb>,
     }
 }
 
@@ -534,6 +536,7 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Nullable<Timestamptz>,
         deleted_at -> Nullable<Timestamptz>,
+        cost -> Nullable<Jsonb>,
     }
 }
 
@@ -594,6 +597,7 @@ diesel::table! {
         stripe_item_id -> Nullable<Text>,
         old_node_id -> Nullable<Uuid>,
         tags -> Array<Nullable<Text>>,
+        cost -> Nullable<Jsonb>,
     }
 }
 

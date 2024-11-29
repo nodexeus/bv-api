@@ -359,7 +359,9 @@ mod tests {
         let host = db.seed.host1.clone();
         let user = db.seed.member.clone();
 
-        let api_host = api::Host::from_host(host.clone(), &mut conn).await.unwrap();
+        let api_host = api::Host::from_host(host.clone(), None, &mut conn)
+            .await
+            .unwrap();
         let resource = common::Resource {
             resource_type: common::ResourceType::User.into(),
             resource_id: user.id.to_string(),

@@ -157,7 +157,7 @@ pub async fn host(
     }
 
     let host = UpdateHostMetrics::apply(&update, &mut write).await?;
-    let host = api::Host::from_host(host, &mut write).await?;
+    let host = api::Host::from_host(host, Some(&authz), &mut write).await?;
 
     let updated_by = common::Resource::from(&authz);
     let host_msg = api::HostMessage::updated(host, updated_by);

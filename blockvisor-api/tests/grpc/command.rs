@@ -65,6 +65,7 @@ async fn responds_ok_for_pending() {
         ip_gateway: None,
         note: None,
         tags: None,
+        cost: None,
     };
     update.apply(node_id, &authz, &mut conn).await.unwrap();
     create_command(&test, node_id, CommandType::NodeCreate).await;

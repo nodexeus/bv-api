@@ -33,6 +33,8 @@ pub enum Error {
     Auth(#[from] crate::auth::Error),
     /// Auth token parsing failed: {0}
     AuthToken(#[from] crate::auth::token::Error),
+    /// Billing amount error: {0}
+    BillingAmount(#[from] super::BillingAmountError),
     /// Failed to parse block age: {0}
     BlockAge(std::num::TryFromIntError),
     /// Failed to parse block height: {0}
@@ -127,6 +129,7 @@ impl From<Error> for Status {
         error!("{err}");
         match err {
             Diesel(_) | Store(_) => Status::internal("Internal error."),
+            BillingAmount(_) => Status::invalid_argument("cost"),
             BlockAge(_) => Status::invalid_argument("block_age"),
             BlockHeight(_) => Status::invalid_argument("block_height"),
             FilterLimit(_) => Status::invalid_argument("limit"),
@@ -545,6 +548,10 @@ pub async fn update_config(
     let authz = if req.new_org_id.is_some() {
         let perms = [NodeAdminPerm::UpdateConfig, NodeAdminPerm::Transfer];
         write.auth_all(&meta, perms).await?
+    } else if req.cost.is_some() {
+        // Only admins can update the node cost.
+        let perms = [NodeAdminPerm::UpdateConfig, NodeAdminPerm::Cost];
+        write.auth(&meta, perms).await?
     } else {
         write
             .auth_or_for(
@@ -570,6 +577,10 @@ pub async fn update_config(
             .map(|tags| tags.into_update(node.tags))
             .transpose()?
             .flatten(),
+        cost: req
+            .cost
+            .map(common::BillingAmount::into_amount)
+            .transpose()?,
     };
     let updated = update.apply(node_id, &authz, &mut write).await?;
 
@@ -747,6 +758,7 @@ impl api::Node {
             &version,
             region.as_ref(),
             reports,
+            authz,
         )
     }
 
@@ -803,7 +815,7 @@ impl api::Node {
                 let reports = reports.remove(&node.id).unwrap_or_default();
 
                 Some(api::Node::new(
-                    node, config, org, host, protocol, version, region, reports,
+                    node, config, org, host, protocol, version, region, reports, authz,
                 ))
             })
             .collect()
@@ -819,6 +831,7 @@ impl api::Node {
         version: &ProtocolVersion,
         region: Option<&Region>,
         reports: Vec<NodeReport>,
+        authz: &AuthZ,
     ) -> Result<Self, Error> {
         let config = config.node_config()?;
         let status = node.status();
@@ -848,6 +861,8 @@ impl api::Node {
         let placement = common::NodePlacement {
             placement: Some(placement),
         };
+
+        let cost = common::BillingAmount::from_node(&node, authz);
 
         let jobs = node
             .jobs
@@ -905,6 +920,7 @@ impl api::Node {
             created_by: Some(common::Resource::from(created_by)),
             created_at: Some(NanosUtc::from(node.created_at).into()),
             updated_at: node.updated_at.map(NanosUtc::from).map(Into::into),
+            cost,
         })
     }
 }
