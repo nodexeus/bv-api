@@ -107,7 +107,6 @@ fn property<S: Into<String>>(key: S, value: S) -> common::ImagePropertyValue {
     common::ImagePropertyValue {
         key: key.into(),
         value: value.into(),
-        ui_type: common::UiType::Text.into(),
     }
 }
 

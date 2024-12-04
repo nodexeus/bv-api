@@ -509,11 +509,7 @@ impl TryFrom<common::ImageConfig> for ImageConfig {
             image_uri: config.image_uri,
             archive_id: config.archive_id.parse().map_err(Error::ParseArchiveId)?,
             store_id: config.store_id.into(),
-            values: config
-                .values
-                .into_iter()
-                .map(TryFrom::try_from)
-                .collect::<Result<Vec<_>, _>>()?,
+            values: config.values.into_iter().map(Into::into).collect(),
         })
     }
 }
