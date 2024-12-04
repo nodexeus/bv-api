@@ -199,18 +199,25 @@ impl NodeConfig {
         add_rules: Vec<FirewallRule>,
         conn: &mut Conn<'_>,
     ) -> Result<Self, Error> {
-        let values = ImageProperty::by_image_id(image.id, conn)
+        let mut values = ImageProperty::by_image_id(image.id, conn)
             .await?
             .into_iter()
-            .map(ImagePropertyValue::from)
-            .chain(new_values)
-            .collect();
-        let rules = ImageRule::by_image_id(image.id, conn)
+            .to_map_keep_last(|property| {
+                (property.key.clone(), ImagePropertyValue::from(property))
+            });
+        for value in new_values {
+            values.insert(value.key.clone(), value);
+        }
+        let values = values.into_values().collect();
+
+        let mut rules = ImageRule::by_image_id(image.id, conn)
             .await?
             .into_iter()
-            .map(FirewallRule::from)
-            .chain(add_rules)
-            .collect();
+            .to_map_keep_last(|rule| (rule.key.clone(), FirewallRule::from(rule)));
+        for rule in add_rules {
+            rules.insert(rule.key.clone(), rule);
+        }
+        let rules = rules.into_values().collect();
 
         Self::generate_from(image, org_id, values, rules, conn).await
     }
@@ -232,12 +239,16 @@ impl NodeConfig {
                 true
             }
         });
-        let new_values = ImageProperty::by_image_id(image.id, conn)
+        let mut new_values = ImageProperty::by_image_id(image.id, conn)
             .await?
             .into_iter()
-            .map(ImagePropertyValue::from)
-            .chain(changed_values)
-            .collect();
+            .to_map_keep_last(|property| {
+                (property.key.clone(), ImagePropertyValue::from(property))
+            });
+        for value in changed_values {
+            new_values.insert(value.key.clone(), value);
+        }
+        let new_values = new_values.into_values().collect();
 
         let old_rules = ImageRule::by_image_id(self.image.image_id, conn)
             .await?
@@ -250,12 +261,14 @@ impl NodeConfig {
                 true
             }
         });
-        let new_rules = ImageRule::by_image_id(image.id, conn)
+        let mut new_rules = ImageRule::by_image_id(image.id, conn)
             .await?
             .into_iter()
-            .map(FirewallRule::from)
-            .chain(changed_rules)
-            .collect();
+            .to_map_keep_last(|rule| (rule.key.clone(), FirewallRule::from(rule)));
+        for rule in changed_rules {
+            new_rules.insert(rule.key.clone(), rule);
+        }
+        let new_rules = new_rules.into_values().collect();
 
         Self::generate_from(image, org_id, new_values, new_rules, conn).await
     }
@@ -496,7 +509,11 @@ impl TryFrom<common::ImageConfig> for ImageConfig {
             image_uri: config.image_uri,
             archive_id: config.archive_id.parse().map_err(Error::ParseArchiveId)?,
             store_id: config.store_id.into(),
-            values: config.values.into_iter().map(Into::into).collect(),
+            values: config
+                .values
+                .into_iter()
+                .map(TryFrom::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
         })
     }
 }

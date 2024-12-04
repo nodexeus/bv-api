@@ -28,8 +28,8 @@ pub enum Error {
     ByImageId(ImageId, diesel::result::Error),
     /// Failed to find image properties for image ids `{0:?}`: {1}
     ByImageIds(HashSet<ImageId>, diesel::result::Error),
-    /// Missing UiType.
-    MissingUiType,
+    /// Unknown UiType.
+    UnknownUiType,
 }
 
 impl From<Error> for Status {
@@ -37,7 +37,7 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             ById(_, NotFound) => Status::not_found("Not found."),
-            MissingUiType => Status::invalid_argument("property.ui_type"),
+            UnknownUiType => Status::invalid_argument("ui_type"),
             _ => Status::internal("Internal error."),
         }
     }
@@ -164,7 +164,7 @@ impl NewProperty {
     }
 
     pub fn from(image_id: ImageId, property: api::AddImageProperty) -> Result<Self, Error> {
-        let ui_type = Option::from(property.ui_type()).ok_or(Error::MissingUiType)?;
+        let ui_type = property.ui_type().try_into()?;
 
         Ok(NewProperty {
             image_id,
@@ -198,6 +198,7 @@ impl NewProperty {
 pub struct ImagePropertyValue {
     pub key: ImagePropertyKey,
     pub value: String,
+    pub ui_type: UiType,
     pub has_changed: bool,
 }
 
@@ -206,6 +207,7 @@ impl From<ImageProperty> for ImagePropertyValue {
         ImagePropertyValue {
             key: property.key,
             value: property.default_value,
+            ui_type: property.ui_type,
             has_changed: false,
         }
     }
@@ -216,17 +218,23 @@ impl From<ImagePropertyValue> for common::ImagePropertyValue {
         common::ImagePropertyValue {
             key: value.key.0,
             value: value.value,
+            ui_type: common::UiType::from(value.ui_type).into(),
         }
     }
 }
 
-impl From<common::ImagePropertyValue> for ImagePropertyValue {
-    fn from(value: common::ImagePropertyValue) -> Self {
-        ImagePropertyValue {
+impl TryFrom<common::ImagePropertyValue> for ImagePropertyValue {
+    type Error = Error;
+
+    fn try_from(value: common::ImagePropertyValue) -> Result<Self, Self::Error> {
+        let ui_type = value.ui_type().try_into()?;
+
+        Ok(ImagePropertyValue {
             key: ImagePropertyKey(value.key),
             value: value.value,
+            ui_type,
             has_changed: true,
-        }
+        })
     }
 }
 
@@ -250,14 +258,16 @@ impl From<UiType> for common::UiType {
     }
 }
 
-impl From<common::UiType> for Option<UiType> {
-    fn from(ui_type: common::UiType) -> Self {
+impl TryFrom<common::UiType> for UiType {
+    type Error = Error;
+
+    fn try_from(ui_type: common::UiType) -> Result<Self, Self::Error> {
         match ui_type {
-            common::UiType::Unspecified => None,
-            common::UiType::Switch => Some(UiType::Switch),
-            common::UiType::Text => Some(UiType::Text),
-            common::UiType::Password => Some(UiType::Password),
-            common::UiType::Enum => Some(UiType::Enum),
+            common::UiType::Unspecified => Err(Error::UnknownUiType),
+            common::UiType::Switch => Ok(UiType::Switch),
+            common::UiType::Text => Ok(UiType::Text),
+            common::UiType::Password => Ok(UiType::Password),
+            common::UiType::Enum => Ok(UiType::Enum),
         }
     }
 }
