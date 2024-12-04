@@ -198,7 +198,6 @@ impl NewProperty {
 pub struct ImagePropertyValue {
     pub key: ImagePropertyKey,
     pub value: String,
-    pub ui_type: UiType,
     pub has_changed: bool,
 }
 
@@ -207,7 +206,6 @@ impl From<ImageProperty> for ImagePropertyValue {
         ImagePropertyValue {
             key: property.key,
             value: property.default_value,
-            ui_type: property.ui_type,
             has_changed: false,
         }
     }
@@ -218,23 +216,17 @@ impl From<ImagePropertyValue> for common::ImagePropertyValue {
         common::ImagePropertyValue {
             key: value.key.0,
             value: value.value,
-            ui_type: common::UiType::from(value.ui_type).into(),
         }
     }
 }
 
-impl TryFrom<common::ImagePropertyValue> for ImagePropertyValue {
-    type Error = Error;
-
-    fn try_from(value: common::ImagePropertyValue) -> Result<Self, Self::Error> {
-        let ui_type = value.ui_type().try_into()?;
-
-        Ok(ImagePropertyValue {
+impl From<common::ImagePropertyValue> for ImagePropertyValue {
+    fn from(value: common::ImagePropertyValue) -> Self {
+        ImagePropertyValue {
             key: ImagePropertyKey(value.key),
             value: value.value,
-            ui_type,
             has_changed: true,
-        })
+        }
     }
 }
 
