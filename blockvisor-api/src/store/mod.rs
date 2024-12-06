@@ -54,9 +54,9 @@ pub enum Error {
     SerializeBody(serde_json::Error),
     /// Failed to serialize ManifestHeader: {0}
     SerializeHeader(serde_json::Error),
-    /// Invalid characters found in tag: {0}
+    /// StoreId is not lower-kebab-case: {0}
     StoreIdChars(String),
-    /// Store ID length `{0}` must be at least 10 characters.
+    /// StoreId length `{0}` must be at least 10 characters.
     StoreIdLen(usize),
 }
 

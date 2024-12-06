@@ -256,8 +256,8 @@ async fn add_image(
             let keys = pointer
                 .new_archive_keys
                 .into_iter()
-                .map(ImagePropertyKey)
-                .collect::<HashSet<_>>();
+                .map(ImagePropertyKey::new)
+                .collect::<Result<HashSet<_>, _>>()?;
             let ids = keys
                 .iter()
                 .map(|key| {

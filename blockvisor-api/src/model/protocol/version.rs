@@ -43,7 +43,7 @@ pub enum Error {
     ByKey(VersionKey, diesel::result::Error),
     /// Failed to parse VersionKey `{0}` into 2 parts delimited by `/`.
     KeyParts(String),
-    /// Invalid characters found in `version_key.protocol_key`: {0}
+    /// Field `version_key.protocol_key` is not lower-kebab-case: {0}
     ProtocolKeyChars(String),
     /// Protocol key must be at least 3 characters: {0}
     ProtocolKeyLen(String),
@@ -51,7 +51,7 @@ pub enum Error {
     Update(VersionId, diesel::result::Error),
     /// Variant key must be at least 3 characters: {0}
     VariantKeyLen(String),
-    /// Invalid characters found in `version_key.variant_key`: {0}
+    /// Field `version_key.variant_key` is not lower-kebab-case: {0}
     VariantKeyChars(String),
 }
 

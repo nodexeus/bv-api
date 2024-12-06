@@ -29,7 +29,7 @@ pub enum Error {
     ParseUrl(String, url::ParseError),
     /// Failed to parse Version `{0}`: {1}
     ParseVersion(String, semver::Error),
-    /// Invalid characters found in tag: {0}
+    /// Tag is not lower-kebab-case: {0}
     TagChars(String),
     /// Tag must be at least 3 characters: {0}
     TagLen(String),
