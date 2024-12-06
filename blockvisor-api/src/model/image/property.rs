@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use derive_more::{Deref, Display, From};
+use derive_more::{Deref, Display, From, Into};
 use diesel::prelude::*;
 use diesel::result::Error::NotFound;
 use diesel_async::RunQueryDsl;
@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::database::Conn;
 use crate::grpc::{api, common, Status};
 use crate::model::schema::{image_properties, sql_types};
+use crate::util::LOWER_KEBAB_CASE;
 
 use super::ImageId;
 
@@ -29,9 +30,17 @@ pub enum Error {
     /// Failed to find image properties for image ids `{0:?}`: {1}
     ByImageIds(HashSet<ImageId>, diesel::result::Error),
     /// Multiple defaults set for image property key group `{0}`.
-    GroupMultiple(String),
+    GroupMultipleDefaults(ImagePropertyGroup),
     /// No default set for image property key group `{0}`.
-    GroupNone(String),
+    GroupNoDefault(ImagePropertyGroup),
+    /// ImagePropertyGroup is not lower-kebab-case: {0}
+    PropertyGroupChars(String),
+    /// ImagePropertyGroup must be at least 3 characters: {0}
+    PropertyGroupLen(String),
+    /// ImagePropertyKey is not lower-kebab-case: {0}
+    PropertyKeyChars(String),
+    /// ImagePropertyKey must be at least 3 characters: {0}
+    PropertyKeyLen(String),
     /// Unknown UiType.
     UnknownUiType,
 }
@@ -41,7 +50,9 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             ById(_, NotFound) => Status::not_found("Not found."),
-            GroupMultiple(_) | GroupNone(_) => Status::failed_precondition("is_group_default"),
+            GroupMultipleDefaults(_) | GroupNoDefault(_) => {
+                Status::failed_precondition("is_group_default")
+            }
             UnknownUiType => Status::invalid_argument("ui_type"),
             _ => Status::internal("Internal error."),
         }
@@ -51,9 +62,37 @@ impl From<Error> for Status {
 #[derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, DieselNewType, Deref, From)]
 pub struct ImagePropertyId(Uuid);
 
-#[derive(Clone, derive_more::Debug, Display, Hash, PartialEq, Eq, DieselNewType, Deref, From)]
+#[derive(Clone, derive_more::Debug, Display, Hash, PartialEq, Eq, DieselNewType, Deref, Into)]
 #[debug("{_0}")]
-pub struct ImagePropertyKey(pub String);
+pub struct ImagePropertyKey(String);
+
+impl ImagePropertyKey {
+    pub fn new(key: String) -> Result<Self, Error> {
+        if key.len() < 3 {
+            Err(Error::PropertyKeyLen(key))
+        } else if !key.chars().all(|c| LOWER_KEBAB_CASE.contains(c)) {
+            Err(Error::PropertyKeyChars(key))
+        } else {
+            Ok(ImagePropertyKey(key))
+        }
+    }
+}
+
+#[derive(Clone, derive_more::Debug, Display, Hash, PartialEq, Eq, DieselNewType, Deref, Into)]
+#[debug("{_0}")]
+pub struct ImagePropertyGroup(String);
+
+impl ImagePropertyGroup {
+    pub fn new(key: String) -> Result<Self, Error> {
+        if key.len() < 3 {
+            Err(Error::PropertyGroupLen(key))
+        } else if !key.chars().all(|c| LOWER_KEBAB_CASE.contains(c)) {
+            Err(Error::PropertyGroupChars(key))
+        } else {
+            Ok(ImagePropertyGroup(key))
+        }
+    }
+}
 
 #[derive(Clone, Debug, Queryable)]
 #[diesel(table_name = image_properties)]
@@ -61,7 +100,7 @@ pub struct ImageProperty {
     pub id: ImagePropertyId,
     pub image_id: ImageId,
     pub key: ImagePropertyKey,
-    pub key_group: Option<String>,
+    pub key_group: Option<ImagePropertyGroup>,
     pub is_group_default: Option<bool>,
     pub new_archive: bool,
     pub default_value: String,
@@ -118,8 +157,8 @@ impl From<ImageProperty> for api::ImageProperty {
         api::ImageProperty {
             image_property_id: property.id.to_string(),
             image_id: property.image_id.to_string(),
-            key: property.key.0,
-            key_group: property.key_group,
+            key: property.key.into(),
+            key_group: property.key_group.map(Into::into),
             is_group_default: property.is_group_default,
             new_archive: property.new_archive,
             default_value: property.default_value,
@@ -138,7 +177,7 @@ impl From<ImageProperty> for api::ImageProperty {
 pub struct NewProperty {
     pub image_id: ImageId,
     pub key: ImagePropertyKey,
-    pub key_group: Option<String>,
+    pub key_group: Option<ImagePropertyGroup>,
     pub is_group_default: Option<bool>,
     pub new_archive: bool,
     pub default_value: String,
@@ -173,8 +212,11 @@ impl NewProperty {
 
         Ok(NewProperty {
             image_id,
-            key: ImagePropertyKey(property.key),
-            key_group: property.key_group,
+            key: ImagePropertyKey::new(property.key)?,
+            key_group: property
+                .key_group
+                .map(ImagePropertyGroup::new)
+                .transpose()?,
             is_group_default: property.is_group_default,
             new_archive: property.new_archive,
             default_value: property.default_value,
@@ -197,14 +239,14 @@ impl NewProperty {
             if let Some(group) = &property.key_group {
                 groups.insert(group.clone());
                 if property.is_group_default.unwrap_or(false) && defaults.insert(group.clone()) {
-                    return Err(Error::GroupMultiple(group.clone()));
+                    return Err(Error::GroupMultipleDefaults(group.clone()));
                 }
             }
         }
 
         for group in groups {
             if !defaults.contains(&group) {
-                return Err(Error::GroupNone(group));
+                return Err(Error::GroupNoDefault(group));
             }
         }
 
@@ -242,13 +284,15 @@ impl From<ImagePropertyValue> for common::ImagePropertyValue {
     }
 }
 
-impl From<common::ImagePropertyValue> for ImagePropertyValue {
-    fn from(value: common::ImagePropertyValue) -> Self {
-        ImagePropertyValue {
-            key: ImagePropertyKey(value.key),
+impl TryFrom<common::ImagePropertyValue> for ImagePropertyValue {
+    type Error = Error;
+
+    fn try_from(value: common::ImagePropertyValue) -> Result<Self, Self::Error> {
+        Ok(ImagePropertyValue {
+            key: ImagePropertyKey::new(value.key)?,
             value: value.value,
             has_changed: true,
-        }
+        })
     }
 }
 

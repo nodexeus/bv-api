@@ -345,7 +345,11 @@ pub async fn create(
     let version =
         ProtocolVersion::by_id(image.protocol_version_id, Some(org_id), &authz, &mut write).await?;
 
-    let new_values = req.new_values.into_iter().map(From::from).collect();
+    let new_values = req
+        .new_values
+        .into_iter()
+        .map(TryFrom::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
     let add_rules = req
         .add_rules
         .into_iter()

@@ -29,7 +29,7 @@ use crate::model::schema::{configs, sql_types};
 use crate::store::StoreId;
 use crate::util::HashVec;
 
-use super::property::ImagePropertyValue;
+use super::property::{ImagePropertyGroup, ImagePropertyValue};
 use super::rule::{FirewallAction, FirewallRule};
 use super::{Archive, ArchiveId, ImageId, ImageRule};
 
@@ -200,8 +200,8 @@ impl NodeConfig {
         conn: &mut Conn<'_>,
     ) -> Result<Self, Error> {
         let mut values: HashMap<ImagePropertyKey, ImagePropertyValue> = HashMap::new();
-        let mut key_group: HashMap<ImagePropertyKey, String> = HashMap::new();
-        let mut group_keys: HashMap<String, Vec<ImagePropertyKey>> = HashMap::new();
+        let mut key_group: HashMap<ImagePropertyKey, ImagePropertyGroup> = HashMap::new();
+        let mut group_keys: HashMap<ImagePropertyGroup, Vec<ImagePropertyKey>> = HashMap::new();
 
         let properties = ImageProperty::by_image_id(image.id, conn).await?;
         for property in properties {
@@ -264,8 +264,8 @@ impl NodeConfig {
         });
 
         let mut new_values: HashMap<ImagePropertyKey, ImagePropertyValue> = HashMap::new();
-        let mut key_group: HashMap<ImagePropertyKey, String> = HashMap::new();
-        let mut group_keys: HashMap<String, Vec<ImagePropertyKey>> = HashMap::new();
+        let mut key_group: HashMap<ImagePropertyKey, ImagePropertyGroup> = HashMap::new();
+        let mut group_keys: HashMap<ImagePropertyGroup, Vec<ImagePropertyKey>> = HashMap::new();
 
         let new_properties = ImageProperty::by_image_id(image.id, conn).await?;
         for property in new_properties {
@@ -555,7 +555,11 @@ impl TryFrom<common::ImageConfig> for ImageConfig {
             image_uri: config.image_uri,
             archive_id: config.archive_id.parse().map_err(Error::ParseArchiveId)?,
             store_id: config.store_id.into(),
-            values: config.values.into_iter().map(Into::into).collect(),
+            values: config
+                .values
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
         })
     }
 }
