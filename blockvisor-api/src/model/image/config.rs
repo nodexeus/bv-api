@@ -1,5 +1,5 @@
 use std::cmp::max;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr, IntoIterator};
@@ -199,13 +199,35 @@ impl NodeConfig {
         add_rules: Vec<FirewallRule>,
         conn: &mut Conn<'_>,
     ) -> Result<Self, Error> {
-        let mut values = ImageProperty::by_image_id(image.id, conn)
-            .await?
-            .into_iter()
-            .to_map_keep_last(|property| {
-                (property.key.clone(), ImagePropertyValue::from(property))
-            });
+        let mut values: HashMap<ImagePropertyKey, ImagePropertyValue> = HashMap::new();
+        let mut key_group: HashMap<ImagePropertyKey, String> = HashMap::new();
+        let mut group_keys: HashMap<String, Vec<ImagePropertyKey>> = HashMap::new();
+
+        let properties = ImageProperty::by_image_id(image.id, conn).await?;
+        for property in properties {
+            if let Some(group) = &property.key_group {
+                key_group.insert(property.key.clone(), group.clone());
+                group_keys
+                    .entry(group.clone())
+                    .or_default()
+                    .push(property.key.clone());
+
+                if property.is_group_default == Some(true) {
+                    values.insert(property.key.clone(), ImagePropertyValue::from(property));
+                }
+            } else {
+                values.insert(property.key.clone(), ImagePropertyValue::from(property));
+            }
+        }
+
         for value in new_values {
+            if let Some(group) = key_group.get(&value.key) {
+                if let Some(keys) = group_keys.get(group) {
+                    for key in keys {
+                        values.remove(key);
+                    }
+                }
+            }
             values.insert(value.key.clone(), value);
         }
         let values = values.into_values().collect();
@@ -228,24 +250,48 @@ impl NodeConfig {
         org_id: Option<OrgId>,
         conn: &mut Conn<'_>,
     ) -> Result<Self, Error> {
-        let old_values = ImageProperty::by_image_id(self.image.image_id, conn)
-            .await?
+        let old_properties = ImageProperty::by_image_id(self.image.image_id, conn).await?;
+        let old_defaults = old_properties
             .into_iter()
             .to_map_keep_last(|property| (property.key, property.default_value));
+
         let changed_values = self.image.values.into_iter().filter(|property| {
-            if let Some(default) = old_values.get(&property.key) {
+            if let Some(default) = old_defaults.get(&property.key) {
                 property.value != *default
             } else {
                 true
             }
         });
-        let mut new_values = ImageProperty::by_image_id(image.id, conn)
-            .await?
-            .into_iter()
-            .to_map_keep_last(|property| {
-                (property.key.clone(), ImagePropertyValue::from(property))
-            });
+
+        let mut new_values: HashMap<ImagePropertyKey, ImagePropertyValue> = HashMap::new();
+        let mut key_group: HashMap<ImagePropertyKey, String> = HashMap::new();
+        let mut group_keys: HashMap<String, Vec<ImagePropertyKey>> = HashMap::new();
+
+        let new_properties = ImageProperty::by_image_id(image.id, conn).await?;
+        for property in new_properties {
+            if let Some(group) = &property.key_group {
+                key_group.insert(property.key.clone(), group.clone());
+                group_keys
+                    .entry(group.clone())
+                    .or_default()
+                    .push(property.key.clone());
+
+                if property.is_group_default == Some(true) {
+                    new_values.insert(property.key.clone(), ImagePropertyValue::from(property));
+                }
+            } else {
+                new_values.insert(property.key.clone(), ImagePropertyValue::from(property));
+            }
+        }
+
         for value in changed_values {
+            if let Some(group) = key_group.get(&value.key) {
+                if let Some(keys) = group_keys.get(group) {
+                    for key in keys {
+                        new_values.remove(key);
+                    }
+                }
+            }
             new_values.insert(value.key.clone(), value);
         }
         let new_values = new_values.into_values().collect();
