@@ -28,6 +28,10 @@ pub enum Error {
     ByImageId(ImageId, diesel::result::Error),
     /// Failed to find image properties for image ids `{0:?}`: {1}
     ByImageIds(HashSet<ImageId>, diesel::result::Error),
+    /// Multiple defaults set for image property key group `{0}`.
+    GroupMultiple(String),
+    /// No default set for image property key group `{0}`.
+    GroupNone(String),
     /// Unknown UiType.
     UnknownUiType,
 }
@@ -37,6 +41,7 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             ById(_, NotFound) => Status::not_found("Not found."),
+            GroupMultiple(_) | GroupNone(_) => Status::failed_precondition("is_group_default"),
             UnknownUiType => Status::invalid_argument("ui_type"),
             _ => Status::internal("Internal error."),
         }
@@ -186,6 +191,23 @@ impl NewProperty {
         properties: Vec<Self>,
         conn: &mut Conn<'_>,
     ) -> Result<Vec<ImageProperty>, Error> {
+        let mut groups = HashSet::new();
+        let mut defaults = HashSet::new();
+        for property in &properties {
+            if let Some(group) = &property.key_group {
+                groups.insert(group.clone());
+                if property.is_group_default.unwrap_or(false) && defaults.insert(group.clone()) {
+                    return Err(Error::GroupMultiple(group.clone()));
+                }
+            }
+        }
+
+        for group in groups {
+            if !defaults.contains(&group) {
+                return Err(Error::GroupNone(group));
+            }
+        }
+
         diesel::insert_into(image_properties::table)
             .values(properties)
             .get_results(conn)
