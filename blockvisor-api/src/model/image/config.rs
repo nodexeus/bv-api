@@ -1,5 +1,5 @@
 use std::cmp::max;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr, IntoIterator};
@@ -29,7 +29,7 @@ use crate::model::schema::{configs, sql_types};
 use crate::store::StoreId;
 use crate::util::HashVec;
 
-use super::property::{ImagePropertyGroup, ImagePropertyValue};
+use super::property::{ImagePropertyValue, PropertyMap};
 use super::rule::{FirewallAction, FirewallRule};
 use super::{Archive, ArchiveId, ImageId, ImageRule};
 
@@ -61,6 +61,10 @@ pub enum Error {
     Property(#[from] super::property::Error),
     /// Image config firewall rule error: {0}
     Rule(#[from] super::rule::Error),
+    /// Update Image Config missing key: {0}
+    UpdateKeyMissing(ImagePropertyKey),
+    /// Update Image Config key is not dynamic: {0}
+    UpdateKeyNotDynamic(ImagePropertyKey),
     /// Invalid VM cpu_count: {0}
     VmCpu(std::num::TryFromIntError),
     /// Invalid VM disk bytes: {0}
@@ -74,10 +78,12 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             ById(_, NotFound) => Status::not_found("Not found."),
-            // safety: `key` is an input from the client
-            ChangeProperty(key) => Status::not_found(format!("property.key: {key}")),
+            ChangeProperty(key) | UpdateKeyMissing(key) => {
+                Status::not_found(format!("property.key: {key}"))
+            }
             ParseArchiveId(_) => Status::invalid_argument("archive_id"),
             ParseImageId(_) => Status::invalid_argument("image_id"),
+            UpdateKeyNotDynamic(key) => Status::failed_precondition(format!("property.key: {key}")),
             ById(_, _)
             | ByIds(_, _)
             | Create(_)
@@ -199,38 +205,8 @@ impl NodeConfig {
         add_rules: Vec<FirewallRule>,
         conn: &mut Conn<'_>,
     ) -> Result<Self, Error> {
-        let mut values: HashMap<ImagePropertyKey, ImagePropertyValue> = HashMap::new();
-        let mut key_group: HashMap<ImagePropertyKey, ImagePropertyGroup> = HashMap::new();
-        let mut group_keys: HashMap<ImagePropertyGroup, Vec<ImagePropertyKey>> = HashMap::new();
-
         let properties = ImageProperty::by_image_id(image.id, conn).await?;
-        for property in properties {
-            if let Some(group) = &property.key_group {
-                key_group.insert(property.key.clone(), group.clone());
-                group_keys
-                    .entry(group.clone())
-                    .or_default()
-                    .push(property.key.clone());
-
-                if property.is_group_default == Some(true) {
-                    values.insert(property.key.clone(), ImagePropertyValue::from(property));
-                }
-            } else {
-                values.insert(property.key.clone(), ImagePropertyValue::from(property));
-            }
-        }
-
-        for value in new_values {
-            if let Some(group) = key_group.get(&value.key) {
-                if let Some(keys) = group_keys.get(group) {
-                    for key in keys {
-                        values.remove(key);
-                    }
-                }
-            }
-            values.insert(value.key.clone(), value);
-        }
-        let values = values.into_values().collect();
+        let values = PropertyMap::new(properties).apply_overrides(new_values);
 
         let mut rules = ImageRule::by_image_id(image.id, conn)
             .await?
@@ -254,47 +230,20 @@ impl NodeConfig {
         let old_defaults = old_properties
             .into_iter()
             .to_map_keep_last(|property| (property.key, property.default_value));
-
-        let changed_values = self.image.values.into_iter().filter(|property| {
-            if let Some(default) = old_defaults.get(&property.key) {
-                property.value != *default
-            } else {
-                true
-            }
-        });
-
-        let mut new_values: HashMap<ImagePropertyKey, ImagePropertyValue> = HashMap::new();
-        let mut key_group: HashMap<ImagePropertyKey, ImagePropertyGroup> = HashMap::new();
-        let mut group_keys: HashMap<ImagePropertyGroup, Vec<ImagePropertyKey>> = HashMap::new();
-
+        let changed_values = self
+            .image
+            .values
+            .into_iter()
+            .filter(|property| {
+                if let Some(default) = old_defaults.get(&property.key) {
+                    property.value != *default
+                } else {
+                    true
+                }
+            })
+            .collect();
         let new_properties = ImageProperty::by_image_id(image.id, conn).await?;
-        for property in new_properties {
-            if let Some(group) = &property.key_group {
-                key_group.insert(property.key.clone(), group.clone());
-                group_keys
-                    .entry(group.clone())
-                    .or_default()
-                    .push(property.key.clone());
-
-                if property.is_group_default == Some(true) {
-                    new_values.insert(property.key.clone(), ImagePropertyValue::from(property));
-                }
-            } else {
-                new_values.insert(property.key.clone(), ImagePropertyValue::from(property));
-            }
-        }
-
-        for value in changed_values {
-            if let Some(group) = key_group.get(&value.key) {
-                if let Some(keys) = group_keys.get(group) {
-                    for key in keys {
-                        new_values.remove(key);
-                    }
-                }
-            }
-            new_values.insert(value.key.clone(), value);
-        }
-        let new_values = new_values.into_values().collect();
+        let new_values = PropertyMap::new(new_properties).apply_overrides(changed_values);
 
         let old_rules = ImageRule::by_image_id(self.image.image_id, conn)
             .await?
@@ -386,6 +335,45 @@ impl NodeConfig {
                 default_in: image.default_firewall_in,
                 default_out: image.default_firewall_out,
                 rules,
+            },
+        })
+    }
+
+    pub async fn update(
+        self,
+        new_values: Vec<ImagePropertyValue>,
+        new_firewall: Option<FirewallConfig>,
+        conn: &mut Conn<'_>,
+    ) -> Result<Self, Error> {
+        let properties = ImageProperty::by_image_id(self.image.image_id, conn).await?;
+        let property_map = PropertyMap::new(properties.clone());
+        let key_to_prop = properties
+            .into_iter()
+            .to_map_keep_last(|prop| (prop.key.clone(), prop));
+
+        for value in &new_values {
+            let property = key_to_prop
+                .get(&value.key)
+                .ok_or_else(|| Error::UpdateKeyMissing(value.key.clone()))?;
+            if !property.dynamic_value {
+                return Err(Error::UpdateKeyNotDynamic(value.key.clone()));
+            }
+        }
+        let overrides = self.image.values.into_iter().chain(new_values).collect();
+
+        Ok(NodeConfig {
+            vm: self.vm,
+            image: ImageConfig {
+                image_id: self.image.image_id,
+                image_uri: self.image.image_uri,
+                archive_id: self.image.archive_id,
+                store_id: self.image.store_id,
+                values: property_map.apply_overrides(overrides),
+            },
+            firewall: if let Some(config) = new_firewall {
+                config
+            } else {
+                self.firewall
             },
         })
     }

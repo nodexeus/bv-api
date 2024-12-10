@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use derive_more::{Deref, Display, From, Into};
 use diesel::prelude::*;
@@ -327,5 +327,60 @@ impl TryFrom<common::UiType> for UiType {
             common::UiType::Password => Ok(UiType::Password),
             common::UiType::Enum => Ok(UiType::Enum),
         }
+    }
+}
+
+pub struct PropertyMap {
+    pub key_to_value: HashMap<ImagePropertyKey, ImagePropertyValue>,
+    pub key_to_group: HashMap<ImagePropertyKey, ImagePropertyGroup>,
+    pub group_to_keys: HashMap<ImagePropertyGroup, Vec<ImagePropertyKey>>,
+}
+
+impl PropertyMap {
+    pub fn new(properties: Vec<ImageProperty>) -> Self {
+        let mut key_to_value = HashMap::new();
+        let mut key_to_group = HashMap::new();
+        let mut group_to_keys = HashMap::<ImagePropertyGroup, Vec<ImagePropertyKey>>::new();
+
+        for property in properties {
+            if let Some(group) = &property.key_group {
+                key_to_group.insert(property.key.clone(), group.clone());
+                group_to_keys
+                    .entry(group.clone())
+                    .or_default()
+                    .push(property.key.clone());
+
+                if property.is_group_default == Some(true) {
+                    key_to_value.insert(property.key.clone(), ImagePropertyValue::from(property));
+                }
+            } else {
+                key_to_value.insert(property.key.clone(), ImagePropertyValue::from(property));
+            }
+        }
+
+        PropertyMap {
+            key_to_value,
+            key_to_group,
+            group_to_keys,
+        }
+    }
+
+    pub fn apply_overrides(
+        mut self,
+        overrides: Vec<ImagePropertyValue>,
+    ) -> Vec<ImagePropertyValue> {
+        for value in overrides {
+            if let Some(group) = self.key_to_group.get(&value.key) {
+                if let Some(keys) = self.group_to_keys.get(group) {
+                    for key in keys {
+                        self.key_to_value.remove(key);
+                    }
+                }
+            }
+
+            self.key_to_value.insert(value.key.clone(), value);
+        }
+
+        self.key_to_value.into_values().collect()
     }
 }
