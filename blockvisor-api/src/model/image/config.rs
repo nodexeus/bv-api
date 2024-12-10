@@ -573,8 +573,8 @@ pub struct FirewallConfig {
 impl From<FirewallConfig> for common::FirewallConfig {
     fn from(config: FirewallConfig) -> Self {
         common::FirewallConfig {
-            default_in: common::FirewallAction::from(config.default_in) as i32,
-            default_out: common::FirewallAction::from(config.default_out) as i32,
+            default_in: common::FirewallAction::from(config.default_in).into(),
+            default_out: common::FirewallAction::from(config.default_out).into(),
             rules: config.rules.into_iter().map(Into::into).collect(),
         }
     }

@@ -238,7 +238,7 @@ impl NewProperty {
         for property in &properties {
             if let Some(group) = &property.key_group {
                 groups.insert(group.clone());
-                if property.is_group_default.unwrap_or(false) && defaults.insert(group.clone()) {
+                if property.is_group_default.unwrap_or(false) && !defaults.insert(group.clone()) {
                     return Err(Error::GroupMultipleDefaults(group.clone()));
                 }
             }
