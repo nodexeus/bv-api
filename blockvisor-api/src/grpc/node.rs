@@ -15,7 +15,7 @@ use crate::model::image::config::{Config, ConfigType, NewConfig, NodeConfig};
 use crate::model::image::ConfigId;
 use crate::model::node::{
     NewNode, NextState, Node, NodeCount, NodeFilter, NodeReport, NodeScheduler, NodeSearch,
-    NodeSort, NodeState, NodeStatus, UpdateNode, UpdateNodeState, UpgradeNode,
+    NodeSort, NodeState, NodeStatus, UpdateNode, UpdateNodeConfig, UpdateNodeState, UpgradeNode,
 };
 use crate::model::protocol::ProtocolVersion;
 use crate::model::{CommandType, Host, Image, Org, Protocol, Region};
@@ -586,9 +586,27 @@ pub async fn update_config(
             .map(common::BillingAmount::into_amount)
             .transpose()?,
     };
-    let updated = update.apply(node_id, &authz, &mut write).await?;
+    update.apply(node_id, &authz, &mut write).await?;
 
-    let node_cmd = NewCommand::node(&updated, CommandType::NodeUpdate)?
+    if !req.new_values.is_empty() || req.new_firewall.is_some() {
+        let update = UpdateNodeConfig {
+            new_values: req
+                .new_values
+                .clone()
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<Vec<_>, _>>()?,
+            new_firewall: req
+                .new_firewall
+                .clone()
+                .map(TryInto::try_into)
+                .transpose()?,
+        };
+        update.apply(node_id, &authz, &mut write).await?;
+    }
+
+    let node = Node::by_id(node_id, &mut write).await?;
+    let node_cmd = NewCommand::node(&node, CommandType::NodeUpdate)?
         .create(&mut write)
         .await?;
     let api_update = api::NodeUpdate {
@@ -598,13 +616,13 @@ pub async fn update_config(
         new_org_name: None,
         new_display_name: req.new_display_name,
         new_note: req.new_note,
-        new_values: vec![],
-        new_firewall: None,
+        new_values: req.new_values,
+        new_firewall: req.new_firewall,
     };
     let update_cmd = node_update(&node_cmd, api_update, &mut write).await?;
     write.mqtt(update_cmd);
 
-    let api_node = api::Node::from_model(updated, &authz, &mut write).await?;
+    let api_node = api::Node::from_model(node, &authz, &mut write).await?;
     let updated_by = common::Resource::from(&authz);
     let updated_msg = api::NodeMessage::updated(api_node, updated_by);
     write.mqtt(updated_msg);

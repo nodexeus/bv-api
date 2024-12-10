@@ -40,7 +40,8 @@ use crate::util::sql::{self, IpNetwork, Tags, Version};
 use crate::util::{SearchOperator, SortOrder};
 
 use super::host::{Host, HostRequirements};
-use super::image::config::{ConfigType, NewConfig};
+use super::image::config::{ConfigType, FirewallConfig, NewConfig};
+use super::image::property::ImagePropertyValue;
 use super::image::{Config, ConfigId, Image, ImageId, NodeConfig};
 use super::protocol::version::{ProtocolVersion, VersionId};
 use super::protocol::{Protocol, ProtocolId};
@@ -509,29 +510,29 @@ impl NewNode {
                 .await?;
 
         /*
-        let secrets = if let Some(old_id) = self.old_node_id {
+            let secrets = if let Some(old_id) = self.old_node_id {
             let prefix = format!("node/{old_id}/secret");
             let names = write.ctx.vault.read().await.list_path(&prefix).await?;
 
             if let Some(names) = names {
-                let mut secrets = HashMap::with_capacity(names.len());
-                for name in names {
-                    let path = format!("{prefix}/{name}");
-                    let result = write.ctx.vault.read().await.get_bytes(&path).await;
-                    let _ = match result {
-                        Ok(data) => secrets.insert(name.clone(), data),
-                        Err(crate::store::vault::Error::PathNotFound) => None,
-                        Err(err) => return Err(err.into()),
-                    };
-                }
-                Some(secrets)
-            } else {
-                None
-            }
+            let mut secrets = HashMap::with_capacity(names.len());
+            for name in names {
+            let path = format!("{prefix}/{name}");
+            let result = write.ctx.vault.read().await.get_bytes(&path).await;
+            let _ = match result {
+            Ok(data) => secrets.insert(name.clone(), data),
+            Err(crate::store::vault::Error::PathNotFound) => None,
+            Err(err) => return Err(err.into()),
+        };
+        }
+            Some(secrets)
+        } else {
+            None
+        }
         } else {
             None
         };
-        */
+             */
         let secrets = None;
 
         let mut created = Vec::new();
@@ -676,14 +677,14 @@ impl NewNode {
                     Host::add_node(&node, write).await?;
 
                     /*
-                    if let Some(secrets) = secrets {
+                        if let Some(secrets) = secrets {
                         for (name, data) in secrets {
-                            let path = format!("node/{}/secret/{name}", node.id);
-                            let _version =
-                                write.ctx.vault.read().await.set_bytes(&path, data).await?;
-                        }
+                        let path = format!("node/{}/secret/{name}", node.id);
+                        let _version =
+                        write.ctx.vault.read().await.set_bytes(&path, data).await?;
                     }
-                    */
+                    }
+                         */
 
                     return Ok(node);
                 }
@@ -809,6 +810,46 @@ impl<'u> UpdateNode<'u> {
 
         diesel::update(nodes::table.find(id))
             .set((self, nodes::updated_at.eq(Utc::now())))
+            .get_result(conn)
+            .await
+            .map_err(Error::UpdateConfig)
+    }
+}
+
+pub struct UpdateNodeConfig {
+    pub new_values: Vec<ImagePropertyValue>,
+    pub new_firewall: Option<FirewallConfig>,
+}
+
+impl UpdateNodeConfig {
+    pub async fn apply(
+        self,
+        id: NodeId,
+        authz: &AuthZ,
+        conn: &mut Conn<'_>,
+    ) -> Result<Node, Error> {
+        let node = Node::by_id(id, conn).await?;
+        let config = Config::by_id(node.config_id, conn).await?;
+        let image_id = config.image_id;
+        let archive_id = config.archive_id;
+
+        let node_config = config.node_config()?;
+        let updated_config = node_config
+            .update(self.new_values, self.new_firewall, conn)
+            .await?;
+        let new_config = NewConfig {
+            image_id,
+            archive_id,
+            config_type: ConfigType::Node,
+            config: updated_config.into(),
+        };
+        let config = new_config.create(authz, conn).await?;
+
+        diesel::update(nodes::table.find(id))
+            .set((
+                nodes::config_id.eq(config.id),
+                nodes::updated_at.eq(Utc::now()),
+            ))
             .get_result(conn)
             .await
             .map_err(Error::UpdateConfig)
