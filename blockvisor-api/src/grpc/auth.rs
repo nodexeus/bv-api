@@ -6,12 +6,11 @@ use tracing::{error, warn};
 
 use crate::auth::claims::{Claims, Expirable, Granted};
 use crate::auth::rbac::{AuthAdminPerm, AuthPerm, GrpcRole, Perm};
-use crate::auth::resource::{Resource, ResourceId};
 use crate::auth::token::refresh::Refresh;
 use crate::auth::token::RequestToken;
 use crate::auth::Authorize;
 use crate::database::{Transaction, WriteConn};
-use crate::model::{Host, Node, Org, User};
+use crate::model::User;
 
 use super::api::auth_service_server::AuthService;
 use super::{api, Grpc, Metadata, Status};
@@ -52,6 +51,8 @@ pub enum Error {
     Refresh(#[from] crate::auth::token::refresh::Error),
     /// Refresh token doesn't match JWT Resource.
     RefreshResource,
+    /// Auth resource error: {0}
+    Resource(#[from] crate::auth::resource::Error),
     /// User auth error: {0}
     User(#[from] crate::model::user::Error),
 }
@@ -76,6 +77,7 @@ impl From<Error> for Status {
             Org(err) => err.into(),
             Rbac(err) => err.into(),
             Refresh(err) => err.into(),
+            Resource(err) => err.into(),
             User(err) => err.into(),
         }
     }
@@ -209,16 +211,9 @@ pub async fn refresh(
         fallback.ok_or(Error::NoRefresh)?
     };
 
-    // Verify that the resource still exists.
-    let resource = claims.resource();
-    let resource_id: ResourceId = match resource {
-        Resource::User(id) => User::by_id(id, &mut write).await.map(|_| id.into())?,
-        Resource::Org(id) => Org::by_id(id, &mut write).await.map(|_| id.into())?,
-        Resource::Host(id) => Host::org_id(id, &mut write).await.map(|_| id.into())?,
-        Resource::Node(id) => Node::org_id(id, &mut write).await.map(|_| id.into())?,
-    };
-
     // Check that the claims and the refresh token refer to the same user
+    let resource = claims.resource();
+    let resource_id = resource.id_exists(&mut write).await?;
     if resource_id != refresh.resource().id() {
         return Err(Error::RefreshResource);
     }

@@ -218,7 +218,7 @@ impl Claims {
         node_id: NodeId,
         conn: &mut Conn<'_>,
     ) -> Result<Option<Granted>, Error> {
-        let org_id = Node::org_id(node_id, conn).await?;
+        let org_id = Node::deleted_org_id(node_id, conn).await?;
 
         match self.resource() {
             Resource::User(id) => Ok(Some(Granted(
@@ -226,7 +226,7 @@ impl Claims {
             ))),
             Resource::Org(id) if id == org_id => Ok(None),
             resource @ Resource::Host(id) => {
-                if id == Node::host_id(node_id, conn).await? {
+                if id == Node::deleted_host_id(node_id, conn).await? {
                     Ok(None)
                 } else {
                     Err(Error::EnsureNode(resource, node_id))
