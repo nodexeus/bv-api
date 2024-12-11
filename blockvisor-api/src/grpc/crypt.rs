@@ -71,6 +71,7 @@ async fn get_secret(
     let resource = req.resource.ok_or(Error::MissingResource)?;
     let resource = Resource::try_from(&resource)?;
     let _authz = read.auth_for(&meta, CryptPerm::GetSecret, resource).await?;
+    let _id = resource.id_exists(&mut read).await?;
 
     let path = format!("{resource}/secret/{}", req.name);
     let data = read.ctx.vault.read().await.get_bytes(&path).await?;
@@ -88,6 +89,7 @@ async fn put_secret(
     let _authz = write
         .auth_for(&meta, CryptPerm::PutSecret, resource)
         .await?;
+    let _id = resource.id_exists(&mut write).await?;
 
     let path = format!("{resource}/secret/{}", req.name);
     let _version = write

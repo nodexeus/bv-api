@@ -70,6 +70,8 @@ pub enum Error {
     FindById(NodeId, diesel::result::Error),
     /// Failed to find nodes by ids `{0:?}`: {1}
     FindByIds(HashSet<NodeId>, diesel::result::Error),
+    /// Failed to find host id for possibly deleted node {0}: {1}
+    FindDeletedHostId(NodeId, diesel::result::Error),
     /// Failed to find org id for possibly deleted node {0}: {1}
     FindDeletedOrgId(NodeId, diesel::result::Error),
     /// Failed to find host id for node {0}: {1}
@@ -303,6 +305,15 @@ impl Node {
             .get_result(conn)
             .await
             .map_err(|err| Error::FindHostId(id, err))
+    }
+
+    pub async fn deleted_host_id(id: NodeId, conn: &mut Conn<'_>) -> Result<HostId, Error> {
+        nodes::table
+            .find(id)
+            .select(nodes::host_id)
+            .get_result(conn)
+            .await
+            .map_err(|err| Error::FindDeletedHostId(id, err))
     }
 
     pub async fn host_has_nodes(host_id: HostId, conn: &mut Conn<'_>) -> Result<bool, Error> {

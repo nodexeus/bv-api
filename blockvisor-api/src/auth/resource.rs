@@ -9,15 +9,25 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::database::Conn;
 use crate::grpc::{common, Status};
 use crate::model::schema::sql_types;
+use crate::model::{Host, Node, Org, User};
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
+    /// Resource host error: {0}
+    Host(#[from] crate::model::host::Error),
+    /// Resource node error: {0}
+    Node(#[from] crate::model::node::Error),
+    /// Resource org error: {0}
+    Org(#[from] crate::model::org::Error),
     /// Failed to parse ResourceId: {0}
     ParseResourceId(uuid::Error),
     /// Unknown resource type.
     UnknownResourceType,
+    /// Resource user error: {0}
+    User(#[from] crate::model::user::Error),
 }
 
 impl From<Error> for Status {
@@ -26,6 +36,10 @@ impl From<Error> for Status {
         match err {
             ParseResourceId(_) => Status::invalid_argument("resource_id"),
             UnknownResourceType => Status::invalid_argument("resource_type"),
+            Host(err) => err.into(),
+            Node(err) => err.into(),
+            Org(err) => err.into(),
+            User(err) => err.into(),
         }
     }
 }
@@ -70,6 +84,15 @@ impl Resource {
 
     pub fn node(self) -> Option<NodeId> {
         matches!(self, Resource::Node(_)).then_some(NodeId(*self.id()))
+    }
+
+    pub async fn id_exists(self, conn: &mut Conn<'_>) -> Result<ResourceId, Error> {
+        match self {
+            Resource::User(id) => Ok(User::by_id(id, conn).await.map(|_| id.into())?),
+            Resource::Org(id) => Ok(Org::by_id(id, conn).await.map(|_| id.into())?),
+            Resource::Host(id) => Ok(Host::org_id(id, conn).await.map(|_| id.into())?),
+            Resource::Node(id) => Ok(Node::org_id(id, conn).await.map(|_| id.into())?),
+        }
     }
 }
 
