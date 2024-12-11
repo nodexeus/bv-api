@@ -152,7 +152,7 @@ async fn update_a_node_config() {
 
     assert!(node.auto_upgrade);
     assert_eq!(node.note.unwrap(), "milk, eggs, bread and copious snacks");
-    assert_eq!(node.display_name.unwrap(), "<script>alert('XSS');</script>");
+    assert_eq!(node.display_name, "<script>alert('XSS');</script>");
     assert_eq!(
         node.tags,
         Tags(vec![Tag::new("updated-node".to_string()).unwrap()])

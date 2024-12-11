@@ -357,6 +357,8 @@ diesel::table! {
         add_cpu_cores -> Nullable<Int8>,
         add_memory_bytes -> Nullable<Int8>,
         add_disk_bytes -> Nullable<Int8>,
+        display_name -> Nullable<Text>,
+        display_group -> Nullable<Text>,
     }
 }
 
@@ -498,7 +500,7 @@ diesel::table! {
     nodes (id) {
         id -> Uuid,
         node_name -> Text,
-        display_name -> Nullable<Text>,
+        display_name -> Text,
         old_node_id -> Nullable<Uuid>,
         org_id -> Uuid,
         host_id -> Uuid,
