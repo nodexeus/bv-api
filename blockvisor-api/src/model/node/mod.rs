@@ -654,6 +654,7 @@ impl NewNode {
                 .values((
                     self,
                     nodes::node_name.eq(&name),
+                    nodes::display_name.eq(&name),
                     nodes::host_id.eq(host.id),
                     nodes::node_state.eq(NodeState::Starting),
                     nodes::ip_address.eq(&ip_address.ip),
