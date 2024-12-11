@@ -110,6 +110,8 @@ pub struct ImageProperty {
     pub add_cpu_cores: Option<i64>,
     pub add_memory_bytes: Option<i64>,
     pub add_disk_bytes: Option<i64>,
+    pub display_name: Option<String>,
+    pub display_group: Option<String>,
 }
 
 impl ImageProperty {
@@ -163,8 +165,10 @@ impl From<ImageProperty> for api::ImageProperty {
             new_archive: property.new_archive,
             default_value: property.default_value,
             dynamic_value: property.dynamic_value,
-            description: property.description,
             ui_type: common::UiType::from(property.ui_type).into(),
+            display_name: property.display_name,
+            display_group: property.display_group,
+            description: property.description,
             add_cpu_cores: property.add_cpu_cores,
             add_memory_bytes: property.add_memory_bytes,
             add_disk_bytes: property.add_disk_bytes,

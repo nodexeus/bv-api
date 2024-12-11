@@ -286,6 +286,8 @@ pub enum ExitCode {
     ServiceNotReady,
     ServiceBroken,
     NotSupported,
+    NodeUpgradeRollback,
+    NodeUpgradeFailure,
 }
 
 impl From<api::CommandExitCode> for Option<ExitCode> {
@@ -299,6 +301,8 @@ impl From<api::CommandExitCode> for Option<ExitCode> {
             api::CommandExitCode::ServiceNotReady => Some(ExitCode::ServiceNotReady),
             api::CommandExitCode::ServiceBroken => Some(ExitCode::ServiceBroken),
             api::CommandExitCode::NotSupported => Some(ExitCode::NotSupported),
+            api::CommandExitCode::NodeUpgradeRollback => Some(ExitCode::NodeUpgradeRollback),
+            api::CommandExitCode::NodeUpgradeFailure => Some(ExitCode::NodeUpgradeFailure),
         }
     }
 }
@@ -313,6 +317,8 @@ impl From<ExitCode> for api::CommandExitCode {
             ExitCode::ServiceNotReady => api::CommandExitCode::ServiceNotReady,
             ExitCode::ServiceBroken => api::CommandExitCode::ServiceBroken,
             ExitCode::NotSupported => api::CommandExitCode::NotSupported,
+            ExitCode::NodeUpgradeRollback => api::CommandExitCode::NodeUpgradeRollback,
+            ExitCode::NodeUpgradeFailure => api::CommandExitCode::NodeUpgradeFailure,
         }
     }
 }

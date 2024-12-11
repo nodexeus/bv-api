@@ -194,7 +194,7 @@ impl From<Error> for Status {
 pub struct Node {
     pub id: NodeId,
     pub node_name: String,
-    pub display_name: Option<String>,
+    pub display_name: String,
     pub old_node_id: Option<NodeId>,
     pub org_id: OrgId,
     pub host_id: HostId,
@@ -1143,9 +1143,7 @@ impl NodeSearch {
                     predicate = Box::new(predicate.or(sql::lower(nodes::node_name).like(name)));
                 }
                 if let Some(name) = self.display_name {
-                    predicate = Box::new(
-                        predicate.or(sql::lower(sql::coalesce(nodes::display_name, "")).like(name)),
-                    );
+                    predicate = Box::new(predicate.or(sql::lower(nodes::display_name).like(name)));
                 }
                 if let Some(name) = self.dns_name {
                     predicate = Box::new(predicate.or(sql::lower(nodes::dns_name).like(name)));
@@ -1165,10 +1163,7 @@ impl NodeSearch {
                     predicate = Box::new(predicate.and(sql::lower(nodes::node_name).like(name)));
                 }
                 if let Some(name) = self.display_name {
-                    predicate = Box::new(
-                        predicate
-                            .and(sql::lower(sql::coalesce(nodes::display_name, "")).like(name)),
-                    );
+                    predicate = Box::new(predicate.and(sql::lower(nodes::display_name).like(name)));
                 }
                 if let Some(name) = self.dns_name {
                     predicate = Box::new(predicate.and(sql::lower(nodes::dns_name).like(name)));
