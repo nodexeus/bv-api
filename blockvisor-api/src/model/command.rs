@@ -8,6 +8,7 @@ use diesel_async::RunQueryDsl;
 use diesel_derive_enum::DbEnum;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
+use prost::Message;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -122,6 +123,7 @@ pub struct Command {
     pub retry_hint_seconds: Option<i64>,
     pub exit_code: Option<ExitCode>,
     pub command_type: CommandType,
+    pub protobuf: Option<Vec<u8>>,
 }
 
 impl Command {
@@ -221,6 +223,7 @@ pub struct NewCommand {
     host_id: HostId,
     node_id: Option<NodeId>,
     command_type: CommandType,
+    protobuf: Option<Vec<u8>>,
 }
 
 impl NewCommand {
@@ -233,6 +236,7 @@ impl NewCommand {
             host_id,
             node_id: None,
             command_type,
+            protobuf: None,
         })
     }
 
@@ -245,7 +249,17 @@ impl NewCommand {
             host_id: node.host_id,
             node_id: Some(node.id),
             command_type,
+            protobuf: None,
         })
+    }
+
+    #[must_use]
+    pub fn with_protobuf<M>(mut self, protobuf: &M) -> Self
+    where
+        M: Message + Send,
+    {
+        self.protobuf = Some(protobuf.encode_to_vec());
+        self
     }
 
     pub async fn create(self, conn: &mut Conn<'_>) -> Result<Command, Error> {

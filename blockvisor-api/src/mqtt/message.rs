@@ -345,6 +345,7 @@ mod tests {
             retry_hint_seconds: None,
             exit_code: None,
             command_type: CommandType::NodeDelete,
+            protobuf: None,
         };
 
         let command = node_delete(&command, &mut conn).await.unwrap();

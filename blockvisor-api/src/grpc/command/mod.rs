@@ -3,6 +3,7 @@ mod success;
 
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
+use prost::Message;
 use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::{error, warn};
@@ -44,8 +45,10 @@ pub enum Error {
     Node(#[from] crate::model::node::Error),
     /// Command node response error: {0}
     NodeResponse(Box<crate::grpc::node::Error>),
-    /// Unexpected NodeUpdate command serialization. This should not happen.
-    NodeUpdateCommand,
+    /// NodeUpdate command is missing expected protobuf bytes.
+    NodeUpdateMissingProtobuf,
+    /// Failed to decode NodeUpdate protobuf: {0}
+    NodeUpdateDecode(prost::DecodeError),
     /// Not a host command: {0}. This should not happen.
     NotHostCommand(CommandId),
     /// Host token required for updating public hosts.
@@ -81,9 +84,12 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Diesel(_) | GrpcHost(_) | NodeUpdateCommand | NotHostCommand(_) | NotNodeCommand(_) => {
-                Status::internal("Internal error.")
-            }
+            Diesel(_)
+            | GrpcHost(_)
+            | NodeUpdateMissingProtobuf
+            | NodeUpdateDecode(_)
+            | NotHostCommand(_)
+            | NotNodeCommand(_) => Status::internal("Internal error."),
             ListMissingNodeOrHost => Status::invalid_argument("node_id or host_id"),
             MissingNodeId => Status::invalid_argument("command.node_id"),
             NotHostToken => Status::forbidden("Access denied."),
@@ -393,7 +399,7 @@ impl api::Command {
             CommandType::NodeStart => node_start(command, conn).await,
             CommandType::NodeStop => node_stop(command, conn).await,
             CommandType::NodeRestart => node_restart(command, conn).await,
-            CommandType::NodeUpdate => Err(Error::NodeUpdateCommand),
+            CommandType::NodeUpdate => node_update(command, conn).await,
             CommandType::NodeUpgrade => node_upgrade(command, authz, conn).await,
             CommandType::NodeDelete => node_delete(command, conn).await,
             _ => Err(Error::NotNodeCommand(command.id)),
@@ -517,11 +523,13 @@ async fn node_restart(command: &Command, conn: &mut Conn<'_>) -> Result<api::Com
     node_command(command, node, node_cmd)
 }
 
-pub async fn node_update(
-    command: &Command,
-    update: api::NodeUpdate,
-    conn: &mut Conn<'_>,
-) -> Result<api::Command, Error> {
+pub async fn node_update(command: &Command, conn: &mut Conn<'_>) -> Result<api::Command, Error> {
+    let bytes = command
+        .protobuf
+        .as_ref()
+        .ok_or(Error::NodeUpdateMissingProtobuf)?;
+    let update: api::NodeUpdate = Message::decode(&bytes[..]).map_err(Error::NodeUpdateDecode)?;
+
     let node_id = command.node_id.ok_or(Error::MissingNodeId)?;
     let node = Node::by_id(node_id, conn).await?;
     let node_cmd = api::node_command::Command::Update(update);
