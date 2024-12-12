@@ -607,7 +607,8 @@ pub async fn update_config(
 
     let node = Node::by_id(node_id, &mut write).await?;
     let api_update = api::NodeUpdate {
-        node_id: node_id.to_string(),
+        node_id: node.id.to_string(),
+        config_id: node.config_id.to_string(),
         auto_upgrade: req.auto_upgrade,
         new_org_id: new_org_id.map(|id| id.to_string()),
         new_org_name: None,
