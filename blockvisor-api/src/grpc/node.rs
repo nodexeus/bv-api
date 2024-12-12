@@ -606,9 +606,6 @@ pub async fn update_config(
     }
 
     let node = Node::by_id(node_id, &mut write).await?;
-    let node_cmd = NewCommand::node(&node, CommandType::NodeUpdate)?
-        .create(&mut write)
-        .await?;
     let api_update = api::NodeUpdate {
         node_id: node_id.to_string(),
         auto_upgrade: req.auto_upgrade,
@@ -619,7 +616,11 @@ pub async fn update_config(
         new_values: req.new_values,
         new_firewall: req.new_firewall,
     };
-    let update_cmd = node_update(&node_cmd, api_update, &mut write).await?;
+    let node_cmd = NewCommand::node(&node, CommandType::NodeUpdate)?
+        .with_protobuf(&api_update)
+        .create(&mut write)
+        .await?;
+    let update_cmd = node_update(&node_cmd, &mut write).await?;
     write.mqtt(update_cmd);
 
     let api_node = api::Node::from_model(node, &authz, &mut write).await?;

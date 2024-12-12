@@ -232,6 +232,7 @@ diesel::table! {
         retry_hint_seconds -> Nullable<Int8>,
         exit_code -> Nullable<EnumCommandExitCode>,
         command_type -> EnumCommandType,
+        protobuf -> Nullable<Bytea>,
     }
 }
 
