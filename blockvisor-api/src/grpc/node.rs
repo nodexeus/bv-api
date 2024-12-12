@@ -606,7 +606,9 @@ pub async fn update_config(
     }
 
     let node = Node::by_id(node_id, &mut write).await?;
-    let new_values = if !req.new_values.is_empty() {
+    let new_values = if req.new_values.is_empty() {
+        vec![]
+    } else {
         let config = Config::by_id(node.config_id, &mut write).await?;
         config
             .node_config()?
@@ -615,8 +617,6 @@ pub async fn update_config(
             .into_iter()
             .map(Into::into)
             .collect()
-    } else {
-        vec![]
     };
 
     let api_update = api::NodeUpdate {
