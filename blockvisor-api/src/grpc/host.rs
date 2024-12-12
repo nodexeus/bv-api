@@ -604,12 +604,10 @@ impl api::Host {
     ) -> Result<Vec<Self>, Error> {
         let lookup = Lookup::from_hosts(&hosts, conn).await?;
 
-        let mut out = Vec::new();
-        for host in hosts {
-            out.push(Self::from_model(host, &lookup, Some(authz))?);
-        }
-
-        Ok(out)
+        hosts
+            .into_iter()
+            .map(|host| Self::from_model(host, &lookup, Some(authz)))
+            .collect()
     }
 
     fn from_model(host: Host, lookup: &Lookup, authz: Option<&AuthZ>) -> Result<Self, Error> {
@@ -690,10 +688,7 @@ impl Lookup {
 
         let ip_addresses = IpAddress::by_host_ids(&host_ids, conn)
             .await?
-            .into_iter()
-            .map(|ip| (ip.host_id, ip))
-            .to_map_keep_all(|(host_id, ip)| (host_id, ip));
-
+            .to_map_keep_all(|ip| (ip.host_id, ip));
         let nodes = Node::by_host_ids(&host_ids, &org_ids, conn)
             .await?
             .to_map_keep_all(|node| (node.host_id, node));

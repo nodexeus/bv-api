@@ -38,16 +38,16 @@ pub enum Error {
     HasHostPending(diesel::result::Error),
     /// Command Host error: {0}
     Host(#[from] super::host::Error),
+    /// Attempt to create a host command with a node id.
+    HostCommandWithNodeId,
     /// Failed to find pending host commands: {0}
     HostPending(diesel::result::Error),
     /// Command Node error: {0}
     Node(#[from] super::node::Error),
+    /// Attempt to create a node command without a node id.
+    NodeCommandWithoutNodeId,
     /// Failed to update command: {0}
     Update(diesel::result::Error),
-    /// Attempt to create a command meant for a node without specificying a node id.
-    NodeCommandWithoutNodeId,
-    /// Attempt to create a command meant for a host while also specificying a node id.
-    HostCommandWithNodeId,
 }
 
 impl From<Error> for Status {

@@ -606,6 +606,19 @@ pub async fn update_config(
     }
 
     let node = Node::by_id(node_id, &mut write).await?;
+    let new_values = if !req.new_values.is_empty() {
+        let config = Config::by_id(node.config_id, &mut write).await?;
+        config
+            .node_config()?
+            .image
+            .values
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    } else {
+        vec![]
+    };
+
     let api_update = api::NodeUpdate {
         node_id: node.id.to_string(),
         config_id: node.config_id.to_string(),
@@ -614,7 +627,7 @@ pub async fn update_config(
         new_org_name: None,
         new_display_name: req.new_display_name,
         new_note: req.new_note,
-        new_values: req.new_values,
+        new_values,
         new_firewall: req.new_firewall,
     };
     let node_cmd = NewCommand::node(&node, CommandType::NodeUpdate)?
