@@ -665,21 +665,18 @@ struct Lookup {
 
 impl Lookup {
     async fn from_host(host: &Host, conn: &mut Conn<'_>) -> Result<Lookup, Error> {
-        Self::from_hosts(&[host], conn).await
+        Self::from_hosts(std::slice::from_ref(host), conn).await
     }
 
-    async fn from_hosts<H>(hosts: &[H], conn: &mut Conn<'_>) -> Result<Lookup, Error>
-    where
-        H: AsRef<Host> + Send + Sync,
-    {
-        let host_ids: HashSet<HostId> = hosts.iter().map(|h| h.as_ref().id).collect();
+    async fn from_hosts(hosts: &[Host], conn: &mut Conn<'_>) -> Result<Lookup, Error> {
+        let host_ids: HashSet<HostId> = hosts.iter().map(|host| host.id).collect();
 
-        let org_ids = hosts.iter().filter_map(|h| h.as_ref().org_id).collect();
+        let org_ids = hosts.iter().filter_map(|host| host.org_id).collect();
         let orgs = Org::by_ids(&org_ids, conn)
             .await?
             .to_map_keep_last(|org| (org.id, org));
 
-        let region_ids = hosts.iter().filter_map(|h| h.as_ref().region_id).collect();
+        let region_ids = hosts.iter().filter_map(|host| host.region_id).collect();
         let regions = Region::by_ids(&region_ids, conn)
             .await?
             .to_map_keep_last(|region| (region.id, region));

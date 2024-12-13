@@ -22,7 +22,7 @@ use crate::util::{SearchOperator, SortOrder};
 use super::ip_address::NewIpAddress;
 use super::node::{NodeScheduler, ResourceAffinity, SimilarNodeAffinity};
 use super::schema::{hosts, ip_addresses, nodes, sql_types};
-use super::{Command, Node, Org, Paginate, Protocol, RegionId};
+use super::{Amount, Command, Node, Org, Paginate, Protocol, RegionId};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -145,13 +145,7 @@ pub struct Host {
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
-    pub cost: Option<super::Amount>,
-}
-
-impl AsRef<Host> for Host {
-    fn as_ref(&self) -> &Host {
-        self
-    }
+    pub cost: Option<Amount>,
 }
 
 impl Host {
@@ -405,7 +399,7 @@ pub struct UpdateHost<'a> {
     pub memory_bytes: Option<i64>,
     pub disk_bytes: Option<i64>,
     pub tags: Option<Tags>,
-    pub cost: Option<super::Amount>,
+    pub cost: Option<Amount>,
 }
 
 impl UpdateHost<'_> {
