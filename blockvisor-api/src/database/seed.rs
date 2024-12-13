@@ -9,7 +9,7 @@ use crate::auth::resource::{NodeId, OrgId, ResourceType, UserId};
 use crate::model::host::{Host, NewHost, ScheduleType};
 use crate::model::image::config::ConfigType;
 use crate::model::image::{Config, Image, ImageId, NewConfig, NodeConfig};
-use crate::model::ip_address::CreateIpAddress;
+use crate::model::ip_address::NewIpAddress;
 use crate::model::node::{Node, NodeState, ResourceAffinity};
 use crate::model::protocol::version::{ProtocolVersion, VersionId};
 use crate::model::protocol::{Protocol, ProtocolId};
@@ -301,9 +301,9 @@ async fn create_hosts(
 async fn create_ip_range(host: &Host, conn: &mut Conn<'_>) -> (IpNetwork, IpNetwork) {
     let ips = IP_RANGE
         .iter()
-        .map(|ip| CreateIpAddress::new(ip.parse().unwrap(), host.id))
+        .map(|ip| NewIpAddress::new(ip.parse().unwrap(), host.id))
         .collect();
-    CreateIpAddress::bulk_create(ips, conn).await.unwrap();
+    NewIpAddress::bulk_create(ips, conn).await.unwrap();
 
     let ip_address = IpAddress::next_for_host(host.id, conn)
         .await

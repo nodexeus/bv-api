@@ -20,7 +20,7 @@ use crate::model::host::{
 use crate::model::node::NodeScheduler;
 use crate::model::protocol::ProtocolVersion;
 use crate::model::{CommandType, Image, IpAddress, Node, Org, Protocol, Region, RegionId, Token};
-use crate::util::sql::{Tag, Tags, Version};
+use crate::util::sql::{IpNetwork, Tag, Tags, Version};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::host_service_server::HostService;
@@ -451,7 +451,7 @@ pub async fn delete(
     }
 
     Host::delete(id, org_id, &mut write).await?;
-    IpAddress::delete_by_host_id(id, &mut write).await?;
+    IpAddress::delete_for_host(id, &mut write).await?;
 
     Ok(api::HostServiceDeleteResponse {})
 }
@@ -616,20 +616,18 @@ impl api::Host {
         let org_name = org.map(|org| org.name.clone());
         let region = host.region_id.and_then(|id| lookup.regions.get(&id));
         let region = region.map(|region| region.name.clone());
+        let cost = authz.and_then(|authz| common::BillingAmount::from_host(&host, authz));
 
         let no_ips = vec![];
-        let no_nodes = vec![];
-        let ips = lookup.ip_addresses.get(&host.id).unwrap_or(&no_ips);
-        let nodes = lookup.nodes.get(&host.id).unwrap_or(&no_nodes);
+        let ips = lookup.host_ips.get(&host.id).unwrap_or(&no_ips);
+        let assigned = lookup.assigned_ips.get(&host.id).unwrap_or(&no_ips);
         let ip_addresses = ips
             .iter()
-            .map(|ip_address| api::HostIpAddress {
-                ip: ip_address.ip.to_string(),
-                assigned: nodes.iter().any(|node| node.ip_address == ip_address.ip),
+            .map(|ip| api::HostIpAddress {
+                ip: ip.to_string(),
+                assigned: assigned.iter().any(|addr| ip == addr),
             })
             .collect();
-
-        let cost = authz.and_then(|authz| common::BillingAmount::from_host(&host, authz));
 
         Ok(api::Host {
             host_id: host.id.to_string(),
@@ -660,9 +658,9 @@ impl api::Host {
 
 struct Lookup {
     orgs: HashMap<OrgId, Org>,
-    nodes: HashMap<HostId, Vec<Node>>,
     regions: HashMap<RegionId, Region>,
-    ip_addresses: HashMap<HostId, Vec<IpAddress>>,
+    host_ips: HashMap<HostId, Vec<IpNetwork>>,
+    assigned_ips: HashMap<HostId, Vec<IpNetwork>>,
 }
 
 impl Lookup {
@@ -686,18 +684,18 @@ impl Lookup {
             .await?
             .to_map_keep_last(|region| (region.id, region));
 
-        let ip_addresses = IpAddress::by_host_ids(&host_ids, conn)
+        let host_ips = IpAddress::for_hosts(&host_ids, conn)
             .await?
-            .to_map_keep_all(|ip| (ip.host_id, ip));
-        let nodes = Node::by_host_ids(&host_ids, &org_ids, conn)
+            .to_map_keep_all(|ip| (ip.host_id, ip.ip));
+        let assigned_ips = IpAddress::assigned_for_hosts(&host_ids, conn)
             .await?
-            .to_map_keep_all(|node| (node.host_id, node));
+            .to_map_keep_all(|ip| (ip.host_id, ip.ip));
 
         Ok(Lookup {
             orgs,
-            nodes,
             regions,
-            ip_addresses,
+            host_ips,
+            assigned_ips,
         })
     }
 }

@@ -588,11 +588,11 @@ pub async fn update_config(
     };
     update.apply(node_id, &authz, &mut write).await?;
 
-    if !req.new_values.is_empty() || req.new_firewall.is_some() {
+    let values_updated = !req.new_values.is_empty();
+    if values_updated || req.new_firewall.is_some() {
         let update = UpdateNodeConfig {
             new_values: req
                 .new_values
-                .clone()
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<Vec<_>, _>>()?,
@@ -606,9 +606,7 @@ pub async fn update_config(
     }
 
     let node = Node::by_id(node_id, &mut write).await?;
-    let new_values = if req.new_values.is_empty() {
-        vec![]
-    } else {
+    let new_values = if values_updated {
         let config = Config::by_id(node.config_id, &mut write).await?;
         config
             .node_config()?
@@ -617,6 +615,8 @@ pub async fn update_config(
             .into_iter()
             .map(Into::into)
             .collect()
+    } else {
+        vec![]
     };
 
     let api_update = api::NodeUpdate {

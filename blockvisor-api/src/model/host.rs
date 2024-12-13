@@ -19,7 +19,7 @@ use crate::grpc::{api, Status};
 use crate::util::sql::{self, greatest, IpNetwork, Tags, Version};
 use crate::util::{SearchOperator, SortOrder};
 
-use super::ip_address::CreateIpAddress;
+use super::ip_address::NewIpAddress;
 use super::node::{NodeScheduler, ResourceAffinity, SimilarNodeAffinity};
 use super::schema::{hosts, ip_addresses, nodes, sql_types};
 use super::{Command, Node, Org, Paginate, Protocol, RegionId};
@@ -380,9 +380,9 @@ impl NewHost<'_> {
 
         let new_ips: Vec<_> = ips
             .iter()
-            .map(|&ip| CreateIpAddress::new(ip, host.id))
+            .map(|&ip| NewIpAddress::new(ip, host.id))
             .collect();
-        CreateIpAddress::bulk_create(new_ips, conn).await?;
+        NewIpAddress::bulk_create(new_ips, conn).await?;
 
         Ok(host)
     }
