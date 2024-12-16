@@ -964,6 +964,25 @@ impl api::Node {
 
 impl api::NodeServiceListRequest {
     fn into_filter(self) -> Result<NodeFilter, Error> {
+        let node_states = self
+            .node_states()
+            .map(NodeState::try_from)
+            .collect::<Result<_, _>>()?;
+        let next_states = self
+            .next_states()
+            .map(NextState::try_from)
+            .collect::<Result<_, _>>()?;
+
+        let protocol_ids = self
+            .protocol_ids
+            .iter()
+            .map(|id| id.parse().map_err(Error::ParseProtocolId))
+            .collect::<Result<_, _>>()?;
+        let version_keys = self
+            .version_keys
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
         let org_ids = self
             .org_ids
             .iter()
@@ -974,23 +993,10 @@ impl api::NodeServiceListRequest {
             .iter()
             .map(|id| id.parse().map_err(Error::ParseHostId))
             .collect::<Result<_, _>>()?;
-        let protocol_ids = self
-            .protocol_ids
-            .iter()
-            .map(|id| id.parse().map_err(Error::ParseProtocolId))
-            .collect::<Result<_, _>>()?;
         let user_ids = self
             .user_ids
             .iter()
             .map(|id| id.parse().map_err(Error::ParseUserId))
-            .collect::<Result<_, _>>()?;
-        let node_states = self
-            .node_states()
-            .map(NodeState::try_from)
-            .collect::<Result<_, _>>()?;
-        let next_states = self
-            .next_states()
-            .map(NextState::try_from)
             .collect::<Result<_, _>>()?;
 
         let search = self
@@ -1037,14 +1043,15 @@ impl api::NodeServiceListRequest {
             .collect::<Result<_, _>>()?;
 
         Ok(NodeFilter {
-            org_ids,
             protocol_ids,
+            version_keys,
+            semantic_versions: self.semantic_versions,
+            org_ids,
             host_ids,
             user_ids,
             ip_addresses,
             node_states,
             next_states,
-            semantic_versions: self.semantic_versions,
             search,
             sort,
             limit: i64::try_from(self.limit).map_err(Error::FilterLimit)?,

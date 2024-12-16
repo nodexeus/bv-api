@@ -16,7 +16,7 @@ pub use status::{NextState, NodeHealth, NodeState, NodeStatus, ProtocolStatus};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
-use diesel::dsl;
+use diesel::dsl::{self, InnerJoinQuerySource};
 use diesel::expression::expression_types::NotSelectable;
 use diesel::pg::Pg;
 use diesel::prelude::*;
@@ -44,8 +44,8 @@ use super::image::config::{ConfigType, FirewallConfig, NewConfig};
 use super::image::property::ImagePropertyValue;
 use super::image::{Config, ConfigId, Image, ImageId, NodeConfig};
 use super::protocol::version::{ProtocolVersion, VersionId};
-use super::protocol::{Protocol, ProtocolId};
-use super::schema::nodes;
+use super::protocol::{Protocol, ProtocolId, VersionKey};
+use super::schema::{nodes, protocol_versions};
 use super::{Amount, Command, IpAddress, Org, Paginate, Region, RegionId};
 
 #[derive(Debug, Display, Error)]
@@ -1057,14 +1057,15 @@ impl NodeSort {
 
 #[derive(Debug)]
 pub struct NodeFilter {
-    pub org_ids: Vec<OrgId>,
     pub protocol_ids: Vec<ProtocolId>,
+    pub version_keys: Vec<VersionKey>,
+    pub semantic_versions: Vec<String>,
+    pub org_ids: Vec<OrgId>,
     pub host_ids: Vec<HostId>,
     pub user_ids: Vec<UserId>,
     pub ip_addresses: Vec<IpNetwork>,
     pub node_states: Vec<NodeState>,
     pub next_states: Vec<NextState>,
-    pub semantic_versions: Vec<String>,
     pub search: Option<NodeSearch>,
     pub sort: VecDeque<NodeSort>,
     pub limit: i64,
@@ -1075,10 +1076,38 @@ impl NodeFilter {
     const DELETED_STATES: &[NodeState] = &[NodeState::Deleting, NodeState::Deleted];
 
     pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(Vec<Node>, u64), Error> {
-        let mut query = nodes::table.into_boxed();
+        let mut query = nodes::table
+            .inner_join(protocol_versions::table)
+            .into_boxed();
 
         if let Some(search) = self.search {
             query = query.filter(search.into_expression());
+        }
+
+        if !self.protocol_ids.is_empty() {
+            query = query.filter(nodes::protocol_id.eq_any(self.protocol_ids));
+        }
+
+        if !self.version_keys.is_empty() {
+            let mut filters: Vec<Box<dyn BoxableExpression<_, _, SqlType = Bool>>> = Vec::new();
+
+            for version_key in self.version_keys {
+                let filter = protocol_versions::protocol_key
+                    .eq(version_key.protocol_key)
+                    .and(protocol_versions::variant_key.eq(version_key.variant_key));
+                filters.push(Box::new(filter));
+            }
+
+            let combined = filters
+                .into_iter()
+                .reduce(|acc, item| Box::new(acc.or(item)));
+            if let Some(filter) = combined {
+                query = query.filter(filter);
+            }
+        }
+
+        if !self.semantic_versions.is_empty() {
+            query = query.filter(nodes::semantic_version.eq_any(self.semantic_versions));
         }
 
         if !self.org_ids.is_empty() {
@@ -1093,16 +1122,8 @@ impl NodeFilter {
             query = query.filter(nodes::created_by_id.eq_any(self.user_ids));
         }
 
-        if !self.protocol_ids.is_empty() {
-            query = query.filter(nodes::protocol_id.eq_any(self.protocol_ids));
-        }
-
         if !self.ip_addresses.is_empty() {
             query = query.filter(nodes::ip_address.eq_any(self.ip_addresses));
-        }
-
-        if !self.semantic_versions.is_empty() {
-            query = query.filter(nodes::semantic_version.eq_any(self.semantic_versions));
         }
 
         // exclude deleted nodes unless a deleted state is requested.
@@ -1141,12 +1162,15 @@ impl NodeFilter {
     }
 }
 
+type NodesAndVersions = InnerJoinQuerySource<nodes::table, protocol_versions::table>;
+
 impl NodeSearch {
-    fn into_expression(self) -> Box<dyn BoxableExpression<nodes::table, Pg, SqlType = Bool>> {
+    fn into_expression(self) -> Box<dyn BoxableExpression<NodesAndVersions, Pg, SqlType = Bool>> {
         match self.operator {
             SearchOperator::Or => {
-                let mut predicate: Box<dyn BoxableExpression<nodes::table, Pg, SqlType = Bool>> =
-                    Box::new(false.into_sql::<Bool>());
+                let mut predicate: Box<
+                    dyn BoxableExpression<NodesAndVersions, Pg, SqlType = Bool>,
+                > = Box::new(false.into_sql::<Bool>());
                 if let Some(id) = self.id {
                     predicate = Box::new(predicate.or(sql::text(nodes::id).like(id)));
                 }
@@ -1165,8 +1189,9 @@ impl NodeSearch {
                 predicate
             }
             SearchOperator::And => {
-                let mut predicate: Box<dyn BoxableExpression<nodes::table, Pg, SqlType = Bool>> =
-                    Box::new(true.into_sql::<Bool>());
+                let mut predicate: Box<
+                    dyn BoxableExpression<NodesAndVersions, Pg, SqlType = Bool>,
+                > = Box::new(true.into_sql::<Bool>());
                 if let Some(id) = self.id {
                     predicate = Box::new(predicate.and(sql::text(nodes::id).like(id)));
                 }
@@ -1234,14 +1259,18 @@ mod tests {
             .unwrap();
 
         let filter = NodeFilter {
+            protocol_ids: vec![],
+            version_keys: vec![VersionKey {
+                protocol_key: db.seed.version.protocol_key.clone(),
+                variant_key: db.seed.version.variant_key.clone(),
+            }],
+            semantic_versions: vec![],
             org_ids: vec![db.seed.org.id],
-            protocol_ids: vec![db.seed.protocol.id],
             host_ids: vec![db.seed.host1.id],
             user_ids: vec![],
             ip_addresses: vec![],
             node_states: vec![NodeState::Running],
             next_states: vec![],
-            semantic_versions: vec![],
             search: None,
             sort: VecDeque::new(),
             offset: 0,
