@@ -364,6 +364,7 @@ impl NodeConfig {
             .image
             .values
             .into_iter()
+            // has_changed will be true but update doesn't change archive
             .map(NewImagePropertyValue::from)
             .chain(new_values)
             .collect();

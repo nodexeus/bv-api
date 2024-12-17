@@ -396,7 +396,7 @@ impl PropertyMap {
     pub fn new(properties: Vec<ImageProperty>) -> Self {
         let mut key_to_value = HashMap::new();
         let mut key_to_group = HashMap::new();
-        let mut group_to_keys = HashMap::<ImagePropertyGroup, Vec<ImagePropertyKey>>::new();
+        let mut group_to_keys = HashMap::<_, Vec<_>>::new();
 
         for property in properties {
             if let Some(group) = &property.key_group {
@@ -407,11 +407,10 @@ impl PropertyMap {
                     .push(property.key.clone());
 
                 if property.is_group_default == Some(true) {
-                    key_to_value
-                        .insert(property.key.clone(), NewImagePropertyValue::from(property));
+                    key_to_value.insert(property.key.clone(), property.into());
                 }
             } else {
-                key_to_value.insert(property.key.clone(), NewImagePropertyValue::from(property));
+                key_to_value.insert(property.key.clone(), property.into());
             }
         }
 
