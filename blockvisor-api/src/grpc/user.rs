@@ -196,15 +196,16 @@ pub async fn list(
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::UserServiceListResponse, Error> {
     let filter = req.into_filter()?;
-    let resources = filter
-        .user_ids
-        .iter()
-        .map(Resource::from)
-        .chain(filter.org_ids.iter().map(Resource::from))
-        .collect::<Vec<_>>();
-    let _authz = read
-        .auth_or_for(&meta, UserAdminPerm::Filter, UserPerm::Filter, &resources)
-        .await?;
+
+    let users = filter.user_ids.iter().map(Resource::from);
+    let orgs = filter.org_ids.iter().map(Resource::from);
+    let resources = users.chain(orgs).collect::<Vec<_>>();
+    if resources.is_empty() {
+        read.auth(&meta, UserAdminPerm::Filter).await?
+    } else {
+        read.auth_or_for(&meta, UserAdminPerm::Filter, UserPerm::Filter, &resources)
+            .await?
+    };
 
     let (users, total) = filter.query(&mut read).await?;
     let users = users.into_iter().map(Into::into).collect();
