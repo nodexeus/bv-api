@@ -116,10 +116,9 @@ async fn update_an_existing_user() {
 async fn list_users() {
     let test = TestServer::new().await;
 
-    let org_id = test.seed().org.id.to_string();
-    let fake_org_id = Uuid::new_v4().to_string();
-    let req = |org_id, email_like| api::UserServiceListRequest {
-        org_id,
+    let req = |org_ids, email_like| api::UserServiceListRequest {
+        user_ids: vec![],
+        org_ids,
         offset: 0,
         limit: 10,
         search: Some(api::UserSearch {
@@ -131,34 +130,36 @@ async fn list_users() {
     };
 
     // Test that an org member can list our own org.
+    let org_id = test.seed().org.id.to_string();
     let resp = test
-        .send_member(UserService::list, req(Some(org_id), None))
+        .send_member(UserService::list, req(vec![org_id], None))
         .await
         .unwrap();
     assert_eq!(resp.users.len(), 3, "{resp:?}");
 
     // Test that an org member cannot list other organizations
-    test.send_member(UserService::list, req(Some(fake_org_id.clone()), None))
+    let fake_org_id = Uuid::new_v4().to_string();
+    test.send_member(UserService::list, req(vec![fake_org_id.clone()], None))
         .await
         .unwrap_err();
 
     // Test that a super user can list for other organizations.
     let resp = test
-        .send_super(UserService::list, req(Some(fake_org_id), None))
+        .send_super(UserService::list, req(vec![fake_org_id], None))
         .await
         .unwrap();
     assert_eq!(resp.users.len(), 0, "{resp:?}");
 
     // Test that root can list by email
     let resp = test
-        .send_super(UserService::list, req(None, Some("admin%".to_string())))
+        .send_super(UserService::list, req(vec![], Some("admin%".to_string())))
         .await
         .unwrap();
     assert_eq!(resp.users.len(), 1, "{resp:?}");
 
     // Test that we don't get matches when there are none
     let resp = test
-        .send_super(UserService::list, req(None, Some("admin".to_string())))
+        .send_super(UserService::list, req(vec![], Some("admin".to_string())))
         .await
         .unwrap();
     assert_eq!(resp.users.len(), 0, "{resp:?}");

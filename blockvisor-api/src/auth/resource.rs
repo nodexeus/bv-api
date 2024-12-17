@@ -108,9 +108,21 @@ impl From<UserId> for Resource {
     }
 }
 
+impl From<&UserId> for Resource {
+    fn from(id: &UserId) -> Self {
+        Resource::User(*id)
+    }
+}
+
 impl From<OrgId> for Resource {
     fn from(id: OrgId) -> Self {
         Resource::Org(id)
+    }
+}
+
+impl From<&OrgId> for Resource {
+    fn from(id: &OrgId) -> Self {
+        Resource::Org(*id)
     }
 }
 
@@ -120,9 +132,21 @@ impl From<NodeId> for Resource {
     }
 }
 
+impl From<&NodeId> for Resource {
+    fn from(id: &NodeId) -> Self {
+        Resource::Node(*id)
+    }
+}
+
 impl From<HostId> for Resource {
     fn from(id: HostId) -> Self {
         Resource::Host(id)
+    }
+}
+
+impl From<&HostId> for Resource {
+    fn from(id: &HostId) -> Self {
+        Resource::Host(*id)
     }
 }
 

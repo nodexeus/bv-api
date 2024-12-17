@@ -297,7 +297,6 @@ impl User {
 
 pub struct UserSearch {
     pub operator: SearchOperator,
-    pub id: Option<String>,
     pub name: Option<String>,
     pub email: Option<String>,
 }
@@ -338,7 +337,8 @@ impl UserSort {
 }
 
 pub struct UserFilter {
-    pub org_id: Option<OrgId>,
+    pub user_ids: Vec<UserId>,
+    pub org_ids: Vec<OrgId>,
     pub search: Option<UserSearch>,
     pub sort: VecDeque<UserSort>,
     pub limit: i64,
@@ -349,12 +349,16 @@ impl UserFilter {
     pub async fn query(mut self, conn: &mut Conn<'_>) -> Result<(Vec<User>, u64), Error> {
         let mut query = users::table.left_join(user_roles::table).into_boxed();
 
-        if let Some(search) = self.search {
-            query = query.filter(search.into_expression());
+        if !self.user_ids.is_empty() {
+            query = query.filter(users::id.eq_any(self.user_ids));
         }
 
-        if let Some(org_id) = self.org_id {
-            query = query.filter(user_roles::org_id.eq(org_id));
+        if !self.org_ids.is_empty() {
+            query = query.filter(user_roles::org_id.eq_any(self.org_ids));
+        }
+
+        if let Some(search) = self.search {
+            query = query.filter(search.into_expression());
         }
 
         if let Some(sort) = self.sort.pop_front() {
@@ -382,16 +386,13 @@ type UsersAndRoles = LeftJoinQuerySource<users::table, user_roles::table>;
 
 impl UserSearch {
     fn into_expression(self) -> Box<dyn BoxableExpression<UsersAndRoles, Pg, SqlType = Bool>> {
-        let user_name = users::first_name.concat(" ").concat(users::last_name);
         match self.operator {
             SearchOperator::Or => {
                 let mut predicate: Box<dyn BoxableExpression<UsersAndRoles, Pg, SqlType = Bool>> =
                     Box::new(false.into_sql::<Bool>());
-                if let Some(id) = self.id {
-                    predicate = Box::new(predicate.or(sql::text(users::id).like(id)));
-                }
                 if let Some(name) = self.name {
-                    predicate = Box::new(predicate.or(sql::lower(user_name).like(name)));
+                    let full_name = users::first_name.concat(" ").concat(users::last_name);
+                    predicate = Box::new(predicate.or(sql::lower(full_name).like(name)));
                 }
                 if let Some(email) = self.email {
                     predicate = Box::new(predicate.or(sql::lower(users::email).like(email)));
@@ -401,11 +402,9 @@ impl UserSearch {
             SearchOperator::And => {
                 let mut predicate: Box<dyn BoxableExpression<UsersAndRoles, Pg, SqlType = Bool>> =
                     Box::new(true.into_sql::<Bool>());
-                if let Some(id) = self.id {
-                    predicate = Box::new(predicate.and(sql::text(users::id).like(id)));
-                }
                 if let Some(name) = self.name {
-                    predicate = Box::new(predicate.and(sql::lower(user_name).like(name)));
+                    let full_name = users::first_name.concat(" ").concat(users::last_name);
+                    predicate = Box::new(predicate.and(sql::lower(full_name).like(name)));
                 }
                 if let Some(email) = self.email {
                     predicate = Box::new(predicate.and(sql::lower(users::email).like(email)));
@@ -416,7 +415,7 @@ impl UserSearch {
     }
 }
 
-#[derive(Debug, Clone, Validate, Insertable)]
+#[derive(Clone, Debug, Validate, Insertable)]
 #[diesel(table_name = users)]
 pub struct NewUser<'a> {
     #[validate(email)]
