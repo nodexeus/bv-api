@@ -41,8 +41,6 @@ pub enum Error {
     PropertyKeyChars(String),
     /// ImagePropertyKey must be at least 3 characters: {0}
     PropertyKeyLen(String),
-    /// Unexpected key group: {0}
-    UnexpectedKeyGroup(String),
     /// Unknown UiType.
     UnknownUiType,
 }
@@ -55,7 +53,6 @@ impl From<Error> for Status {
             GroupMultipleDefaults(_) | GroupNoDefault(_) => {
                 Status::failed_precondition("is_group_default")
             }
-            UnexpectedKeyGroup(_) => Status::invalid_argument("key_group"),
             UnknownUiType => Status::invalid_argument("ui_type"),
             _ => Status::internal("Internal error."),
         }
@@ -266,16 +263,64 @@ impl NewProperty {
 }
 
 #[derive(Clone, Debug)]
-pub struct ImagePropertyValue {
+pub struct NewImagePropertyValue {
+    pub key: ImagePropertyKey,
+    pub value: String,
+    pub has_changed: bool,
+}
+
+impl From<ImageProperty> for NewImagePropertyValue {
+    fn from(property: ImageProperty) -> Self {
+        NewImagePropertyValue {
+            key: property.key,
+            value: property.default_value,
+            has_changed: false,
+        }
+    }
+}
+
+impl From<NewImagePropertyValue> for api::NewImagePropertyValue {
+    fn from(value: NewImagePropertyValue) -> Self {
+        api::NewImagePropertyValue {
+            key: value.key.0,
+            value: value.value,
+        }
+    }
+}
+
+impl TryFrom<api::NewImagePropertyValue> for NewImagePropertyValue {
+    type Error = Error;
+
+    fn try_from(value: api::NewImagePropertyValue) -> Result<Self, Self::Error> {
+        Ok(NewImagePropertyValue {
+            key: ImagePropertyKey::new(value.key)?,
+            value: value.value,
+            has_changed: true,
+        })
+    }
+}
+
+impl From<PropertyValueConfig> for NewImagePropertyValue {
+    fn from(property: PropertyValueConfig) -> Self {
+        NewImagePropertyValue {
+            key: property.key,
+            value: property.value,
+            has_changed: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PropertyValueConfig {
     pub key: ImagePropertyKey,
     pub key_group: Option<ImagePropertyGroup>,
     pub value: String,
     pub has_changed: bool,
 }
 
-impl From<ImageProperty> for ImagePropertyValue {
+impl From<ImageProperty> for PropertyValueConfig {
     fn from(property: ImageProperty) -> Self {
-        ImagePropertyValue {
+        PropertyValueConfig {
             key: property.key,
             key_group: property.key_group,
             value: property.default_value,
@@ -284,9 +329,9 @@ impl From<ImageProperty> for ImagePropertyValue {
     }
 }
 
-impl From<ImagePropertyValue> for common::ImagePropertyValue {
-    fn from(value: ImagePropertyValue) -> Self {
-        common::ImagePropertyValue {
+impl From<PropertyValueConfig> for common::PropertyValueConfig {
+    fn from(value: PropertyValueConfig) -> Self {
+        common::PropertyValueConfig {
             key: value.key.0,
             key_group: value.key_group.map(|group| group.0),
             value: value.value,
@@ -294,16 +339,13 @@ impl From<ImagePropertyValue> for common::ImagePropertyValue {
     }
 }
 
-impl TryFrom<common::ImagePropertyValue> for ImagePropertyValue {
+impl TryFrom<common::PropertyValueConfig> for PropertyValueConfig {
     type Error = Error;
 
-    fn try_from(value: common::ImagePropertyValue) -> Result<Self, Self::Error> {
-        Ok(ImagePropertyValue {
+    fn try_from(value: common::PropertyValueConfig) -> Result<Self, Self::Error> {
+        Ok(PropertyValueConfig {
             key: ImagePropertyKey::new(value.key)?,
-            key_group: value
-                .key_group
-                .map(|group| Err(Error::UnexpectedKeyGroup(group)))
-                .transpose()?,
+            key_group: value.key_group.map(ImagePropertyGroup::new).transpose()?,
             value: value.value,
             has_changed: true,
         })
@@ -345,7 +387,7 @@ impl TryFrom<common::UiType> for UiType {
 }
 
 pub struct PropertyMap {
-    pub key_to_value: HashMap<ImagePropertyKey, ImagePropertyValue>,
+    pub key_to_value: HashMap<ImagePropertyKey, NewImagePropertyValue>,
     pub key_to_group: HashMap<ImagePropertyKey, ImagePropertyGroup>,
     pub group_to_keys: HashMap<ImagePropertyGroup, Vec<ImagePropertyKey>>,
 }
@@ -365,10 +407,11 @@ impl PropertyMap {
                     .push(property.key.clone());
 
                 if property.is_group_default == Some(true) {
-                    key_to_value.insert(property.key.clone(), ImagePropertyValue::from(property));
+                    key_to_value
+                        .insert(property.key.clone(), NewImagePropertyValue::from(property));
                 }
             } else {
-                key_to_value.insert(property.key.clone(), ImagePropertyValue::from(property));
+                key_to_value.insert(property.key.clone(), NewImagePropertyValue::from(property));
             }
         }
 
@@ -381,8 +424,8 @@ impl PropertyMap {
 
     pub fn apply_overrides(
         mut self,
-        overrides: Vec<ImagePropertyValue>,
-    ) -> Vec<ImagePropertyValue> {
+        overrides: Vec<NewImagePropertyValue>,
+    ) -> Vec<PropertyValueConfig> {
         for value in overrides {
             if let Some(group) = self.key_to_group.get(&value.key) {
                 if let Some(keys) = self.group_to_keys.get(group) {
@@ -395,6 +438,17 @@ impl PropertyMap {
             self.key_to_value.insert(value.key.clone(), value);
         }
 
-        self.key_to_value.into_values().collect()
+        self.key_to_value
+            .into_values()
+            .map(|new_value| {
+                let key_group = self.key_to_group.get(&new_value.key).cloned();
+                PropertyValueConfig {
+                    key: new_value.key,
+                    key_group,
+                    value: new_value.value,
+                    has_changed: new_value.has_changed,
+                }
+            })
+            .collect()
     }
 }

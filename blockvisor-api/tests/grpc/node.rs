@@ -103,10 +103,9 @@ fn host_placement<S: ToString>(host_id: S) -> common::NodePlacement {
     }
 }
 
-fn property<S: Into<String>>(key: S, value: S) -> common::ImagePropertyValue {
-    common::ImagePropertyValue {
+fn property<S: Into<String>>(key: S, value: S) -> api::NewImagePropertyValue {
+    api::NewImagePropertyValue {
         key: key.into(),
-        key_group: None,
         value: value.into(),
     }
 }
