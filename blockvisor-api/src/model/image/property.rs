@@ -41,6 +41,8 @@ pub enum Error {
     PropertyKeyChars(String),
     /// ImagePropertyKey must be at least 3 characters: {0}
     PropertyKeyLen(String),
+    /// Unexpected key group: {0}
+    UnexpectedKeyGroup(String),
     /// Unknown UiType.
     UnknownUiType,
 }
@@ -53,6 +55,7 @@ impl From<Error> for Status {
             GroupMultipleDefaults(_) | GroupNoDefault(_) => {
                 Status::failed_precondition("is_group_default")
             }
+            UnexpectedKeyGroup(_) => Status::invalid_argument("key_group"),
             UnknownUiType => Status::invalid_argument("ui_type"),
             _ => Status::internal("Internal error."),
         }
@@ -265,6 +268,7 @@ impl NewProperty {
 #[derive(Clone, Debug)]
 pub struct ImagePropertyValue {
     pub key: ImagePropertyKey,
+    pub key_group: Option<ImagePropertyGroup>,
     pub value: String,
     pub has_changed: bool,
 }
@@ -273,6 +277,7 @@ impl From<ImageProperty> for ImagePropertyValue {
     fn from(property: ImageProperty) -> Self {
         ImagePropertyValue {
             key: property.key,
+            key_group: property.key_group,
             value: property.default_value,
             has_changed: false,
         }
@@ -283,6 +288,7 @@ impl From<ImagePropertyValue> for common::ImagePropertyValue {
     fn from(value: ImagePropertyValue) -> Self {
         common::ImagePropertyValue {
             key: value.key.0,
+            key_group: value.key_group.map(|group| group.0),
             value: value.value,
         }
     }
@@ -294,6 +300,10 @@ impl TryFrom<common::ImagePropertyValue> for ImagePropertyValue {
     fn try_from(value: common::ImagePropertyValue) -> Result<Self, Self::Error> {
         Ok(ImagePropertyValue {
             key: ImagePropertyKey::new(value.key)?,
+            key_group: value
+                .key_group
+                .map(|group| Err(Error::UnexpectedKeyGroup(group)))
+                .transpose()?,
             value: value.value,
             has_changed: true,
         })
