@@ -5,7 +5,7 @@ use tonic::{Request, Response};
 use tracing::error;
 
 use crate::auth::rbac::{UserAdminPerm, UserPerm, UserSettingsAdminPerm, UserSettingsPerm};
-use crate::auth::resource::UserId;
+use crate::auth::resource::{Resource, UserId};
 use crate::auth::{self, token, Authorize};
 use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::model::user::setting::{NewUserSetting, UserSetting};
@@ -34,8 +34,6 @@ pub enum Error {
     ParseInvitationId(uuid::Error),
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
-    /// Failed to parse UserId: {0}
-    ParseUserId(uuid::Error),
     /// User search failed: {0}
     SearchOperator(crate::util::search::Error),
     /// Sort order: {0}
@@ -56,9 +54,8 @@ impl From<Error> for Status {
             Diesel(_) | Email(_) | ParseInvitationId(_) => Status::internal("Internal error."),
             FilterLimit(_) => Status::invalid_argument("limit"),
             FilterOffset(_) => Status::invalid_argument("offset"),
-            ParseId(_) => Status::invalid_argument("id"),
+            ParseId(_) => Status::invalid_argument("user_id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
-            ParseUserId(_) => Status::invalid_argument("user_id"),
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
@@ -199,12 +196,15 @@ pub async fn list(
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::UserServiceListResponse, Error> {
     let filter = req.into_filter()?;
-    if let Some(org_id) = filter.org_id {
-        read.auth_or_for(&meta, UserAdminPerm::Filter, UserPerm::Filter, org_id)
-            .await?
-    } else {
-        read.auth(&meta, UserAdminPerm::Filter).await?
-    };
+    let resources = filter
+        .user_ids
+        .iter()
+        .map(Resource::from)
+        .chain(filter.org_ids.iter().map(Resource::from))
+        .collect::<Vec<_>>();
+    let _authz = read
+        .auth_or_for(&meta, UserAdminPerm::Filter, UserPerm::Filter, &resources)
+        .await?;
 
     let (users, total) = filter.query(&mut read).await?;
     let users = users.into_iter().map(Into::into).collect();
@@ -252,7 +252,7 @@ pub async fn get_settings(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::UserServiceGetSettingsResponse, Error> {
-    let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
+    let user_id: UserId = req.user_id.parse().map_err(Error::ParseId)?;
     read.auth_or_for(
         &meta,
         UserSettingsAdminPerm::Get,
@@ -276,7 +276,7 @@ pub async fn update_settings(
     meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::UserServiceUpdateSettingsResponse, Error> {
-    let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
+    let user_id: UserId = req.user_id.parse().map_err(Error::ParseId)?;
     write
         .auth_or_for(
             &meta,
@@ -302,7 +302,7 @@ pub async fn delete_settings(
     meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::UserServiceDeleteSettingsResponse, Error> {
-    let user_id: UserId = req.user_id.parse().map_err(Error::ParseUserId)?;
+    let user_id: UserId = req.user_id.parse().map_err(Error::ParseId)?;
     write
         .auth_or_for(
             &meta,
@@ -320,10 +320,17 @@ pub async fn delete_settings(
 
 impl api::UserServiceListRequest {
     fn into_filter(self) -> Result<UserFilter, Error> {
-        let org_id = self
-            .org_id
+        let user_ids = self
+            .user_ids
+            .iter()
+            .map(|id| id.parse().map_err(Error::ParseId))
+            .collect::<Result<Vec<_>, _>>()?;
+        let org_ids = self
+            .org_ids
+            .iter()
             .map(|id| id.parse().map_err(Error::ParseOrgId))
-            .transpose()?;
+            .collect::<Result<Vec<_>, _>>()?;
+
         let search = self
             .search
             .map(|search| {
@@ -332,7 +339,6 @@ impl api::UserServiceListRequest {
                         .operator()
                         .try_into()
                         .map_err(Error::SearchOperator)?,
-                    id: search.user_id.map(|name| name.trim().to_lowercase()),
                     name: search.name.map(|name| name.trim().to_lowercase()),
                     email: search.email.map(|email| email.trim().to_lowercase()),
                 })
@@ -354,7 +360,8 @@ impl api::UserServiceListRequest {
             .collect::<Result<_, _>>()?;
 
         Ok(UserFilter {
-            org_id,
+            user_ids,
+            org_ids,
             search,
             sort,
             limit: i64::try_from(self.limit).map_err(Error::FilterLimit)?,
