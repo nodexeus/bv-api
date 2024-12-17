@@ -29,7 +29,7 @@ use crate::model::schema::{configs, sql_types};
 use crate::store::StoreId;
 use crate::util::HashVec;
 
-use super::property::{ImagePropertyValue, PropertyMap};
+use super::property::{NewImagePropertyValue, PropertyMap, PropertyValueConfig};
 use super::rule::{FirewallAction, FirewallRule};
 use super::{Archive, ArchiveId, ImageId, ImageRule};
 
@@ -201,7 +201,7 @@ impl NodeConfig {
     pub async fn new(
         image: Image,
         org_id: Option<OrgId>,
-        new_values: Vec<ImagePropertyValue>,
+        new_values: Vec<NewImagePropertyValue>,
         add_rules: Vec<FirewallRule>,
         conn: &mut Conn<'_>,
     ) -> Result<Self, Error> {
@@ -234,6 +234,7 @@ impl NodeConfig {
             .image
             .values
             .into_iter()
+            .map(NewImagePropertyValue::from)
             .filter(|property| {
                 if let Some(default) = old_defaults.get(&property.key) {
                     property.value != *default
@@ -278,7 +279,7 @@ impl NodeConfig {
     async fn generate_from(
         image: Image,
         org_id: Option<OrgId>,
-        values: Vec<ImagePropertyValue>,
+        values: Vec<PropertyValueConfig>,
         rules: Vec<FirewallRule>,
         conn: &mut Conn<'_>,
     ) -> Result<Self, Error> {
@@ -341,7 +342,7 @@ impl NodeConfig {
 
     pub async fn update(
         self,
-        new_values: Vec<ImagePropertyValue>,
+        new_values: Vec<NewImagePropertyValue>,
         new_firewall: Option<FirewallConfig>,
         conn: &mut Conn<'_>,
     ) -> Result<Self, Error> {
@@ -359,7 +360,13 @@ impl NodeConfig {
                 return Err(Error::UpdateKeyNotDynamic(value.key.clone()));
             }
         }
-        let overrides = self.image.values.into_iter().chain(new_values).collect();
+        let overrides = self
+            .image
+            .values
+            .into_iter()
+            .map(NewImagePropertyValue::from)
+            .chain(new_values)
+            .collect();
 
         Ok(NodeConfig {
             vm: self.vm,
@@ -519,7 +526,7 @@ pub struct ImageConfig {
     pub image_uri: String,
     pub archive_id: ArchiveId,
     pub store_id: StoreId,
-    pub values: Vec<ImagePropertyValue>,
+    pub values: Vec<PropertyValueConfig>,
 }
 
 impl From<ImageConfig> for common::ImageConfig {

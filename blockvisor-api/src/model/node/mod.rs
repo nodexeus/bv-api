@@ -41,7 +41,7 @@ use crate::util::{SearchOperator, SortOrder};
 
 use super::host::{Host, HostRequirements};
 use super::image::config::{ConfigType, FirewallConfig, NewConfig};
-use super::image::property::ImagePropertyValue;
+use super::image::property::NewImagePropertyValue;
 use super::image::{Config, ConfigId, Image, ImageId, NodeConfig};
 use super::protocol::version::{ProtocolVersion, VersionId};
 use super::protocol::{Protocol, ProtocolId, VersionKey};
@@ -829,7 +829,7 @@ impl<'u> UpdateNode<'u> {
 }
 
 pub struct UpdateNodeConfig {
-    pub new_values: Vec<ImagePropertyValue>,
+    pub new_values: Vec<NewImagePropertyValue>,
     pub new_firewall: Option<FirewallConfig>,
 }
 
