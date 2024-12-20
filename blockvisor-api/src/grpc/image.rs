@@ -325,7 +325,7 @@ async fn get_image(
         .await?;
 
     let version_key = VersionKey::try_from(req.version_key.ok_or(Error::MissingVersionKey)?)?;
-    let versions = ProtocolVersion::by_key(&version_key, org_id, &authz, &mut read).await?;
+    let mut versions = ProtocolVersion::by_key(&version_key, org_id, &authz, &mut read).await?;
 
     let version = if let Some(version) = req.semantic_version {
         let version: Version = version.parse().map_err(Error::ParseVersion)?;
@@ -334,7 +334,7 @@ async fn get_image(
             .find(|v| v.semantic_version == version)
             .ok_or(Error::FindVersion(version))?
     } else {
-        versions.first().ok_or(Error::NoVersions)?.clone()
+        versions.pop().ok_or(Error::NoVersions)?
     };
 
     let build = if let Some(build) = req.build_version {
