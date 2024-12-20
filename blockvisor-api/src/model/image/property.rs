@@ -191,6 +191,8 @@ pub struct NewProperty {
     pub add_cpu_cores: Option<i64>,
     pub add_memory_bytes: Option<i64>,
     pub add_disk_bytes: Option<i64>,
+    pub display_name: Option<String>,
+    pub display_group: Option<String>,
 }
 
 impl NewProperty {
@@ -208,6 +210,8 @@ impl NewProperty {
             add_cpu_cores: property.add_cpu_cores,
             add_memory_bytes: property.add_memory_bytes,
             add_disk_bytes: property.add_disk_bytes,
+            display_name: property.display_name,
+            display_group: property.display_group,
         }
     }
 
@@ -230,6 +234,8 @@ impl NewProperty {
             add_cpu_cores: property.add_cpu_cores,
             add_memory_bytes: property.add_memory_bytes,
             add_disk_bytes: property.add_disk_bytes,
+            display_name: property.display_name,
+            display_group: property.display_group,
         })
     }
 
