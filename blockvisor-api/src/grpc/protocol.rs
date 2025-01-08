@@ -57,7 +57,7 @@ pub enum Error {
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
     /// Failed to parse protocol version: {0}
-    ParseVersion(crate::util::sql::Error),
+    ParseVersion(crate::model::sql::Error),
     /// Failed to parse VersionId: {0}
     ParseVersionId(uuid::Error),
     /// Protocol model error: {0}
@@ -508,7 +508,6 @@ pub async fn list_protocols(
 
     let (protocols, total) = filter.query(&authz, &mut read).await?;
     let protocols = api::Protocol::from_models(protocols, &authz, &mut read).await?;
-    // protocols.sort_by_cached_key(|chain| chain.name.clone());
 
     Ok(api::ProtocolServiceListProtocolsResponse { protocols, total })
 }

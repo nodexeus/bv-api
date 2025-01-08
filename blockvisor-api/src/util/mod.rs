@@ -1,8 +1,6 @@
 pub mod search;
 pub use search::{SearchOperator, SortOrder};
 
-pub mod sql;
-
 pub mod timestamp;
 pub use timestamp::{NanosUtc, SecondsUtc};
 

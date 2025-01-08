@@ -25,7 +25,8 @@ use crate::auth::resource::OrgId;
 use crate::auth::AuthZ;
 use crate::database::{Conn, WriteConn};
 use crate::grpc::{common, Status};
-use crate::util::{sql, SearchOperator, SortOrder};
+use crate::model::sql;
+use crate::util::{SearchOperator, SortOrder};
 
 use super::schema::{protocols, sql_types};
 use super::Paginate;

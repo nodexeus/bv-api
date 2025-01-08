@@ -1,3 +1,6 @@
+pub mod amount;
+pub use amount::{Amount, Currency, Period};
+
 use std::fmt;
 use std::str::FromStr;
 
@@ -12,8 +15,7 @@ use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
 
 use crate::grpc::{common, Status};
-
-use super::LOWER_KEBAB_CASE;
+use crate::util::LOWER_KEBAB_CASE;
 
 define_sql_function!(fn coalesce(x: Nullable<Text>, y: Text) -> Text);
 define_sql_function!(fn greatest<T: SingleValue>(x: T, y: T) -> T);

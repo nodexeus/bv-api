@@ -17,8 +17,8 @@ use crate::auth::AuthZ;
 use crate::database::Conn;
 use crate::grpc::{api, common, Status};
 use crate::model::schema::protocol_versions;
+use crate::model::sql::Version;
 use crate::model::Region;
-use crate::util::sql::Version;
 use crate::util::{NanosUtc, LOWER_KEBAB_CASE};
 
 use super::{ProtocolId, Visibility};

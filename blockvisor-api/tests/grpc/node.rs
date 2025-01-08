@@ -4,8 +4,8 @@ use blockvisor_api::database::seed::{
 use blockvisor_api::grpc::{api, common};
 use blockvisor_api::model::command::Command;
 use blockvisor_api::model::schema::commands;
+use blockvisor_api::model::sql::{Tag, Tags};
 use blockvisor_api::model::Node;
-use blockvisor_api::util::sql::{Tag, Tags};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use tonic::Code;
@@ -87,7 +87,7 @@ fn scheduler_placement() -> common::NodePlacement {
     common::NodePlacement {
         placement: Some(common::node_placement::Placement::Scheduler(
             common::NodeScheduler {
-                resource: common::ResourceAffinity::MostResources.into(),
+                resource: None,
                 similarity: None,
                 region: None,
             },

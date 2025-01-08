@@ -14,12 +14,13 @@ use crate::model::command::NewCommand;
 use crate::model::image::config::{Config, ConfigType, NewConfig, NodeConfig};
 use crate::model::image::ConfigId;
 use crate::model::node::{
-    NewNode, NextState, Node, NodeCount, NodeFilter, NodeReport, NodeScheduler, NodeSearch,
-    NodeSort, NodeState, NodeStatus, UpdateNode, UpdateNodeConfig, UpdateNodeState, UpgradeNode,
+    HostCount, Launcher, NewNode, NextState, Node, NodeFilter, NodeReport, NodeScheduler,
+    NodeSearch, NodeSort, NodeState, NodeStatus, RegionCount, UpdateNode, UpdateNodeConfig,
+    UpdateNodeState, UpgradeNode,
 };
 use crate::model::protocol::ProtocolVersion;
+use crate::model::sql::{Tag, Tags};
 use crate::model::{CommandType, Host, Image, Org, Protocol, Region};
-use crate::util::sql::{Tag, Tags};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::node_service_server::NodeService;
@@ -29,12 +30,12 @@ use super::{api, common, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
+    /// Node amount error: {0}
+    Amount(#[from] crate::model::sql::amount::Error),
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
     /// Auth token parsing failed: {0}
     AuthToken(#[from] crate::auth::token::Error),
-    /// Billing amount error: {0}
-    BillingAmount(#[from] super::BillingAmountError),
     /// Failed to parse block age: {0}
     BlockAge(std::num::TryFromIntError),
     /// Failed to parse block height: {0}
@@ -61,6 +62,8 @@ pub enum Error {
     ImageProperty(#[from] crate::model::image::property::Error),
     /// Node ip address error: {0}
     IpAddress(#[from] crate::model::ip_address::Error),
+    /// Node launcher error: {0}
+    Launcher(#[from] crate::model::node::launcher::Error),
     /// No node ids given.
     MissingIds,
     /// Missing placement.
@@ -69,8 +72,6 @@ pub enum Error {
     Node(#[from] crate::model::node::Error),
     /// Node model status error: {0}
     NodeStatus(#[from] crate::model::node::status::Error),
-    /// No ResourceAffinity.
-    NoResourceAffinity,
     /// Node org error: {0}
     Org(#[from] crate::model::org::Error),
     /// Failed to parse ConfigId: {0}
@@ -82,7 +83,7 @@ pub enum Error {
     /// Failed to parse ImageId: {0}
     ParseImageId(uuid::Error),
     /// Failed to parse ip: {0}
-    ParseIp(crate::util::sql::Error),
+    ParseIp(crate::model::sql::Error),
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
     /// Failed to parse ProtocolId: {0}
@@ -112,7 +113,7 @@ pub enum Error {
     /// Sort order: {0}
     SortOrder(crate::util::search::Error),
     /// Node SQL error: {0}
-    Sql(#[from] crate::util::sql::Error),
+    Sql(#[from] crate::model::sql::Error),
     /// Node store error: {0}
     Store(#[from] crate::store::Error),
     /// The requested sort field is unknown.
@@ -129,14 +130,12 @@ impl From<Error> for Status {
         error!("{err}");
         match err {
             Diesel(_) | Store(_) => Status::internal("Internal error."),
-            BillingAmount(_) => Status::invalid_argument("cost"),
             BlockAge(_) => Status::invalid_argument("block_age"),
             BlockHeight(_) => Status::invalid_argument("block_height"),
             FilterLimit(_) => Status::invalid_argument("limit"),
             FilterOffset(_) => Status::invalid_argument("offset"),
             MissingIds => Status::invalid_argument("ids"),
             MissingPlacement => Status::invalid_argument("placement"),
-            NoResourceAffinity => Status::invalid_argument("resource"),
             ParseConfigId(_) => Status::invalid_argument("config_id"),
             ParseHostId(_) => Status::invalid_argument("host_id"),
             ParseId(_) => Status::invalid_argument("node_id"),
@@ -151,6 +150,7 @@ impl From<Error> for Status {
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
+            Amount(err) => err.into(),
             Auth(err) => err.into(),
             AuthToken(err) => err.into(),
             Claims(err) => err.into(),
@@ -161,6 +161,7 @@ impl From<Error> for Status {
             ImageConfig(err) => err.into(),
             ImageProperty(err) => err.into(),
             IpAddress(err) => err.into(),
+            Launcher(err) => err.into(),
             Node(err) => err.into(),
             NodeStatus(err) => err.into(),
             Org(err) => err.into(),
@@ -306,12 +307,12 @@ pub async fn create(
         .as_ref()
         .ok_or(Error::MissingPlacement)?;
 
-    let (node_counts, scheduler, authz) = match placement {
+    let (launcher, scheduler, authz) = match placement {
         Placement::Scheduler(scheduler) => {
             let authz = write
                 .auth_or_for(&meta, NodeAdminPerm::Create, perms, &resources)
                 .await?;
-            (None, Some(scheduler), authz)
+            (Launcher::Scheduler, Some(scheduler), authz)
         }
 
         Placement::HostId(id) => {
@@ -320,22 +321,35 @@ pub async fn create(
             let authz = write
                 .auth_or_for(&meta, NodeAdminPerm::Create, perms, &resources)
                 .await?;
-            (Some(vec![NodeCount::one(host_id)]), None, authz)
+            let launcher = Launcher::BatchHost(vec![HostCount::one(host_id)]);
+            (launcher, None, authz)
         }
 
-        Placement::Multiple(hosts) => {
-            let node_counts = hosts
-                .node_counts
+        Placement::BatchHost(batch) => {
+            let host_counts = batch
+                .host_counts
                 .iter()
-                .map(|nc| nc.try_into().map_err(Into::into))
-                .collect::<Result<Vec<NodeCount>, Error>>()?;
-            for node_count in &node_counts {
-                resources.push(Resource::from(node_count.host_id));
+                .map(|count| count.try_into().map_err(Into::into))
+                .collect::<Result<Vec<HostCount>, Error>>()?;
+            for host_count in &host_counts {
+                resources.push(Resource::from(host_count.host_id));
             }
             let authz = write
                 .auth_or_for(&meta, NodeAdminPerm::Create, perms, &resources)
                 .await?;
-            (Some(node_counts), None, authz)
+            (Launcher::BatchHost(host_counts), None, authz)
+        }
+
+        Placement::BatchRegion(batch) => {
+            let region_counts = batch
+                .region_counts
+                .iter()
+                .map(|count| count.try_into().map_err(Into::into))
+                .collect::<Result<Vec<RegionCount>, Error>>()?;
+            let authz = write
+                .auth_or_for(&meta, NodeAdminPerm::Create, perms, &resources)
+                .await?;
+            (Launcher::BatchRegion(region_counts), None, authz)
         }
     };
 
@@ -389,28 +403,23 @@ pub async fn create(
         protocol_version_id: version.id,
         semantic_version: version.semantic_version,
         auto_upgrade: true,
+        scheduler_resource: scheduler.and_then(|s| s.resource().into()),
         scheduler_similarity: scheduler.and_then(|s| s.similarity().into()),
-        scheduler_resource: scheduler
-            .map(|s| Option::from(s.resource()).ok_or(Error::NoResourceAffinity))
-            .transpose()?,
         scheduler_region_id: region.map(|r| r.id),
         tags,
     };
 
-    let created_by = Resource::from(&authz);
-    let created = new_node
-        .create(node_counts, created_by, &authz, &mut write)
-        .await?;
+    let created = new_node.create(launcher, &authz, &mut write).await?;
 
     let mut nodes = Vec::with_capacity(created.len());
     for node in created {
+        let created_by = common::Resource::from(node.created_by());
         let node_create = NewCommand::node(&node, CommandType::NodeCreate)?
             .create(&mut write)
             .await?;
+
         let api_cmd = api::Command::from(&node_create, &authz, &mut write).await?;
         let api_node = api::Node::from_model(node, &authz, &mut write).await?;
-
-        let created_by = common::Resource::from(created_by);
         let created = api::NodeMessage::created(api_node.clone(), created_by);
 
         write.mqtt(api_cmd);
@@ -581,10 +590,7 @@ pub async fn update_config(
             .map(|tags| tags.into_update(node.tags))
             .transpose()?
             .flatten(),
-        cost: req
-            .cost
-            .map(common::BillingAmount::into_amount)
-            .transpose()?,
+        cost: req.cost.map(common::BillingAmount::try_into).transpose()?,
     };
     update.apply(node_id, &authz, &mut write).await?;
 
@@ -887,8 +893,8 @@ impl api::Node {
             .scheduler_resource
             .zip(region)
             .map(|(resource, region)| NodeScheduler {
+                resource: Some(resource),
                 similarity: node.scheduler_similarity,
-                resource,
                 region: Some(region.clone()),
             });
         let placement = match scheduler {

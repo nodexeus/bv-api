@@ -9,8 +9,8 @@ use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction};
 use crate::grpc::api::bundle_service_server::BundleService;
 use crate::grpc::{api, Grpc, Metadata, Status};
+use crate::model::sql::Version;
 use crate::store::BUNDLE_FILE;
-use crate::util::sql::Version;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -23,7 +23,7 @@ pub enum Error {
     /// Missing bundle identifier.
     MissingId,
     /// Failed to parse version from key `{0}`: {1}
-    ParseVersion(String, crate::util::sql::Error),
+    ParseVersion(String, crate::model::sql::Error),
     /// Store failed: {0}
     Store(#[from] crate::store::Error),
     /// File name should end in `/{BUNDLE_FILE:?}` but is `{0}`.

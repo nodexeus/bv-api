@@ -17,9 +17,9 @@ use crate::model::image::property::ImagePropertyKey;
 use crate::model::image::rule::{ImageRule, NewImageRule};
 use crate::model::image::{Archive, Image, ImageProperty, NewImage, NewProperty, UpdateImage};
 use crate::model::protocol::VersionKey;
+use crate::model::sql::Version;
 use crate::model::ProtocolVersion;
 use crate::store::StoreId;
-use crate::util::sql::Version;
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::image_service_server::ImageService;
@@ -72,7 +72,7 @@ pub enum Error {
     /// Failed to parse ProtocolId: {0}
     ParseProtocolId(uuid::Error),
     /// Failed to parse protocol version: {0}
-    ParseVersion(crate::util::sql::Error),
+    ParseVersion(crate::model::sql::Error),
     /// Failed to parse VersionId: {0}
     ParseVersionId(uuid::Error),
     /// Image property error: {0}

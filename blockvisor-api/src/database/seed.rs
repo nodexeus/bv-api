@@ -15,9 +15,9 @@ use crate::model::protocol::version::{ProtocolVersion, VersionId};
 use crate::model::protocol::{Protocol, ProtocolId};
 use crate::model::rbac::RbacUser;
 use crate::model::schema::{images, nodes, orgs, protocol_versions, protocols};
+use crate::model::sql::{IpNetwork, Tag, Tags};
 use crate::model::user::NewUser;
 use crate::model::{IpAddress, Org, Region, User};
-use crate::util::sql::{IpNetwork, Tag, Tags};
 
 use super::Conn;
 

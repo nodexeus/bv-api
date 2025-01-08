@@ -37,8 +37,6 @@ use std::sync::Arc;
 use axum::http::HeaderValue;
 use axum::Extension;
 use derive_more::Deref;
-use displaydoc::Display;
-use thiserror::Error;
 use tonic::codec::CompressionEncoding;
 use tonic::metadata::AsciiMetadataValue;
 use tonic::transport::server::Router;
@@ -46,10 +44,7 @@ use tonic::transport::Server;
 use tower_http::cors::{self, CorsLayer};
 use tower_http::trace::TraceLayer;
 
-use crate::auth::rbac::{HostAdminPerm, NodeAdminPerm};
-use crate::auth::AuthZ;
 use crate::config::Context;
-use crate::model;
 
 use self::api::api_key_service_server::ApiKeyServiceServer;
 use self::api::archive_service_server::ArchiveServiceServer;
@@ -291,101 +286,4 @@ pub fn server(context: &Arc<Context>) -> Router<impl Clone> {
         .add_service(gzip_service!(OrgServiceServer, grpc.clone()))
         .add_service(gzip_service!(ProtocolServiceServer, grpc.clone()))
         .add_service(gzip_service!(UserServiceServer, grpc))
-}
-
-#[derive(Debug, Display, Error)]
-pub enum BillingAmountError {
-    /// Billing amount provided without an `amount` field.
-    NoAmount,
-    /// Unknown currency.
-    UnknownCurrency,
-    /// Unknown period.
-    UnknownPeriod,
-}
-
-impl common::BillingAmount {
-    fn from_host(host: &model::Host, authz: &AuthZ) -> Option<Self> {
-        let cost = host.cost?;
-        if !authz.has_perm(HostAdminPerm::Cost) {
-            return None;
-        }
-        Some(common::BillingAmount {
-            amount: Some(common::Amount {
-                currency: common::Currency::from(cost.currency) as i32,
-                amount_minor_units: cost.amount,
-            }),
-            period: common::Period::from(cost.period) as i32,
-        })
-    }
-
-    fn from_node(node: &model::Node, authz: &AuthZ) -> Option<Self> {
-        let cost = node.cost?;
-        if !authz.has_perm(NodeAdminPerm::Cost) {
-            return None;
-        }
-        Some(common::BillingAmount {
-            amount: Some(common::Amount {
-                currency: common::Currency::from(cost.currency) as i32,
-                amount_minor_units: cost.amount,
-            }),
-            period: common::Period::from(cost.period) as i32,
-        })
-    }
-
-    fn into_amount(self) -> Result<model::Amount, BillingAmountError> {
-        let amount = self.amount.ok_or(BillingAmountError::NoAmount)?;
-        Ok(model::Amount {
-            amount: amount.amount_minor_units,
-            currency: model::Currency::try_from(amount.currency())?,
-            period: model::Period::try_from(self.period())?,
-        })
-    }
-}
-
-impl From<model::Currency> for common::Currency {
-    fn from(value: model::Currency) -> Self {
-        match value {
-            model::Currency::Usd => common::Currency::Usd,
-        }
-    }
-}
-
-impl common::Currency {
-    pub const fn from_stripe(value: crate::stripe::api::currency::Currency) -> Option<Self> {
-        use crate::stripe::api::currency::Currency::*;
-        match value {
-            USD => Some(common::Currency::Usd),
-            _ => None,
-        }
-    }
-}
-
-impl From<model::Period> for common::Period {
-    fn from(value: model::Period) -> Self {
-        match value {
-            model::Period::Monthly => common::Period::Monthly,
-        }
-    }
-}
-
-impl TryFrom<common::Currency> for model::Currency {
-    type Error = BillingAmountError;
-
-    fn try_from(value: common::Currency) -> Result<Self, Self::Error> {
-        match value {
-            common::Currency::Usd => Ok(model::Currency::Usd),
-            common::Currency::Unspecified => Err(BillingAmountError::UnknownPeriod),
-        }
-    }
-}
-
-impl TryFrom<common::Period> for model::Period {
-    type Error = BillingAmountError;
-
-    fn try_from(value: common::Period) -> Result<Self, Self::Error> {
-        match value {
-            common::Period::Monthly => Ok(model::Period::Monthly),
-            common::Period::Unspecified => Err(BillingAmountError::UnknownPeriod),
-        }
-    }
 }
