@@ -188,10 +188,13 @@ fn create_node(test: &TestServer, old_node_id: Option<NodeId>) -> api::NodeServi
         org_id: test.seed().org.id.to_string(),
         image_id: test.seed().image.id.to_string(),
         old_node_id: old_node_id.map(|id| id.to_string()),
-        placement: Some(common::NodePlacement {
-            placement: Some(common::node_placement::Placement::HostId(
-                test.seed().host1.id.to_string(),
-            )),
+        launcher: Some(common::NodeLauncher {
+            launch: Some(common::node_launcher::Launch::ByHost(common::ByHost {
+                host_counts: vec![common::HostCount {
+                    host_id: test.seed().host1.id.to_string(),
+                    node_count: 1,
+                }],
+            })),
         }),
         new_values: vec![],
         add_rules: vec![],

@@ -1,5 +1,6 @@
 use blockvisor_api::database::seed::{
     ARCHIVE_ID_1, ARCHIVE_ID_2, DISK_BYTES, IMAGE_ID, MEMORY_BYTES, MORE_RESOURCES_KEY, ORG_ID,
+    REGION_ID,
 };
 use blockvisor_api::grpc::{api, common};
 use blockvisor_api::model::command::Command;
@@ -22,7 +23,7 @@ async fn create_a_new_node() {
         org_id,
         image_id,
         old_node_id: None,
-        placement: Some(scheduler_placement()),
+        launcher: Some(launch_region(REGION_ID, 1)),
         new_values,
         add_rules,
         tags: None,
@@ -69,7 +70,7 @@ async fn create_a_new_node() {
 
     // can choose a specific host to create a node on
     let mut host2_req = create_req(ORG_ID.into(), IMAGE_ID.into(), vec![], vec![]);
-    host2_req.placement = Some(host_placement(test.seed().host2.id));
+    host2_req.launcher = Some(launch_host(test.seed().host2.id, 1));
     let result = test
         .send_admin(NodeService::create, host2_req.clone())
         .await;
@@ -83,23 +84,27 @@ async fn create_a_new_node() {
     assert_eq!(result.unwrap_err().code(), Code::FailedPrecondition);
 }
 
-fn scheduler_placement() -> common::NodePlacement {
-    common::NodePlacement {
-        placement: Some(common::node_placement::Placement::Scheduler(
-            common::NodeScheduler {
-                resource: None,
-                similarity: None,
-                region: None,
-            },
-        )),
+fn launch_host<S: ToString>(host_id: S, node_count: u32) -> common::NodeLauncher {
+    common::NodeLauncher {
+        launch: Some(common::node_launcher::Launch::ByHost(common::ByHost {
+            host_counts: vec![common::HostCount {
+                host_id: host_id.to_string(),
+                node_count,
+            }],
+        })),
     }
 }
 
-fn host_placement<S: ToString>(host_id: S) -> common::NodePlacement {
-    common::NodePlacement {
-        placement: Some(common::node_placement::Placement::HostId(
-            host_id.to_string(),
-        )),
+fn launch_region<S: ToString>(region_id: S, node_count: u32) -> common::NodeLauncher {
+    common::NodeLauncher {
+        launch: Some(common::node_launcher::Launch::ByRegion(common::ByRegion {
+            region_counts: vec![common::RegionCount {
+                region_id: region_id.to_string(),
+                node_count,
+                resource: None,
+                similarity: None,
+            }],
+        })),
     }
 }
 

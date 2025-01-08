@@ -25,22 +25,6 @@ impl NodeScheduler {
     }
 }
 
-impl From<NodeScheduler> for common::NodeScheduler {
-    fn from(scheduler: NodeScheduler) -> Self {
-        common::NodeScheduler {
-            resource: scheduler
-                .resource
-                .map(common::ResourceAffinity::from)
-                .map(Into::into),
-            similarity: scheduler
-                .similarity
-                .map(common::SimilarNodeAffinity::from)
-                .map(Into::into),
-            region: scheduler.region.map(|r| r.name),
-        }
-    }
-}
-
 /// Whether similar nodes will be placed on the same host or spread over many.
 #[derive(Clone, Copy, Debug, DbEnum)]
 #[ExistingTypePath = "sql_types::EnumNodeSimilarityAffinity"]

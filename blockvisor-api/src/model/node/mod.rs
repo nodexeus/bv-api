@@ -1,8 +1,8 @@
 pub mod job;
 pub use job::{NodeJob, NodeJobProgress, NodeJobStatus, NodeJobs};
 
-pub mod launcher;
-pub use launcher::{HostCount, Launcher, RegionCount};
+pub mod launch;
+pub use launch::{HostCount, Launch, RegionCount};
 
 pub mod log;
 pub use log::{LogEvent, NewNodeLog, NodeEvent, NodeEventData, NodeLog};
@@ -28,7 +28,6 @@ use diesel::result::Error::{DatabaseError, NotFound};
 use diesel::sql_types::Bool;
 use diesel_async::RunQueryDsl;
 use displaydoc::Display;
-use futures_util::future::OptionFuture;
 use petname::{Generator, Petnames};
 use thiserror::Error;
 use tracing::warn;
@@ -101,8 +100,8 @@ pub enum Error {
     IpAddress(#[from] crate::model::ip_address::Error),
     /// The stripe `item` for this node doesn't have an associated `price`.
     ItemWithoutPrice,
-    /// Node launcher error: {0}
-    Launcher(#[from] Box<self::launcher::Error>),
+    /// Node launch error: {0}
+    Launch(#[from] Box<self::launch::Error>),
     /// Missing node-admin-transfer permission.
     MissingTransferPerm,
     /// Node log error: {0}
@@ -174,7 +173,7 @@ impl From<Error> for Status {
             Host(err) => err.into(),
             Image(err) => err.into(),
             IpAddress(err) => err.into(),
-            Launcher(err) => (*err).into(),
+            Launch(err) => (*err).into(),
             NodeLog(err) => err.into(),
             Org(err) => err.into(),
             Paginate(err) => err.into(),
@@ -486,16 +485,13 @@ pub struct NewNode {
     pub protocol_version_id: VersionId,
     pub semantic_version: Version,
     pub auto_upgrade: bool,
-    pub scheduler_resource: Option<ResourceAffinity>,
-    pub scheduler_similarity: Option<SimilarNodeAffinity>,
-    pub scheduler_region_id: Option<RegionId>,
     pub tags: Tags,
 }
 
 impl NewNode {
     pub async fn create(
         &self,
-        launcher: Launcher,
+        launch: Launch,
         authz: &AuthZ,
         write: &mut WriteConn<'_, '_>,
     ) -> Result<Vec<Node>, Error> {
@@ -532,10 +528,10 @@ impl NewNode {
         };
              */
 
-        launcher
-            .launch(self, &org, &version, &node_config, None, authz, write)
+        launch
+            .create(self, &org, &version, &node_config, None, authz, write)
             .await
-            .map_err(|err| Error::Launcher(Box::new(err)))
+            .map_err(|err| Error::Launch(Box::new(err)))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -678,17 +674,6 @@ impl NewNode {
 
         let candidates = Host::candidates(requirements, Some(1), conn).await?;
         candidates.into_iter().next().ok_or(Error::NoMatchingHost)
-    }
-
-    async fn scheduler(&self, conn: &mut Conn<'_>) -> Result<NodeScheduler, Error> {
-        let region = self.scheduler_region_id.map(|id| Region::by_id(id, conn));
-        let region = OptionFuture::from(region).await.transpose()?;
-
-        Ok(NodeScheduler {
-            resource: self.scheduler_resource,
-            similarity: self.scheduler_similarity,
-            region,
-        })
     }
 }
 
@@ -1152,15 +1137,12 @@ mod tests {
             protocol_version_id: db.seed.version.id,
             semantic_version: "1.2.3".parse().unwrap(),
             auto_upgrade: false,
-            scheduler_similarity: None,
-            scheduler_resource: Some(ResourceAffinity::MostResources),
-            scheduler_region_id: None,
             tags: Default::default(),
         };
 
-        let launcher = Launcher::BatchHost(vec![HostCount::one(db.seed.host1.id)]);
+        let launch = Launch::ByHost(vec![HostCount::one(db.seed.host1.id)]);
         let authz = view_authz(db.seed.node.id);
-        new_node.create(launcher, &authz, &mut write).await.unwrap();
+        new_node.create(launch, &authz, &mut write).await.unwrap();
 
         let filter = NodeFilter {
             protocol_ids: vec![],

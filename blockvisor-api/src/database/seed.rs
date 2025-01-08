@@ -66,6 +66,9 @@ pub const HOST_2: &str = "host-2";
 pub const NODE_ID: &str = "cdbbc736-f399-42ab-86cf-617ce983011d";
 pub const NODE_NAME: &str = "node-1";
 
+pub const REGION_ID: &str = "25282a98-a121-4b37-89ec-fae40eec6622";
+pub const REGION_NAME: &str = "moon";
+
 pub const IP_RANGE: [&str; 10] = [
     "127.0.0.1",
     "127.0.0.2",
@@ -236,9 +239,11 @@ async fn create_users(org_id: OrgId, conn: &mut Conn<'_>) -> (User, User) {
 }
 
 async fn create_region(conn: &mut Conn<'_>) -> Region {
-    Region::get_or_create("moneyland", Some("MOLA"), conn)
-        .await
-        .unwrap()
+    let query = format!("INSERT INTO regions (id, name) VALUES ('{REGION_ID}', '{REGION_NAME}');");
+    diesel::sql_query(query).execute(conn).await.unwrap();
+
+    let region_id = REGION_ID.parse().unwrap();
+    Region::by_id(region_id, conn).await.unwrap()
 }
 
 async fn create_hosts(

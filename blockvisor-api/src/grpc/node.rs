@@ -14,9 +14,8 @@ use crate::model::command::NewCommand;
 use crate::model::image::config::{Config, ConfigType, NewConfig, NodeConfig};
 use crate::model::image::ConfigId;
 use crate::model::node::{
-    HostCount, Launcher, NewNode, NextState, Node, NodeFilter, NodeReport, NodeScheduler,
-    NodeSearch, NodeSort, NodeState, NodeStatus, RegionCount, UpdateNode, UpdateNodeConfig,
-    UpdateNodeState, UpgradeNode,
+    HostCount, Launch, NewNode, NextState, Node, NodeFilter, NodeReport, NodeSearch, NodeSort,
+    NodeState, NodeStatus, RegionCount, UpdateNode, UpdateNodeConfig, UpdateNodeState, UpgradeNode,
 };
 use crate::model::protocol::ProtocolVersion;
 use crate::model::sql::{Tag, Tags};
@@ -25,7 +24,7 @@ use crate::util::{HashVec, NanosUtc};
 
 use super::api::node_service_server::NodeService;
 use super::command::node_update;
-use super::common::node_placement::Placement;
+use super::common::node_launcher;
 use super::{api, common, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
@@ -62,12 +61,14 @@ pub enum Error {
     ImageProperty(#[from] crate::model::image::property::Error),
     /// Node ip address error: {0}
     IpAddress(#[from] crate::model::ip_address::Error),
-    /// Node launcher error: {0}
-    Launcher(#[from] crate::model::node::launcher::Error),
+    /// Node launch error: {0}
+    Launch(#[from] crate::model::node::launch::Error),
     /// No node ids given.
     MissingIds,
-    /// Missing placement.
-    MissingPlacement,
+    /// Missing launch type.
+    MissingLaunch,
+    /// Missing NodeLauncher.
+    MissingLauncher,
     /// Node model error: {0}
     Node(#[from] crate::model::node::Error),
     /// Node model status error: {0}
@@ -135,7 +136,8 @@ impl From<Error> for Status {
             FilterLimit(_) => Status::invalid_argument("limit"),
             FilterOffset(_) => Status::invalid_argument("offset"),
             MissingIds => Status::invalid_argument("ids"),
-            MissingPlacement => Status::invalid_argument("placement"),
+            MissingLaunch => Status::invalid_argument("launch"),
+            MissingLauncher => Status::invalid_argument("launcher"),
             ParseConfigId(_) => Status::invalid_argument("config_id"),
             ParseHostId(_) => Status::invalid_argument("host_id"),
             ParseId(_) => Status::invalid_argument("node_id"),
@@ -161,7 +163,7 @@ impl From<Error> for Status {
             ImageConfig(err) => err.into(),
             ImageProperty(err) => err.into(),
             IpAddress(err) => err.into(),
-            Launcher(err) => err.into(),
+            Launch(err) => err.into(),
             Node(err) => err.into(),
             NodeStatus(err) => err.into(),
             Org(err) => err.into(),
@@ -299,33 +301,14 @@ pub async fn create(
         resources.push(Resource::from(old_id));
     };
 
-    let placement = req
-        .placement
-        .as_ref()
-        .ok_or(Error::MissingPlacement)?
-        .placement
-        .as_ref()
-        .ok_or(Error::MissingPlacement)?;
+    let launch = req
+        .launcher
+        .ok_or(Error::MissingLauncher)?
+        .launch
+        .ok_or(Error::MissingLaunch)?;
 
-    let (launcher, scheduler, authz) = match placement {
-        Placement::Scheduler(scheduler) => {
-            let authz = write
-                .auth_or_for(&meta, NodeAdminPerm::Create, perms, &resources)
-                .await?;
-            (Launcher::Scheduler, Some(scheduler), authz)
-        }
-
-        Placement::HostId(id) => {
-            let host_id = id.parse().map_err(Error::ParseHostId)?;
-            resources.push(Resource::from(host_id));
-            let authz = write
-                .auth_or_for(&meta, NodeAdminPerm::Create, perms, &resources)
-                .await?;
-            let launcher = Launcher::BatchHost(vec![HostCount::one(host_id)]);
-            (launcher, None, authz)
-        }
-
-        Placement::BatchHost(batch) => {
+    let (launch, authz) = match launch {
+        node_launcher::Launch::ByHost(batch) => {
             let host_counts = batch
                 .host_counts
                 .iter()
@@ -337,10 +320,10 @@ pub async fn create(
             let authz = write
                 .auth_or_for(&meta, NodeAdminPerm::Create, perms, &resources)
                 .await?;
-            (Launcher::BatchHost(host_counts), None, authz)
+            (Launch::ByHost(host_counts), authz)
         }
 
-        Placement::BatchRegion(batch) => {
+        node_launcher::Launch::ByRegion(batch) => {
             let region_counts = batch
                 .region_counts
                 .iter()
@@ -349,7 +332,7 @@ pub async fn create(
             let authz = write
                 .auth_or_for(&meta, NodeAdminPerm::Create, perms, &resources)
                 .await?;
-            (Launcher::BatchRegion(region_counts), None, authz)
+            (Launch::ByRegion(region_counts), authz)
         }
     };
 
@@ -379,11 +362,6 @@ pub async fn create(
     };
     let config = new_config.create(&authz, &mut write).await?;
 
-    let region = match scheduler.as_ref().and_then(|s| s.region.as_ref()) {
-        Some(region) => Some(Region::by_name(region, &mut write).await?),
-        None => None,
-    };
-
     let tags = if let Some(ref tags) = req.tags {
         tags.tags
             .iter()
@@ -403,13 +381,10 @@ pub async fn create(
         protocol_version_id: version.id,
         semantic_version: version.semantic_version,
         auto_upgrade: true,
-        scheduler_resource: scheduler.and_then(|s| s.resource().into()),
-        scheduler_similarity: scheduler.and_then(|s| s.similarity().into()),
-        scheduler_region_id: region.map(|r| r.id),
         tags,
     };
 
-    let created = new_node.create(launcher, &authz, &mut write).await?;
+    let created = new_node.create(launch, &authz, &mut write).await?;
 
     let mut nodes = Vec::with_capacity(created.len());
     for node in created {
@@ -785,11 +760,17 @@ impl api::Node {
     pub async fn from_model(node: Node, authz: &AuthZ, conn: &mut Conn<'_>) -> Result<Self, Error> {
         let config = Config::by_id(node.config_id, conn).await?;
         let org = Org::by_id(node.org_id, conn).await?;
+
         let host = Host::by_id(node.host_id, Some(node.org_id), conn).await?;
+        let region = if let Some(id) = host.region_id {
+            Some(Region::by_id(id, conn).await?)
+        } else {
+            None
+        };
+
         let protocol = Protocol::by_id(node.protocol_id, Some(org.id), authz, conn).await?;
         let version =
             ProtocolVersion::by_id(node.protocol_version_id, Some(org.id), authz, conn).await?;
-        let region = node.region(conn).await?;
         let reports = NodeReport::by_node(node.id, conn).await?;
 
         api::Node::new(
@@ -797,9 +778,9 @@ impl api::Node {
             &config,
             &org,
             &host,
+            region.as_ref(),
             &protocol,
             &version,
-            region.as_ref(),
             reports,
             authz,
         )
@@ -823,9 +804,12 @@ impl api::Node {
             .to_map_keep_last(|org| (org.id, org));
 
         let host_ids = nodes.iter().map(|n| n.host_id).collect();
-        let hosts = Host::by_ids(&host_ids, &org_ids, conn)
+        let hosts = Host::by_ids(&host_ids, &org_ids, conn).await?;
+        let region_ids = hosts.iter().filter_map(|h| h.region_id).collect();
+        let regions = Region::by_ids(&region_ids, conn)
             .await?
-            .to_map_keep_last(|host| (host.id, host));
+            .to_map_keep_last(|region| (region.id, region));
+        let hosts = hosts.to_map_keep_last(|host| (host.id, host));
 
         let protocol_ids = nodes.iter().map(|n| n.protocol_id).collect();
         let protocol = Protocol::by_ids(&protocol_ids, &org_ids, authz, conn)
@@ -837,11 +821,6 @@ impl api::Node {
             .await?
             .to_map_keep_last(|version| (version.id, version));
 
-        let region_ids = nodes.iter().filter_map(|n| n.scheduler_region_id).collect();
-        let regions = Region::by_ids(&region_ids, conn)
-            .await?
-            .to_map_keep_last(|region| (region.id, region));
-
         let mut reports = NodeReport::by_node_ids(&node_ids, conn)
             .await?
             .to_map_keep_all(|report| (report.node_id, report));
@@ -852,13 +831,13 @@ impl api::Node {
                 let config = configs.get(&node.config_id)?;
                 let org = orgs.get(&node.org_id)?;
                 let host = hosts.get(&node.host_id)?;
+                let region = host.region_id.and_then(|id| regions.get(&id));
                 let protocol = protocol.get(&node.protocol_id)?;
                 let version = versions.get(&node.protocol_version_id)?;
-                let region = node.scheduler_region_id.map(|id| &regions[&id]);
                 let reports = reports.remove(&node.id).unwrap_or_default();
 
                 Some(api::Node::new(
-                    node, config, org, host, protocol, version, region, reports, authz,
+                    node, config, org, host, region, protocol, version, reports, authz,
                 ))
             })
             .collect()
@@ -870,15 +849,16 @@ impl api::Node {
         config: &Config,
         org: &Org,
         host: &Host,
+        region: Option<&Region>,
         protocol: &Protocol,
         version: &ProtocolVersion,
-        region: Option<&Region>,
         reports: Vec<NodeReport>,
         authz: &AuthZ,
     ) -> Result<Self, Error> {
         let config = config.node_config()?;
         let status = node.status();
         let created_by = node.created_by();
+        let cost = common::BillingAmount::from_node(&node, authz);
 
         let block_height = node
             .block_height
@@ -888,24 +868,6 @@ impl api::Node {
             .block_height
             .map(|age| u64::try_from(age).map_err(Error::BlockAge))
             .transpose()?;
-
-        let scheduler = node
-            .scheduler_resource
-            .zip(region)
-            .map(|(resource, region)| NodeScheduler {
-                resource: Some(resource),
-                similarity: node.scheduler_similarity,
-                region: Some(region.clone()),
-            });
-        let placement = match scheduler {
-            Some(scheduler) => common::node_placement::Placement::Scheduler(scheduler.into()),
-            None => common::node_placement::Placement::HostId(node.host_id.to_string()),
-        };
-        let placement = common::NodePlacement {
-            placement: Some(placement),
-        };
-
-        let cost = common::BillingAmount::from_node(&node, authz);
 
         let jobs = node
             .jobs
@@ -938,6 +900,7 @@ impl api::Node {
             host_org_id: host.org_id.map(|id| id.to_string()),
             host_network_name: host.network_name.clone(),
             host_display_name: host.display_name.clone(),
+            host_region: region.map(|region| region.name.clone()),
             protocol_id: node.protocol_id.to_string(),
             protocol_name: protocol.name.clone(),
             protocol_version_id: node.protocol_version_id.to_string(),
@@ -955,7 +918,6 @@ impl api::Node {
             block_height,
             block_age,
             note: node.note,
-            placement: Some(placement),
             node_status: Some(status.into()),
             jobs,
             reports,

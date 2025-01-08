@@ -16,15 +16,15 @@ use super::{NewNode, Node, NodeScheduler, ResourceAffinity, SimilarNodeAffinity}
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    /// Launcher host error: {0}
+    /// Launch host error: {0}
     Host(#[from] crate::model::host::Error),
-    /// Launcher node error: {0}
+    /// Launch node error: {0}
     Node(#[from] crate::model::node::Error),
     /// Failed to parse HostId: {0}
     ParseHostId(uuid::Error),
     /// Failed to parse RegionId: {0}
     ParseRegionId(uuid::Error),
-    /// Launcher region error: {0}
+    /// Launch region error: {0}
     Region(#[from] crate::model::region::Error),
 }
 
@@ -41,15 +41,14 @@ impl From<Error> for Status {
     }
 }
 
-pub enum Launcher {
-    Scheduler,
-    BatchHost(Vec<HostCount>),
-    BatchRegion(Vec<RegionCount>),
+pub enum Launch {
+    ByHost(Vec<HostCount>),
+    ByRegion(Vec<RegionCount>),
 }
 
-impl Launcher {
+impl Launch {
     #[allow(clippy::too_many_arguments)]
-    pub async fn launch(
+    pub async fn create(
         self,
         node: &NewNode,
         org: &Org,
@@ -63,25 +62,7 @@ impl Launcher {
         let mut launched = Vec::new();
 
         match self {
-            Launcher::Scheduler => {
-                let scheduler = node.scheduler(write).await?;
-                let host = node.find_host(&scheduler, authz, write).await?;
-                let node = node
-                    .create_node(
-                        &host,
-                        org,
-                        version,
-                        node_config,
-                        secrets,
-                        created_by,
-                        authz,
-                        write,
-                    )
-                    .await?;
-                launched.push(node);
-            }
-
-            Launcher::BatchHost(host_counts) => {
+            Launch::ByHost(host_counts) => {
                 for count in host_counts {
                     let host = Host::by_id(count.host_id, Some(node.org_id), write).await?;
                     for _ in 0..count.node_count {
@@ -113,7 +94,7 @@ impl Launcher {
                 }
             }
 
-            Launcher::BatchRegion(region_counts) => {
+            Launch::ByRegion(region_counts) => {
                 for count in region_counts {
                     let region = Region::by_id(count.region_id, write).await?;
                     let scheduler = NodeScheduler {
