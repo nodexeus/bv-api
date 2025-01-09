@@ -130,7 +130,7 @@ impl TryFrom<common::Period> for Period {
 
 impl common::BillingAmount {
     pub fn from_host(host: &Host, authz: &AuthZ) -> Option<Self> {
-        if !authz.has_perm(HostAdminPerm::Cost) {
+        if !authz.has_perm(HostAdminPerm::ViewCost) {
             return None;
         }
 
@@ -145,7 +145,7 @@ impl common::BillingAmount {
     }
 
     pub fn from_node(node: &Node, authz: &AuthZ) -> Option<Self> {
-        if !authz.has_perm(NodeAdminPerm::Cost) {
+        if !authz.has_perm(NodeAdminPerm::ViewCost) {
             return None;
         }
 

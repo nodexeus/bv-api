@@ -19,6 +19,7 @@ use crate::model::host::{
 };
 use crate::model::node::NodeScheduler;
 use crate::model::protocol::ProtocolVersion;
+use crate::model::region::NewRegion;
 use crate::model::sql::{IpNetwork, Tag, Tags, Version};
 use crate::model::{CommandType, Image, IpAddress, Node, Org, Protocol, Region, RegionId, Token};
 use crate::util::{HashVec, NanosUtc};
@@ -62,6 +63,8 @@ pub enum Error {
     Jwt(#[from] crate::auth::token::jwt::Error),
     /// Failed to parse memory bytes: {0}
     MemoryBytes(std::num::TryFromIntError),
+    /// Lookup missing Region. This should not happen.
+    MissingRegion,
     /// Node model error: {0}
     Node(#[from] crate::model::node::Error),
     /// Host org error: {0}
@@ -82,6 +85,8 @@ pub enum Error {
     ParseNodeCount(std::num::TryFromIntError),
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
+    /// Failed to parse RegionId: {0}
+    ParseRegionId(uuid::Error),
     /// Host protocol error: {0}
     Protocol(#[from] crate::model::protocol::Error),
     /// Host protocol version error: {0}
@@ -107,7 +112,7 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Diesel(_) | Jwt(_) | ParseNodeCount(_) | Refresh(_) => {
+            Diesel(_) | Jwt(_) | MissingRegion | ParseNodeCount(_) | Refresh(_) => {
                 Status::internal("Internal error.")
             }
             CpuCores(_) => Status::out_of_range("cpu_cores"),
@@ -124,6 +129,7 @@ impl From<Error> for Status {
             ParseIpAddress(_) => Status::invalid_argument("ip_address"),
             ParseIpGateway(_) => Status::invalid_argument("ip_gateway"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
+            ParseRegionId(_) => Status::invalid_argument("region_id"),
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
@@ -148,48 +154,75 @@ impl From<Error> for Status {
 
 #[tonic::async_trait]
 impl HostService for Grpc {
-    async fn create(
+    async fn create_host(
         &self,
-        req: Request<api::HostServiceCreateRequest>,
-    ) -> Result<Response<api::HostServiceCreateResponse>, tonic::Status> {
+        req: Request<api::HostServiceCreateHostRequest>,
+    ) -> Result<Response<api::HostServiceCreateHostResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| create(req, meta.into(), write).scope_boxed())
+        self.write(|write| create_host(req, meta.into(), write).scope_boxed())
             .await
     }
 
-    async fn get(
+    async fn create_region(
         &self,
-        req: Request<api::HostServiceGetRequest>,
-    ) -> Result<Response<api::HostServiceGetResponse>, tonic::Status> {
+        req: Request<api::HostServiceCreateRegionRequest>,
+    ) -> Result<Response<api::HostServiceCreateRegionResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| get(req, meta.into(), read).scope_boxed())
+        self.write(|write| create_region(req, meta.into(), write).scope_boxed())
             .await
     }
 
-    async fn list(
+    async fn get_host(
         &self,
-        req: Request<api::HostServiceListRequest>,
-    ) -> Result<Response<api::HostServiceListResponse>, tonic::Status> {
+        req: Request<api::HostServiceGetHostRequest>,
+    ) -> Result<Response<api::HostServiceGetHostResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.read(|read| list(req, meta.into(), read).scope_boxed())
+        self.read(|read| get_host(req, meta.into(), read).scope_boxed())
             .await
     }
 
-    async fn update(
+    async fn get_region(
         &self,
-        req: Request<api::HostServiceUpdateRequest>,
-    ) -> Result<Response<api::HostServiceUpdateResponse>, tonic::Status> {
+        req: Request<api::HostServiceGetRegionRequest>,
+    ) -> Result<Response<api::HostServiceGetRegionResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| update(req, meta.into(), write).scope_boxed())
+        self.read(|read| get_region(req, meta.into(), read).scope_boxed())
             .await
     }
 
-    async fn delete(
+    async fn list_hosts(
         &self,
-        req: Request<api::HostServiceDeleteRequest>,
-    ) -> Result<Response<api::HostServiceDeleteResponse>, tonic::Status> {
+        req: Request<api::HostServiceListHostsRequest>,
+    ) -> Result<Response<api::HostServiceListHostsResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
-        self.write(|write| delete(req, meta.into(), write).scope_boxed())
+        self.read(|read| list_hosts(req, meta.into(), read).scope_boxed())
+            .await
+    }
+
+    async fn list_regions(
+        &self,
+        req: Request<api::HostServiceListRegionsRequest>,
+    ) -> Result<Response<api::HostServiceListRegionsResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.read(|read| list_regions(req, meta.into(), read).scope_boxed())
+            .await
+    }
+
+    async fn update_host(
+        &self,
+        req: Request<api::HostServiceUpdateHostRequest>,
+    ) -> Result<Response<api::HostServiceUpdateHostResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| update_host(req, meta.into(), write).scope_boxed())
+            .await
+    }
+
+    async fn delete_host(
+        &self,
+        req: Request<api::HostServiceDeleteHostRequest>,
+    ) -> Result<Response<api::HostServiceDeleteHostResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| delete_host(req, meta.into(), write).scope_boxed())
             .await
     }
 
@@ -219,40 +252,24 @@ impl HostService for Grpc {
         self.write(|write| restart(req, meta.into(), write).scope_boxed())
             .await
     }
-
-    async fn regions(
-        &self,
-        req: Request<api::HostServiceRegionsRequest>,
-    ) -> Result<Response<api::HostServiceRegionsResponse>, tonic::Status> {
-        let (meta, _, req) = req.into_parts();
-        self.read(|read| regions(req, meta.into(), read).scope_boxed())
-            .await
-    }
 }
 
-pub async fn create(
-    req: api::HostServiceCreateRequest,
+pub async fn create_host(
+    req: api::HostServiceCreateHostRequest,
     _meta: Metadata,
     mut write: WriteConn<'_, '_>,
-) -> Result<api::HostServiceCreateResponse, Error> {
+) -> Result<api::HostServiceCreateHostResponse, Error> {
     let token = Token::host_provision_by_token(&req.provision_token, &mut write)
         .await
         .map_err(Error::HostProvisionByToken)?;
     let org_id = req.is_private.then_some(token.org_id);
+    let region_id = req.region_id.parse().map_err(Error::ParseRegionId)?;
 
     let host_ips: Vec<_> = req
         .ips
         .iter()
         .map(|ip| ip.parse().map_err(Error::ParseIps))
         .collect::<Result<_, _>>()?;
-
-    let region = if let Some(ref region) = req.region {
-        Region::get_or_create(region, None, &mut write)
-            .await
-            .map(Some)?
-    } else {
-        None
-    };
 
     let tags = if let Some(ref tags) = req.tags {
         tags.tags
@@ -266,9 +283,9 @@ pub async fn create(
 
     let new_host = NewHost {
         org_id,
+        region_id,
         network_name: &req.network_name,
         display_name: req.display_name.as_deref(),
-        region_id: region.map(|region| region.id),
         schedule_type: req.schedule_type().try_into()?,
         os: &req.os,
         os_version: &req.os_version,
@@ -295,7 +312,7 @@ pub async fn create(
 
     let host = api::Host::from_host(host, None, &mut write).await?;
 
-    Ok(api::HostServiceCreateResponse {
+    Ok(api::HostServiceCreateHostResponse {
         host: Some(host),
         token: jwt.into(),
         refresh: encoded.into(),
@@ -303,53 +320,139 @@ pub async fn create(
     })
 }
 
-pub async fn get(
-    req: api::HostServiceGetRequest,
+pub async fn create_region(
+    req: api::HostServiceCreateRegionRequest,
+    meta: Metadata,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::HostServiceCreateRegionResponse, Error> {
+    let _authz = write.auth(&meta, HostAdminPerm::CreateRegion).await?;
+
+    let new_region = NewRegion {
+        name: &req.name,
+        sku_code: req.sku_code.as_deref(),
+    };
+    let region = new_region.create(&mut write).await?;
+
+    Ok(api::HostServiceCreateRegionResponse {
+        region: Some(region.into()),
+    })
+}
+
+pub async fn get_host(
+    req: api::HostServiceGetHostRequest,
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
-) -> Result<api::HostServiceGetResponse, Error> {
+) -> Result<api::HostServiceGetHostResponse, Error> {
     let id: HostId = req.host_id.parse().map_err(Error::ParseId)?;
     let mut resources = vec![Resource::from(id)];
 
     let org_id = Host::org_id(id, &mut read).await?;
     let authz = if let Some(org_id) = org_id {
         resources.push(Resource::from(org_id));
-        read.auth_or_for(&meta, HostAdminPerm::Get, HostPerm::Get, &resources)
+        read.auth_or_for(&meta, HostAdminPerm::GetHost, HostPerm::GetHost, &resources)
             .await?
     } else {
-        read.auth(&meta, HostAdminPerm::Get).await?
+        read.auth(&meta, HostAdminPerm::GetHost).await?
     };
 
     let host = Host::by_id(id, org_id, &mut read).await?;
     let host = api::Host::from_host(host, Some(&authz), &mut read).await?;
 
-    Ok(api::HostServiceGetResponse { host: Some(host) })
+    Ok(api::HostServiceGetHostResponse { host: Some(host) })
 }
 
-pub async fn list(
-    req: api::HostServiceListRequest,
+pub async fn get_region(
+    req: api::HostServiceGetRegionRequest,
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
-) -> Result<api::HostServiceListResponse, Error> {
+) -> Result<api::HostServiceGetRegionResponse, Error> {
+    let _authz = read.auth(&meta, HostPerm::GetRegion).await?;
+
+    let id: RegionId = req.region_id.parse().map_err(Error::ParseRegionId)?;
+    let region = Region::by_id(id, &mut read).await?;
+
+    Ok(api::HostServiceGetRegionResponse {
+        region: Some(region.into()),
+    })
+}
+
+pub async fn list_hosts(
+    req: api::HostServiceListHostsRequest,
+    meta: Metadata,
+    mut read: ReadConn<'_, '_>,
+) -> Result<api::HostServiceListHostsResponse, Error> {
     let filter = req.into_filter()?;
     let authz = if filter.org_ids.is_empty() {
-        read.auth(&meta, HostAdminPerm::List).await?
+        read.auth(&meta, HostAdminPerm::ListHosts).await?
     } else {
-        read.auth_or_for(&meta, HostAdminPerm::List, HostPerm::List, &filter.org_ids)
-            .await?
+        read.auth_or_for(
+            &meta,
+            HostAdminPerm::ListHosts,
+            HostPerm::ListHosts,
+            &filter.org_ids,
+        )
+        .await?
     };
 
     let (hosts, total) = filter.query(&mut read).await?;
     let hosts = api::Host::from_hosts(hosts, &authz, &mut read).await?;
 
-    Ok(api::HostServiceListResponse { hosts, total })
+    Ok(api::HostServiceListHostsResponse { hosts, total })
 }
 
-pub async fn update(
-    req: api::HostServiceUpdateRequest,
+pub async fn list_regions(
+    req: api::HostServiceListRegionsRequest,
+    meta: Metadata,
+    mut read: ReadConn<'_, '_>,
+) -> Result<api::HostServiceListRegionsResponse, Error> {
+    let org_id = req
+        .org_id
+        .as_ref()
+        .map(|id| id.parse().map_err(Error::ParseOrgId))
+        .transpose()?;
+
+    let authz = if let Some(org_id) = org_id {
+        read.auth_or_for(
+            &meta,
+            HostAdminPerm::ListRegions,
+            HostPerm::ListRegions,
+            org_id,
+        )
+        .await?
+    } else {
+        read.auth(&meta, HostAdminPerm::ListRegions).await?
+    };
+
+    let image_id = req.image_id.parse().map_err(Error::ParseImageId)?;
+    let image = Image::by_id(image_id, org_id, &authz, &mut read).await?;
+    let version =
+        ProtocolVersion::by_id(image.protocol_version_id, org_id, &authz, &mut read).await?;
+    let protocol = Protocol::by_id(version.protocol_id, org_id, &authz, &mut read).await?;
+
+    let requirements = HostRequirements {
+        scheduler: &NodeScheduler::least_resources(),
+        protocol: &protocol,
+        org_id,
+        cpu_cores: image.min_cpu_cores,
+        memory_bytes: image.min_memory_bytes,
+        disk_bytes: image.min_disk_bytes,
+    };
+
+    let candidates = Host::candidates(requirements, None, &mut read).await?;
+    let region_ids = candidates.into_iter().map(|host| host.region_id).collect();
+
+    let mut regions = Region::by_ids(&region_ids, &mut read).await?;
+    regions.sort_by(|r1, r2| r1.name.cmp(&r2.name));
+    let regions = regions.into_iter().map(Into::into).collect();
+
+    Ok(api::HostServiceListRegionsResponse { regions })
+}
+
+pub async fn update_host(
+    req: api::HostServiceUpdateHostRequest,
     meta: Metadata,
     mut write: WriteConn<'_, '_>,
-) -> Result<api::HostServiceUpdateResponse, Error> {
+) -> Result<api::HostServiceUpdateHostResponse, Error> {
     let id: HostId = req.host_id.parse().map_err(Error::ParseId)?;
     let mut resources = vec![Resource::from(id)];
 
@@ -358,23 +461,33 @@ pub async fn update(
         resources.push(Resource::from(org_id));
     };
 
-    // for public hosts, only a host api token has the host-update perm
+    // for public hosts, only a host api token has the update perm
     let authz = if req.cost.is_some() {
         // Only admins can update the cost of a host.
         write
             .auth_for(
                 &meta,
-                [HostAdminPerm::Update, HostAdminPerm::Cost],
+                [HostAdminPerm::UpdateHost, HostAdminPerm::ViewCost],
                 &resources,
             )
             .await?
     } else {
         write
-            .auth_or_for(&meta, HostAdminPerm::Update, HostPerm::Update, &resources)
+            .auth_or_for(
+                &meta,
+                HostAdminPerm::UpdateHost,
+                HostPerm::UpdateHost,
+                &resources,
+            )
             .await?
     };
     let host = Host::by_id(id, org_id, &mut write).await?;
 
+    let region_id = req
+        .region_id
+        .as_ref()
+        .map(|id| id.parse().map_err(Error::ParseRegionId))
+        .transpose()?;
     let bv_version = req
         .bv_version
         .as_ref()
@@ -384,18 +497,11 @@ pub async fn update(
         .disk_bytes
         .map(|space| space.try_into().map_err(Error::DiskBytes))
         .transpose()?;
-    let region = if let Some(ref region) = req.region {
-        Region::get_or_create(region, None, &mut write)
-            .await
-            .map(Some)?
-    } else {
-        None
-    };
 
     let update = UpdateHost {
         network_name: req.network_name.as_deref(),
         display_name: req.display_name.as_deref(),
-        region_id: region.map(|r| r.id),
+        region_id,
         schedule_type: req
             .schedule_type
             .map(|_| req.schedule_type().try_into())
@@ -419,14 +525,14 @@ pub async fn update(
     let host = update.apply(id, &mut write).await?;
     let host = api::Host::from_host(host, Some(&authz), &mut write).await?;
 
-    Ok(api::HostServiceUpdateResponse { host: Some(host) })
+    Ok(api::HostServiceUpdateHostResponse { host: Some(host) })
 }
 
-pub async fn delete(
-    req: api::HostServiceDeleteRequest,
+pub async fn delete_host(
+    req: api::HostServiceDeleteHostRequest,
     meta: Metadata,
     mut write: WriteConn<'_, '_>,
-) -> Result<api::HostServiceDeleteResponse, Error> {
+) -> Result<api::HostServiceDeleteHostResponse, Error> {
     let id: HostId = req.host_id.parse().map_err(Error::ParseId)?;
     let mut resources = vec![Resource::from(id)];
 
@@ -434,10 +540,15 @@ pub async fn delete(
     let _authz = if let Some(org_id) = org_id {
         resources.push(Resource::from(org_id));
         write
-            .auth_or_for(&meta, HostAdminPerm::Delete, HostPerm::Delete, &resources)
+            .auth_or_for(
+                &meta,
+                HostAdminPerm::DeleteHost,
+                HostPerm::DeleteHost,
+                &resources,
+            )
             .await?
     } else {
-        write.auth(&meta, HostAdminPerm::Delete).await?
+        write.auth(&meta, HostAdminPerm::DeleteHost).await?
     };
 
     if Node::host_has_nodes(id, &mut write).await? {
@@ -447,7 +558,7 @@ pub async fn delete(
     Host::delete(id, org_id, &mut write).await?;
     IpAddress::delete_for_host(id, &mut write).await?;
 
-    Ok(api::HostServiceDeleteResponse {})
+    Ok(api::HostServiceDeleteHostResponse {})
 }
 
 pub async fn start(
@@ -528,59 +639,6 @@ pub async fn restart(
     Ok(api::HostServiceRestartResponse {})
 }
 
-pub async fn regions(
-    req: api::HostServiceRegionsRequest,
-    meta: Metadata,
-    mut read: ReadConn<'_, '_>,
-) -> Result<api::HostServiceRegionsResponse, Error> {
-    let org_id = req
-        .org_id
-        .as_ref()
-        .map(|id| id.parse().map_err(Error::ParseOrgId))
-        .transpose()?;
-
-    let authz = if let Some(org_id) = org_id {
-        read.auth_or_for(&meta, HostAdminPerm::Regions, HostPerm::Regions, org_id)
-            .await?
-    } else {
-        read.auth(&meta, HostAdminPerm::Regions).await?
-    };
-
-    let image_id = req.image_id.parse().map_err(Error::ParseImageId)?;
-    let image = Image::by_id(image_id, org_id, &authz, &mut read).await?;
-    let version =
-        ProtocolVersion::by_id(image.protocol_version_id, org_id, &authz, &mut read).await?;
-    let protocol = Protocol::by_id(version.protocol_id, org_id, &authz, &mut read).await?;
-
-    let requirements = HostRequirements {
-        scheduler: &NodeScheduler::least_resources(),
-        protocol: &protocol,
-        org_id,
-        cpu_cores: image.min_cpu_cores,
-        memory_bytes: image.min_memory_bytes,
-        disk_bytes: image.min_disk_bytes,
-    };
-
-    let candidates = Host::candidates(requirements, None, &mut read).await?;
-    let region_ids = candidates
-        .into_iter()
-        .filter_map(|host| host.region_id)
-        .collect();
-
-    let mut regions = Region::by_ids(&region_ids, &mut read).await?;
-    regions.sort_by(|r1, r2| r1.name.cmp(&r2.name));
-
-    let regions = regions
-        .into_iter()
-        .map(|region| api::Region {
-            name: Some(region.name),
-            pricing_tier: region.pricing_tier,
-        })
-        .collect();
-
-    Ok(api::HostServiceRegionsResponse { regions })
-}
-
 impl api::Host {
     pub async fn from_host(
         host: Host,
@@ -608,8 +666,10 @@ impl api::Host {
         let created_by = host.created_by();
         let org = host.org_id.and_then(|id| lookup.orgs.get(&id));
         let org_name = org.map(|org| org.name.clone());
-        let region = host.region_id.and_then(|id| lookup.regions.get(&id));
-        let region = region.map(|region| region.name.clone());
+        let region = lookup
+            .regions
+            .get(&host.region_id)
+            .ok_or(Error::MissingRegion)?;
         let cost = authz.and_then(|authz| common::BillingAmount::from_host(&host, authz));
 
         let no_ips = vec![];
@@ -617,7 +677,7 @@ impl api::Host {
         let assigned = lookup.assigned_ips.get(&host.id).unwrap_or(&no_ips);
         let ip_addresses = ips
             .iter()
-            .map(|ip| api::HostIpAddress {
+            .map(|ip| common::HostIpAddress {
                 ip: ip.to_string(),
                 assigned: assigned.iter().any(|addr| ip == addr),
             })
@@ -627,10 +687,10 @@ impl api::Host {
             host_id: host.id.to_string(),
             org_id: host.org_id.map(|id| id.to_string()),
             org_name,
-            region,
+            region: Some(region.clone().into()),
             network_name: host.network_name,
             display_name: host.display_name,
-            schedule_type: api::ScheduleType::from(host.schedule_type).into(),
+            schedule_type: common::ScheduleType::from(host.schedule_type).into(),
             os: host.os,
             os_version: host.os_version,
             bv_version: host.bv_version.to_string(),
@@ -670,7 +730,7 @@ impl Lookup {
             .await?
             .to_map_keep_last(|org| (org.id, org));
 
-        let region_ids = hosts.iter().filter_map(|host| host.region_id).collect();
+        let region_ids = hosts.iter().map(|host| host.region_id).collect();
         let regions = Region::by_ids(&region_ids, conn)
             .await?
             .to_map_keep_last(|region| (region.id, region));
@@ -691,7 +751,7 @@ impl Lookup {
     }
 }
 
-impl api::HostServiceListRequest {
+impl api::HostServiceListHostsRequest {
     fn into_filter(self) -> Result<HostFilter, Error> {
         let org_ids = self
             .org_ids

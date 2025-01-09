@@ -15,7 +15,7 @@ use thiserror::Error;
 
 use crate::auth::resource::{HostId, OrgId, Resource, ResourceId, ResourceType};
 use crate::database::Conn;
-use crate::grpc::{api, Status};
+use crate::grpc::{common, Status};
 use crate::model::sql::{self, greatest, Amount, IpNetwork, Tags, Version};
 use crate::util::{SearchOperator, SortOrder};
 
@@ -113,7 +113,7 @@ impl From<Error> for Status {
 pub struct Host {
     pub id: HostId,
     pub org_id: Option<OrgId>,
-    pub region_id: Option<RegionId>,
+    pub region_id: RegionId,
     pub network_name: String,
     pub display_name: Option<String>,
     pub schedule_type: ScheduleType,
@@ -344,7 +344,7 @@ pub struct HostRequirements<'r> {
 #[diesel(table_name = hosts)]
 pub struct NewHost<'a> {
     pub org_id: Option<OrgId>,
-    pub region_id: Option<RegionId>,
+    pub region_id: RegionId,
     pub network_name: &'a str,
     pub display_name: Option<&'a str>,
     pub schedule_type: ScheduleType,
@@ -635,23 +635,23 @@ pub enum ScheduleType {
     Manual,
 }
 
-impl From<ScheduleType> for api::ScheduleType {
+impl From<ScheduleType> for common::ScheduleType {
     fn from(schedule_type: ScheduleType) -> Self {
         match schedule_type {
-            ScheduleType::Automatic => api::ScheduleType::Automatic,
-            ScheduleType::Manual => api::ScheduleType::Manual,
+            ScheduleType::Automatic => common::ScheduleType::Automatic,
+            ScheduleType::Manual => common::ScheduleType::Manual,
         }
     }
 }
 
-impl TryFrom<api::ScheduleType> for ScheduleType {
+impl TryFrom<common::ScheduleType> for ScheduleType {
     type Error = Error;
 
-    fn try_from(schedule_type: api::ScheduleType) -> Result<Self, Self::Error> {
+    fn try_from(schedule_type: common::ScheduleType) -> Result<Self, Self::Error> {
         match schedule_type {
-            api::ScheduleType::Unspecified => Err(Error::UnknownScheduleType),
-            api::ScheduleType::Automatic => Ok(ScheduleType::Automatic),
-            api::ScheduleType::Manual => Ok(ScheduleType::Manual),
+            common::ScheduleType::Unspecified => Err(Error::UnknownScheduleType),
+            common::ScheduleType::Automatic => Ok(ScheduleType::Automatic),
+            common::ScheduleType::Manual => Ok(ScheduleType::Manual),
         }
     }
 }
@@ -663,14 +663,14 @@ pub enum ConnectionStatus {
     Offline,
 }
 
-impl TryFrom<api::HostConnectionStatus> for ConnectionStatus {
+impl TryFrom<common::HostConnectionStatus> for ConnectionStatus {
     type Error = Error;
 
-    fn try_from(status: api::HostConnectionStatus) -> Result<Self, Self::Error> {
+    fn try_from(status: common::HostConnectionStatus) -> Result<Self, Self::Error> {
         match status {
-            api::HostConnectionStatus::Unspecified => Err(Error::UnknownConnectionStatus),
-            api::HostConnectionStatus::Offline => Ok(ConnectionStatus::Offline),
-            api::HostConnectionStatus::Online => Ok(ConnectionStatus::Online),
+            common::HostConnectionStatus::Unspecified => Err(Error::UnknownConnectionStatus),
+            common::HostConnectionStatus::Offline => Ok(ConnectionStatus::Offline),
+            common::HostConnectionStatus::Online => Ok(ConnectionStatus::Online),
         }
     }
 }

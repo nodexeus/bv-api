@@ -220,11 +220,11 @@ impl ProtocolVersion {
     ///   USD - hardcoded for now
     ///   M - Billing cycle (monthly)
     pub fn sku(&self, region: &Region) -> Option<String> {
-        let sku_code = &self.sku_code;
+        let version = &self.sku_code;
         region
-            .pricing_tier
+            .sku_code
             .as_deref()
-            .map(|tier| format!("FMN-{sku_code}-{tier}-USD-M"))
+            .map(|region| format!("FMN-{version}-{region}-USD-M"))
     }
 }
 
