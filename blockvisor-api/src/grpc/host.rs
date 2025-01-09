@@ -19,8 +19,8 @@ use crate::model::host::{
 };
 use crate::model::node::NodeScheduler;
 use crate::model::protocol::ProtocolVersion;
+use crate::model::sql::{IpNetwork, Tag, Tags, Version};
 use crate::model::{CommandType, Image, IpAddress, Node, Org, Protocol, Region, RegionId, Token};
-use crate::util::sql::{IpNetwork, Tag, Tags, Version};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::host_service_server::HostService;
@@ -28,10 +28,10 @@ use super::{api, common, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
+    /// Host amount error: {0}
+    Amount(#[from] crate::model::sql::amount::Error),
     /// Auth check failed: {0}
     Auth(#[from] crate::auth::Error),
-    /// Billing amount error: {0}
-    BillingAmount(#[from] super::BillingAmountError),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
     /// Host command error: {0}
@@ -56,8 +56,6 @@ pub enum Error {
     HostProvisionByToken(crate::model::token::Error),
     /// Host image error: {0}
     Image(#[from] crate::model::image::Error),
-    /// Invalid cost.
-    InvalidCost(super::BillingAmountError),
     /// Host ip address error: {0}
     IpAddress(#[from] crate::model::ip_address::Error),
     /// Host JWT failure: {0}
@@ -69,17 +67,17 @@ pub enum Error {
     /// Host org error: {0}
     Org(#[from] crate::model::org::Error),
     /// Failed to parse bv_version: {0}
-    ParseBvVersion(crate::util::sql::Error),
+    ParseBvVersion(crate::model::sql::Error),
     /// Failed to parse HostId: {0}
     ParseId(uuid::Error),
     /// Failed to parse ImageId: {0}
     ParseImageId(uuid::Error),
     /// Failed to parse ip: {0}
-    ParseIps(crate::util::sql::Error),
+    ParseIps(crate::model::sql::Error),
     /// Failed to parse IP address: {0}
-    ParseIpAddress(crate::util::sql::Error),
+    ParseIpAddress(crate::model::sql::Error),
     /// Failed to parse IP gateway: {0}
-    ParseIpGateway(crate::util::sql::Error),
+    ParseIpGateway(crate::model::sql::Error),
     /// Failed to parse non-zero host node_count as u64: {0}
     ParseNodeCount(std::num::TryFromIntError),
     /// Failed to parse OrgId: {0}
@@ -97,7 +95,7 @@ pub enum Error {
     /// Sort order: {0}
     SortOrder(crate::util::search::Error),
     /// Host SQL error: {0}
-    Sql(#[from] crate::util::sql::Error),
+    Sql(#[from] crate::model::sql::Error),
     /// Host store error: {0}
     Store(#[from] crate::store::Error),
     /// The requested sort field is unknown.
@@ -114,7 +112,6 @@ impl From<Error> for Status {
             }
             CpuCores(_) => Status::out_of_range("cpu_cores"),
             DiskBytes(_) => Status::out_of_range("disk_bytes"),
-            BillingAmount(_) => Status::invalid_argument("cost"),
             FilterLimit(_) => Status::invalid_argument("limit"),
             FilterOffset(_) => Status::invalid_argument("offset"),
             HasNodes => Status::failed_precondition("This host still has nodes."),
@@ -130,7 +127,7 @@ impl From<Error> for Status {
             SearchOperator(_) => Status::invalid_argument("search.operator"),
             SortOrder(_) => Status::invalid_argument("sort.order"),
             UnknownSortField => Status::invalid_argument("sort.field"),
-            InvalidCost(_) => Status::invalid_argument("host.cost"),
+            Amount(err) => err.into(),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Command(err) => err.into(),
@@ -417,10 +414,7 @@ pub async fn update(
             .map(|tags| tags.into_update(host.tags))
             .transpose()?
             .flatten(),
-        cost: req
-            .cost
-            .map(common::BillingAmount::into_amount)
-            .transpose()?,
+        cost: req.cost.map(TryInto::try_into).transpose()?,
     };
     let host = update.apply(id, &mut write).await?;
     let host = api::Host::from_host(host, Some(&authz), &mut write).await?;
@@ -559,7 +553,7 @@ pub async fn regions(
     let protocol = Protocol::by_id(version.protocol_id, org_id, &authz, &mut read).await?;
 
     let requirements = HostRequirements {
-        scheduler: NodeScheduler::least_resources(),
+        scheduler: &NodeScheduler::least_resources(),
         protocol: &protocol,
         org_id,
         cpu_cores: image.min_cpu_cores,

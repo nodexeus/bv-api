@@ -1,6 +1,9 @@
 pub mod job;
 pub use job::{NodeJob, NodeJobProgress, NodeJobStatus, NodeJobs};
 
+pub mod launch;
+pub use launch::{HostCount, Launch, RegionCount};
+
 pub mod log;
 pub use log::{LogEvent, NewNodeLog, NodeEvent, NodeEventData, NodeLog};
 
@@ -25,7 +28,6 @@ use diesel::result::Error::{DatabaseError, NotFound};
 use diesel::sql_types::Bool;
 use diesel_async::RunQueryDsl;
 use displaydoc::Display;
-use futures_util::future::OptionFuture;
 use petname::{Generator, Petnames};
 use thiserror::Error;
 use tracing::warn;
@@ -34,9 +36,9 @@ use crate::auth::rbac::{BillingPerm, NodeAdminPerm};
 use crate::auth::resource::{HostId, NodeId, OrgId, Resource, ResourceId, ResourceType, UserId};
 use crate::auth::AuthZ;
 use crate::database::{Conn, WriteConn};
-use crate::grpc::{common, Status};
+use crate::grpc::Status;
+use crate::model::sql::{self, Amount, Currency, IpNetwork, Period, Tags, Version};
 use crate::stripe::api::subscription::SubscriptionItemId;
-use crate::util::sql::{self, IpNetwork, Tags, Version};
 use crate::util::{SearchOperator, SortOrder};
 
 use super::host::{Host, HostRequirements};
@@ -46,7 +48,7 @@ use super::image::{Config, ConfigId, Image, ImageId, NodeConfig};
 use super::protocol::version::{ProtocolVersion, VersionId};
 use super::protocol::{Protocol, ProtocolId, VersionKey};
 use super::schema::{nodes, protocol_versions};
-use super::{Amount, Command, IpAddress, Org, Paginate, Region, RegionId};
+use super::{Command, IpAddress, Org, Paginate, Region, RegionId};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -98,26 +100,20 @@ pub enum Error {
     IpAddress(#[from] crate::model::ip_address::Error),
     /// The stripe `item` for this node doesn't have an associated `price`.
     ItemWithoutPrice,
+    /// Node launch error: {0}
+    Launch(#[from] Box<self::launch::Error>),
     /// Missing node-admin-transfer permission.
     MissingTransferPerm,
     /// Node log error: {0}
     NodeLog(#[from] self::log::Error),
-    /// No host id or scheduler.
-    NoHostOrScheduler,
     /// Failed to find a matching host.
     NoMatchingHost,
     /// Cannot launch node without a region.
     NoRegion,
-    /// No host id or scheduler.
-    NoScheduler,
     /// Node org error: {0}
     Org(#[from] crate::model::org::Error),
     /// Node pagination: {0}
     Paginate(#[from] crate::model::paginate::Error),
-    /// Failed to parse HostId: {0}
-    ParseHostId(uuid::Error),
-    /// Failed to parse IpAddr: {0}
-    ParseIpAddr(std::net::AddrParseError),
     /// The stripe `price` for this node doesn't have an associated `amount`.
     PriceWithoutAmount,
     /// Node protocol error: {0}
@@ -157,7 +153,6 @@ pub enum Error {
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
-        tracing::error!("{err}");
         match err {
             Create(DatabaseError(UniqueViolation, _)) => Status::already_exists("Already exists."),
             Delete(_, NotFound)
@@ -178,6 +173,7 @@ impl From<Error> for Status {
             Host(err) => err.into(),
             Image(err) => err.into(),
             IpAddress(err) => err.into(),
+            Launch(err) => (*err).into(),
             NodeLog(err) => err.into(),
             Org(err) => err.into(),
             Paginate(err) => err.into(),
@@ -234,7 +230,7 @@ pub struct Node {
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
-    pub cost: Option<super::Amount>,
+    pub cost: Option<Amount>,
 }
 
 impl Node {
@@ -353,19 +349,19 @@ impl Node {
         }
 
         /*
-        let prefix = format!("node/{id}/secret");
-        let secrets = write.ctx.vault.read().await.list_path(&prefix).await?;
-        if let Some(names) = secrets {
+            let prefix = format!("node/{id}/secret");
+            let secrets = write.ctx.vault.read().await.list_path(&prefix).await?;
+            if let Some(names) = secrets {
             for name in names {
-                let path = format!("{prefix}/{name}");
-                let result = write.ctx.vault.read().await.delete_path(&path).await;
-                match result {
-                    Ok(()) | Err(crate::store::vault::Error::PathNotFound) => (),
-                    Err(err) => return Err(err.into()),
-                }
-            }
+            let path = format!("{prefix}/{name}");
+            let result = write.ctx.vault.read().await.delete_path(&path).await;
+            match result {
+            Ok(()) | Err(crate::store::vault::Error::PathNotFound) => (),
+            Err(err) => return Err(err.into()),
         }
-        */
+        }
+        }
+             */
 
         if let Some(ref item_id) = node.stripe_item_id {
             write.ctx.stripe.remove_subscription(item_id).await?;
@@ -379,21 +375,16 @@ impl Node {
         protocol: &Protocol,
         write: &mut WriteConn<'_, '_>,
     ) -> Result<Option<Host>, Error> {
-        let candidates = match self.scheduler(write).await? {
-            Some(scheduler) => {
-                let requirements = HostRequirements {
-                    scheduler,
-                    protocol,
-                    org_id: None,
-                    cpu_cores: self.cpu_cores,
-                    memory_bytes: self.memory_bytes,
-                    disk_bytes: self.disk_bytes,
-                };
-
-                Host::candidates(requirements, Some(2), write).await?
-            }
-            None => vec![Host::by_id(self.host_id, Some(self.org_id), write).await?],
+        let scheduler = self.scheduler(write).await?;
+        let requirements = HostRequirements {
+            scheduler: &scheduler,
+            protocol,
+            org_id: Some(self.org_id),
+            cpu_cores: self.cpu_cores,
+            memory_bytes: self.memory_bytes,
+            disk_bytes: self.disk_bytes,
         };
+        let candidates = Host::candidates(requirements, Some(2), write).await?;
 
         let mut counts: HashMap<HostId, usize> = HashMap::new();
         for log in NodeLog::by_node_id(self.id, write).await? {
@@ -430,16 +421,12 @@ impl Node {
         Ok(Some(best))
     }
 
-    pub async fn scheduler(&self, conn: &mut Conn<'_>) -> Result<Option<NodeScheduler>, Error> {
-        let Some(resource) = self.scheduler_resource else {
-            return Ok(None);
-        };
-
-        Ok(Some(NodeScheduler {
-            region: self.region(conn).await?,
+    pub async fn scheduler(&self, conn: &mut Conn<'_>) -> Result<NodeScheduler, Error> {
+        Ok(NodeScheduler {
+            resource: self.scheduler_resource,
             similarity: self.scheduler_similarity,
-            resource,
-        }))
+            region: self.region(conn).await?,
+        })
     }
 
     pub async fn region(&self, conn: &mut Conn<'_>) -> Result<Option<Region>, Error> {
@@ -498,17 +485,13 @@ pub struct NewNode {
     pub protocol_version_id: VersionId,
     pub semantic_version: Version,
     pub auto_upgrade: bool,
-    pub scheduler_similarity: Option<SimilarNodeAffinity>,
-    pub scheduler_resource: Option<ResourceAffinity>,
-    pub scheduler_region_id: Option<RegionId>,
     pub tags: Tags,
 }
 
 impl NewNode {
     pub async fn create(
         &self,
-        node_counts: Option<Vec<NodeCount>>,
-        created_by: Resource,
+        launch: Launch,
         authz: &AuthZ,
         write: &mut WriteConn<'_, '_>,
     ) -> Result<Vec<Node>, Error> {
@@ -544,61 +527,11 @@ impl NewNode {
             None
         };
              */
-        let secrets = None;
 
-        let mut created = Vec::new();
-        if let Some(counts) = node_counts {
-            for count in counts {
-                let host = Host::by_id(count.host_id, Some(self.org_id), write).await?;
-                for _ in 0..count.node_count {
-                    match self
-                        .create_node(
-                            &host,
-                            &org,
-                            &version,
-                            &node_config,
-                            secrets.as_ref(),
-                            created_by,
-                            authz,
-                            write,
-                        )
-                        .await
-                    {
-                        Ok(node) => created.push(node),
-                        Err(err) => {
-                            for node in created {
-                                if let Err(err) = write.ctx.dns.delete(&node.dns_id).await {
-                                    warn!("Failed to delete DNS record {}: {err}", node.dns_id);
-                                }
-                            }
-
-                            return Err(err);
-                        }
-                    }
-                }
-            }
-        } else {
-            let scheduler = self
-                .scheduler(write)
-                .await?
-                .ok_or(Error::NoHostOrScheduler)?;
-            let host = self.find_host(scheduler, authz, write).await?;
-            let node = self
-                .create_node(
-                    &host,
-                    &org,
-                    &version,
-                    &node_config,
-                    secrets.as_ref(),
-                    created_by,
-                    authz,
-                    write,
-                )
-                .await?;
-            created.push(node);
-        }
-
-        Ok(created)
+        launch
+            .create(self, &org, &version, &node_config, None, authz, write)
+            .await
+            .map_err(|err| Error::Launch(Box::new(err)))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -649,10 +582,10 @@ impl NewNode {
                 (None, None)
             }
         };
-        let cost = price.map(|amount| super::Amount {
+        let cost = price.map(|amount| Amount {
             amount,
-            currency: super::Currency::Usd,
-            period: super::Period::Monthly,
+            currency: Currency::Usd,
+            period: Period::Monthly,
         });
 
         loop {
@@ -722,7 +655,7 @@ impl NewNode {
     /// Finds the most suitable host to place the node on.
     async fn find_host(
         &self,
-        scheduler: NodeScheduler,
+        scheduler: &NodeScheduler,
         authz: &AuthZ,
         conn: &mut Conn<'_>,
     ) -> Result<Host, Error> {
@@ -741,45 +674,6 @@ impl NewNode {
 
         let candidates = Host::candidates(requirements, Some(1), conn).await?;
         candidates.into_iter().next().ok_or(Error::NoMatchingHost)
-    }
-
-    async fn scheduler(&self, conn: &mut Conn<'_>) -> Result<Option<NodeScheduler>, Error> {
-        let Some(resource) = self.scheduler_resource else {
-            return Ok(None);
-        };
-        let region = self.scheduler_region_id.map(|id| Region::by_id(id, conn));
-        let region = OptionFuture::from(region).await.transpose()?;
-
-        Ok(Some(NodeScheduler {
-            region,
-            similarity: self.scheduler_similarity,
-            resource,
-        }))
-    }
-}
-
-pub struct NodeCount {
-    pub host_id: HostId,
-    pub node_count: u32,
-}
-
-impl NodeCount {
-    pub const fn one(host_id: HostId) -> Self {
-        NodeCount {
-            host_id,
-            node_count: 1,
-        }
-    }
-}
-
-impl TryFrom<&common::NodeCount> for NodeCount {
-    type Error = Error;
-
-    fn try_from(count: &common::NodeCount) -> Result<Self, Self::Error> {
-        Ok(NodeCount {
-            host_id: count.host_id.parse().map_err(Error::ParseHostId)?,
-            node_count: count.node_count,
-        })
     }
 }
 
@@ -1243,20 +1137,12 @@ mod tests {
             protocol_version_id: db.seed.version.id,
             semantic_version: "1.2.3".parse().unwrap(),
             auto_upgrade: false,
-            scheduler_similarity: None,
-            scheduler_resource: Some(ResourceAffinity::MostResources),
-            scheduler_region_id: None,
             tags: Default::default(),
         };
 
-        let node_counts = Some(vec![NodeCount::one(db.seed.host1.id)]);
+        let launch = Launch::ByHost(vec![HostCount::one(db.seed.host1.id)]);
         let authz = view_authz(db.seed.node.id);
-        let created_by = Resource::from(&authz);
-
-        new_node
-            .create(node_counts, created_by, &authz, &mut write)
-            .await
-            .unwrap();
+        new_node.create(launch, &authz, &mut write).await.unwrap();
 
         let filter = NodeFilter {
             protocol_ids: vec![],

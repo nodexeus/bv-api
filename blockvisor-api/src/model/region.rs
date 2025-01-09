@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use derive_more::{Deref, Display, From};
+use derive_more::{Deref, Display, From, FromStr};
 use diesel::prelude::*;
 use diesel::result::Error::NotFound;
 use diesel_async::RunQueryDsl;
@@ -38,7 +38,7 @@ impl From<Error> for Status {
     }
 }
 
-#[derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, DieselNewType, Deref, From)]
+#[derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, DieselNewType, Deref, From, FromStr)]
 pub struct RegionId(Uuid);
 
 #[derive(Clone, Debug, Queryable)]

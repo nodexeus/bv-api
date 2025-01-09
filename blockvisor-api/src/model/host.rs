@@ -16,13 +16,13 @@ use thiserror::Error;
 use crate::auth::resource::{HostId, OrgId, Resource, ResourceId, ResourceType};
 use crate::database::Conn;
 use crate::grpc::{api, Status};
-use crate::util::sql::{self, greatest, IpNetwork, Tags, Version};
+use crate::model::sql::{self, greatest, Amount, IpNetwork, Tags, Version};
 use crate::util::{SearchOperator, SortOrder};
 
 use super::ip_address::NewIpAddress;
 use super::node::{NodeScheduler, ResourceAffinity, SimilarNodeAffinity};
 use super::schema::{hosts, ip_addresses, nodes, sql_types};
-use super::{Amount, Command, Node, Org, Paginate, Protocol, RegionId};
+use super::{Command, Node, Org, Paginate, Protocol, RegionId};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -291,7 +291,7 @@ impl Host {
             query = query.filter(hosts::org_id.is_null());
         }
 
-        if let Some(region_id) = require.scheduler.region.map(|region| region.id) {
+        if let Some(region_id) = require.scheduler.region.as_ref().map(|region| region.id) {
             query = query.filter(hosts::region_id.eq(region_id));
         }
 
@@ -310,12 +310,13 @@ impl Host {
         }
 
         query = match require.scheduler.resource {
-            ResourceAffinity::MostResources => {
+            Some(ResourceAffinity::MostResources) => {
                 query.then_order_by((free_cpu.desc(), free_memory.desc(), free_disk.desc()))
             }
-            ResourceAffinity::LeastResources => {
+            Some(ResourceAffinity::LeastResources) => {
                 query.then_order_by((free_cpu, free_memory, free_disk))
             }
+            None => query,
         };
 
         if let Some(limit) = limit {
@@ -331,7 +332,7 @@ impl Host {
 }
 
 pub struct HostRequirements<'r> {
-    pub scheduler: NodeScheduler,
+    pub scheduler: &'r NodeScheduler,
     pub protocol: &'r Protocol,
     pub org_id: Option<OrgId>,
     pub cpu_cores: i64,

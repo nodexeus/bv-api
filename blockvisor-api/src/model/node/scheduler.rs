@@ -8,7 +8,7 @@ use crate::model::Region;
 #[derive(Debug)]
 pub struct NodeScheduler {
     /// Affinity to scheduling on the most or least heavily utilized hosts.
-    pub resource: ResourceAffinity,
+    pub resource: Option<ResourceAffinity>,
     /// Affinity to similar nodes on a host. Takes precedence over `resource`.
     pub similarity: Option<SimilarNodeAffinity>,
     /// The region for the node. Takes precedence over `similarity`.
@@ -18,22 +18,9 @@ pub struct NodeScheduler {
 impl NodeScheduler {
     pub const fn least_resources() -> Self {
         NodeScheduler {
-            resource: ResourceAffinity::LeastResources,
+            resource: Some(ResourceAffinity::LeastResources),
             similarity: None,
             region: None,
-        }
-    }
-}
-
-impl From<NodeScheduler> for common::NodeScheduler {
-    fn from(scheduler: NodeScheduler) -> Self {
-        common::NodeScheduler {
-            similarity: scheduler
-                .similarity
-                .map(common::SimilarNodeAffinity::from)
-                .map(Into::into),
-            resource: common::ResourceAffinity::from(scheduler.resource).into(),
-            region: scheduler.region.map(|r| r.name),
         }
     }
 }

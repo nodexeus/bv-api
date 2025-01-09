@@ -17,8 +17,9 @@ use crate::auth::rbac::Role;
 use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
 use crate::grpc::Status;
+use crate::model::sql;
 use crate::stripe::api::customer::CustomerId;
-use crate::util::{sql, SearchOperator, SortOrder};
+use crate::util::{SearchOperator, SortOrder};
 
 use super::address::AddressId;
 use super::rbac::RbacUser;
