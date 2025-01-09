@@ -537,8 +537,7 @@ pub async fn update_config(
         let perms = [NodeAdminPerm::UpdateConfig, NodeAdminPerm::Transfer];
         write.auth_all(&meta, perms).await?
     } else if req.cost.is_some() {
-        // Only admins can update the node cost.
-        let perms = [NodeAdminPerm::UpdateConfig, NodeAdminPerm::Cost];
+        let perms = [NodeAdminPerm::UpdateConfig, NodeAdminPerm::ViewCost];
         write.auth(&meta, perms).await?
     } else {
         write
@@ -762,11 +761,7 @@ impl api::Node {
         let org = Org::by_id(node.org_id, conn).await?;
 
         let host = Host::by_id(node.host_id, Some(node.org_id), conn).await?;
-        let region = if let Some(id) = host.region_id {
-            Some(Region::by_id(id, conn).await?)
-        } else {
-            None
-        };
+        let region = Region::by_id(host.region_id, conn).await?;
 
         let protocol = Protocol::by_id(node.protocol_id, Some(org.id), authz, conn).await?;
         let version =
@@ -774,15 +769,7 @@ impl api::Node {
         let reports = NodeReport::by_node(node.id, conn).await?;
 
         api::Node::new(
-            node,
-            &config,
-            &org,
-            &host,
-            region.as_ref(),
-            &protocol,
-            &version,
-            reports,
-            authz,
+            node, &config, &org, &host, &region, &protocol, &version, reports, authz,
         )
     }
 
@@ -805,7 +792,7 @@ impl api::Node {
 
         let host_ids = nodes.iter().map(|n| n.host_id).collect();
         let hosts = Host::by_ids(&host_ids, &org_ids, conn).await?;
-        let region_ids = hosts.iter().filter_map(|h| h.region_id).collect();
+        let region_ids = hosts.iter().map(|h| h.region_id).collect();
         let regions = Region::by_ids(&region_ids, conn)
             .await?
             .to_map_keep_last(|region| (region.id, region));
@@ -831,7 +818,7 @@ impl api::Node {
                 let config = configs.get(&node.config_id)?;
                 let org = orgs.get(&node.org_id)?;
                 let host = hosts.get(&node.host_id)?;
-                let region = host.region_id.and_then(|id| regions.get(&id));
+                let region = regions.get(&host.region_id)?;
                 let protocol = protocol.get(&node.protocol_id)?;
                 let version = versions.get(&node.protocol_version_id)?;
                 let reports = reports.remove(&node.id).unwrap_or_default();
@@ -849,7 +836,7 @@ impl api::Node {
         config: &Config,
         org: &Org,
         host: &Host,
-        region: Option<&Region>,
+        region: &Region,
         protocol: &Protocol,
         version: &ProtocolVersion,
         reports: Vec<NodeReport>,
@@ -900,7 +887,8 @@ impl api::Node {
             host_org_id: host.org_id.map(|id| id.to_string()),
             host_network_name: host.network_name.clone(),
             host_display_name: host.display_name.clone(),
-            host_region: region.map(|region| region.name.clone()),
+            region_id: region.id.to_string(),
+            region_name: region.name.clone(),
             protocol_id: node.protocol_id.to_string(),
             protocol_name: protocol.name.clone(),
             protocol_version_id: node.protocol_version_id.to_string(),

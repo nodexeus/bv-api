@@ -9,8 +9,8 @@ use thiserror::Error;
 use tracing::{trace, warn};
 
 use crate::database::{Database, Pool};
-use crate::grpc::api;
 use crate::grpc::command::host_pending;
+use crate::grpc::common;
 use crate::model::command::NewCommand;
 use crate::model::host::{ConnectionStatus, UpdateHost};
 use crate::model::{Command, CommandType};
@@ -101,7 +101,8 @@ impl Notifier {
     }
 
     async fn handle_packet(&self, packet: Publish, pool: &Pool) -> Result<(), Error> {
-        let status = api::HostStatus::decode(&*packet.payload).map_err(Error::ParseHostStatus)?;
+        let status =
+            common::HostStatus::decode(&*packet.payload).map_err(Error::ParseHostStatus)?;
         let mut conn = pool.conn().await.map_err(Error::PoolConnection)?;
 
         let host_id = status.host_id.parse().map_err(Error::ParseHostId)?;

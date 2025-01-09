@@ -1,5 +1,6 @@
 use blockvisor_api::auth::resource::HostId;
-use blockvisor_api::grpc::api;
+use blockvisor_api::database::seed::REGION_ID;
+use blockvisor_api::grpc::{api, common};
 use tonic::Code;
 
 use crate::setup::helper::traits::{HostService, NodeService, OrgService, SocketRpc};
@@ -9,13 +10,13 @@ use crate::setup::TestServer;
 async fn create_a_new_host() {
     let test = TestServer::new().await;
 
-    let create_req = |provision_token| api::HostServiceCreateRequest {
+    let create_req = |provision_token| api::HostServiceCreateHostRequest {
         provision_token,
         is_private: false,
         network_name: "new-host".to_string(),
         display_name: None,
-        region: Some("europe-2-birmingham".to_string()),
-        schedule_type: api::ScheduleType::Automatic as i32,
+        region_id: REGION_ID.to_string(),
+        schedule_type: common::ScheduleType::Automatic.into(),
         os: "LuukOS".to_string(),
         os_version: "4".to_string(),
         bv_version: "0.1.2".to_string(),
@@ -31,7 +32,7 @@ async fn create_a_new_host() {
     // fails with invalid provision token
     let req = create_req("invalid".into());
     let status = test
-        .send_unauthenticated(HostService::create, req)
+        .send_unauthenticated(HostService::create_host, req)
         .await
         .unwrap_err();
     assert_eq!(status.code(), Code::PermissionDenied);
@@ -49,7 +50,7 @@ async fn create_a_new_host() {
     // ok with valid provision token
     let req = create_req(provision_token);
     let resp = test
-        .send_unauthenticated(HostService::create, req)
+        .send_unauthenticated(HostService::create_host, req)
         .await
         .unwrap();
     assert_eq!(resp.host.unwrap().network_name, "new-host");
@@ -59,11 +60,11 @@ async fn create_a_new_host() {
 async fn update_an_existing_host() {
     let test = TestServer::new().await;
 
-    let update_req = |host_id: HostId| api::HostServiceUpdateRequest {
+    let update_req = |host_id: HostId| api::HostServiceUpdateHostRequest {
         host_id: host_id.to_string(),
         network_name: None,
         display_name: Some("Servy McServington".to_string()),
-        region: None,
+        region_id: None,
         schedule_type: None,
         os: Some("TempleOS".to_string()),
         os_version: Some("3".to_string()),
@@ -78,21 +79,24 @@ async fn update_an_existing_host() {
     // fails without token
     let req = update_req(test.seed().host1.id);
     let status = test
-        .send_unauthenticated(HostService::update, req)
+        .send_unauthenticated(HostService::update_host, req)
         .await
         .unwrap_err();
     assert_eq!(status.code(), Code::Unauthenticated);
 
     // denied with org-admin token
     let req = update_req(test.seed().host1.id);
-    let status = test.send_admin(HostService::update, req).await.unwrap_err();
+    let status = test
+        .send_admin(HostService::update_host, req)
+        .await
+        .unwrap_err();
     assert_eq!(status.code(), Code::PermissionDenied);
 
     // denied with wrong host token
     let jwt = test.private_host_jwt();
     let req = update_req(test.seed().host1.id);
     let status = test
-        .send_with(HostService::update, req, &jwt)
+        .send_with(HostService::update_host, req, &jwt)
         .await
         .unwrap_err();
     assert_eq!(status.code(), Code::PermissionDenied);
@@ -100,7 +104,7 @@ async fn update_an_existing_host() {
     // ok for correct host token
     let jwt = test.public_host_jwt();
     let req = update_req(test.seed().host1.id);
-    test.send_with(HostService::update, req, &jwt)
+    test.send_with(HostService::update_host, req, &jwt)
         .await
         .unwrap();
 }
@@ -109,7 +113,7 @@ async fn update_an_existing_host() {
 async fn delete_an_existing_host() {
     let test = TestServer::new().await;
 
-    let delete_req = |host_id: HostId| api::HostServiceDeleteRequest {
+    let delete_req = |host_id: HostId| api::HostServiceDeleteHostRequest {
         host_id: host_id.to_string(),
     };
 
@@ -117,7 +121,7 @@ async fn delete_an_existing_host() {
     let jwt = test.public_host_jwt();
     let req = delete_req(test.seed().host2.id);
     let status = test
-        .send_with(HostService::delete, req, &jwt)
+        .send_with(HostService::delete_host, req, &jwt)
         .await
         .unwrap_err();
     assert_eq!(status.code(), Code::PermissionDenied);
@@ -125,7 +129,7 @@ async fn delete_an_existing_host() {
     // fails for public host if not superuser
     let req = delete_req(test.seed().host1.id);
     let status = test
-        .send_admin(HostService::delete, req.clone())
+        .send_admin(HostService::delete_host, req.clone())
         .await
         .unwrap_err();
     assert_eq!(status.code(), Code::PermissionDenied);
@@ -133,7 +137,7 @@ async fn delete_an_existing_host() {
     // fails while there is still a node
     let req = delete_req(test.seed().host1.id);
     let status = test
-        .send_super(HostService::delete, req.clone())
+        .send_super(HostService::delete_host, req.clone())
         .await
         .unwrap_err();
     assert_eq!(status.code(), Code::FailedPrecondition);
@@ -146,7 +150,9 @@ async fn delete_an_existing_host() {
         .unwrap();
 
     // ok once nodes are deleted
-    test.send_super(HostService::delete, req).await.unwrap();
+    test.send_super(HostService::delete_host, req)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

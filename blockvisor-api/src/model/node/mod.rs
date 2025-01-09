@@ -108,8 +108,6 @@ pub enum Error {
     NodeLog(#[from] self::log::Error),
     /// Failed to find a matching host.
     NoMatchingHost,
-    /// Cannot launch node without a region.
-    NoRegion,
     /// Node org error: {0}
     Org(#[from] crate::model::org::Error),
     /// Node pagination: {0}
@@ -569,7 +567,7 @@ impl NewNode {
         let (stripe_item_id, price) = if billing_exempt {
             (None, None)
         } else {
-            let region = Region::by_id(host.region_id.ok_or(Error::NoRegion)?, write).await?;
+            let region = Region::by_id(host.region_id, write).await?;
             if let Some(sku) = version.sku(&region) {
                 let item = write.ctx.stripe.add_subscription(org, &sku).await?;
                 let price = item

@@ -151,10 +151,11 @@ pub mod tests {
 
     #[test]
     fn serde_many_perms() {
-        let json = r#"{"perms":["host-get","host-provision-get"]}"#;
+        let json = r#"{"perms":["host-list-regions","host-provision-get"]}"#;
         let perms: TestPerms = serde_json::from_str(json).unwrap();
 
-        let expected = Perms::All(hashset! { HostPerm::Get.into(), HostProvisionPerm::Get.into() });
+        let expected =
+            Perms::All(hashset! { HostPerm::ListRegions.into(), HostProvisionPerm::Get.into() });
         assert_eq!(perms.perms, expected);
     }
 }

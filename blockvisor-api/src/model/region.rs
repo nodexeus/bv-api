@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use derive_more::{Deref, Display, From, FromStr};
 use diesel::prelude::*;
-use diesel::result::Error::NotFound;
+use diesel::result::DatabaseErrorKind::UniqueViolation;
+use diesel::result::Error::{DatabaseError, NotFound};
 use diesel_async::RunQueryDsl;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
@@ -10,29 +11,26 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::database::Conn;
-use crate::grpc::Status;
+use crate::grpc::{api, Status};
 
 use super::schema::regions;
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
+    /// Failed to create region: {0}
+    Create(diesel::result::Error),
     /// Failed to get regions for id `{0}`: {1}
     ById(RegionId, diesel::result::Error),
     /// Failed to get regions by ids `{0:?}`: {1}
     ByIds(HashSet<RegionId>, diesel::result::Error),
-    /// Failed to get regions for name `{0}`: {1}
-    ByName(String, diesel::result::Error),
-    /// Failed to get or create regions for name `{0}`: {1}
-    GetOrCreate(String, diesel::result::Error),
 }
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
         match err {
-            ById(_, NotFound) | ByIds(_, NotFound) | ByName(_, NotFound) => {
-                Status::not_found("Not found.")
-            }
+            Create(DatabaseError(UniqueViolation, _)) => Status::already_exists("Already exists."),
+            ById(_, NotFound) | ByIds(_, NotFound) => Status::not_found("Not found."),
             _ => Status::internal("Internal error."),
         }
     }
@@ -45,7 +43,7 @@ pub struct RegionId(Uuid);
 pub struct Region {
     pub id: RegionId,
     pub name: String,
-    pub pricing_tier: Option<String>,
+    pub sku_code: Option<String>,
 }
 
 impl Region {
@@ -67,30 +65,31 @@ impl Region {
             .await
             .map_err(|err| Error::ByIds(region_ids.clone(), err))
     }
+}
 
-    pub async fn by_name(name: &str, conn: &mut Conn<'_>) -> Result<Self, Error> {
-        regions::table
-            .filter(regions::name.eq(name))
-            .get_result(conn)
-            .await
-            .map_err(|err| Error::ByName(name.into(), err))
-    }
+#[derive(Clone, Debug, Insertable)]
+#[diesel(table_name = regions)]
+pub struct NewRegion<'a> {
+    pub name: &'a str,
+    pub sku_code: Option<&'a str>,
+}
 
-    pub async fn get_or_create(
-        name: &str,
-        pricing_tier: Option<&str>,
-        conn: &mut Conn<'_>,
-    ) -> Result<Self, Error> {
+impl NewRegion<'_> {
+    pub async fn create(self, conn: &mut Conn<'_>) -> Result<Region, Error> {
         diesel::insert_into(regions::table)
-            .values((
-                regions::name.eq(name.to_lowercase()),
-                regions::pricing_tier.eq(pricing_tier.map(str::to_uppercase)),
-            ))
-            .on_conflict(regions::name)
-            .do_update()
-            .set(regions::name.eq(name.to_lowercase()))
+            .values(self)
             .get_result(conn)
             .await
-            .map_err(|err| Error::GetOrCreate(name.into(), err))
+            .map_err(Error::Create)
+    }
+}
+
+impl From<Region> for api::Region {
+    fn from(region: Region) -> Self {
+        api::Region {
+            region_id: region.id.to_string(),
+            name: region.name,
+            sku_code: region.sku_code,
+        }
     }
 }

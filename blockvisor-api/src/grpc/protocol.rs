@@ -56,6 +56,8 @@ pub enum Error {
     ParseId(uuid::Error),
     /// Failed to parse OrgId: {0}
     ParseOrgId(uuid::Error),
+    /// Failed to parse RegionId: {0}
+    ParseRegionId(uuid::Error),
     /// Failed to parse protocol version: {0}
     ParseVersion(crate::model::sql::Error),
     /// Failed to parse VersionId: {0}
@@ -101,6 +103,7 @@ impl From<Error> for Status {
             MissingVersionKey => Status::invalid_argument("version_key"),
             ParseId(_) => Status::invalid_argument("protocol_id"),
             ParseOrgId(_) => Status::invalid_argument("org_id"),
+            ParseRegionId(_) => Status::invalid_argument("region_id"),
             ParseVersion(_) => Status::invalid_argument("protocol_version"),
             ParseVersionId(_) => Status::invalid_argument("protocol_version_id"),
             RegionMissingPrice(_) | SkuMissingPrice(_) => Status::not_found("Not found."),
@@ -332,7 +335,8 @@ pub async fn get_pricing(
     let version_key = VersionKey::try_from(req.version_key.ok_or(Error::MissingVersionKey)?)?;
     let version = ProtocolVersion::latest_by_key(&version_key, org_id, &authz, &mut read).await?;
 
-    let region = Region::by_name(&req.region, &mut read).await?;
+    let region_id = req.region_id.parse().map_err(Error::ParseRegionId)?;
+    let region = Region::by_id(region_id, &mut read).await?;
     let sku = version
         .sku(&region)
         .ok_or(Error::RegionMissingPrice(region.id))?;

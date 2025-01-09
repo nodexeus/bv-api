@@ -115,26 +115,28 @@ define_perms! {
     }
 
     Host => {
-        Delete,
-        Get,
-        List,
-        Regions,
+        DeleteHost,
+        GetHost,
+        GetRegion,
+        ListHosts,
+        ListRegions,
         Restart,
         Start,
         Stop,
-        Update,
+        UpdateHost,
     }
 
     HostAdmin => {
-        Cost,
-        Delete,
-        Get,
-        List,
-        Regions,
+        CreateRegion,
+        DeleteHost,
+        GetHost,
+        ListHosts,
+        ListRegions,
         Restart,
         Start,
         Stop,
-        Update,
+        UpdateHost,
+        ViewCost,
     }
 
     HostBilling => {
@@ -201,7 +203,6 @@ define_perms! {
     }
 
     NodeAdmin => {
-        Cost,
         Create,
         Delete,
         Get,
@@ -214,6 +215,7 @@ define_perms! {
         Transfer,
         UpdateConfig,
         Upgrade,
+        ViewCost,
     }
 
     Org => {

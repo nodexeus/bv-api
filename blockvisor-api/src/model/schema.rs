@@ -262,7 +262,7 @@ diesel::table! {
     hosts (id) {
         id -> Uuid,
         org_id -> Nullable<Uuid>,
-        region_id -> Nullable<Uuid>,
+        region_id -> Uuid,
         network_name -> Text,
         display_name -> Nullable<Text>,
         schedule_type -> EnumScheduleType,
@@ -667,7 +667,7 @@ diesel::table! {
     regions (id) {
         id -> Uuid,
         name -> Text,
-        pricing_tier -> Nullable<Text>,
+        sku_code -> Nullable<Text>,
     }
 }
 
