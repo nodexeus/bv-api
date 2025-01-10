@@ -41,7 +41,7 @@ use crate::model::sql::{self, Amount, Currency, IpNetwork, Period, Tags, Version
 use crate::stripe::api::subscription::SubscriptionItemId;
 use crate::util::{SearchOperator, SortOrder};
 
-use super::host::{Host, HostRequirements};
+use super::host::{Host, HostCandidate, HostRequirements};
 use super::image::config::{ConfigType, FirewallConfig, NewConfig};
 use super::image::property::NewImagePropertyValue;
 use super::image::{Config, ConfigId, Image, ImageId, NodeConfig};
@@ -403,13 +403,13 @@ impl Node {
             // If there are 0 hosts to try, we return None.
             (_, 0) => return Ok(None),
             // If we are on the first host to try we just take the first candidate.
-            ([], _) => candidates[0].clone(),
+            ([], _) => candidates[0].host.clone(),
             // If we are on the first host to try and we tried once, we try that host again.
             ([(host, 1)], 1) => host.clone(),
             // Now we need at least two candidates, so lets check for that.
             (_, 1) => return Ok(None),
             // If there is 1 host that we tried so far, we can try a new one
-            ([_], _) => candidates[1].clone(),
+            ([_], _) => candidates[1].host.clone(),
             // If we are on the second host to try and we tried once, we try that host again.
             ([_, (host, 1)], _) => host.clone(),
             // Otherwise we exhausted our our options and return None
@@ -656,7 +656,7 @@ impl NewNode {
         scheduler: &NodeScheduler,
         authz: &AuthZ,
         conn: &mut Conn<'_>,
-    ) -> Result<Host, Error> {
+    ) -> Result<HostCandidate, Error> {
         let config = Config::by_id(self.config_id, conn).await?;
         let node_config = config.node_config()?;
         let protocol = Protocol::by_id(self.protocol_id, Some(self.org_id), authz, conn).await?;
@@ -689,7 +689,7 @@ pub struct UpdateNode<'u> {
     pub cost: Option<Amount>,
 }
 
-impl<'u> UpdateNode<'u> {
+impl UpdateNode<'_> {
     pub async fn apply(
         self,
         id: NodeId,
@@ -770,7 +770,7 @@ pub struct UpdateNodeState<'u> {
     pub p2p_address: Option<&'u str>,
 }
 
-impl<'u> UpdateNodeState<'u> {
+impl UpdateNodeState<'_> {
     pub async fn apply(self, id: NodeId, conn: &mut Conn<'_>) -> Result<Node, Error> {
         let row = nodes::table.find(id);
         diesel::update(row)

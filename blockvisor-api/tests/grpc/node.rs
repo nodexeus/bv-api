@@ -1,6 +1,5 @@
 use blockvisor_api::database::seed::{
     ARCHIVE_ID_1, ARCHIVE_ID_2, DISK_BYTES, IMAGE_ID, MEMORY_BYTES, MORE_RESOURCES_KEY, ORG_ID,
-    REGION_ID,
 };
 use blockvisor_api::grpc::{api, common};
 use blockvisor_api::model::command::Command;
@@ -23,7 +22,7 @@ async fn create_a_new_node() {
         org_id,
         image_id,
         old_node_id: None,
-        launcher: Some(launch_region(REGION_ID, 1)),
+        launcher: Some(launch_region(test.seed().region.id, 1)),
         new_values,
         add_rules,
         tags: None,

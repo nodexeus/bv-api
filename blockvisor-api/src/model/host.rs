@@ -52,6 +52,8 @@ pub enum Error {
     FindDeletedOrgId(HostId, diesel::result::Error),
     /// Failed to find org id for host id `{0}`: {1}
     FindOrgId(HostId, diesel::result::Error),
+    /// Failed to parse free_ips as u32: {0}
+    FreeIps(std::num::TryFromIntError),
     /// Failed to get host candidates: {0}
     HostCandidates(diesel::result::Error),
     /// Host ip address error: {0}
@@ -250,11 +252,11 @@ impl Host {
     }
 
     /// List suitable hosts for a node to be scheduled on.
-    pub async fn candidates<'r>(
-        require: HostRequirements<'r>,
+    pub async fn candidates(
+        require: HostRequirements<'_>,
         limit: Option<i64>,
         conn: &mut Conn<'_>,
-    ) -> Result<Vec<Host>, Error> {
+    ) -> Result<Vec<HostCandidate>, Error> {
         let free_cpu = hosts::cpu_cores - hosts::node_cpu_cores;
         let free_memory = hosts::memory_bytes - hosts::node_memory_bytes;
         let free_disk = hosts::disk_bytes - hosts::node_disk_bytes;
@@ -323,7 +325,19 @@ impl Host {
             query = query.limit(limit);
         }
 
-        query.get_results(conn).await.map_err(Error::HostCandidates)
+        query
+            .select((hosts::all_columns, free_ips))
+            .get_results::<(Host, Option<i64>)>(conn)
+            .await
+            .map_err(Error::HostCandidates)?
+            .into_iter()
+            .map(|(host, free_ips)| {
+                Ok(HostCandidate {
+                    host,
+                    free_ips: free_ips.unwrap_or(0).try_into().map_err(Error::FreeIps)?,
+                })
+            })
+            .collect()
     }
 
     pub fn created_by(&self) -> Resource {
@@ -338,6 +352,11 @@ pub struct HostRequirements<'r> {
     pub cpu_cores: i64,
     pub memory_bytes: i64,
     pub disk_bytes: i64,
+}
+
+pub struct HostCandidate {
+    pub host: Host,
+    pub free_ips: u32,
 }
 
 #[derive(Debug, Clone, Insertable)]

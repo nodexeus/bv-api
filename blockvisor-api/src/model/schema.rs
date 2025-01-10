@@ -666,8 +666,9 @@ diesel::table! {
 diesel::table! {
     regions (id) {
         id -> Uuid,
-        name -> Text,
         sku_code -> Nullable<Text>,
+        key -> Text,
+        display_name -> Text,
     }
 }
 

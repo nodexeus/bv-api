@@ -117,7 +117,6 @@ define_perms! {
     Host => {
         DeleteHost,
         GetHost,
-        GetRegion,
         ListHosts,
         ListRegions,
         Restart,
@@ -136,6 +135,7 @@ define_perms! {
         Start,
         Stop,
         UpdateHost,
+        UpdateRegion,
         ViewCost,
     }
 

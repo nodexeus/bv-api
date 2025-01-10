@@ -18,10 +18,11 @@ use crate::model::host::{
     Host, HostFilter, HostRequirements, HostSearch, HostSort, NewHost, UpdateHost,
 };
 use crate::model::node::NodeScheduler;
-use crate::model::protocol::ProtocolVersion;
-use crate::model::region::NewRegion;
+use crate::model::region::{NewRegion, RegionKey, UpdateRegion};
 use crate::model::sql::{IpNetwork, Tag, Tags, Version};
-use crate::model::{CommandType, Image, IpAddress, Node, Org, Protocol, Region, RegionId, Token};
+use crate::model::{
+    CommandType, Image, IpAddress, Node, Org, Protocol, ProtocolVersion, Region, RegionId, Token,
+};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::host_service_server::HostService;
@@ -61,9 +62,11 @@ pub enum Error {
     IpAddress(#[from] crate::model::ip_address::Error),
     /// Host JWT failure: {0}
     Jwt(#[from] crate::auth::token::jwt::Error),
+    /// Lookup missing Region. This should not happen.
+    LookupMissingRegion,
     /// Failed to parse memory bytes: {0}
     MemoryBytes(std::num::TryFromIntError),
-    /// Lookup missing Region. This should not happen.
+    /// Missing the region to get info for.
     MissingRegion,
     /// Node model error: {0}
     Node(#[from] crate::model::node::Error),
@@ -112,7 +115,7 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Diesel(_) | Jwt(_) | MissingRegion | ParseNodeCount(_) | Refresh(_) => {
+            Diesel(_) | Jwt(_) | LookupMissingRegion | ParseNodeCount(_) | Refresh(_) => {
                 Status::internal("Internal error.")
             }
             CpuCores(_) => Status::out_of_range("cpu_cores"),
@@ -122,6 +125,7 @@ impl From<Error> for Status {
             HasNodes => Status::failed_precondition("This host still has nodes."),
             HostProvisionByToken(_) => Status::forbidden("Invalid token."),
             MemoryBytes(_) => Status::out_of_range("memory_bytes"),
+            MissingRegion => Status::out_of_range("region"),
             ParseBvVersion(_) => Status::invalid_argument("bv_version"),
             ParseId(_) => Status::invalid_argument("host_id"),
             ParseImageId(_) => Status::invalid_argument("image_id"),
@@ -214,6 +218,15 @@ impl HostService for Grpc {
     ) -> Result<Response<api::HostServiceUpdateHostResponse>, tonic::Status> {
         let (meta, _, req) = req.into_parts();
         self.write(|write| update_host(req, meta.into(), write).scope_boxed())
+            .await
+    }
+
+    async fn update_region(
+        &self,
+        req: Request<api::HostServiceUpdateRegionRequest>,
+    ) -> Result<Response<api::HostServiceUpdateRegionResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| update_region(req, meta.into(), write).scope_boxed())
             .await
     }
 
@@ -328,7 +341,8 @@ pub async fn create_region(
     let _authz = write.auth(&meta, HostAdminPerm::CreateRegion).await?;
 
     let new_region = NewRegion {
-        name: &req.name,
+        key: RegionKey::new(req.region_key.clone())?,
+        display_name: &req.display_name,
         sku_code: req.sku_code.as_deref(),
     };
     let region = new_region.create(&mut write).await?;
@@ -363,13 +377,21 @@ pub async fn get_host(
 
 pub async fn get_region(
     req: api::HostServiceGetRegionRequest,
-    meta: Metadata,
+    _meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::HostServiceGetRegionResponse, Error> {
-    let _authz = read.auth(&meta, HostPerm::GetRegion).await?;
+    // this is a public endpoint that does not need authz
 
-    let id: RegionId = req.region_id.parse().map_err(Error::ParseRegionId)?;
-    let region = Region::by_id(id, &mut read).await?;
+    let region = match req.region.ok_or(Error::MissingRegion)? {
+        api::host_service_get_region_request::Region::RegionId(id) => {
+            let id = id.parse().map_err(Error::ParseRegionId)?;
+            Region::by_id(id, &mut read).await?
+        }
+        api::host_service_get_region_request::Region::RegionKey(key) => {
+            let key = RegionKey::new(key)?;
+            Region::by_key(&key, &mut read).await?
+        }
+    };
 
     Ok(api::HostServiceGetRegionResponse {
         region: Some(region.into()),
@@ -438,12 +460,31 @@ pub async fn list_regions(
         disk_bytes: image.min_disk_bytes,
     };
 
+    let mut region_ids = HashSet::new();
+    let mut region_hosts = HashMap::new();
+    let mut region_ips = HashMap::new();
     let candidates = Host::candidates(requirements, None, &mut read).await?;
-    let region_ids = candidates.into_iter().map(|host| host.region_id).collect();
+    for candidate in candidates {
+        let region_id = candidate.host.region_id;
+        region_ids.insert(region_id);
+        *region_hosts.entry(region_id).or_insert(0) += 1;
+        *region_ips.entry(region_id).or_insert(0) += candidate.free_ips;
+    }
 
     let mut regions = Region::by_ids(&region_ids, &mut read).await?;
-    regions.sort_by(|r1, r2| r1.name.cmp(&r2.name));
-    let regions = regions.into_iter().map(Into::into).collect();
+    regions.sort_by(|r1, r2| r1.key.cmp(&r2.key));
+    let regions = regions
+        .into_iter()
+        .map(|region| {
+            let valid_hosts = region_hosts.get(&region.id).copied().unwrap_or(0);
+            let free_ips = region_ips.get(&region.id).copied().unwrap_or(0);
+            api::RegionInfo {
+                region: Some(region.into()),
+                valid_hosts,
+                free_ips,
+            }
+        })
+        .collect();
 
     Ok(api::HostServiceListRegionsResponse { regions })
 }
@@ -526,6 +567,25 @@ pub async fn update_host(
     let host = api::Host::from_host(host, Some(&authz), &mut write).await?;
 
     Ok(api::HostServiceUpdateHostResponse { host: Some(host) })
+}
+
+pub async fn update_region(
+    req: api::HostServiceUpdateRegionRequest,
+    meta: Metadata,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::HostServiceUpdateRegionResponse, Error> {
+    let _authz = write.auth(&meta, HostAdminPerm::UpdateRegion).await?;
+
+    let update = UpdateRegion {
+        id: req.region_id.parse().map_err(Error::ParseRegionId)?,
+        display_name: req.display_name.as_deref(),
+        sku_code: req.sku_code.as_deref(),
+    };
+    let region = update.apply(&mut write).await?;
+
+    Ok(api::HostServiceUpdateRegionResponse {
+        region: Some(region.into()),
+    })
 }
 
 pub async fn delete_host(
@@ -669,7 +729,7 @@ impl api::Host {
         let region = lookup
             .regions
             .get(&host.region_id)
-            .ok_or(Error::MissingRegion)?;
+            .ok_or(Error::LookupMissingRegion)?;
         let cost = authz.and_then(|authz| common::BillingAmount::from_host(&host, authz));
 
         let no_ips = vec![];

@@ -24,6 +24,7 @@ where
         .route("/", routing::get(list_hosts))
         .route("/regions", routing::get(list_regions))
         .route("/:id", routing::put(update_host))
+        .route("/region/:id", routing::put(update_region))
         .route("/:id", routing::delete(delete_host))
         .route("/:id/start", routing::put(start))
         .route("/:id/stop", routing::put(stop))
@@ -64,7 +65,11 @@ async fn get_region(
     headers: HeaderMap,
     Path((region_id,)): Path<(String,)>,
 ) -> Result<Json<api::HostServiceGetRegionResponse>, Error> {
-    let req = api::HostServiceGetRegionRequest { region_id };
+    let req = api::HostServiceGetRegionRequest {
+        region: Some(api::host_service_get_region_request::Region::RegionId(
+            region_id,
+        )),
+    };
     ctx.read(|read| grpc::host::get_region(req, headers.into(), read).scope_boxed())
         .await
 }
@@ -126,6 +131,28 @@ async fn update_host(
         cost: req.cost,
     };
     ctx.write(|write| grpc::host::update_host(req, headers.into(), write).scope_boxed())
+        .await
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostServiceUpdateRegionRequest {
+    display_name: Option<String>,
+    sku_code: Option<String>,
+}
+
+async fn update_region(
+    State(ctx): State<Arc<Context>>,
+    headers: HeaderMap,
+    Path((region_id,)): Path<(String,)>,
+    Json(req): Json<HostServiceUpdateRegionRequest>,
+) -> Result<Json<api::HostServiceUpdateRegionResponse>, Error> {
+    let req = api::HostServiceUpdateRegionRequest {
+        region_id,
+        display_name: req.display_name,
+        sku_code: req.sku_code,
+    };
+    ctx.write(|write| grpc::host::update_region(req, headers.into(), write).scope_boxed())
         .await
 }
 

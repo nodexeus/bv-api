@@ -888,7 +888,7 @@ impl api::Node {
             host_network_name: host.network_name.clone(),
             host_display_name: host.display_name.clone(),
             region_id: region.id.to_string(),
-            region_name: region.name.clone(),
+            region_key: region.key.clone().into(),
             protocol_id: node.protocol_id.to_string(),
             protocol_name: protocol.name.clone(),
             protocol_version_id: node.protocol_version_id.to_string(),

@@ -135,7 +135,7 @@ pub struct ReadConn<'c, 't> {
     pub ctx: &'t Context,
 }
 
-impl<'c, 't> Authorize for ReadConn<'c, 't> {
+impl Authorize for ReadConn<'_, '_> {
     async fn authorize(
         &mut self,
         meta: &grpc::Metadata,
@@ -164,7 +164,7 @@ pub struct WriteConn<'c, 't> {
     pub mqtt_tx: UnboundedSender<Message>,
 }
 
-impl<'c, 't> Authorize for WriteConn<'c, 't> {
+impl Authorize for WriteConn<'_, '_> {
     async fn authorize(
         &mut self,
         meta: &grpc::Metadata,

@@ -94,7 +94,7 @@ pub struct NewAddress<'a> {
     pub state: Option<&'a str>,
 }
 
-impl<'a> NewAddress<'a> {
+impl NewAddress<'_> {
     pub async fn create(self, conn: &mut Conn<'_>) -> Result<Address, Error> {
         diesel::insert_into(addresses::table)
             .values(self)
