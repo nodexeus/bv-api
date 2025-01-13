@@ -14,10 +14,11 @@ use crate::model::node::{Node, NodeState, ResourceAffinity};
 use crate::model::protocol::version::{ProtocolVersion, VersionId};
 use crate::model::protocol::{Protocol, ProtocolId};
 use crate::model::rbac::RbacUser;
+use crate::model::region::{NewRegion, Region, RegionKey};
 use crate::model::schema::{images, nodes, orgs, protocol_versions, protocols};
 use crate::model::sql::{IpNetwork, Tag, Tags};
 use crate::model::user::NewUser;
-use crate::model::{IpAddress, Org, Region, User};
+use crate::model::{IpAddress, Org, User};
 
 use super::Conn;
 
@@ -65,9 +66,6 @@ pub const HOST_2: &str = "host-2";
 
 pub const NODE_ID: &str = "cdbbc736-f399-42ab-86cf-617ce983011d";
 pub const NODE_NAME: &str = "node-1";
-
-pub const REGION_ID: &str = "25282a98-a121-4b37-89ec-fae40eec6622";
-pub const REGION_NAME: &str = "moon";
 
 pub const IP_RANGE: [&str; 10] = [
     "127.0.0.1",
@@ -239,11 +237,12 @@ async fn create_users(org_id: OrgId, conn: &mut Conn<'_>) -> (User, User) {
 }
 
 async fn create_region(conn: &mut Conn<'_>) -> Region {
-    let query = format!("INSERT INTO regions (id, name) VALUES ('{REGION_ID}', '{REGION_NAME}');");
-    diesel::sql_query(query).execute(conn).await.unwrap();
-
-    let region_id = REGION_ID.parse().unwrap();
-    Region::by_id(region_id, conn).await.unwrap()
+    let region = NewRegion {
+        key: RegionKey::new("the-moon".into()).unwrap(),
+        display_name: "to the moon",
+        sku_code: None,
+    };
+    NewRegion::create(region, conn).await.unwrap()
 }
 
 async fn create_hosts(
@@ -395,6 +394,7 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('blockjoy-admin', 'host-admin-start'),
         ('blockjoy-admin', 'host-admin-stop'),
         ('blockjoy-admin', 'host-admin-update-host'),
+        ('blockjoy-admin', 'host-admin-update-region'),
         ('blockjoy-admin', 'host-admin-view-cost'),
         ('blockjoy-admin', 'image-admin-add'),
         ('blockjoy-admin', 'image-admin-get'),
@@ -467,7 +467,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('api-key-user', 'org-update'),
         ('api-key-user', 'host-billing-get'),
         ('api-key-user', 'host-get-host'),
-        ('api-key-user', 'host-get-region'),
         ('api-key-user', 'host-list-hosts'),
         ('api-key-user', 'host-list-regions'),
         ('api-key-user', 'host-provision-create'),
@@ -496,7 +495,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('api-key-org', 'org-update'),
         ('api-key-org', 'host-billing-get'),
         ('api-key-org', 'host-get-host'),
-        ('api-key-org', 'host-get-region'),
         ('api-key-org', 'host-list-hosts'),
         ('api-key-org', 'host-list-regions'),
         ('api-key-org', 'host-provision-create'),
@@ -529,7 +527,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('api-key-host', 'host-billing-get'),
         ('api-key-host', 'host-delete-host'),
         ('api-key-host', 'host-get-host'),
-        ('api-key-host', 'host-get-region'),
         ('api-key-host', 'host-list-hosts'),
         ('api-key-host', 'host-list-regions'),
         ('api-key-host', 'host-provision-create'),
@@ -646,7 +643,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('grpc-new-host', 'crypt-put-secret'),
         ('grpc-new-host', 'discovery-services'),
         ('grpc-new-host', 'host-get-host'),
-        ('grpc-new-host', 'host-get-region'),
         ('grpc-new-host', 'host-list-hosts'),
         ('grpc-new-host', 'host-list-regions'),
         ('grpc-new-host', 'host-update-host'),
@@ -702,7 +698,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('org-admin', 'protocol-get-pricing'),
         -- org-member --
         ('org-member', 'host-get-host'),
-        ('org-member', 'host-get-region'),
         ('org-member', 'host-list-hosts'),
         ('org-member', 'host-list-regions'),
         ('org-member', 'host-restart'),
@@ -727,7 +722,6 @@ async fn setup_rbac(conn: &mut Conn<'_>) {
         ('org-personal', 'host-billing-get'),
         ('org-personal', 'host-delete-host'),
         ('org-personal', 'host-get-host'),
-        ('org-personal', 'host-get-region'),
         ('org-personal', 'host-list-hosts'),
         ('org-personal', 'host-list-regions'),
         ('org-personal', 'host-provision-create'),

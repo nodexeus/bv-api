@@ -1,5 +1,4 @@
 use blockvisor_api::auth::resource::HostId;
-use blockvisor_api::database::seed::REGION_ID;
 use blockvisor_api::grpc::{api, common};
 use tonic::Code;
 
@@ -15,7 +14,7 @@ async fn create_a_new_host() {
         is_private: false,
         network_name: "new-host".to_string(),
         display_name: None,
-        region_id: REGION_ID.to_string(),
+        region_id: test.seed().region.id.to_string(),
         schedule_type: common::ScheduleType::Automatic.into(),
         os: "LuukOS".to_string(),
         os_version: "4".to_string(),

@@ -475,7 +475,7 @@ pub struct UpdateUser<'a> {
     pub last_name: Option<&'a str>,
 }
 
-impl<'a> UpdateUser<'a> {
+impl UpdateUser<'_> {
     pub async fn apply(self, conn: &mut Conn<'_>) -> Result<User, Error> {
         let user_id = self.id;
         diesel::update(users::table.find(user_id))

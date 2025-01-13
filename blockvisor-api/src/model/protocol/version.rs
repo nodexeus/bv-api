@@ -260,7 +260,7 @@ pub struct NewVersion<'v> {
     pub description: Option<String>,
 }
 
-impl<'v> NewVersion<'v> {
+impl NewVersion<'_> {
     pub async fn create(self, conn: &mut Conn<'_>) -> Result<ProtocolVersion, Error> {
         diesel::insert_into(protocol_versions::table)
             .values(self)
@@ -279,7 +279,7 @@ pub struct UpdateVersion<'u> {
     pub visibility: Option<Visibility>,
 }
 
-impl<'u> UpdateVersion<'u> {
+impl UpdateVersion<'_> {
     pub async fn apply(self, conn: &mut Conn<'_>) -> Result<ProtocolVersion, Error> {
         let id = self.id;
         diesel::update(protocol_versions::table.find(id))

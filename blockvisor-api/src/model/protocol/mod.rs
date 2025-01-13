@@ -165,7 +165,7 @@ pub struct UpdateProtocol<'u> {
     pub visibility: Option<Visibility>,
 }
 
-impl<'u> UpdateProtocol<'u> {
+impl UpdateProtocol<'_> {
     pub async fn apply(self, conn: &mut Conn<'_>) -> Result<Protocol, Error> {
         let id = self.id;
         diesel::update(protocols::table.find(id))

@@ -104,10 +104,10 @@ impl Launch {
                     };
 
                     for _ in 0..count.node_count {
-                        let host = node.find_host(&scheduler, authz, write).await?;
+                        let candidate = node.find_host(&scheduler, authz, write).await?;
                         match node
                             .create_node(
-                                &host,
+                                &candidate.host,
                                 org,
                                 version,
                                 node_config,

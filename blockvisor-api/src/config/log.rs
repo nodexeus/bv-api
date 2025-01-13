@@ -9,7 +9,7 @@ use opentelemetry_otlp::{LogExporter, MetricExporter, SpanExporter, WithExportCo
 use opentelemetry_sdk::logs::{LogError, LoggerProvider};
 use opentelemetry_sdk::metrics::{MetricError, PeriodicReader, SdkMeterProvider};
 use opentelemetry_sdk::runtime::{Tokio, TokioCurrentThread};
-use opentelemetry_sdk::trace::{self, TracerProvider};
+use opentelemetry_sdk::trace::TracerProvider;
 use opentelemetry_sdk::Resource;
 use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
 use serde::Deserialize;
@@ -129,8 +129,7 @@ impl Log {
                 .with_endpoint(config.opentelemetry.endpoint.clone())
                 .build()
                 .expect("span exporter");
-            let trace_config = trace::Config::default().with_resource(resource);
-            let builder = TracerProvider::builder().with_config(trace_config);
+            let builder = TracerProvider::builder().with_resource(resource);
             let tracer = if is_serial {
                 builder
                     .with_batch_exporter(exporter, TokioCurrentThread)

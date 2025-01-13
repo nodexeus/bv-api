@@ -411,7 +411,7 @@ pub struct NewOrg<'a> {
     pub is_personal: bool,
 }
 
-impl<'a> NewOrg<'a> {
+impl NewOrg<'_> {
     pub const fn personal() -> Self {
         NewOrg {
             name: PERSONAL_ORG_NAME,
@@ -444,7 +444,7 @@ pub struct UpdateOrg<'a> {
     pub address_id: Option<AddressId>,
 }
 
-impl<'a> UpdateOrg<'a> {
+impl UpdateOrg<'_> {
     pub async fn update(self, conn: &mut Conn<'_>) -> Result<Org, Error> {
         diesel::update(orgs::table.find(self.id))
             .set((self, orgs::updated_at.eq(Utc::now())))
