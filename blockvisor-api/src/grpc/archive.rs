@@ -137,7 +137,7 @@ pub async fn get_download_metadata(
     let (header, data_version) = read
         .ctx
         .store
-        .download_manifest_header(&archive.store_id, req.data_version)
+        .download_manifest_header(&archive.store_key, req.data_version)
         .await?;
 
     Ok(api::ArchiveServiceGetDownloadMetadataResponse {
@@ -185,7 +185,7 @@ pub async fn get_download_chunks(
     let chunks = read
         .ctx
         .store
-        .refresh_download_manifest(&archive.store_id, req.data_version, &indexes)
+        .refresh_download_manifest(&archive.store_key, req.data_version, &indexes)
         .await?;
 
     Ok(api::ArchiveServiceGetDownloadChunksResponse {
@@ -234,7 +234,7 @@ pub async fn get_upload_slots(
     let (slots, data_version) = read
         .ctx
         .store
-        .upload_slots(&archive.store_id, req.data_version, &indexes, expires)
+        .upload_slots(&archive.store_key, req.data_version, &indexes, expires)
         .await?;
 
     Ok(api::ArchiveServiceGetUploadSlotsResponse {
@@ -286,7 +286,7 @@ pub async fn put_download_manifest(
 
     read.ctx
         .store
-        .save_download_manifest(&archive.store_id, manifest)
+        .save_download_manifest(&archive.store_key, manifest)
         .await?;
 
     Ok(api::ArchiveServicePutDownloadManifestResponse {})

@@ -19,7 +19,7 @@ use crate::model::image::{Archive, Image, ImageProperty, NewImage, NewProperty, 
 use crate::model::protocol::VersionKey;
 use crate::model::sql::Version;
 use crate::model::ProtocolVersion;
-use crate::store::StoreId;
+use crate::store::StoreKey;
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::image_service_server::ImageService;
@@ -55,7 +55,7 @@ pub enum Error {
     MissingKeyCombos(Vec<HashSet<ImagePropertyKey>>),
     /// Missing image property key: {0}
     MissingPropertyKey(ImagePropertyKey),
-    /// Missing StoreId pointer.
+    /// Missing StoreKey pointer.
     MissingStorePointer,
     /// Missing version key.
     MissingVersionKey,
@@ -268,7 +268,7 @@ async fn add_image(
                 })
                 .collect::<Result<HashSet<_>, _>>()?;
             let pointer = match pointer.pointer.ok_or(Error::MissingStorePointer)? {
-                api::archive_pointer::Pointer::StoreId(id) => Some(StoreId::new(id)?),
+                api::archive_pointer::Pointer::StoreKey(id) => Some(StoreKey::new(id)?),
                 api::archive_pointer::Pointer::Disallowed(Empty {}) => None,
             };
             Ok((keys, ids, pointer))
@@ -282,8 +282,8 @@ async fn add_image(
         for (index, set) in new_archive_powerset.iter().enumerate() {
             if keys == *set {
                 found = Some(index);
-                if let Some(ref store_id) = pointer {
-                    new_archives.push(NewArchive::new(image.id, store_id.clone(), &ids));
+                if let Some(ref store_key) = pointer {
+                    new_archives.push(NewArchive::new(image.id, store_key.clone(), &ids));
                 }
             }
         }
@@ -392,9 +392,9 @@ async fn update_archive(
     let _authz = write.auth(&meta, ImageAdminPerm::UpdateArchive).await?;
 
     let id = req.archive_id.parse().map_err(Error::ParseArchiveId)?;
-    let store_id = req.store_id.map(Into::into);
+    let store_key = req.store_key.map(Into::into);
 
-    let update = UpdateArchive { id, store_id };
+    let update = UpdateArchive { id, store_key };
     let archive = update.update(&mut write).await?;
 
     Ok(api::ImageServiceUpdateArchiveResponse {

@@ -58,8 +58,8 @@ pub const MORE_RESOURCES_KEY: &str = "more-resources";
 
 pub const ARCHIVE_ID_1: &str = "d4c6a35e-2804-4feb-a052-234e91d7ac8b";
 pub const ARCHIVE_ID_2: &str = "e54dab10-5c62-4778-8aba-dc5162b48025";
-pub const STORE_ID_1: &str = "store-1";
-pub const STORE_ID_2: &str = "store-2";
+pub const STORE_KEY_1: &str = "store-1";
+pub const STORE_KEY_2: &str = "store-2";
 
 pub const HOST_1: &str = "host-1";
 pub const HOST_2: &str = "host-2";
@@ -141,10 +141,10 @@ async fn create_image(conn: &mut Conn<'_>) -> (Protocol, ProtocolVersion, Image)
             VALUES ('{IMAGE_PROPERTY_ID_1}', '{IMAGE_ID}', '{NETWORK_KEY}', false, 'testnet', 'enum');"),
         format!("INSERT INTO image_properties (id, image_id, key, new_archive, default_value, ui_type, add_cpu_cores, add_memory_bytes, add_disk_bytes)
             VALUES ('{IMAGE_PROPERTY_ID_2}', '{IMAGE_ID}', '{MORE_RESOURCES_KEY}', true, 'resources', 'switch', 1, {MEMORY_BYTES}, {DISK_BYTES});"),
-        format!("INSERT INTO archives (id, org_id, image_id, store_id, image_property_ids)
-            VALUES ('{ARCHIVE_ID_1}', null, '{IMAGE_ID}', '{STORE_ID_1}', array[]::uuid[]);"),
-        format!("INSERT INTO archives (id, org_id, image_id, store_id, image_property_ids)
-            VALUES ('{ARCHIVE_ID_2}', null, '{IMAGE_ID}', '{STORE_ID_2}', '{{ {IMAGE_PROPERTY_ID_2} }}');"),
+        format!("INSERT INTO archives (id, org_id, image_id, store_key, image_property_ids)
+            VALUES ('{ARCHIVE_ID_1}', null, '{IMAGE_ID}', '{STORE_KEY_1}', array[]::uuid[]);"),
+        format!("INSERT INTO archives (id, org_id, image_id, store_key, image_property_ids)
+            VALUES ('{ARCHIVE_ID_2}', null, '{IMAGE_ID}', '{STORE_KEY_2}', '{{ {IMAGE_PROPERTY_ID_2} }}');"),
     ];
 
     for query in queries {

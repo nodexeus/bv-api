@@ -13,7 +13,7 @@ use crate::auth::resource::OrgId;
 use crate::database::Conn;
 use crate::grpc::{api, Status};
 use crate::model::schema::archives;
-use crate::store::StoreId;
+use crate::store::StoreKey;
 
 use super::{ImageId, ImagePropertyId};
 
@@ -50,7 +50,7 @@ pub struct Archive {
     pub id: ArchiveId,
     pub org_id: Option<OrgId>,
     pub image_id: ImageId,
-    pub store_id: StoreId,
+    pub store_key: StoreKey,
     pub image_property_ids: Vec<Option<ImagePropertyId>>,
 }
 
@@ -103,7 +103,7 @@ impl From<Archive> for api::Archive {
         api::Archive {
             archive_id: archive.id.to_string(),
             image_id: archive.image_id.to_string(),
-            store_id: archive.store_id.into(),
+            store_key: archive.store_key.into(),
             image_property_ids: archive
                 .image_property_ids
                 .iter()
@@ -117,19 +117,19 @@ impl From<Archive> for api::Archive {
 #[diesel(table_name = archives)]
 pub struct NewArchive {
     pub image_id: ImageId,
-    pub store_id: StoreId,
+    pub store_key: StoreKey,
     pub image_property_ids: Vec<Option<ImagePropertyId>>,
 }
 
 impl NewArchive {
     pub fn new(
         image_id: ImageId,
-        store_id: StoreId,
+        store_key: StoreKey,
         property_ids: &HashSet<ImagePropertyId>,
     ) -> Self {
         NewArchive {
             image_id,
-            store_id,
+            store_key,
             image_property_ids: property_ids.iter().map(|id| Some(*id)).collect(),
         }
     }
@@ -150,7 +150,7 @@ impl NewArchive {
 #[diesel(table_name = archives)]
 pub struct UpdateArchive {
     pub id: ArchiveId,
-    pub store_id: Option<StoreId>,
+    pub store_key: Option<StoreKey>,
 }
 
 impl UpdateArchive {

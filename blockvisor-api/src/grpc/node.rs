@@ -889,6 +889,7 @@ impl api::Node {
             host_display_name: host.display_name.clone(),
             region_id: region.id.to_string(),
             region_key: region.key.clone().into(),
+            region_name: region.display_name.clone().into(),
             protocol_id: node.protocol_id.to_string(),
             protocol_name: protocol.name.clone(),
             protocol_version_id: node.protocol_version_id.to_string(),
