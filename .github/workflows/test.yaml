@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -6,17 +6,15 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  SQLX_OFFLINE: true
-
 jobs:
-  test:
-    name: Tests
-    runs-on: 
+  tests:
+    runs-on:
       group: Docker
       labels: docker
+
     env:
       CONFIG_FILE: "${{ github.workspace }}/blockvisor-api/config.toml"
+
     services:
       postgres:
         image: postgres:13-bookworm
@@ -49,18 +47,14 @@ jobs:
           VAULT_DEV_ROOT_TOKEN_ID: "vault-root-token"
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
-
-      - name: Install libpq
-        run: apt update && apt install libpq-dev -y
+      - name: Install packages
+        run: >
+          apt update
+          && apt install -y libpq-dev
 
       - name: Initialize vault
         run: >
@@ -70,38 +64,14 @@ jobs:
           --data '{"type":"kv","options":{"version":"2"}}'
           http://localhost:28200/v1/sys/mounts/blockjoy
 
-      - name: Cargo test
-        uses: actions-rs/cargo@v1
+      - uses: rustsec/audit-check@v2
         with:
-          command: test
-          args: --no-fail-fast
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-  lints:
-    name: Lints
-    runs-on:  
-      group: Docker
-      labels: docker
+      - uses: dtolnay/rust-toolchain@stable
 
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
-
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          components: clippy, rustfmt
-          override: true
-
-      - name: Check formatting
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
-
-      - name: Catch common mistakes
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --tests -- -D warnings -Drust-2018-idioms
+      - name: Cargo tests
+        run: >
+          cargo clippy --all-features --all-targets -- -Dwarnings -Drust-2018-idioms
+          && cargo fmt --all -- --check
+          && cargo test --all-features --no-fail-fast --jobs 1
