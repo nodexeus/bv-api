@@ -26,7 +26,7 @@ use crate::grpc::{common, Status};
 use crate::model::image::property::{ImageProperty, ImagePropertyKey};
 use crate::model::image::Image;
 use crate::model::schema::{configs, sql_types};
-use crate::store::StoreId;
+use crate::store::StoreKey;
 use crate::util::HashVec;
 
 use super::property::{NewImagePropertyValue, PropertyMap, PropertyValueConfig};
@@ -329,7 +329,7 @@ impl NodeConfig {
                 image_id: image.id,
                 image_uri: image.image_uri,
                 archive_id: archive.id,
-                store_id: archive.store_id,
+                store_key: archive.store_key,
                 values,
             },
             firewall: FirewallConfig {
@@ -375,7 +375,7 @@ impl NodeConfig {
                 image_id: self.image.image_id,
                 image_uri: self.image.image_uri,
                 archive_id: self.image.archive_id,
-                store_id: self.image.store_id,
+                store_key: self.image.store_key,
                 values: property_map.apply_overrides(overrides),
             },
             firewall: if let Some(config) = new_firewall {
@@ -398,7 +398,7 @@ impl NodeConfig {
                 image_id: Uuid::nil().into(),
                 image_uri: "legacy".to_string(),
                 archive_id: Uuid::nil().into(),
-                store_id: "legacy".to_string().into(),
+                store_key: "legacy".to_string().into(),
                 values: vec![],
             },
             firewall: FirewallConfig {
@@ -526,7 +526,7 @@ pub struct ImageConfig {
     pub image_id: ImageId,
     pub image_uri: String,
     pub archive_id: ArchiveId,
-    pub store_id: StoreId,
+    pub store_key: StoreKey,
     pub values: Vec<PropertyValueConfig>,
 }
 
@@ -536,7 +536,7 @@ impl From<ImageConfig> for common::ImageConfig {
             image_id: config.image_id.to_string(),
             image_uri: config.image_uri,
             archive_id: config.archive_id.to_string(),
-            store_id: config.store_id.to_string(),
+            store_key: config.store_key.to_string(),
             values: config.values.into_iter().map(Into::into).collect(),
         }
     }
@@ -550,7 +550,7 @@ impl TryFrom<common::ImageConfig> for ImageConfig {
             image_id: config.image_id.parse().map_err(Error::ParseImageId)?,
             image_uri: config.image_uri,
             archive_id: config.archive_id.parse().map_err(Error::ParseArchiveId)?,
-            store_id: config.store_id.into(),
+            store_key: config.store_key.into(),
             values: config
                 .values
                 .into_iter()

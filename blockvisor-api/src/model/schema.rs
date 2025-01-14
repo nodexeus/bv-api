@@ -146,7 +146,7 @@ diesel::table! {
         id -> Uuid,
         org_id -> Nullable<Uuid>,
         image_id -> Uuid,
-        store_id -> Text,
+        store_key -> Text,
         image_property_ids -> Array<Nullable<Uuid>>,
     }
 }

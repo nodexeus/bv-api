@@ -36,28 +36,28 @@ pub enum Error {
     Manifest(#[from] manifest::Error),
     /// Missing chunk index: {0}
     MissingChunk(usize),
-    /// Missing `ManifestBody` for `StoreId` {0}
-    MissingManifestBody(StoreId),
-    /// Missing `ManifestHeader` for `StoreId` {0}
-    MissingManifestHeader(StoreId),
+    /// Missing `ManifestBody` for `StoreKey` {0}
+    MissingManifestBody(StoreKey),
+    /// Missing `ManifestHeader` for `StoreKey` {0}
+    MissingManifestHeader(StoreKey),
     /// No data versions found.
     NoDataVersion,
-    /// Failed to parse `ManifestBody` for `StoreId` {0}: {1}
-    ParseManifestBody(StoreId, serde_json::Error),
-    /// Failed to parse `ManifestHeader` for `StoreId` {0}: {1}
-    ParseManifestHeader(StoreId, serde_json::Error),
-    /// Failed to read `ManifestBody` for `StoreId` {0}: {1}
-    ReadManifestBody(StoreId, client::Error),
-    /// Failed to read `ManifestHeader` for `StoreId` {0}: {1}
-    ReadManifestHeader(StoreId, client::Error),
+    /// Failed to parse `ManifestBody` for `StoreKey` {0}: {1}
+    ParseManifestBody(StoreKey, serde_json::Error),
+    /// Failed to parse `ManifestHeader` for `StoreKey` {0}: {1}
+    ParseManifestHeader(StoreKey, serde_json::Error),
+    /// Failed to read `ManifestBody` for `StoreKey` {0}: {1}
+    ReadManifestBody(StoreKey, client::Error),
+    /// Failed to read `ManifestHeader` for `StoreKey` {0}: {1}
+    ReadManifestHeader(StoreKey, client::Error),
     /// Failed to serialize ManifestBody: {0}
     SerializeBody(serde_json::Error),
     /// Failed to serialize ManifestHeader: {0}
     SerializeHeader(serde_json::Error),
-    /// StoreId is not lower-kebab-case: {0}
-    StoreIdChars(String),
-    /// StoreId length `{0}` must be at least 10 characters.
-    StoreIdLen(usize),
+    /// StoreKey is not lower-kebab-case: {0}
+    StoreKeyChars(String),
+    /// StoreKey length `{0}` must be at least 10 characters.
+    StoreKeyLen(usize),
 }
 
 impl From<Error> for Status {
@@ -78,22 +78,22 @@ impl From<Error> for Status {
             | SerializeBody(_)
             | SerializeHeader(_) => Status::internal("Internal error."),
             MissingChunk(_) => Status::failed_precondition("Unknown chunk index."),
-            StoreIdChars(_) | StoreIdLen(_) => Status::invalid_argument("store_id"),
+            StoreKeyChars(_) | StoreKeyLen(_) => Status::invalid_argument("store_key"),
         }
     }
 }
 
 #[derive(Clone, Debug, Display, PartialEq, Eq, DieselNewType, Deref, From, Into)]
-pub struct StoreId(String);
+pub struct StoreKey(String);
 
-impl StoreId {
+impl StoreKey {
     pub fn new(id: String) -> Result<Self, Error> {
         if id.len() < 10 {
-            Err(Error::StoreIdLen(id.len()))
+            Err(Error::StoreKeyLen(id.len()))
         } else if !id.chars().all(|c| LOWER_KEBAB_CASE.contains(c)) {
-            Err(Error::StoreIdChars(id))
+            Err(Error::StoreKeyChars(id))
         } else {
-            Ok(StoreId(id))
+            Ok(StoreKey(id))
         }
     }
 }
@@ -129,9 +129,9 @@ impl Store {
         Self::new(aws_sdk_s3::Client::from_conf(s3_config), config)
     }
 
-    /// Return a descending order list of data versions for a `StoreId`.
-    async fn data_versions(&self, store_id: &StoreId) -> Result<Vec<u64>, Error> {
-        let path = format!("{store_id}/");
+    /// Return a descending order list of data versions for a `StoreKey`.
+    async fn data_versions(&self, store_key: &StoreKey) -> Result<Vec<u64>, Error> {
+        let path = format!("{store_key}/");
         let mut versions: Vec<_> = self
             .client
             .list(&self.bucket.archive, &path)
@@ -154,26 +154,26 @@ impl Store {
     /// If `data_version` is None then it uses the latest data version.
     pub async fn download_manifest_header(
         &self,
-        store_id: &StoreId,
+        store_key: &StoreKey,
         data_version: Option<u64>,
     ) -> Result<(ManifestHeader, u64), Error> {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let mut versions = self.data_versions(store_id).await?;
+            let mut versions = self.data_versions(store_key).await?;
             versions.pop().ok_or(Error::NoDataVersion)?
         };
 
-        let key = format!("{store_id}/{data_version}/{MANIFEST_HEADER}");
+        let key = format!("{store_key}/{data_version}/{MANIFEST_HEADER}");
         match self.client.read_key(&self.bucket.archive, &key).await {
             Ok(bytes) => match serde_json::from_slice(&bytes) {
                 Ok(header) => Ok((header, data_version)),
-                Err(err) => Err(Error::ParseManifestHeader(store_id.clone(), err)),
+                Err(err) => Err(Error::ParseManifestHeader(store_key.clone(), err)),
             },
             Err(client::Error::MissingKey(_, _)) => {
-                Err(Error::MissingManifestHeader(store_id.clone()))
+                Err(Error::MissingManifestHeader(store_key.clone()))
             }
-            Err(err) => Err(Error::ReadManifestHeader(store_id.clone(), err)),
+            Err(err) => Err(Error::ReadManifestHeader(store_key.clone(), err)),
         }
     }
 
@@ -182,38 +182,38 @@ impl Store {
     /// If `data_version` is None then it uses the latest data version.
     async fn download_manifest_body(
         &self,
-        store_id: &StoreId,
+        store_key: &StoreKey,
         data_version: Option<u64>,
     ) -> Result<(ManifestBody, u64), Error> {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let mut versions = self.data_versions(store_id).await?;
+            let mut versions = self.data_versions(store_key).await?;
             versions.pop().ok_or(Error::NoDataVersion)?
         };
 
-        let key = format!("{store_id}/{data_version}/{MANIFEST_BODY}");
+        let key = format!("{store_key}/{data_version}/{MANIFEST_BODY}");
         match self.client.read_key(&self.bucket.archive, &key).await {
             Ok(bytes) => match serde_json::from_slice(&bytes) {
                 Ok(body) => Ok((body, data_version)),
-                Err(err) => Err(Error::ParseManifestBody(store_id.clone(), err)),
+                Err(err) => Err(Error::ParseManifestBody(store_key.clone(), err)),
             },
             Err(client::Error::MissingKey(_, _)) => {
-                Err(Error::MissingManifestBody(store_id.clone()))
+                Err(Error::MissingManifestBody(store_key.clone()))
             }
-            Err(err) => Err(Error::ReadManifestBody(store_id.clone(), err)),
+            Err(err) => Err(Error::ReadManifestBody(store_key.clone(), err)),
         }
     }
 
     /// Regenerate the download URLs for the requested `DownloadManifest` chunks.
     pub async fn refresh_download_manifest(
         &self,
-        store_id: &StoreId,
+        store_key: &StoreKey,
         data_version: u64,
         chunk_indexes: &[usize],
     ) -> Result<Vec<ArchiveChunk>, Error> {
         let (manifest, _) = self
-            .download_manifest_body(store_id, Some(data_version))
+            .download_manifest_body(store_key, Some(data_version))
             .await?;
         let expires = Duration::from_secs(self.expiration.as_secs());
 
@@ -238,20 +238,20 @@ impl Store {
 
     pub async fn save_download_manifest(
         &self,
-        store_id: &StoreId,
+        store_key: &StoreKey,
         manifest: DownloadManifest,
     ) -> Result<(), Error> {
-        let mut versions = self.data_versions(store_id).await?;
+        let mut versions = self.data_versions(store_key).await?;
         let data_version = versions.pop().unwrap_or_default();
 
-        let header_key = format!("{store_id}/{data_version}/{MANIFEST_HEADER}");
+        let header_key = format!("{store_key}/{data_version}/{MANIFEST_HEADER}");
         let header: ManifestHeader = (&manifest).try_into()?;
         let header_data = serde_json::to_vec(&header).map_err(Error::SerializeHeader)?;
         self.client
             .write_key(&self.bucket.archive, &header_key, header_data)
             .await?;
 
-        let body_key = format!("{store_id}/{data_version}/{MANIFEST_BODY}");
+        let body_key = format!("{store_key}/{data_version}/{MANIFEST_BODY}");
         let body: ManifestBody = manifest.into();
         let body_data = serde_json::to_vec(&body).map_err(Error::SerializeBody)?;
         self.client
@@ -262,7 +262,7 @@ impl Store {
 
     pub async fn upload_slots(
         &self,
-        store_id: &StoreId,
+        store_key: &StoreKey,
         data_version: Option<u64>,
         slot_indexes: &[usize],
         expires: Duration,
@@ -270,13 +270,13 @@ impl Store {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let mut versions = self.data_versions(store_id).await?;
+            let mut versions = self.data_versions(store_key).await?;
             versions.pop().unwrap_or_default() + 1
         };
 
         let mut slots = Vec::with_capacity(slot_indexes.len());
         for &index in slot_indexes {
-            let key = format!("{store_id}/{data_version}/data.part_{index}");
+            let key = format!("{store_key}/{data_version}/data.part_{index}");
             let url = self
                 .client
                 .upload_url(&self.bucket.archive, &key, expires)

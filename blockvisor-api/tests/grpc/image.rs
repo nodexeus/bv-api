@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use blockvisor_api::database::seed::{
     ARCHIVE_ID_1, IMAGE_ID, ORG_ID, ORG_IMAGE_ID, ORG_PROTOCOL_KEY, ORG_VARIANT_KEY, PROTOCOL_KEY,
-    PROTOCOL_VERSION_ID, SEMANTIC_VERSION, STORE_ID_1, STORE_ID_2, VARIANT_KEY,
+    PROTOCOL_VERSION_ID, SEMANTIC_VERSION, STORE_KEY_1, STORE_KEY_2, VARIANT_KEY,
 };
 use blockvisor_api::grpc::{api, common};
 use blockvisor_api::model::image::rule::{FirewallAction, FirewallDirection};
@@ -21,7 +21,7 @@ async fn add_a_new_image() {
     let req = api::ImageServiceAddImageRequest {
         protocol_version_id: PROTOCOL_VERSION_ID.into(),
         org_id: Some(ORG_ID.into()),
-        image_uri: "docker:TODO".to_string(),
+        image_uri: "docker://image".to_string(),
         description: None,
         properties: vec![
             add_image_property("prop1", false),
@@ -42,9 +42,9 @@ async fn add_a_new_image() {
         min_disk_bytes: 3,
         ramdisks: vec![],
         archive_pointers: vec![
-            archive_pointer(vec![], Some("default-store-id")),
-            archive_pointer(vec!["prop2"], Some("prop2-store-id")),
-            archive_pointer(vec!["prop4"], Some("prop4-store-id")),
+            archive_pointer(vec![], Some("default-store-key")),
+            archive_pointer(vec!["prop2"], Some("prop2-store-key")),
+            archive_pointer(vec!["prop4"], Some("prop4-store-key")),
             archive_pointer(vec!["prop2", "prop4"], None),
         ],
     };
@@ -80,9 +80,9 @@ async fn add_a_new_image() {
             .map(|id| id_to_key.get(id).unwrap())
             .collect::<Vec<_>>();
         match keys.as_slice() {
-            [] => assert_eq!(archive.store_id, "default-store-id"),
-            [key] if *key == "prop2" => assert_eq!(archive.store_id, "prop2-store-id"),
-            [key] if *key == "prop4" => assert_eq!(archive.store_id, "prop4-store-id"),
+            [] => assert_eq!(archive.store_key, "default-store-key"),
+            [key] if *key == "prop2" => assert_eq!(archive.store_key, "prop2-store-key"),
+            [key] if *key == "prop4" => assert_eq!(archive.store_key, "prop4-store-key"),
             _ => panic!("unexpected archive: {archive:?}"),
         }
     }
@@ -132,11 +132,11 @@ fn firewall_rule<S: Into<String>>(
     }
 }
 
-fn archive_pointer<S: Into<String>>(keys: Vec<S>, store_id: Option<S>) -> api::ArchivePointer {
+fn archive_pointer<S: Into<String>>(keys: Vec<S>, store_key: Option<S>) -> api::ArchivePointer {
     api::ArchivePointer {
         new_archive_keys: keys.into_iter().map(Into::into).collect(),
-        pointer: Some(if let Some(id) = store_id {
-            api::archive_pointer::Pointer::StoreId(id.into())
+        pointer: Some(if let Some(key) = store_key {
+            api::archive_pointer::Pointer::StoreKey(key.into())
         } else {
             api::archive_pointer::Pointer::Disallowed(Empty {})
         }),
@@ -266,21 +266,21 @@ async fn update_existing_archive() {
         image_id: IMAGE_ID.into(),
         org_id: Some(ORG_ID.into()),
     };
-    let new_store_id = "new-store-id";
+    let new_store_key = "new-store-key";
     let update = api::ImageServiceUpdateArchiveRequest {
         archive_id: ARCHIVE_ID_1.to_string(),
-        store_id: Some(new_store_id.into()),
+        store_key: Some(new_store_key.into()),
     };
 
-    // check existing store ids
+    // check existing store keys
     let result = test
         .send_member(ImageService::list_archives, list.clone())
         .await;
     let archives = result.unwrap().archives;
-    let store_ids: HashSet<_> = archives.iter().map(|a| a.store_id.as_str()).collect();
-    assert_eq!(store_ids.len(), 2);
-    assert!(store_ids.contains(&STORE_ID_1));
-    assert!(store_ids.contains(&STORE_ID_2));
+    let store_keys: HashSet<_> = archives.iter().map(|a| a.store_key.as_str()).collect();
+    assert_eq!(store_keys.len(), 2);
+    assert!(store_keys.contains(&STORE_KEY_1));
+    assert!(store_keys.contains(&STORE_KEY_2));
 
     // org admin can't update an archive
     let result = test
@@ -292,15 +292,15 @@ async fn update_existing_archive() {
     let result = test.send_super(ImageService::update_archive, update).await;
     assert_eq!(result.unwrap().archive.unwrap().archive_id, ARCHIVE_ID_1);
 
-    // check new store ids
+    // check new store keys
     let result = test
         .send_member(ImageService::list_archives, list.clone())
         .await;
     let archives = result.unwrap().archives;
-    let store_ids: HashSet<_> = archives.iter().map(|a| a.store_id.as_str()).collect();
-    assert_eq!(store_ids.len(), 2);
-    assert!(store_ids.contains(&new_store_id));
-    assert!(store_ids.contains(&STORE_ID_2));
+    let store_keys: HashSet<_> = archives.iter().map(|a| a.store_key.as_str()).collect();
+    assert_eq!(store_keys.len(), 2);
+    assert!(store_keys.contains(&new_store_key));
+    assert!(store_keys.contains(&STORE_KEY_2));
 }
 
 #[tokio::test]
