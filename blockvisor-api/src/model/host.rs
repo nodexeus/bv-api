@@ -273,7 +273,7 @@ impl Host {
 
         // type constructor ensures injection safety
         let tag = &require.protocol.key;
-        let tag_filter = format!("'{tag}' = ANY(tags) OR CARDINALITY(tags) = 0");
+        let tag_filter = format!("'{tag}' = ANY(tags)");
         let tag_order = format!("'{tag}' = ANY(tags)");
 
         let mut query = hosts::table
