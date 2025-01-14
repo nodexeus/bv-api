@@ -22,8 +22,7 @@ use crate::util::LOWER_KEBAB_CASE;
 
 use self::manifest::{ArchiveChunk, DownloadManifest, ManifestBody, ManifestHeader, UploadSlot};
 
-pub const CREDENTIALS: &str = "blockvisor-api credentials provider";
-pub const BABEL_IMAGE_FILE: &str = "blockjoy.gz";
+pub const CREDENTIALS: &str = "api-credentials-provider";
 pub const BUNDLE_FILE: &str = "bvd-bundle.tgz";
 pub const MANIFEST_BODY: &str = "manifest-body.json";
 pub const MANIFEST_HEADER: &str = "manifest-header.json";
