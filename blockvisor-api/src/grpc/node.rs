@@ -121,8 +121,6 @@ pub enum Error {
     UnknownSortField,
     /// Node user error: {0}
     User(#[from] crate::model::user::Error),
-    /// Node vault error: {0}
-    Vault(#[from] crate::store::vault::Error),
 }
 
 impl From<Error> for Status {
@@ -175,7 +173,6 @@ impl From<Error> for Status {
             Rule(err) => err.into(),
             Sql(err) => err.into(),
             User(err) => err.into(),
-            Vault(err) => err.into(),
         }
     }
 }

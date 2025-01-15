@@ -85,7 +85,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.4", features = ["serde"] }
 uuid = { version = "1.12", features = ["serde", "v4"] }
 validator = { version = "0.19", features = ["derive"] }
-vaultrs = "0.7"
 zeroize = { version = "1.6", features = ["zeroize_derive"] }
 
 [dev-dependencies]

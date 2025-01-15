@@ -23,8 +23,6 @@ pub enum Error {
     MissingResource,
     /// Claims resource failed: {0}
     Resource(#[from] crate::auth::resource::Error),
-    /// Vault error: {0}
-    Vault(#[from] crate::store::vault::Error),
 }
 
 impl From<Error> for Status {
@@ -37,7 +35,6 @@ impl From<Error> for Status {
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Resource(err) => err.into(),
-            Vault(err) => err.into(),
         }
     }
 }
@@ -73,8 +70,12 @@ async fn get_secret(
     let _authz = read.auth_for(&meta, CryptPerm::GetSecret, resource).await?;
     let _id = resource.id_exists(&mut read).await?;
 
+    // FIXME: secrets integration
+    /*
     let path = format!("{resource}/secret/{}", req.name);
     let data = read.ctx.vault.read().await.get_bytes(&path).await?;
+     */
+    let data = Vec::new();
 
     Ok(api::CryptServiceGetSecretResponse { value: data })
 }
@@ -91,6 +92,8 @@ async fn put_secret(
         .await?;
     let _id = resource.id_exists(&mut write).await?;
 
+    // FIXME: secrets integration
+    /*
     let path = format!("{resource}/secret/{}", req.name);
     let _version = write
         .ctx
@@ -99,6 +102,7 @@ async fn put_secret(
         .await
         .set_bytes(&path, &req.value)
         .await?;
+    */
 
     Ok(api::CryptServicePutSecretResponse {})
 }

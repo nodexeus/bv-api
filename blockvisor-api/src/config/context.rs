@@ -3,14 +3,14 @@ use std::sync::Arc;
 use displaydoc::Display;
 use rand::rngs::OsRng;
 use thiserror::Error;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 use crate::auth::Auth;
 use crate::cloudflare::{Cloudflare, Dns};
 use crate::database::Pool;
 use crate::email::Email;
 use crate::mqtt::Notifier;
-use crate::store::{Store, Vault};
+use crate::store::Store;
 use crate::stripe::{Stripe, Subscription};
 
 use super::log::Log;
@@ -42,8 +42,6 @@ pub enum Error {
     MissingStripe,
     /// Builder is missing Store.
     MissingStore,
-    /// Builder is missing Vault.
-    MissingVault,
     /// Failed to create MQTT options: {0}
     Mqtt(#[from] super::mqtt::Error),
     /// Failed to create Notifier: {0}
@@ -52,8 +50,6 @@ pub enum Error {
     Pool(crate::database::Error),
     /// Failed to create Stripe: {0}
     Stripe(crate::stripe::Error),
-    /// Failed to create Vault: {0}
-    Vault(crate::store::vault::Error),
 }
 
 /// Service `Context` containing metadata that can be passed down to handlers.
@@ -72,7 +68,6 @@ pub struct Context {
     pub rng: Arc<Mutex<OsRng>>,
     pub store: Arc<Store>,
     pub stripe: Arc<Box<dyn Subscription + Send + Sync + 'static>>,
-    pub vault: Arc<RwLock<Vault>>,
 }
 
 impl Context {
@@ -99,9 +94,6 @@ impl Context {
             .map_err(Error::Notifier)?;
         let store = Store::new_s3(&config.store);
         let stripe = Stripe::new(config.stripe.clone()).map_err(Error::Stripe)?;
-        let vault = Vault::new(config.vault.clone())
-            .await
-            .map_err(Error::Vault)?;
 
         Ok(Builder::default()
             .auth(auth)
@@ -112,7 +104,6 @@ impl Context {
             .pool(pool)
             .store(store)
             .stripe(stripe)
-            .vault(vault)
             .config(config))
     }
 
@@ -138,9 +129,6 @@ impl Context {
             .map_err(Error::Notifier)?;
         let store = TestStore::new().await.mock_store();
         let stripe = MockStripe::new().await;
-        let vault = Vault::new(config.vault.clone())
-            .await
-            .map_err(Error::Vault)?;
 
         Builder::default()
             .auth(auth)
@@ -152,7 +140,6 @@ impl Context {
             .rng(rng)
             .store(store)
             .stripe(stripe)
-            .vault(vault)
             .config(config)
             .build()
             .map(|ctx| (ctx, db))
@@ -172,7 +159,6 @@ pub struct Builder {
     rng: Option<OsRng>,
     store: Option<Store>,
     stripe: Option<Box<dyn Subscription + Send + Sync + 'static>>,
-    vault: Option<Arc<RwLock<Vault>>>,
 }
 
 impl Builder {
@@ -188,7 +174,6 @@ impl Builder {
             rng: Arc::new(Mutex::new(self.rng.unwrap_or_default())),
             store: self.store.ok_or(Error::MissingStore).map(Arc::new)?,
             stripe: self.stripe.ok_or(Error::MissingStripe).map(Arc::new)?,
-            vault: self.vault.ok_or(Error::MissingVault)?,
         }))
     }
 
@@ -255,12 +240,6 @@ impl Builder {
         S: Subscription + Send + Sync + 'static,
     {
         self.stripe = Some(Box::new(stripe));
-        self
-    }
-
-    #[must_use]
-    pub fn vault(mut self, vault: Arc<RwLock<Vault>>) -> Self {
-        self.vault = Some(vault);
         self
     }
 }
