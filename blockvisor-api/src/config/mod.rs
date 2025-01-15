@@ -8,7 +8,6 @@ pub mod server;
 pub mod store;
 pub mod stripe;
 pub mod token;
-pub mod vault;
 
 mod context;
 pub use context::Context;
@@ -67,8 +66,6 @@ pub enum Error {
     Stripe(stripe::Error),
     /// Failed to parse token Config: {0}
     Token(token::Error),
-    /// Failed to parse vault Config: {0}
-    Vault(vault::Error),
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -84,7 +81,6 @@ pub struct Config {
     pub store: Arc<store::Config>,
     pub stripe: Arc<stripe::Config>,
     pub token: Arc<token::Config>,
-    pub vault: Arc<vault::Config>,
 }
 
 impl Config {
@@ -150,9 +146,6 @@ impl TryFrom<&Provider> for Config {
         let token = token::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Token)?;
-        let vault = vault::Config::try_from(provider)
-            .map(Arc::new)
-            .map_err(Error::Vault)?;
 
         Ok(Config {
             cloudflare,
@@ -165,7 +158,6 @@ impl TryFrom<&Provider> for Config {
             store,
             stripe,
             token,
-            vault,
         })
     }
 }

@@ -3,9 +3,6 @@ pub use client::Client;
 
 pub mod manifest;
 
-pub mod vault;
-pub use vault::Vault;
-
 use std::sync::Arc;
 use std::time::Duration;
 

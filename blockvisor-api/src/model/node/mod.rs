@@ -138,8 +138,6 @@ pub enum Error {
     Upgrade(diesel::result::Error),
     /// The node is already using the requested image_id.
     UpgradeSameImage,
-    /// Store error for node: {0}
-    Vault(#[from] crate::store::vault::Error),
     /// Failed to parse VM cpu count: {0}
     VmCpu(std::num::TryFromIntError),
     /// Failed to parse VM memory bytes: {0}
@@ -180,7 +178,6 @@ impl From<Error> for Status {
             Region(err) => err.into(),
             Report(err) => err.into(),
             Store(err) => err.into(),
-            Vault(err) => err.into(),
             _ => Status::internal("Internal error."),
         }
     }
@@ -346,20 +343,21 @@ impl Node {
             warn!("Failed to remove node dns: {err}");
         }
 
+        // FIXME: secrets integration
         /*
-            let prefix = format!("node/{id}/secret");
-            let secrets = write.ctx.vault.read().await.list_path(&prefix).await?;
-            if let Some(names) = secrets {
+        let prefix = format!("node/{id}/secret");
+        let secrets = write.ctx.vault.read().await.list_path(&prefix).await?;
+        if let Some(names) = secrets {
             for name in names {
-            let path = format!("{prefix}/{name}");
-            let result = write.ctx.vault.read().await.delete_path(&path).await;
-            match result {
-            Ok(()) | Err(crate::store::vault::Error::PathNotFound) => (),
-            Err(err) => return Err(err.into()),
+                let path = format!("{prefix}/{name}");
+                let result = write.ctx.vault.read().await.delete_path(&path).await;
+                match result {
+                    Ok(()) | Err(crate::store::vault::Error::PathNotFound) => (),
+                    Err(err) => return Err(err.into()),
+                }
+            }
         }
-        }
-        }
-             */
+        */
 
         if let Some(ref item_id) = node.stripe_item_id {
             write.ctx.stripe.remove_subscription(item_id).await?;
@@ -501,6 +499,7 @@ impl NewNode {
             ProtocolVersion::by_id(self.protocol_version_id, Some(self.org_id), authz, write)
                 .await?;
 
+        // FIXME: secrets integration
         /*
             let secrets = if let Some(old_id) = self.old_node_id {
             let prefix = format!("node/{old_id}/secret");
