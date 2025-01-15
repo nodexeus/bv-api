@@ -10,7 +10,6 @@ jobs:
   tests:
     runs-on:
       group: Docker
-      labels: docker
 
     env:
       CONFIG_FILE: "${{ github.workspace }}/blockvisor-api/config.toml"
@@ -51,10 +50,8 @@ jobs:
         with:
           submodules: true
 
-      - name: Install packages
-        run: >
-          apt update
-          && apt install -y libpq-dev
+      - name: Install dependencies
+        run: apt update && apt install -y libpq-dev
 
       - name: Initialize vault
         run: >
@@ -64,11 +61,11 @@ jobs:
           --data '{"type":"kv","options":{"version":"2"}}'
           http://localhost:28200/v1/sys/mounts/blockjoy
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: dtolnay/rust-toolchain@stable
 
       - name: Cargo tests
         run: >
