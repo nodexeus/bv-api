@@ -26,6 +26,7 @@ use crate::grpc::{common, Status};
 use crate::model::image::property::{ImageProperty, ImagePropertyKey};
 use crate::model::image::Image;
 use crate::model::schema::{configs, sql_types};
+use crate::model::sql::Version;
 use crate::store::StoreKey;
 use crate::util::HashVec;
 
@@ -57,6 +58,8 @@ pub enum Error {
     ParseArchiveId(uuid::Error),
     /// Failed to parse ImageId: {0}
     ParseImageId(uuid::Error),
+    /// Failed to parse min babel version: {0}
+    ParseMinBabel(crate::model::sql::Error),
     /// Image config property error: {0}
     Property(#[from] super::property::Error),
     /// Image config firewall rule error: {0}
@@ -83,6 +86,7 @@ impl From<Error> for Status {
             }
             ParseArchiveId(_) => Status::invalid_argument("archive_id"),
             ParseImageId(_) => Status::invalid_argument("image_id"),
+            ParseMinBabel(_) => Status::invalid_argument("min_babel_version"),
             UpdateKeyNotDynamic(key) => Status::failed_precondition(format!("property.key: {key}")),
             ById(_, _)
             | ByIds(_, _)
@@ -331,6 +335,7 @@ impl NodeConfig {
                 archive_id: archive.id,
                 store_key: archive.store_key,
                 values,
+                min_babel_version: image.min_babel_version,
             },
             firewall: FirewallConfig {
                 default_in: image.default_firewall_in,
@@ -377,6 +382,7 @@ impl NodeConfig {
                 archive_id: self.image.archive_id,
                 store_key: self.image.store_key,
                 values: property_map.apply_overrides(overrides),
+                min_babel_version: self.image.min_babel_version,
             },
             firewall: if let Some(config) = new_firewall {
                 config
@@ -400,6 +406,7 @@ impl NodeConfig {
                 archive_id: Uuid::nil().into(),
                 store_key: "legacy".to_string().into(),
                 values: vec![],
+                min_babel_version: semver::Version::new(0, 0, 1).into(),
             },
             firewall: FirewallConfig {
                 default_in: FirewallAction::Drop,
@@ -528,6 +535,7 @@ pub struct ImageConfig {
     pub archive_id: ArchiveId,
     pub store_key: StoreKey,
     pub values: Vec<PropertyValueConfig>,
+    pub min_babel_version: Version,
 }
 
 impl From<ImageConfig> for common::ImageConfig {
@@ -538,6 +546,7 @@ impl From<ImageConfig> for common::ImageConfig {
             archive_id: config.archive_id.to_string(),
             store_key: config.store_key.to_string(),
             values: config.values.into_iter().map(Into::into).collect(),
+            min_babel_version: config.min_babel_version.to_string(),
         }
     }
 }
@@ -556,6 +565,10 @@ impl TryFrom<common::ImageConfig> for ImageConfig {
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,
+            min_babel_version: config
+                .min_babel_version
+                .parse()
+                .map_err(Error::ParseMinBabel)?,
         })
     }
 }

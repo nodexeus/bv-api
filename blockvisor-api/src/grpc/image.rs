@@ -43,6 +43,8 @@ pub enum Error {
     Image(#[from] crate::model::image::Error),
     /// Invalid new_archive_keys combination: {0:?}
     InvalidKeyCombo(HashSet<ImagePropertyKey>),
+    /// Failed to parse minimum babel version: {0}
+    MinBabel(crate::model::sql::Error),
     /// Failed to parse minimum cpu count: {0}
     MinCpu(std::num::TryFromIntError),
     /// Failed to parse minimum disk space: {0}
@@ -99,6 +101,7 @@ impl From<Error> for Status {
                 // safety: keys are from the client
                 Status::invalid_argument(format!("invalid archive_pointer key combo: {set:?}"))
             }
+            MinBabel(_) => Status::invalid_argument("min_babel_version"),
             MinCpu(_) => Status::invalid_argument("min_cpu_cores"),
             MinDisk(_) => Status::invalid_argument("min_disk_bytes"),
             MinMemory(_) => Status::invalid_argument("min_memory_bytes"),
@@ -210,6 +213,7 @@ async fn add_image(
         min_cpu_cores: i64::try_from(req.min_cpu_cores).map_err(Error::MinCpu)?,
         min_memory_bytes: i64::try_from(req.min_memory_bytes).map_err(Error::MinMemory)?,
         min_disk_bytes: i64::try_from(req.min_disk_bytes).map_err(Error::MinDisk)?,
+        min_babel_version: req.min_babel_version.parse().map_err(Error::MinBabel)?,
         ramdisks: Ramdisks(req.ramdisks.into_iter().map(Into::into).collect()),
         default_firewall_in: firewall.default_in().try_into()?,
         default_firewall_out: firewall.default_out().try_into()?,
@@ -448,6 +452,7 @@ impl api::Image {
             min_cpu_cores: u64::try_from(image.min_cpu_cores).map_err(Error::MinCpu)?,
             min_memory_bytes: u64::try_from(image.min_memory_bytes).map_err(Error::MinMemory)?,
             min_disk_bytes: u64::try_from(image.min_disk_bytes).map_err(Error::MinDisk)?,
+            min_babel_version: image.min_babel_version.to_string(),
             ramdisks: image.ramdisks.into_iter().map(Into::into).collect(),
             visibility: common::Visibility::from(image.visibility).into(),
             created_at: Some(NanosUtc::from(image.created_at).into()),
