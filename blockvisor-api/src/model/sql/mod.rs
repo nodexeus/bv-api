@@ -108,7 +108,7 @@ impl ToSql<Inet, Pg> for IpNetwork {
 }
 
 #[derive(
-    Clone, Debug, Deref, Display, PartialEq, Eq, PartialOrd, Ord, AsExpression, FromSqlRow,
+    Clone, Debug, Deref, Display, PartialEq, Eq, PartialOrd, Ord, AsExpression, FromSqlRow, From,
 )]
 #[diesel(sql_type = Text)]
 pub struct Version(semver::Version);

@@ -31,6 +31,7 @@ use crate::database::Conn;
 use crate::grpc::Status;
 use crate::model::protocol::{VersionId, Visibility};
 use crate::model::schema::images;
+use crate::model::sql::Version;
 
 use self::config::Ramdisks;
 use self::rule::FirewallAction;
@@ -99,6 +100,7 @@ pub struct Image {
     pub visibility: Visibility,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
+    pub min_babel_version: Version,
 }
 
 impl Image {
@@ -189,6 +191,7 @@ pub struct NewImage {
     pub min_cpu_cores: i64,
     pub min_memory_bytes: i64,
     pub min_disk_bytes: i64,
+    pub min_babel_version: Version,
     pub ramdisks: Ramdisks,
     pub default_firewall_in: FirewallAction,
     pub default_firewall_out: FirewallAction,

@@ -40,6 +40,7 @@ async fn add_a_new_image() {
         min_cpu_cores: 1,
         min_memory_bytes: 2,
         min_disk_bytes: 3,
+        min_babel_version: "0.0.1".to_string(),
         ramdisks: vec![],
         archive_pointers: vec![
             archive_pointer(vec![], Some("default-store-key")),
