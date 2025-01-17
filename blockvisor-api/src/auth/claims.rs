@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::Duration;
-use derive_more::Deref;
+use derive_more::{Deref, IntoIterator};
 use displaydoc::Display;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -130,7 +130,7 @@ impl Claims {
         conn: &mut Conn<'_>,
     ) -> Result<Option<Granted>, Error> {
         match resources {
-            Resources::None => Ok(None),
+            Resources::All => Ok(None),
             Resources::One(resource) => self.ensure_resource(resource, conn).await,
             Resources::Many(resources) => {
                 let mut granted = Granted::default();
@@ -239,7 +239,7 @@ impl Claims {
 }
 
 /// A set of permissions granted by authorization checks.
-#[derive(Debug, Default, Deref)]
+#[derive(Debug, Default, Deref, IntoIterator)]
 pub struct Granted(HashSet<Perm>);
 
 impl Granted {
@@ -330,26 +330,38 @@ impl Granted {
         perms.into_iter().any(|perm| self.contains(&perm.into()))
     }
 
-    pub fn ensure_perm<P>(&self, perm: P, claims: &Claims) -> Result<(), Error>
+    /// Returns the valid permission.
+    pub fn ensure_perm<P>(&self, perm: P, resource: Resource) -> Result<Perm, Error>
     where
         P: Into<Perm>,
     {
         let perm = perm.into();
         self.has_perm(perm)
-            .then_some(())
-            .ok_or_else(|| Error::MissingPerm(perm, claims.resource()))
+            .then_some(perm)
+            .ok_or_else(|| Error::MissingPerm(perm, resource))
     }
 
-    pub fn ensure_all_perms(&self, perms: HashSet<Perm>, claims: &Claims) -> Result<(), Error> {
+    /// Returns the matching set of valid permissions.
+    pub fn ensure_all_perms(
+        &self,
+        perms: HashSet<Perm>,
+        resource: Resource,
+    ) -> Result<Granted, Error> {
         perms
-            .into_iter()
-            .try_for_each(|p| self.ensure_perm(p, claims))
+            .iter()
+            .try_for_each(|perm| self.ensure_perm(*perm, resource).map(|_| ()))?;
+        Ok(Granted(perms))
     }
 
-    pub fn ensure_any_perms(&self, perms: HashSet<Perm>, claims: &Claims) -> Result<(), Error> {
+    /// Returns the first valid permission.
+    pub fn ensure_any_perms(
+        &self,
+        perms: HashSet<Perm>,
+        resource: Resource,
+    ) -> Result<Perm, Error> {
         for perm in &perms {
-            if matches!(self.ensure_perm(*perm, claims), Ok(())) {
-                return Ok(());
+            if let Ok(perm) = self.ensure_perm(*perm, resource) {
+                return Ok(perm);
             }
         }
 

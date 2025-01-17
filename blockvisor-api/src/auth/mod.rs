@@ -31,7 +31,7 @@ pub(crate) trait Authorize {
         &mut self,
         meta: &Metadata,
         perms: Perms,
-        resources: Option<Resources>,
+        resources: Resources,
     ) -> Result<AuthZ, Error>;
 
     /// Authorize request token for `perms` and all resources.
@@ -39,7 +39,7 @@ pub(crate) trait Authorize {
     where
         P: Into<Perms> + Send,
     {
-        self.authorize(meta, perms.into(), None).await
+        self.authorize(meta, perms.into(), Resources::All).await
     }
 
     /// Authorize request token for `perms` and ensure `resources`.
@@ -53,8 +53,7 @@ pub(crate) trait Authorize {
         P: Into<Perms> + Send,
         R: Into<Resources> + Send,
     {
-        self.authorize(meta, perms.into(), Some(resources.into()))
-            .await
+        self.authorize(meta, perms.into(), resources.into()).await
     }
 
     /// Try and authorize request token for `admin_perms` and all resources.
@@ -72,23 +71,25 @@ pub(crate) trait Authorize {
         UP: Into<Perms> + Send,
         UR: Into<Resources> + Send,
     {
-        if let Ok(authz) = self.authorize(meta, admin_perms.into(), None).await {
+        if let Ok(authz) = self
+            .authorize(meta, admin_perms.into(), Resources::All)
+            .await
+        {
             return Ok(authz);
         }
 
-        self.authorize(meta, user_perms.into(), Some(user_resources.into()))
+        self.authorize(meta, user_perms.into(), user_resources.into())
             .await
     }
 
     /// Authorize request token for all `perms` and all resources.
-    #[allow(unused)]
     async fn auth_all<I, P>(&mut self, meta: &Metadata, perms: I) -> Result<AuthZ, Error>
     where
         I: IntoIterator<Item = P>,
         P: Into<Perm> + Send,
     {
         let perms = Perms::All(perms.into_iter().map(Into::into).collect());
-        self.authorize(meta, perms, None).await
+        self.authorize(meta, perms, Resources::All).await
     }
 
     /// Authorize request token for all `perms` and ensure `resources`.
@@ -105,7 +106,7 @@ pub(crate) trait Authorize {
         R: Into<Resources> + Send,
     {
         let perms = Perms::All(perms.into_iter().map(Into::into).collect());
-        self.authorize(meta, perms, Some(resources.into())).await
+        self.authorize(meta, perms, resources.into()).await
     }
 
     /// Authorize request token for any `perms` and all resources.
@@ -115,7 +116,7 @@ pub(crate) trait Authorize {
         P: Into<Perm> + Send,
     {
         let perms = Perms::Any(perms.into_iter().map(Into::into).collect());
-        self.authorize(meta, perms, None).await
+        self.authorize(meta, perms, Resources::All).await
     }
 
     /// Authorize request token for any `perms` and ensure `resources`.
@@ -132,7 +133,7 @@ pub(crate) trait Authorize {
         R: Into<Resources> + Send,
     {
         let perms = Perms::Any(perms.into_iter().map(Into::into).collect());
-        self.authorize(meta, perms, Some(resources.into())).await
+        self.authorize(meta, perms, resources.into()).await
     }
 }
 
@@ -146,8 +147,8 @@ pub enum Error {
     DecodeJwt(token::jwt::Error),
     /// Failed to decode refresh BearerToken: {0}
     DecodeRefresh(refresh::Error),
-    /// JWT for resource {0} has expired.
-    ExpiredJwt(String),
+    /// JWT for resource `{0:?}` has expired.
+    ExpiredJwt(Option<Resource>),
     /// Refresh token for resource {0} has expired.
     ExpiredRefresh(String),
     /// Failed to parse RequestToken: {0}
@@ -194,7 +195,7 @@ impl Auth {
         &self,
         meta: &Metadata,
         perms: Perms,
-        resources: Option<Resources>,
+        resources: Resources,
         conn: &mut Conn<'_>,
     ) -> Result<AuthZ, Error> {
         let token: RequestToken = meta.try_into().map_err(Error::ParseRequestToken)?;
@@ -205,42 +206,15 @@ impl Auth {
         &self,
         token: &RequestToken,
         perms: Perms,
-        resources: Option<Resources>,
+        resources: Resources,
         conn: &mut Conn<'_>,
     ) -> Result<AuthZ, Error> {
         let claims = self.claims(token, conn).await?;
-        self.authorize_claims(claims, perms, resources, conn).await
-    }
 
-    pub async fn claims(&self, token: &RequestToken, conn: &mut Conn<'_>) -> Result<Claims, Error> {
-        match token {
-            RequestToken::Bearer(token) => self.cipher.jwt.decode(token).map_err(|e| match e {
-                token::jwt::Error::TokenExpired => {
-                    let claims = self.cipher.jwt.decode_expired(token).ok();
-                    Error::ExpiredJwt(
-                        claims
-                            .map_or_else(|| "unknown".to_string(), |c| format!("{}", c.resource())),
-                    )
-                }
-                other => Error::DecodeJwt(other),
-            }),
-            RequestToken::ApiKey(token) => Validated::from_token(token, conn)
-                .await
-                .map_err(Error::ValidateApiKey)
-                .map(|v| v.claims(self.token_expires)),
-        }
-    }
-
-    pub async fn authorize_claims(
-        &self,
-        claims: Claims,
-        perms: Perms,
-        resources: Option<Resources>,
-        conn: &mut Conn<'_>,
-    ) -> Result<AuthZ, Error> {
         // first ensure that claims can access the requested resource
-        let granted = if let Some(resources) = resources {
-            claims.ensure_resources(resources, conn).await?
+        let extra = claims.ensure_resources(resources, conn).await?;
+        let granted = if let RequestToken::Jwt(_) = token {
+            extra
         } else {
             None
         };
@@ -248,21 +222,40 @@ impl Auth {
         // then grant permissions from the access claims
         let granted = Granted::from_access(&claims.access, granted, conn).await?;
 
-        // then grant permissions for non-org roles
-        let granted = if let Some(user_id) = claims.resource().user() {
-            Granted::all_orgs(user_id, Some(granted), conn).await?
-        } else {
-            granted
+        // then optionally grant permissions for non-org roles
+        let resource = claims.resource();
+        let granted = match (resource, token) {
+            (Resource::User(user_id), RequestToken::Jwt(_)) => {
+                Granted::all_orgs(user_id, Some(granted), conn).await?
+            }
+            _ => granted,
         };
 
         // finally check that the requested permissions exist
         match perms {
-            Perms::One(perm) => granted.ensure_perm(perm, &claims)?,
-            Perms::All(perms) => granted.ensure_all_perms(perms, &claims)?,
-            Perms::Any(perms) => granted.ensure_any_perms(perms, &claims)?,
+            Perms::One(perm) => granted.ensure_perm(perm, resource).map(|_| ())?,
+            Perms::All(perms) => granted.ensure_all_perms(perms, resource).map(|_| ())?,
+            Perms::Any(perms) => granted.ensure_any_perms(perms, resource).map(|_| ())?,
         }
 
         Ok(AuthZ { claims, granted })
+    }
+
+    pub async fn claims(&self, token: &RequestToken, conn: &mut Conn<'_>) -> Result<Claims, Error> {
+        match token {
+            RequestToken::ApiKey(token) => Validated::from_token(token, conn)
+                .await
+                .map_err(Error::ValidateApiKey)
+                .map(|v| v.claims(self.token_expires)),
+
+            RequestToken::Jwt(token) => self.cipher.jwt.decode(token).map_err(|e| match e {
+                token::jwt::Error::TokenExpired => {
+                    let claims = self.cipher.jwt.decode_expired(token).ok();
+                    Error::ExpiredJwt(claims.map(|c| c.resource()))
+                }
+                other => Error::DecodeJwt(other),
+            }),
+        }
     }
 
     pub fn refresh(&self, meta: &Metadata) -> Result<Refresh, Error> {

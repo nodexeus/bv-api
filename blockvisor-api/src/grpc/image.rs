@@ -7,8 +7,7 @@ use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::error;
 
-use crate::auth::rbac::{ImageAdminPerm, ImagePerm};
-use crate::auth::resource::Resources;
+use crate::auth::rbac::{ImageAdminPerm, ImagePerm, Perm};
 use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::model::image::archive::{NewArchive, UpdateArchive};
@@ -322,16 +321,19 @@ async fn get_image(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ImageServiceGetImageResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ImageAdminPerm::Get.into();
+    let user_perm: Perm = ImagePerm::Get.into();
 
-    let authz = read
-        .auth_or_for(&meta, ImageAdminPerm::Get, ImagePerm::Get, resources)
-        .await?;
+    let (org_id, authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth_any(&meta, [admin_perm, user_perm]).await?;
+        (None, authz)
+    };
 
     let version_key = VersionKey::try_from(req.version_key.ok_or(Error::MissingVersionKey)?)?;
     let mut versions = ProtocolVersion::by_key(&version_key, org_id, &authz, &mut read).await?;
@@ -369,21 +371,19 @@ async fn list_archives(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ImageServiceListArchivesResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ImageAdminPerm::ListArchives.into();
+    let user_perm: Perm = ImagePerm::ListArchives.into();
 
-    let authz = read
-        .auth_or_for(
-            &meta,
-            ImageAdminPerm::ListArchives,
-            ImagePerm::ListArchives,
-            resources,
-        )
-        .await?;
+    let (org_id, authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth_any(&meta, [admin_perm, user_perm]).await?;
+        (None, authz)
+    };
 
     let image_id = req.image_id.parse().map_err(Error::ParseImageId)?;
     let image = Image::by_id(image_id, org_id, &authz, &mut read).await?;

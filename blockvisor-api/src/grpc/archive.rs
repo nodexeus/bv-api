@@ -6,8 +6,7 @@ use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::error;
 
-use crate::auth::rbac::{ArchiveAdminPerm, ArchivePerm};
-use crate::auth::resource::Resources;
+use crate::auth::rbac::{ArchiveAdminPerm, ArchivePerm, Perm};
 use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction};
 use crate::grpc::api::archive_service_server::ArchiveService;
@@ -116,21 +115,19 @@ pub async fn get_download_metadata(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ArchiveServiceGetDownloadMetadataResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ArchiveAdminPerm::GetDownloadMetadata.into();
+    let user_perm: Perm = ArchivePerm::GetDownloadMetadata.into();
 
-    let _authz = read
-        .auth_or_for(
-            &meta,
-            ArchiveAdminPerm::GetDownloadMetadata,
-            ArchivePerm::GetDownloadMetadata,
-            resources,
-        )
-        .await?;
+    let (org_id, _authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth_any(&meta, [admin_perm, user_perm]).await?;
+        (None, authz)
+    };
 
     let archive_id = req.archive_id.parse().map_err(Error::ParseArchiveId)?;
     let archive = Archive::by_id(archive_id, org_id, &mut read).await?;
@@ -153,21 +150,19 @@ pub async fn get_download_chunks(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ArchiveServiceGetDownloadChunksResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ArchiveAdminPerm::GetDownloadChunks.into();
+    let user_perm: Perm = ArchivePerm::GetDownloadChunks.into();
 
-    let _authz = read
-        .auth_or_for(
-            &meta,
-            ArchiveAdminPerm::GetDownloadChunks,
-            ArchivePerm::GetDownloadChunks,
-            resources,
-        )
-        .await?;
+    let (org_id, _authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth_any(&meta, [admin_perm, user_perm]).await?;
+        (None, authz)
+    };
 
     let archive_id = req.archive_id.parse().map_err(Error::ParseArchiveId)?;
     let archive = Archive::by_id(archive_id, org_id, &mut read).await?;
@@ -201,21 +196,19 @@ pub async fn get_upload_slots(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ArchiveServiceGetUploadSlotsResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ArchiveAdminPerm::GetUploadSlots.into();
+    let user_perm: Perm = ArchivePerm::GetUploadSlots.into();
 
-    let _authz = read
-        .auth_or_for(
-            &meta,
-            ArchiveAdminPerm::GetUploadSlots,
-            ArchivePerm::GetUploadSlots,
-            resources,
-        )
-        .await?;
+    let (org_id, _authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth(&meta, admin_perm).await?;
+        (None, authz)
+    };
 
     let archive_id = req.archive_id.parse().map_err(Error::ParseArchiveId)?;
     let archive = Archive::by_id(archive_id, org_id, &mut read).await?;
@@ -251,21 +244,19 @@ pub async fn put_download_manifest(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ArchiveServicePutDownloadManifestResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ArchiveAdminPerm::PutDownloadManifest.into();
+    let user_perm: Perm = ArchivePerm::PutDownloadManifest.into();
 
-    let _authz = read
-        .auth_or_for(
-            &meta,
-            ArchiveAdminPerm::PutDownloadManifest,
-            ArchivePerm::PutDownloadManifest,
-            resources,
-        )
-        .await?;
+    let (org_id, _authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth(&meta, admin_perm).await?;
+        (None, authz)
+    };
 
     let archive_id = req.archive_id.parse().map_err(Error::ParseArchiveId)?;
     let archive = Archive::by_id(archive_id, org_id, &mut read).await?;

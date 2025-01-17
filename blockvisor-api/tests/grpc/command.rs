@@ -1,4 +1,5 @@
 use blockvisor_api::auth::claims::Granted;
+use blockvisor_api::auth::rbac::{CommandPerm, Perms, ProtocolPerm};
 use blockvisor_api::auth::resource::NodeId;
 use blockvisor_api::auth::AuthZ;
 use blockvisor_api::grpc::api;
@@ -24,7 +25,8 @@ async fn node_create_failed() {
     let node_id = test.seed().node.id;
     let cmd = create_command(&test, node_id, CommandType::NodeCreate).await;
 
-    let jwt = test.org_jwt();
+    let perms = Perms::All(hashset! { CommandPerm::Update.into(), ProtocolPerm::ViewPublic.into()});
+    let jwt = test.org_jwt(perms);
     let req = api::CommandServiceUpdateRequest {
         command_id: cmd.id.to_string(),
         exit_message: Some("hugo boss".to_string()),
@@ -70,7 +72,9 @@ async fn responds_ok_for_pending() {
     update.apply(node_id, &authz, &mut conn).await.unwrap();
     create_command(&test, node_id, CommandType::NodeCreate).await;
 
-    let jwt = test.org_jwt();
+    let perms =
+        Perms::All(hashset! { CommandPerm::Pending.into(), ProtocolPerm::ViewPublic.into()});
+    let jwt = test.org_jwt(perms);
     let req = api::CommandServicePendingRequest {
         host_id: host_id.to_string(),
         filter_type: None,

@@ -34,7 +34,6 @@ async fn add_a_new_protocol() {
         .await
         .unwrap();
     let protocol = resp.protocol.unwrap();
-    dbg!(&protocol);
     assert_eq!(protocol.key, key);
     assert_eq!(protocol.name, name);
     assert!(protocol.org_id.is_none());

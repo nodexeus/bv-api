@@ -18,7 +18,7 @@ use crate::model::node::{
     NodeState, NodeStatus, RegionCount, UpdateNode, UpdateNodeConfig, UpdateNodeState,
 };
 use crate::model::protocol::ProtocolVersion;
-use crate::model::sql::{Tag, Tags};
+use crate::model::sql::Tag;
 use crate::model::{CommandType, Host, Image, Org, Protocol, Region};
 use crate::util::{HashVec, NanosUtc};
 
@@ -364,7 +364,7 @@ pub async fn create(
             .iter()
             .map(|tag| Tag::new(tag.name.clone()).map_err(Into::into))
             .collect::<Result<Vec<_>, Error>>()
-            .map(Tags)?
+            .map(Into::into)?
     } else {
         Default::default()
     };

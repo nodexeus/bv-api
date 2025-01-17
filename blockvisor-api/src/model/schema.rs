@@ -136,8 +136,8 @@ diesel::table! {
         key_salt -> Text,
         resource -> EnumResourceType,
         resource_id -> Uuid,
+        permissions -> Array<Nullable<Text>>,
         created_at -> Timestamptz,
-        updated_at -> Nullable<Timestamptz>,
     }
 }
 

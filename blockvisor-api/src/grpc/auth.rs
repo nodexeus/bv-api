@@ -33,8 +33,8 @@ pub enum Error {
     Jwt(#[from] crate::auth::token::jwt::Error),
     /// Node auth error: {0}
     Node(#[from] crate::model::node::Error),
-    /// Not Bearer Token.
-    NotBearer,
+    /// Not JWT Token.
+    NotJwt,
     /// No Refresh token in cookie or request body.
     NoRefresh,
     /// Org auth error: {0}
@@ -62,7 +62,7 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
-            Jwt(_) | NotBearer | ParseToken(_) | RefreshResource => {
+            Jwt(_) | NotJwt | ParseToken(_) | RefreshResource => {
                 Status::unauthorized("Access denied.")
             }
             Diesel(_) | Email(_) => Status::internal("Internal error."),
@@ -200,8 +200,8 @@ pub async fn refresh(
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::AuthServiceRefreshResponse, Error> {
     let claims = match req.token.parse().map_err(Error::ParseToken)? {
-        RequestToken::Bearer(token) => write.ctx.auth.cipher.jwt.decode_expired(&token)?,
-        RequestToken::ApiKey(_) => Err(Error::NotBearer)?,
+        RequestToken::ApiKey(_) => Err(Error::NotJwt)?,
+        RequestToken::Jwt(token) => write.ctx.auth.cipher.jwt.decode_expired(&token)?,
     };
 
     let refresh = if let Some(refresh) = req.refresh {

@@ -3,7 +3,7 @@
 //! All roles and permissions are serialized to the database in kebab-case form,
 //! minus the implied `Role` or `Perm` suffix.
 //!
-//! For example, `ApiKeyRole::User` becomes `api-key-user` in the `roles` table.
+//! For example, `OrgRole::Owner` becomes `org-owner` in the `roles` table.
 
 pub mod access;
 pub use access::{Access, Perms, Roles};
@@ -12,13 +12,6 @@ pub use access::{Access, Perms, Roles};
 mod macros;
 
 define_roles! {
-    ApiKey => {
-        User,
-        Org,
-        Host,
-        Node,
-    }
-
     Blockjoy => {
         Admin,
     }
@@ -252,9 +245,9 @@ define_perms! {
     }
 
     Protocol => {
+        GetPricing,
         GetProtocol,
         GetLatest,
-        GetPricing,
         GetStats,
         ListProtocols,
         ListVariants,
@@ -266,6 +259,7 @@ define_perms! {
     ProtocolAdmin => {
         AddProtocol,
         AddVersion,
+        GetPricing,
         GetProtocol,
         GetLatest,
         ListProtocols,

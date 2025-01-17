@@ -1,3 +1,4 @@
+use blockvisor_api::auth::rbac::{MetricsPerm, Perms};
 use blockvisor_api::grpc::{api, common};
 use blockvisor_api::model::node::{Node, NodeHealth, NodeState};
 use blockvisor_api::model::Host;
@@ -39,7 +40,7 @@ async fn responds_ok_for_write_node() {
         }],
     }];
 
-    let jwt = test.org_jwt();
+    let jwt = test.org_jwt(Perms::from(MetricsPerm::Node));
     let req = api::MetricsServiceNodeRequest { metrics };
     test.send_with(MetricsService::node, req, &jwt)
         .await
@@ -144,7 +145,7 @@ async fn single_failure_doesnt_abort_all_updates() {
     let mut invalid_metric = valid_metric.clone();
     invalid_metric.node_id = Uuid::new_v4().to_string();
 
-    let jwt = test.org_jwt();
+    let jwt = test.org_jwt(Perms::from(MetricsPerm::Node));
     let metrics = vec![valid_metric, invalid_metric];
     let req = api::MetricsServiceNodeRequest { metrics };
     test.send_with(MetricsService::node, req, &jwt)

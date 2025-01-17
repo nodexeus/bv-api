@@ -1,18 +1,22 @@
+use std::collections::HashSet;
+
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::error;
 
-use crate::auth::rbac::ApiKeyPerm;
+use crate::auth::claims::Granted;
+use crate::auth::rbac::{ApiKeyPerm, Perm};
 use crate::auth::resource::Resource;
 use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction, WriteConn};
-use crate::model::api_key::{ApiKey, NewApiKey, UpdateLabel};
+use crate::model::api_key::{ApiKey, NewApiKey};
+use crate::model::sql::Permissions;
 use crate::util::NanosUtc;
 
 use super::api::api_key_service_server::ApiKeyService;
-use super::{api, common, Grpc, Metadata, Status};
+use super::{api, Grpc, Metadata, Status};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -26,16 +30,16 @@ pub enum Error {
     Diesel(#[from] diesel::result::Error),
     /// Request is missing the resource.
     MissingResource,
-    /// Missing API key `updated_at`.
-    MissingUpdatedAt,
     /// Database model error: {0}
     Model(#[from] crate::model::api_key::Error),
-    /// Nothing is set to be updated in the request.
-    NothingToUpdate,
     /// Failed to parse KeyId: {0}
-    ParseKeyId(crate::auth::token::api_key::Error),
+    ParseId(crate::auth::token::api_key::Error),
+    /// Failed to parse Perm: {0}
+    ParsePerm(String),
     /// API key resource error: {0}
     Resource(#[from] crate::auth::resource::Error),
+    /// API key sql type error: {0}
+    Sql(#[from] crate::model::sql::Error),
 }
 
 impl From<Error> for Status {
@@ -43,15 +47,16 @@ impl From<Error> for Status {
         use Error::*;
         error!("{err}");
         match err {
+            Diesel(_) => Status::internal("Internal error."),
             ClaimsNotUser => Status::forbidden("Access denied."),
-            Diesel(_) | MissingUpdatedAt => Status::internal("Internal error."),
             MissingResource => Status::invalid_argument("resource"),
-            NothingToUpdate => Status::failed_precondition("Nothing to update."),
-            ParseKeyId(_) => Status::invalid_argument("id"),
+            ParseId(_) => Status::invalid_argument("api_key_id"),
+            ParsePerm(_) => Status::invalid_argument("permission"),
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Model(err) => err.into(),
             Resource(err) => err.into(),
+            Sql(err) => err.into(),
         }
     }
 }
@@ -76,24 +81,6 @@ impl ApiKeyService for Grpc {
             .await
     }
 
-    async fn update(
-        &self,
-        req: Request<api::ApiKeyServiceUpdateRequest>,
-    ) -> Result<Response<api::ApiKeyServiceUpdateResponse>, tonic::Status> {
-        let (meta, _, req) = req.into_parts();
-        self.write(|write| update(req, meta.into(), write).scope_boxed())
-            .await
-    }
-
-    async fn regenerate(
-        &self,
-        req: Request<api::ApiKeyServiceRegenerateRequest>,
-    ) -> Result<Response<api::ApiKeyServiceRegenerateResponse>, tonic::Status> {
-        let (meta, _, req) = req.into_parts();
-        self.write(|write| regenerate(req, meta.into(), write).scope_boxed())
-            .await
-    }
-
     async fn delete(
         &self,
         req: Request<api::ApiKeyServiceDeleteRequest>,
@@ -114,10 +101,25 @@ pub async fn create(
     let authz = write.auth_for(&meta, ApiKeyPerm::Create, resource).await?;
 
     let user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
-    let created = NewApiKey::create(user_id, req.label, resource, &mut write).await?;
+    let org_id = resource.org_id(&mut write).await?;
+    let perms = req
+        .permissions
+        .iter()
+        .map(|perm| perm.parse().map_err(Error::ParsePerm))
+        .collect::<Result<HashSet<Perm>, _>>()?;
+
+    // first get the user permissions for the org
+    let granted = Granted::for_org(user_id, org_id, true, &mut write).await?;
+    // then append additional permissions from the token
+    let granted = Granted::from_access(&authz.claims.access, Some(granted), &mut write).await?;
+    // then filter by the requested api key permissions
+    let granted = granted.ensure_all_perms(perms, resource)?;
+
+    let permissions = Permissions::from(granted);
+    let created = NewApiKey::create(user_id, req.label, resource, permissions, &mut write).await?;
 
     Ok(api::ApiKeyServiceCreateResponse {
-        api_key: Some(created.secret.into()),
+        api_key: created.secret.into(),
         created_at: Some(NanosUtc::from(created.api_key.created_at).into()),
     })
 }
@@ -131,57 +133,9 @@ pub async fn list(
     let user_id = authz.resource().user().ok_or(Error::ClaimsNotUser)?;
 
     let keys = ApiKey::by_user_id(user_id, &mut read).await?;
-    let api_keys = keys.into_iter().map(api::ListApiKey::from).collect();
+    let api_keys = keys.into_iter().map(Into::into).collect();
 
     Ok(api::ApiKeyServiceListResponse { api_keys })
-}
-
-pub async fn update(
-    req: api::ApiKeyServiceUpdateRequest,
-    meta: Metadata,
-    mut write: WriteConn<'_, '_>,
-) -> Result<api::ApiKeyServiceUpdateResponse, Error> {
-    let key_id = req.api_key_id.parse().map_err(Error::ParseKeyId)?;
-    let existing = ApiKey::by_id(key_id, &mut write).await?;
-    write.auth_for(&meta, ApiKeyPerm::Update, &existing).await?;
-
-    let mut updated_at = None;
-
-    if let Some(label) = req.label {
-        updated_at = UpdateLabel::new(key_id, label)
-            .update(&mut write)
-            .await
-            .map(Some)?;
-    }
-
-    let updated_at = updated_at
-        .ok_or(Error::NothingToUpdate)
-        .map(NanosUtc::from)
-        .map(Into::into)?;
-
-    Ok(api::ApiKeyServiceUpdateResponse {
-        updated_at: Some(updated_at),
-    })
-}
-
-pub async fn regenerate(
-    req: api::ApiKeyServiceRegenerateRequest,
-    meta: Metadata,
-    mut write: WriteConn<'_, '_>,
-) -> Result<api::ApiKeyServiceRegenerateResponse, Error> {
-    let key_id = req.api_key_id.parse().map_err(Error::ParseKeyId)?;
-    let existing = ApiKey::by_id(key_id, &mut write).await?;
-    write
-        .auth_for(&meta, ApiKeyPerm::Regenerate, &existing)
-        .await?;
-
-    let new_key = NewApiKey::regenerate(key_id, &mut write).await?;
-    let updated_at = new_key.api_key.updated_at.ok_or(Error::MissingUpdatedAt)?;
-
-    Ok(api::ApiKeyServiceRegenerateResponse {
-        api_key: Some(new_key.secret.into()),
-        updated_at: Some(NanosUtc::from(updated_at).into()),
-    })
 }
 
 pub async fn delete(
@@ -189,24 +143,11 @@ pub async fn delete(
     meta: Metadata,
     mut write: WriteConn<'_, '_>,
 ) -> Result<api::ApiKeyServiceDeleteResponse, Error> {
-    let key_id = req.api_key_id.parse().map_err(Error::ParseKeyId)?;
+    let key_id = req.api_key_id.parse().map_err(Error::ParseId)?;
     let existing = ApiKey::by_id(key_id, &mut write).await?;
     write.auth_for(&meta, ApiKeyPerm::Delete, &existing).await?;
 
     ApiKey::delete(key_id, &mut write).await?;
 
     Ok(api::ApiKeyServiceDeleteResponse {})
-}
-
-impl From<ApiKey> for api::ListApiKey {
-    fn from(api_key: ApiKey) -> Self {
-        let resource = Resource::from(&api_key);
-        api::ListApiKey {
-            api_key_id: Some(api_key.id.to_string()),
-            label: Some(api_key.label),
-            resource: Some(common::Resource::from(resource)),
-            created_at: Some(NanosUtc::from(api_key.created_at).into()),
-            updated_at: api_key.updated_at.map(NanosUtc::from).map(Into::into),
-        }
-    }
 }

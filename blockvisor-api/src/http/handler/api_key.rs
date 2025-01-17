@@ -16,8 +16,6 @@ where
     Router::new()
         .route("/", routing::post(create))
         .route("/", routing::get(list))
-        .route("/", routing::put(update))
-        .route("/regenerate", routing::post(regenerate))
         .route("/", routing::delete(delete))
         .with_state(context)
 }
@@ -37,24 +35,6 @@ async fn list(
     Query(req): Query<api::ApiKeyServiceListRequest>,
 ) -> Result<Json<api::ApiKeyServiceListResponse>, super::Error> {
     ctx.read(|read| grpc::api_key::list(req, headers.into(), read).scope_boxed())
-        .await
-}
-
-async fn update(
-    State(ctx): State<Arc<Context>>,
-    headers: axum::http::header::HeaderMap,
-    Json(req): Json<api::ApiKeyServiceUpdateRequest>,
-) -> Result<Json<api::ApiKeyServiceUpdateResponse>, super::Error> {
-    ctx.write(|write| grpc::api_key::update(req, headers.into(), write).scope_boxed())
-        .await
-}
-
-async fn regenerate(
-    State(ctx): State<Arc<Context>>,
-    headers: axum::http::header::HeaderMap,
-    Json(req): Json<api::ApiKeyServiceRegenerateRequest>,
-) -> Result<Json<api::ApiKeyServiceRegenerateResponse>, super::Error> {
-    ctx.write(|write| grpc::api_key::regenerate(req, headers.into(), write).scope_boxed())
         .await
 }
 
