@@ -41,6 +41,7 @@ use crate::model::sql::{self, Amount, Currency, IpNetwork, Period, Tags, Version
 use crate::stripe::api::subscription::SubscriptionItemId;
 use crate::util::{SearchOperator, SortOrder};
 
+use super::command::NewCommand;
 use super::host::{Host, HostCandidate, HostRequirements};
 use super::image::config::{ConfigType, FirewallConfig, NewConfig};
 use super::image::property::NewImagePropertyValue;
@@ -48,7 +49,7 @@ use super::image::{Config, ConfigId, Image, ImageId, NodeConfig};
 use super::protocol::version::{ProtocolVersion, VersionId};
 use super::protocol::{Protocol, ProtocolId, VersionKey};
 use super::schema::{nodes, protocol_versions};
-use super::{Command, IpAddress, Org, Paginate, Region, RegionId};
+use super::{Command, CommandType, IpAddress, Org, Paginate, Region, RegionId};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -72,6 +73,8 @@ pub enum Error {
     FindById(NodeId, diesel::result::Error),
     /// Failed to find nodes by ids `{0:?}`: {1}
     FindByIds(HashSet<NodeId>, diesel::result::Error),
+    /// Failed to find nodes by version ids `{0:?}`: {1}
+    FindByVersionIds(HashSet<VersionId>, diesel::result::Error),
     /// Failed to find host id for possibly deleted node {0}: {1}
     FindDeletedHostId(NodeId, diesel::result::Error),
     /// Failed to find org id for possibly deleted node {0}: {1}
@@ -82,6 +85,8 @@ pub enum Error {
     FindOrgId(NodeId, diesel::result::Error),
     /// Failed to generate node name. This should not happen.
     GenerateName,
+    /// Grpc command error: {0}
+    Grpc(Box<crate::grpc::command::Error>),
     /// Node host error: {0}
     Host(#[from] crate::model::host::Error),
     /// Host doesn't have enough free CPU: {0}
@@ -108,6 +113,8 @@ pub enum Error {
     NodeLog(#[from] self::log::Error),
     /// Failed to find a matching host.
     NoMatchingHost,
+    /// Failed to find an image for this version.
+    NoImage,
     /// Node org error: {0}
     Org(#[from] crate::model::org::Error),
     /// Node pagination: {0}
@@ -155,7 +162,8 @@ impl From<Error> for Status {
             | FindById(_, NotFound)
             | FindDeletedOrgId(_, NotFound)
             | FindHostId(_, NotFound)
-            | FindOrgId(_, NotFound) => Status::not_found("Not found."),
+            | FindOrgId(_, NotFound)
+            | FindByVersionIds(_, NotFound) => Status::not_found("Not found."),
             HostFreeCpu(_) => Status::failed_precondition("Host cpu."),
             HostFreeDisk(_) => Status::failed_precondition("Host memory."),
             HostFreeIp(_) => Status::failed_precondition("Host IP."),
@@ -267,6 +275,18 @@ impl Node {
             .get_results(conn)
             .await
             .map_err(|err| Error::FindByHostIds(host_ids.clone(), err))
+    }
+
+    pub async fn by_version_ids(
+        version_ids: &HashSet<VersionId>,
+        conn: &mut Conn<'_>,
+    ) -> Result<Vec<Self>, Error> {
+        nodes::table
+            .filter(nodes::protocol_version_id.eq_any(version_ids))
+            .filter(nodes::deleted_at.is_null())
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::FindByVersionIds(version_ids.clone(), err))
     }
 
     pub async fn org_id(id: NodeId, conn: &mut Conn<'_>) -> Result<OrgId, Error> {
@@ -463,6 +483,68 @@ impl Node {
             message,
         };
         report.create(conn).await.map_err(Error::Report)
+    }
+
+    pub async fn notify_upgrade(
+        self,
+        to_image_id: ImageId,
+        org_id: Option<OrgId>,
+        authz: &AuthZ,
+        write: &mut WriteConn<'_, '_>,
+    ) -> Result<Self, Error> {
+        use crate::grpc::api;
+
+        let upgrade = UpgradeNode {
+            id: self.id,
+            image_id: to_image_id,
+            org_id,
+        };
+        let updated = upgrade.apply(authz, write).await?;
+        let cmd = NewCommand::node(&updated, CommandType::NodeUpgrade)
+            .map_err(|err| Error::Command(Box::new(err)))?
+            .create(write)
+            .await
+            .map_err(|err| Error::Command(Box::new(err)))?;
+        let cmd = api::Command::from(&cmd, authz, write)
+            .await
+            .map_err(|err| Error::Grpc(Box::new(err)))?;
+        write.mqtt(cmd);
+        Ok(updated)
+    }
+
+    pub async fn notify_auto_upgrades(
+        to_version: ProtocolVersion,
+        org_id: Option<OrgId>,
+        authz: &AuthZ,
+        write: &mut WriteConn<'_, '_>,
+    ) -> Result<(), Error> {
+        let version_key = VersionKey::new(to_version.protocol_key, to_version.variant_key);
+        let is_lower_but_compatible = |lower: &semver::Version, than: &semver::Version| {
+            lower < than && lower.major == than.major
+        };
+        let from_versions = ProtocolVersion::by_key(&version_key, org_id, authz, write)
+            .await?
+            .into_iter()
+            .filter(|version| {
+                // Check that this version is lower than the version we are upgrading to, but still
+                // compatible with it.
+                is_lower_but_compatible(&version.semantic_version, &to_version.semantic_version)
+            })
+            .map(|version| version.id)
+            .collect();
+        let image = Image::latest_build(to_version.id, org_id, authz, write)
+            .await?
+            .ok_or(Error::NoImage)?;
+        let to_upgrade = Node::by_version_ids(&from_versions, write)
+            .await?
+            .into_iter()
+            .filter(|node| node.auto_upgrade);
+        for upgradeable_node in to_upgrade {
+            upgradeable_node
+                .notify_upgrade(image.id, org_id, authz, write)
+                .await?;
+        }
+        Ok(())
     }
 
     pub fn created_by(&self) -> Resource {

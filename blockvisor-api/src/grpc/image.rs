@@ -18,7 +18,7 @@ use crate::model::image::rule::{ImageRule, NewImageRule};
 use crate::model::image::{Archive, Image, ImageProperty, NewImage, NewProperty, UpdateImage};
 use crate::model::protocol::VersionKey;
 use crate::model::sql::Version;
-use crate::model::ProtocolVersion;
+use crate::model::{Node, ProtocolVersion};
 use crate::store::StoreKey;
 use crate::util::{HashVec, NanosUtc};
 
@@ -63,6 +63,8 @@ pub enum Error {
     MissingVersionKey,
     /// No builds found.
     NoBuilds,
+    /// Node error: {0}
+    Node(#[from] crate::model::node::Error),
     /// No versions found.
     NoVersions,
     /// Failed to parse ArchiveId: {0}
@@ -126,6 +128,7 @@ impl From<Error> for Status {
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Image(err) => err.into(),
+            Node(err) => err.into(),
             Property(err) => err.into(),
             Protocol(err) => err.into(),
             Rule(err) => err.into(),
@@ -201,14 +204,14 @@ async fn add_image(
         .transpose()?;
 
     let version = ProtocolVersion::by_id(version_id, org_id, &authz, &mut write).await?;
-    let latest = Image::latest_build(version_id, &mut write).await?;
+    let latest = Image::latest_build(version_id, org_id, &authz, &mut write).await?;
 
     let firewall = req.firewall.ok_or(Error::MissingFirewallConfig)?;
     let new_image = NewImage {
         protocol_version_id: version.id,
         org_id: version.org_id.or(org_id),
         image_uri: req.image_uri,
-        build_version: latest.map_or(1, |build| build + 1),
+        build_version: latest.map_or(1, |image| image.build_version + 1),
         description: req.description,
         min_cpu_cores: i64::try_from(req.min_cpu_cores).map_err(Error::MinCpu)?,
         min_memory_bytes: i64::try_from(req.min_memory_bytes).map_err(Error::MinMemory)?,
@@ -293,7 +296,7 @@ async fn add_image(
         }
 
         if let Some(index) = found {
-            let _ = new_archive_powerset.swap_remove(index);
+            new_archive_powerset.swap_remove(index);
         } else {
             return Err(Error::InvalidKeyCombo(keys));
         }
@@ -305,6 +308,8 @@ async fn add_image(
     } else {
         return Err(Error::MissingKeyCombos(new_archive_powerset));
     };
+
+    Node::notify_auto_upgrades(version, org_id, &authz, &mut write).await?;
 
     Ok(api::ImageServiceAddImageResponse {
         image: Some(api::Image::from(image, properties, rules)?),
@@ -344,9 +349,10 @@ async fn get_image(
     let build = if let Some(build) = req.build_version {
         i64::try_from(build).map_err(Error::BuildVersion)?
     } else {
-        Image::latest_build(version.id, &mut read)
+        Image::latest_build(version.id, org_id, &authz, &mut read)
             .await?
             .ok_or(Error::NoBuilds)?
+            .build_version
     };
 
     let image = Image::by_build(version.id, org_id, build, &authz, &mut read).await?;

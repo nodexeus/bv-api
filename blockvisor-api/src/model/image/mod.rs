@@ -15,7 +15,6 @@ use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
-use diesel::dsl::max;
 use diesel::prelude::*;
 use diesel::result::Error::NotFound;
 use diesel_async::RunQueryDsl;
@@ -137,13 +136,18 @@ impl Image {
 
     pub async fn latest_build(
         version_id: VersionId,
+        org_id: Option<OrgId>,
+        authz: &AuthZ,
         conn: &mut Conn<'_>,
-    ) -> Result<Option<i64>, Error> {
+    ) -> Result<Option<Self>, Error> {
         images::table
             .filter(images::protocol_version_id.eq(version_id))
-            .select(max(images::build_version))
+            .filter(images::org_id.eq(org_id).or(images::org_id.is_null()))
+            .filter(images::visibility.eq_any(<&[Visibility]>::from(authz)))
+            .order_by(images::build_version.desc())
             .first(conn)
             .await
+            .optional()
             .map_err(|err| Error::LatestBuild(version_id, err))
     }
 

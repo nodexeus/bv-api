@@ -15,7 +15,7 @@ use crate::model::image::config::{Config, ConfigType, NewConfig, NodeConfig};
 use crate::model::image::ConfigId;
 use crate::model::node::{
     HostCount, Launch, NewNode, NextState, Node, NodeFilter, NodeReport, NodeSearch, NodeSort,
-    NodeState, NodeStatus, RegionCount, UpdateNode, UpdateNodeConfig, UpdateNodeState, UpgradeNode,
+    NodeState, NodeStatus, RegionCount, UpdateNode, UpdateNodeConfig, UpdateNodeState,
 };
 use crate::model::protocol::ProtocolVersion;
 use crate::model::sql::{Tag, Tags};
@@ -654,18 +654,8 @@ pub async fn upgrade_image(
     let nodes = Node::by_ids(&ids, &mut write).await?;
 
     for node in nodes {
-        let upgrade = UpgradeNode {
-            id: node.id,
-            image_id,
-            org_id,
-        };
-        let node = upgrade.apply(&authz, &mut write).await?;
-
-        let cmd = NewCommand::node(&node, CommandType::NodeUpgrade)?
-            .create(&mut write)
+        node.notify_upgrade(image_id, org_id, &authz, &mut write)
             .await?;
-        let cmd = api::Command::from(&cmd, &authz, &mut write).await?;
-        write.mqtt(cmd);
     }
 
     Ok(api::NodeServiceUpgradeImageResponse {})
