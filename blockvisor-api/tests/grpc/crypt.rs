@@ -1,3 +1,4 @@
+use blockvisor_api::auth::rbac::{CryptPerm, Perms};
 use blockvisor_api::auth::resource::{NodeId, Resource};
 use blockvisor_api::grpc::{api, common};
 use tonic::Code;
@@ -13,7 +14,9 @@ const TEST_SECRET: &[u8] = b"super secret stuff";
 #[tokio::test]
 async fn node_can_create_secrets() {
     let test = TestServer::new().await;
-    let jwt = test.node_jwt();
+    let jwt = test.node_jwt(Perms::All(
+        hashset! { CryptPerm::GetSecret.into(), CryptPerm::PutSecret.into() },
+    ));
 
     // can't create a secret for another resource
     let req = api::CryptServicePutSecretRequest {
@@ -56,7 +59,9 @@ async fn node_can_create_secrets() {
 #[tokio::test]
 async fn node_can_read_secrets() {
     let test = TestServer::new().await;
-    let jwt = test.node_jwt();
+    let jwt = test.node_jwt(Perms::All(
+        hashset! { CryptPerm::GetSecret.into(), CryptPerm::PutSecret.into() },
+    ));
 
     let req = api::CryptServicePutSecretRequest {
         resource: Some(common::Resource::from(Resource::Node(test.seed().node.id))),
@@ -89,7 +94,9 @@ async fn delete_node_deletes_secrets() {
 
     let node = resp.nodes[0].clone();
     let node_id: NodeId = node.node_id.parse().unwrap();
-    let claims = test.node_claims_for(node_id);
+
+    let perms = hashset! { CryptPerm::GetSecret.into(), CryptPerm::PutSecret.into() };
+    let claims = test.node_claims_for(node_id, Perms::All(perms));
     let jwt = test.cipher().jwt.encode(&claims).unwrap();
 
     let req = api::CryptServicePutSecretRequest {
@@ -138,7 +145,8 @@ async fn new_node_with_old_id_copies_secrets() {
 
     let node = resp.nodes[0].clone();
     let node_id: NodeId = node.node_id.parse().unwrap();
-    let claims = test.node_claims_for(node_id);
+
+    let claims = test.node_claims_for(node_id, Perms::from(CryptPerm::PutSecret));
     let jwt = test.cipher().jwt.encode(&claims).unwrap();
 
     let put_secret = |name: &str| api::CryptServicePutSecretRequest {
@@ -193,7 +201,10 @@ async fn new_node_with_old_id_copies_secrets() {
     */
 }
 
-fn create_node(test: &TestServer, old_node_id: Option<NodeId>) -> api::NodeServiceCreateRequest {
+pub fn create_node(
+    test: &TestServer,
+    old_node_id: Option<NodeId>,
+) -> api::NodeServiceCreateRequest {
     api::NodeServiceCreateRequest {
         org_id: test.seed().org.id.to_string(),
         image_id: test.seed().image.id.to_string(),

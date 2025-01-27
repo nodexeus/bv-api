@@ -118,7 +118,7 @@ mod tests {
         };
 
         let encoded = ctx.auth.cipher.jwt.encode(&claims).unwrap();
-        let RequestToken::Bearer(token) = encoded.parse().unwrap() else {
+        let RequestToken::Jwt(token) = encoded.parse().unwrap() else {
             panic!("Unexpected RequestToken type")
         };
 

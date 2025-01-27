@@ -74,7 +74,7 @@ async fn ok_for_refresh() {
     };
     let resp = test.send_member(AuthService::refresh, req).await.unwrap();
 
-    let RequestToken::Bearer(token) = resp.token.parse().unwrap() else {
+    let RequestToken::Jwt(token) = resp.token.parse().unwrap() else {
         panic!("Unexpected RequestToken type")
     };
     let refresh = resp.refresh.into();

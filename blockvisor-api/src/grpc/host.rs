@@ -19,7 +19,7 @@ use crate::model::host::{
 };
 use crate::model::node::NodeScheduler;
 use crate::model::region::{NewRegion, RegionKey, UpdateRegion};
-use crate::model::sql::{IpNetwork, Tag, Tags, Version};
+use crate::model::sql::{IpNetwork, Tag, Version};
 use crate::model::{
     CommandType, Image, IpAddress, Node, Org, Protocol, ProtocolVersion, Region, RegionId, Token,
 };
@@ -289,7 +289,7 @@ pub async fn create_host(
             .iter()
             .map(|tag| Tag::new(tag.name.clone()).map_err(Into::into))
             .collect::<Result<Vec<_>, Error>>()
-            .map(Tags)?
+            .map(Into::into)?
     } else {
         Default::default()
     };

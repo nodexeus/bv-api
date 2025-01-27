@@ -140,7 +140,7 @@ impl Authorize for ReadConn<'_, '_> {
         &mut self,
         meta: &grpc::Metadata,
         perms: Perms,
-        resources: Option<Resources>,
+        resources: Resources,
     ) -> Result<AuthZ, auth::Error> {
         self.ctx
             .auth
@@ -169,7 +169,7 @@ impl Authorize for WriteConn<'_, '_> {
         &mut self,
         meta: &grpc::Metadata,
         perms: Perms,
-        resources: Option<Resources>,
+        resources: Resources,
     ) -> Result<AuthZ, auth::Error> {
         self.ctx
             .auth

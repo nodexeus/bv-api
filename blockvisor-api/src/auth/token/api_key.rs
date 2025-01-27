@@ -23,20 +23,19 @@ use thiserror::Error;
 use uuid::Uuid;
 use zeroize::ZeroizeOnDrop;
 
-use crate::auth::claims::{Claims, Expirable};
-use crate::auth::rbac::{ApiKeyRole, Roles};
-use crate::auth::resource::{Resource, ResourceType};
+use crate::auth::claims::Claims;
+use crate::auth::rbac::Perms;
+use crate::auth::resource::Resource;
 use crate::auth::token::ApiToken;
 use crate::database::Conn;
 use crate::model::ApiKey;
 
-const SALT_BYTES: usize = 16;
-const SECRET_BYTES: usize = 20;
-
-pub(super) const TOKEN_PREFIX: &str = "blockjoy_";
+pub(super) const TOKEN_PREFIX: &str = "api_";
 const TOKEN_ID_LEN: usize = 22;
 const TOKEN_SECRET_LEN: usize = 27;
 const TOKEN_LEN: usize = TOKEN_PREFIX.len() + TOKEN_ID_LEN + 1 + TOKEN_SECRET_LEN;
+const SALT_BYTES: usize = 16;
+const SECRET_BYTES: usize = 20;
 
 /// Internal errors. Note that these are not safe for external display.
 #[derive(Debug, Display, Error)]
@@ -75,22 +74,15 @@ impl Validated {
         Ok(Validated(api_key))
     }
 
-    pub fn claims(&self, expires: chrono::Duration) -> Claims {
-        let expirable = Expirable::from_now(expires);
+    pub fn claims(self, expires: chrono::Duration) -> Claims {
         let resource = Resource::from(&self.0);
-        let roles = match ResourceType::from(&resource) {
-            ResourceType::User => Roles::One(ApiKeyRole::User.into()),
-            ResourceType::Org => Roles::One(ApiKeyRole::Org.into()),
-            ResourceType::Host => Roles::One(ApiKeyRole::Host.into()),
-            ResourceType::Node => Roles::One(ApiKeyRole::Node.into()),
-        };
-
-        Claims::new(resource, expirable, roles.into())
+        let perms = Perms::from(self.0.permissions);
+        Claims::from_now(expires, resource, perms)
     }
 }
 
-/// A newtype wrapping a Uuid representing the database `id`.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, DieselNewType, Deref, From)]
+/// A newtype represenation of the database `id`.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, DieselNewType, Deref)]
 pub struct KeyId(Uuid);
 
 impl KeyId {
@@ -107,7 +99,7 @@ impl KeyId {
             .map_err(Error::DecodeKeyId)?;
 
         Uuid::from_slice(&id_bytes)
-            .map(Into::into)
+            .map(KeyId)
             .map_err(Error::ParseKeyId)
     }
 }
@@ -116,7 +108,7 @@ impl FromStr for KeyId {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse().map(Self).map_err(Error::ParseKeyId)
+        s.parse().map(KeyId).map_err(Error::ParseKeyId)
     }
 }
 

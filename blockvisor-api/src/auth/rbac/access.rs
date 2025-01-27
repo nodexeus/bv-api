@@ -73,9 +73,7 @@ pub mod tests {
     use crate::auth::AuthZ;
 
     #[cfg(test)]
-    use crate::auth::rbac::{
-        ApiKeyPerm, ApiKeyRole, BlockjoyRole, GrpcRole, HostPerm, HostProvisionPerm,
-    };
+    use crate::auth::rbac::{BlockjoyRole, GrpcRole, HostPerm, HostProvisionPerm, OrgRole};
 
     use super::*;
 
@@ -130,19 +128,19 @@ pub mod tests {
 
     #[test]
     fn serde_many_roles() {
-        let json = r#"{"roles":["api-key-user","grpc-new-host"]}"#;
+        let json = r#"{"roles":["org-personal","grpc-new-host"]}"#;
         let roles: TestRoles = serde_json::from_str(json).unwrap();
 
-        let expected = Roles::Many(hashset! { ApiKeyRole::User.into(), GrpcRole::NewHost.into() });
+        let expected = Roles::Many(hashset! { OrgRole::Personal.into(), GrpcRole::NewHost.into() });
         assert_eq!(roles.roles, expected);
     }
 
     #[test]
     fn serde_one_perm() {
-        let json = r#"{"perms":"api-key-create"}"#;
+        let json = r#"{"perms":"host-list-regions"}"#;
         let perms: TestPerms = serde_json::from_str(json).unwrap();
 
-        let expected = Perms::One(ApiKeyPerm::Create.into());
+        let expected = Perms::One(HostPerm::ListRegions.into());
         assert_eq!(perms.perms, expected);
 
         let serialized = serde_json::to_string(&perms).unwrap();

@@ -4,7 +4,7 @@ pub use amount::{Amount, Currency, Period};
 use std::fmt;
 use std::str::FromStr;
 
-use derive_more::{Deref, Display, From, Into};
+use derive_more::{Deref, Display, From, Into, IntoIterator};
 use diesel::deserialize::{FromSql, FromSqlRow};
 use diesel::expression::AsExpression;
 use diesel::pg::{Pg, PgValue};
@@ -14,6 +14,8 @@ use diesel::{define_sql_function, deserialize, serialize};
 use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
 
+use crate::auth::claims::Granted;
+use crate::auth::rbac::Perm;
 use crate::grpc::{common, Status};
 use crate::util::LOWER_KEBAB_CASE;
 
@@ -27,6 +29,8 @@ define_sql_function!(fn text<T: SingleValue>(x: T) -> Text);
 pub enum Error {
     /// Failed to parse IP `{0}`: {1}
     ParseIp(String, ipnetwork::IpNetworkError),
+    /// Failed to parse Perm `{0}`: {1}
+    ParsePerm(String, String),
     /// Failed to parse Url `{0}`: {1}
     ParseUrl(String, url::ParseError),
     /// Failed to parse Version `{0}`: {1}
@@ -152,9 +156,9 @@ impl Tag {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, AsExpression, FromSqlRow)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, AsExpression, FromSqlRow, From, IntoIterator)]
 #[diesel(sql_type = Array<Nullable<Text>>)]
-pub struct Tags(pub Vec<Tag>);
+pub struct Tags(Vec<Tag>);
 
 impl FromSql<Array<Nullable<Text>>, Pg> for Tags {
     fn from_sql(value: PgValue<'_>) -> deserialize::Result<Self> {
@@ -199,10 +203,43 @@ impl From<Tags> for common::Tags {
     fn from(tags: Tags) -> Self {
         common::Tags {
             tags: tags
-                .0
                 .into_iter()
                 .map(|tag| common::Tag { name: tag.0 })
                 .collect(),
         }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, AsExpression, FromSqlRow, IntoIterator)]
+#[diesel(sql_type = Array<Nullable<Text>>)]
+pub struct Permissions(Vec<Perm>);
+
+impl Permissions {
+    pub fn from(granted: Granted) -> Self {
+        Permissions(granted.into_iter().collect())
+    }
+}
+
+impl FromSql<Array<Nullable<Text>>, Pg> for Permissions {
+    fn from_sql(value: PgValue<'_>) -> deserialize::Result<Self> {
+        let perms = <Vec<Option<String>> as FromSql<Array<Nullable<Text>>, Pg>>::from_sql(value)?;
+        perms
+            .into_iter()
+            .filter_map(|opt| {
+                opt.map(|perm| perm.parse().map_err(|err| Error::ParsePerm(perm, err)))
+            })
+            .collect::<Result<Vec<Perm>, Error>>()
+            .map(Permissions)
+            .map_err(Into::into)
+    }
+}
+
+impl ToSql<Array<Nullable<Text>>, Pg> for Permissions {
+    fn to_sql(&self, out: &mut Output<'_, '_, Pg>) -> serialize::Result {
+        let perms: Vec<Option<String>> = self.0.iter().map(|perm| Some(perm.to_string())).collect();
+        <Vec<Option<String>> as ToSql<Array<Nullable<Text>>, Pg>>::to_sql(
+            &perms,
+            &mut out.reborrow(),
+        )
     }
 }

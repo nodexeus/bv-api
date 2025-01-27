@@ -24,6 +24,8 @@ pub enum Error {
     Org(#[from] crate::model::org::Error),
     /// Failed to parse ResourceId: {0}
     ParseResourceId(uuid::Error),
+    /// No org id for public host.
+    PublicHost,
     /// Unknown resource type.
     UnknownResourceType,
     /// Resource user error: {0}
@@ -35,6 +37,7 @@ impl From<Error> for Status {
         use Error::*;
         match err {
             ParseResourceId(_) => Status::invalid_argument("resource_id"),
+            PublicHost => Status::failed_precondition("no org for public host"),
             UnknownResourceType => Status::invalid_argument("resource_type"),
             Host(err) => err.into(),
             Node(err) => err.into(),
@@ -92,6 +95,15 @@ impl Resource {
             Resource::Org(id) => Ok(Org::by_id(id, conn).await.map(|_| id.into())?),
             Resource::Host(id) => Ok(Host::org_id(id, conn).await.map(|_| id.into())?),
             Resource::Node(id) => Ok(Node::org_id(id, conn).await.map(|_| id.into())?),
+        }
+    }
+
+    pub async fn org_id(self, conn: &mut Conn<'_>) -> Result<OrgId, Error> {
+        match self {
+            Resource::User(id) => Ok(Org::find_personal(id, conn).await.map(|org| org.id)?),
+            Resource::Org(id) => Ok(id),
+            Resource::Host(id) => Ok(Host::org_id(id, conn).await?.ok_or(Error::PublicHost)?),
+            Resource::Node(id) => Ok(Node::org_id(id, conn).await?),
         }
     }
 }
@@ -361,7 +373,7 @@ pub struct NodeId(Uuid);
 
 #[derive(Clone, Debug)]
 pub enum Resources {
-    None,
+    All,
     One(Resource),
     Many(Vec<Resource>),
 }
@@ -408,7 +420,7 @@ where
 {
     fn from(items: [T; N]) -> Self {
         match N {
-            0 => Resources::None,
+            0 => Resources::All,
             1 => Resources::One(items[0].into()),
             _ => items.as_ref().into(),
         }

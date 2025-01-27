@@ -1,10 +1,11 @@
+use blockvisor_api::auth::rbac::{NodePerm, Perms, ProtocolPerm};
 use blockvisor_api::database::seed::{
     ARCHIVE_ID_1, ARCHIVE_ID_2, DISK_BYTES, IMAGE_ID, MEMORY_BYTES, MORE_RESOURCES_KEY, ORG_ID,
 };
 use blockvisor_api::grpc::{api, common};
 use blockvisor_api::model::command::Command;
 use blockvisor_api::model::schema::commands;
-use blockvisor_api::model::sql::{Tag, Tags};
+use blockvisor_api::model::sql::Tag;
 use blockvisor_api::model::Node;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -159,7 +160,7 @@ async fn update_a_node_config() {
     assert_eq!(node.display_name, "<script>alert('XSS');</script>");
     assert_eq!(
         node.tags,
-        Tags(vec![Tag::new("updated-node".to_string()).unwrap()])
+        vec![Tag::new("updated-node".to_string()).unwrap()].into()
     );
 
     validate_commands(&test).await;
@@ -215,7 +216,7 @@ async fn report_a_node_status() {
         node_id: node.id.to_string(),
         config_id: node.config_id.to_string(),
         status: Some(common::NodeStatus {
-            state: common::NodeState::Stopped as i32,
+            state: common::NodeState::Stopped.into(),
             next: None,
             protocol: None,
         }),
@@ -231,7 +232,11 @@ async fn report_a_node_status() {
     assert_eq!(status.code(), Code::PermissionDenied);
 
     // ok for org token
-    let jwt = test.org_jwt();
+    let perms = Perms::All(hashset! {
+        NodePerm::ReportStatus.into(),
+        ProtocolPerm::ViewPublic.into()
+    });
+    let jwt = test.org_jwt(perms);
     let req = report_req();
     test.send_with(NodeService::report_status, req, &jwt)
         .await

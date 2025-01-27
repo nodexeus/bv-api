@@ -9,7 +9,9 @@ use thiserror::Error;
 use crate::auth::resource::{Resource, ResourceId, ResourceType, UserId};
 use crate::auth::token::api_key::{BearerSecret, KeyHash, KeyId, Salt, Secret};
 use crate::database::{Conn, WriteConn};
-use crate::grpc::Status;
+use crate::grpc::{api, common, Status};
+use crate::model::sql::Permissions;
+use crate::util::NanosUtc;
 
 use super::schema::api_keys;
 
@@ -23,16 +25,10 @@ pub enum Error {
     FindById(diesel::result::Error),
     /// Failed to find api keys by user_id: {0}
     FindByUser(diesel::result::Error),
-    /// Missing `updated_at`. This should not happen.
-    MissingUpdatedAt,
     /// {0} api keys were deleted. This should not happen.
     MultipleKeysDeleted(usize),
     /// No api keys were deleted.
     NoKeysDeleted,
-    /// Failed to regenerate a new api key: {0}
-    Regenerate(diesel::result::Error),
-    /// Failed to update api key label: {0}
-    UpdateLabel(diesel::result::Error),
 }
 
 impl From<Error> for Status {
@@ -59,8 +55,8 @@ pub struct ApiKey {
     pub key_salt: Salt,
     pub resource: ResourceType,
     pub resource_id: ResourceId,
+    pub permissions: Permissions,
     pub created_at: DateTime<Utc>,
-    pub updated_at: Option<DateTime<Utc>>,
 }
 
 impl ApiKey {
@@ -78,22 +74,6 @@ impl ApiKey {
             .get_results(conn)
             .await
             .map_err(Error::FindByUser)
-    }
-
-    pub async fn regenerate(
-        key_id: KeyId,
-        key_hash: KeyHash,
-        conn: &mut Conn<'_>,
-    ) -> Result<Self, Error> {
-        diesel::update(api_keys::table)
-            .filter(api_keys::id.eq(key_id))
-            .set((
-                api_keys::key_hash.eq(key_hash),
-                api_keys::updated_at.eq(Utc::now()),
-            ))
-            .get_result(conn)
-            .await
-            .map_err(Error::Regenerate)
     }
 
     pub async fn delete(key_id: KeyId, conn: &mut Conn<'_>) -> Result<(), Error> {
@@ -128,6 +108,7 @@ pub struct NewApiKey {
     key_salt: Salt,
     resource: ResourceType,
     resource_id: ResourceId,
+    permissions: Permissions,
 }
 
 impl NewApiKey {
@@ -135,6 +116,7 @@ impl NewApiKey {
         user_id: UserId,
         label: String,
         resource: Resource,
+        permissions: Permissions,
         write: &mut WriteConn<'_, '_>,
     ) -> Result<Created, Error> {
         let mut rng = write.ctx.rng.lock().await;
@@ -150,6 +132,7 @@ impl NewApiKey {
             key_salt: salt,
             resource: resource.typ(),
             resource_id: resource.id(),
+            permissions,
         };
 
         let api_key: ApiKey = diesel::insert_into(api_keys::table)
@@ -162,53 +145,27 @@ impl NewApiKey {
 
         Ok(Created { api_key, secret })
     }
-
-    pub async fn regenerate(
-        key_id: KeyId,
-        write: &mut WriteConn<'_, '_>,
-    ) -> Result<Created, Error> {
-        let existing = ApiKey::by_id(key_id, write).await?;
-        let new_secret = {
-            let mut rng = write.ctx.rng.lock().await;
-            Secret::generate(&mut *rng)
-        };
-
-        let key_hash = KeyHash::from(&existing.key_salt, &new_secret);
-        let updated = ApiKey::regenerate(key_id, key_hash, write).await?;
-        let secret = BearerSecret::new(updated.id, &new_secret);
-
-        Ok(Created {
-            api_key: updated,
-            secret,
-        })
-    }
 }
 
-/// A new `ApiKey` row plus the `BearerSecret` for returning only on creation.
+/// A new `ApiKey` row plus the `BearerSecret` returned once on creation.
 pub struct Created {
     pub api_key: ApiKey,
     pub secret: BearerSecret,
 }
 
-#[derive(Debug, AsChangeset)]
-#[diesel(table_name = api_keys)]
-pub struct UpdateLabel {
-    id: KeyId,
-    label: String,
-}
-
-impl UpdateLabel {
-    pub const fn new(id: KeyId, label: String) -> Self {
-        UpdateLabel { id, label }
-    }
-
-    pub async fn update(self, conn: &mut Conn<'_>) -> Result<DateTime<Utc>, Error> {
-        let updated: ApiKey = diesel::update(api_keys::table.find(self.id))
-            .set((self, api_keys::updated_at.eq(Utc::now())))
-            .get_result(conn)
-            .await
-            .map_err(Error::UpdateLabel)?;
-
-        updated.updated_at.ok_or(Error::MissingUpdatedAt)
+impl From<ApiKey> for api::ApiKey {
+    fn from(api_key: ApiKey) -> Self {
+        let resource = Resource::from(&api_key);
+        api::ApiKey {
+            api_key_id: api_key.id.to_string(),
+            label: api_key.label,
+            resource: Some(common::Resource::from(resource)),
+            permissions: api_key
+                .permissions
+                .into_iter()
+                .map(|perm| perm.to_string())
+                .collect(),
+            created_at: Some(NanosUtc::from(api_key.created_at).into()),
+        }
     }
 }

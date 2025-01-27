@@ -7,8 +7,7 @@ use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::error;
 
-use crate::auth::rbac::{ProtocolAdminPerm, ProtocolPerm};
-use crate::auth::resource::Resources;
+use crate::auth::rbac::{Perm, ProtocolAdminPerm, ProtocolPerm};
 use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::model::protocol::stats::NodeStats;
@@ -292,21 +291,19 @@ pub async fn get_latest(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ProtocolServiceGetLatestResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ProtocolAdminPerm::GetLatest.into();
+    let user_perm: Perm = ProtocolPerm::GetLatest.into();
 
-    let authz = read
-        .auth_or_for(
-            &meta,
-            ProtocolAdminPerm::GetLatest,
-            ProtocolPerm::GetLatest,
-            resources,
-        )
-        .await?;
+    let (org_id, authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth_any(&meta, [admin_perm, user_perm]).await?;
+        (None, authz)
+    };
 
     let version_key = VersionKey::try_from(req.version_key.ok_or(Error::MissingVersionKey)?)?;
     let version = ProtocolVersion::latest_by_key(&version_key, org_id, &authz, &mut read).await?;
@@ -321,16 +318,19 @@ pub async fn get_pricing(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ProtocolServiceGetPricingResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ProtocolAdminPerm::GetPricing.into();
+    let user_perm: Perm = ProtocolPerm::GetPricing.into();
 
-    let authz = read
-        .auth_for(&meta, ProtocolPerm::GetPricing, resources)
-        .await?;
+    let (org_id, authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth_any(&meta, [admin_perm, user_perm]).await?;
+        (None, authz)
+    };
 
     let version_key = VersionKey::try_from(req.version_key.ok_or(Error::MissingVersionKey)?)?;
     let version = ProtocolVersion::latest_by_key(&version_key, org_id, &authz, &mut read).await?;
@@ -356,21 +356,19 @@ pub async fn get_protocol(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ProtocolServiceGetProtocolResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ProtocolAdminPerm::GetProtocol.into();
+    let user_perm: Perm = ProtocolPerm::GetProtocol.into();
 
-    let authz = read
-        .auth_or_for(
-            &meta,
-            ProtocolAdminPerm::GetProtocol,
-            ProtocolPerm::GetProtocol,
-            resources,
-        )
-        .await?;
+    let (org_id, authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth_any(&meta, [admin_perm, user_perm]).await?;
+        (None, authz)
+    };
 
     let protocol = match req.protocol.ok_or(Error::MissingProtocol)? {
         api::protocol_service_get_protocol_request::Protocol::ProtocolId(id) => {
@@ -393,21 +391,19 @@ pub async fn get_stats(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ProtocolServiceGetStatsResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ProtocolAdminPerm::ViewAllStats.into();
+    let user_perm: Perm = ProtocolPerm::GetStats.into();
 
-    let authz = read
-        .auth_or_for(
-            &meta,
-            ProtocolAdminPerm::ViewAllStats,
-            ProtocolPerm::GetStats,
-            resources,
-        )
-        .await?;
+    let (org_id, authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth(&meta, admin_perm).await?;
+        (None, authz)
+    };
 
     match req.stats_for.ok_or(Error::MissingStatsFor)? {
         api::protocol_service_get_stats_request::StatsFor::ProtocolId(id) => {
@@ -521,23 +517,21 @@ pub async fn list_variants(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ProtocolServiceListVariantsResponse, Error> {
-    let protocol_id = req.protocol_id.parse().map_err(Error::ParseId)?;
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
+    let admin_perm: Perm = ProtocolAdminPerm::ListVariants.into();
+    let user_perm: Perm = ProtocolPerm::ListVariants.into();
+
+    let (org_id, authz) = if let Some(ref org_id) = req.org_id {
         let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
     } else {
-        (None, Resources::None)
+        let authz = read.auth_any(&meta, [admin_perm, user_perm]).await?;
+        (None, authz)
     };
 
-    let authz = read
-        .auth_or_for(
-            &meta,
-            ProtocolAdminPerm::ListVariants,
-            ProtocolPerm::ListVariants,
-            resources,
-        )
-        .await?;
-
+    let protocol_id = req.protocol_id.parse().map_err(Error::ParseId)?;
     let versions = ProtocolVersion::by_protocol_id(protocol_id, org_id, &authz, &mut read).await?;
     let mut variant_keys = versions
         .into_iter()
@@ -554,21 +548,19 @@ pub async fn list_versions(
     meta: Metadata,
     mut read: ReadConn<'_, '_>,
 ) -> Result<api::ProtocolServiceListVersionsResponse, Error> {
-    let (org_id, resources): (_, Resources) = if let Some(ref org_id) = req.org_id {
-        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
-        (Some(org_id), [org_id].into())
-    } else {
-        (None, Resources::None)
-    };
+    let admin_perm: Perm = ProtocolAdminPerm::ListVersions.into();
+    let user_perm: Perm = ProtocolPerm::ListVersions.into();
 
-    let authz = read
-        .auth_or_for(
-            &meta,
-            ProtocolAdminPerm::ListVersions,
-            ProtocolPerm::ListVersions,
-            resources,
-        )
-        .await?;
+    let (org_id, authz) = if let Some(ref org_id) = req.org_id {
+        let org_id = org_id.parse().map_err(Error::ParseOrgId)?;
+        let authz = read
+            .auth_or_for(&meta, admin_perm, user_perm, org_id)
+            .await?;
+        (Some(org_id), authz)
+    } else {
+        let authz = read.auth_any(&meta, [admin_perm, user_perm]).await?;
+        (None, authz)
+    };
 
     let version_key = VersionKey::try_from(req.version_key.ok_or(Error::MissingVersionKey)?)?;
     let versions = ProtocolVersion::by_key(&version_key, org_id, &authz, &mut read).await?;

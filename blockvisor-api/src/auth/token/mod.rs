@@ -59,7 +59,7 @@ impl Cipher {
 /// An unverified request token from the `authorization` header.
 pub enum RequestToken {
     ApiKey(ApiToken),
-    Bearer(BearerToken),
+    Jwt(BearerToken),
 }
 
 impl TryFrom<&Metadata> for RequestToken {
@@ -81,7 +81,7 @@ impl FromStr for RequestToken {
 
     fn from_str(token: &str) -> Result<Self, Self::Err> {
         if !token.starts_with(api_key::TOKEN_PREFIX) {
-            return Ok(RequestToken::Bearer(token.to_string().into()));
+            return Ok(RequestToken::Jwt(token.to_string().into()));
         }
 
         let key_id = KeyId::from_token(token).map_err(Error::ParseKeyId)?;

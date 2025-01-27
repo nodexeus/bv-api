@@ -91,7 +91,7 @@ async fn acl(
 
     if ctx
         .auth
-        .authorize_token(&token, MqttAdminPerm::Acl.into(), None, &mut conn)
+        .authorize_token(&token, MqttAdminPerm::Acl.into(), Resources::All, &mut conn)
         .await
         .is_ok()
     {
@@ -107,7 +107,7 @@ async fn acl(
     };
 
     ctx.auth
-        .authorize_token(&token, MqttPerm::Acl.into(), Some(resources), &mut conn)
+        .authorize_token(&token, MqttPerm::Acl.into(), resources, &mut conn)
         .await
         .map(|_authz| response::ok())
         .map_err(|err| Status::from(err).into())
