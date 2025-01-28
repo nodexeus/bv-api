@@ -67,8 +67,6 @@ pub enum Error {
     Delete(NodeId, diesel::result::Error),
     /// Failed to find deleted node by id `{0}`: {1}
     FindDeletedById(NodeId, diesel::result::Error),
-    /// Failed to find nodes by host ids `{0:?}`: {1}
-    FindByHostIds(HashSet<HostId>, diesel::result::Error),
     /// Failed to find node by id `{0}`: {1}
     FindById(NodeId, diesel::result::Error),
     /// Failed to find nodes by ids `{0:?}`: {1}
@@ -81,6 +79,8 @@ pub enum Error {
     FindDeletedOrgId(NodeId, diesel::result::Error),
     /// Failed to find host id for node {0}: {1}
     FindHostId(NodeId, diesel::result::Error),
+    /// Failed to find nodes by host ids `{0:?}`: {1}
+    FindHostIds(HashSet<HostId>, diesel::result::Error),
     /// Failed to find org id for node {0}: {1}
     FindOrgId(NodeId, diesel::result::Error),
     /// Failed to generate node name. This should not happen.
@@ -162,20 +162,51 @@ impl From<Error> for Status {
             }
             Delete(_, NotFound)
             | FindById(_, NotFound)
+            | FindByIds(_, NotFound)
+            | FindDeletedById(_, NotFound)
+            | FindDeletedHostId(_, NotFound)
             | FindDeletedOrgId(_, NotFound)
             | FindHostId(_, NotFound)
+            | FindHostIds(_, NotFound)
             | FindOrgId(_, NotFound)
             | FindByVersionIds(_, NotFound) => Status::not_found("Not found."),
+            AlreadyDeleted(_)
+            | Cloudflare(_)
+            | Create(_)
+            | Delete(_, _)
+            | FindById(_, _)
+            | FindByIds(_, _)
+            | FindDeletedById(_, _)
+            | FindDeletedHostId(_, _)
+            | FindDeletedOrgId(_, _)
+            | FindHostId(_, _)
+            | FindHostIds(_, _)
+            | FindOrgId(_, _)
+            | FindByVersionIds(_, _)
+            | GenerateName
+            | HostHasNodes(_, _)
+            | ItemWithoutPrice
+            | PriceWithoutAmount
+            | Stripe(_)
+            | UpdateConfig(_)
+            | UpdateMetrics(_, _)
+            | UpdateStatus(_)
+            | Upgrade(_)
+            | VmCpu(_)
+            | VmDisk(_)
+            | VmMemory(_) => Status::internal("Internal error."),
             HostFreeCpu(_) => Status::failed_precondition("Host has too little available cpu."),
             HostFreeDisk(_) => Status::failed_precondition("Host has too little available memory."),
-            HostFreeIp(_) => Status::failed_precondition("Host has too few available IP's."),
+            HostFreeIp(_) => Status::failed_precondition("Host has too few available IPs."),
             HostFreeMem(_) => Status::failed_precondition("Host has too little available disk."),
             MissingTransferPerm => Status::forbidden("Missing permission."),
+            NoImage => Status::failed_precondition("No image for this version."),
             NoMatchingHost => Status::failed_precondition("No matching host."),
             UpdateSameOrg => Status::already_exists("new_org_id"),
             UpgradeSameImage => Status::already_exists("image_id"),
             Command(err) => (*err).into(),
             Config(err) => err.into(),
+            Grpc(err) => (*err).into(),
             Host(err) => err.into(),
             Image(err) => err.into(),
             IpAddress(err) => err.into(),
@@ -188,7 +219,6 @@ impl From<Error> for Status {
             Region(err) => err.into(),
             Report(err) => err.into(),
             Store(err) => err.into(),
-            _ => Status::internal("Internal error."),
         }
     }
 }
@@ -276,7 +306,7 @@ impl Node {
             .filter(nodes::deleted_at.is_null())
             .get_results(conn)
             .await
-            .map_err(|err| Error::FindByHostIds(host_ids.clone(), err))
+            .map_err(|err| Error::FindHostIds(host_ids.clone(), err))
     }
 
     pub async fn by_version_ids(
@@ -367,19 +397,19 @@ impl Node {
 
         // FIXME: secrets integration
         /*
-        let prefix = format!("node/{id}/secret");
-        let secrets = write.ctx.vault.read().await.list_path(&prefix).await?;
-        if let Some(names) = secrets {
+            let prefix = format!("node/{id}/secret");
+            let secrets = write.ctx.vault.read().await.list_path(&prefix).await?;
+            if let Some(names) = secrets {
             for name in names {
-                let path = format!("{prefix}/{name}");
-                let result = write.ctx.vault.read().await.delete_path(&path).await;
-                match result {
-                    Ok(()) | Err(crate::store::vault::Error::PathNotFound) => (),
-                    Err(err) => return Err(err.into()),
-                }
-            }
+            let path = format!("{prefix}/{name}");
+            let result = write.ctx.vault.read().await.delete_path(&path).await;
+            match result {
+            Ok(()) | Err(crate::store::vault::Error::PathNotFound) => (),
+            Err(err) => return Err(err.into()),
         }
-        */
+        }
+        }
+             */
 
         if let Some(ref item_id) = node.stripe_item_id {
             write.ctx.stripe.remove_subscription(item_id).await?;
