@@ -36,7 +36,7 @@ use crate::auth::rbac::{BillingPerm, NodeAdminPerm};
 use crate::auth::resource::{HostId, NodeId, OrgId, Resource, ResourceId, ResourceType, UserId};
 use crate::auth::AuthZ;
 use crate::database::{Conn, WriteConn};
-use crate::grpc::Status;
+use crate::grpc::{api, Status};
 use crate::model::sql::{self, Amount, Currency, IpNetwork, Period, Tags, Version};
 use crate::stripe::api::subscription::SubscriptionItemId;
 use crate::util::{SearchOperator, SortOrder};
@@ -113,8 +113,6 @@ pub enum Error {
     NodeLog(#[from] self::log::Error),
     /// Failed to find a matching host.
     NoMatchingHost,
-    /// Failed to find an image for this version.
-    NoImage,
     /// Node org error: {0}
     Org(#[from] crate::model::org::Error),
     /// Node pagination: {0}
@@ -200,7 +198,6 @@ impl From<Error> for Status {
             HostFreeIp(_) => Status::failed_precondition("Host has too few available IPs."),
             HostFreeMem(_) => Status::failed_precondition("Host has too little available disk."),
             MissingTransferPerm => Status::forbidden("Missing permission."),
-            NoImage => Status::failed_precondition("No image for this version."),
             NoMatchingHost => Status::failed_precondition("No matching host."),
             UpdateSameOrg => Status::already_exists("new_org_id"),
             UpgradeSameImage => Status::already_exists("image_id"),
@@ -517,22 +514,51 @@ impl Node {
         report.create(conn).await.map_err(Error::Report)
     }
 
+    pub async fn notify_auto_upgrades(
+        image: &Image,
+        version: ProtocolVersion,
+        org_id: Option<OrgId>,
+        authz: &AuthZ,
+        write: &mut WriteConn<'_, '_>,
+    ) -> Result<(), Error> {
+        let is_lower_but_compatible = |lower: &semver::Version, than: &semver::Version| {
+            lower < than && lower.major == than.major
+        };
+
+        let version_key = VersionKey::new(version.protocol_key, version.variant_key);
+        let old_versions = ProtocolVersion::by_key(&version_key, org_id, authz, write)
+            .await?
+            .into_iter()
+            .filter(|pv| is_lower_but_compatible(&pv.semantic_version, &version.semantic_version))
+            .map(|version| version.id)
+            .collect();
+        let old_nodes = Node::by_version_ids(&old_versions, write)
+            .await?
+            .into_iter()
+            .filter(|node| node.auto_upgrade);
+
+        for node in old_nodes {
+            node.notify_upgrade(image.id, org_id, authz, write).await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn notify_upgrade(
         self,
-        to_image_id: ImageId,
+        image_id: ImageId,
         org_id: Option<OrgId>,
         authz: &AuthZ,
         write: &mut WriteConn<'_, '_>,
     ) -> Result<Self, Error> {
-        use crate::grpc::api;
-
         let upgrade = UpgradeNode {
             id: self.id,
-            image_id: to_image_id,
+            image_id,
             org_id,
         };
-        let updated = upgrade.apply(authz, write).await?;
-        let cmd = NewCommand::node(&updated, CommandType::NodeUpgrade)
+        let upgraded = upgrade.apply(authz, write).await?;
+
+        let cmd = NewCommand::node(&upgraded, CommandType::NodeUpgrade)
             .map_err(|err| Error::Command(Box::new(err)))?
             .create(write)
             .await
@@ -541,46 +567,8 @@ impl Node {
             .await
             .map_err(|err| Error::Grpc(Box::new(err)))?;
         write.mqtt(cmd);
-        Ok(updated)
-    }
 
-    pub async fn notify_auto_upgrades(
-        to_version: ProtocolVersion,
-        org_id: Option<OrgId>,
-        authz: &AuthZ,
-        write: &mut WriteConn<'_, '_>,
-    ) -> Result<(), Error> {
-        let version_key = VersionKey::new(to_version.protocol_key, to_version.variant_key);
-        let is_lower_but_compatible = |lower: &semver::Version, than: &semver::Version| {
-            lower < than && lower.major == than.major
-        };
-        let from_versions = ProtocolVersion::by_key(&version_key, org_id, authz, write)
-            .await?
-            .into_iter()
-            .filter(|version| {
-                // Check that this version is lower than the version we are upgrading to, but still
-                // compatible with it.
-                is_lower_but_compatible(&version.semantic_version, &to_version.semantic_version)
-            })
-            .map(|version| version.id)
-            .collect();
-        let mut to_upgrade = Node::by_version_ids(&from_versions, write)
-            .await?
-            .into_iter()
-            .filter(|node| node.auto_upgrade)
-            .peekable();
-        if to_upgrade.peek().is_none() {
-            return Ok(());
-        }
-        let image = Image::latest_build(to_version.id, org_id, authz, write)
-            .await?
-            .ok_or(Error::NoImage)?;
-        for upgradeable_node in to_upgrade {
-            upgradeable_node
-                .notify_upgrade(image.id, org_id, authz, write)
-                .await?;
-        }
-        Ok(())
+        Ok(upgraded)
     }
 
     pub fn created_by(&self) -> Resource {
