@@ -1,7 +1,7 @@
 pub mod stats;
 
 pub mod version;
-pub use version::{ProtocolVersion, VersionId, VersionKey};
+pub use version::{ProtocolVersion, VersionId, VersionKey, VersionMetadata};
 
 use std::collections::{HashSet, VecDeque};
 
