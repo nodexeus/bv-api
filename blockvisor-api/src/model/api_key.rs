@@ -41,7 +41,9 @@ impl From<Error> for Status {
             DeleteKey(NotFound) | FindById(NotFound) | FindByUser(NotFound) | NoKeysDeleted => {
                 Status::not_found("Not found.")
             }
-            _ => Status::internal("Internal error."),
+            CreateNew(_) | DeleteKey(_) | FindById(_) | FindByUser(_) | MultipleKeysDeleted(_) => {
+                Status::internal("Internal error.")
+            }
         }
     }
 }
