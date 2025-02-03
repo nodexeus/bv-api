@@ -15,7 +15,7 @@
 use std::str::FromStr;
 
 use base64::engine::{general_purpose::STANDARD_NO_PAD, Engine as _};
-use derive_more::{Deref, From, Into};
+use derive_more::{Deref, Into};
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display;
 use rand::RngCore;
