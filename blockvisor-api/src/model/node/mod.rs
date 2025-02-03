@@ -969,6 +969,7 @@ impl UpgradeNode<'_> {
             .set((
                 nodes::image_id.eq(self.image.id),
                 nodes::config_id.eq(config.id),
+                nodes::protocol_id.eq(self.version.protocol_id),
                 nodes::protocol_version_id.eq(self.version.id),
                 nodes::semantic_version.eq(&self.version.semantic_version),
                 nodes::next_state.eq(Some(NextState::Upgrading)),
