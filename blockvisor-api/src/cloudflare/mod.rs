@@ -182,7 +182,9 @@ pub mod tests {
     fn mock_dns_record(id: u32) -> ApiSuccess<DnsRecord> {
         ApiSuccess {
             result: DnsRecord {
-                meta: Meta { auto_added: false },
+                meta: Meta {
+                    auto_added: Some(false),
+                },
                 locked: None,
                 name: "test".into(),
                 ttl: 1,
@@ -207,6 +209,9 @@ pub mod tests {
     async fn test_parse_dns() {
         let test1 = r#"{"result":{"id":"45afecb529c9029d909e1a2ca863fd9d","name":"formally-knowing-eel.n0des.xyz","type":"A","content":"127.0.0.8","proxiable":false,"proxied":false,"ttl":300,"settings":{},"meta":{"auto_added":false,"managed_by_apps":false,"managed_by_argo_tunnel":false},"comment":null,"tags":[],"created_on":"2025-01-27T16:29:07.984046Z","modified_on":"2025-01-27T16:29:07.984046Z"},"success":true,"errors":[],"messages":[]}"#;
         let _: ApiSuccess<DnsRecord> = serde_json::from_str(test1).unwrap();
+
+        let test2 = r#"{"result":{"id":"a4d9ce6930076c15989a895fb6d32da8","name":"wholly-more-jennet.n0des.xyz","type":"A","content":"64.140.170.246","proxiable":true,"proxied":false,"ttl":300,"settings":{},"meta":{},"comment":null,"tags":[],"created_on":"2025-02-04T13:51:08.045677Z","modified_on":"2025-02-04T13:51:08.045677Z"},"success":true,"errors":[],"messages":[]}"#;
+        let _: ApiSuccess<DnsRecord> = serde_json::from_str(test2).unwrap();
     }
 
     #[tokio::test]
