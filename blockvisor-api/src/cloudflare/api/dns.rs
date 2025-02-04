@@ -42,7 +42,7 @@ pub struct DnsRecord {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Meta {
     /// Will exist if Cloudflare automatically added this DNS record during initial setup.
-    pub auto_added: bool,
+    pub auto_added: Option<bool>,
 }
 
 /// Type of the DNS record, along with the associated value.
