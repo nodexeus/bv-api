@@ -28,8 +28,8 @@ use super::{ProtocolId, Visibility};
 pub enum Error {
     /// Failed to create protocol version: {0}
     Create(diesel::result::Error),
-    /// No versions found for version key.
-    NoVersions,
+    /// No versions found for version key {0}.
+    NoVersions(VersionKey),
     /// Protocol version model error: {0}
     Protocol(#[from] super::Error),
     /// Failed to find protocol versions for protocol id `{0:?}`: {1}
@@ -67,9 +67,10 @@ impl From<Error> for Status {
             Create(DatabaseError(UniqueViolation, _)) => {
                 Status::already_exists("Protocol version already exists.")
             }
-            ById(_, NotFound) | ByIds(_, NotFound) | ByKey(_, NotFound) | NoVersions => {
+            ById(_, NotFound) | ByIds(_, NotFound) | ByKey(_, NotFound) => {
                 Status::not_found("Version not found.")
             }
+            NoVersions(key) => Status::not_found(format!("No versions found for {key}")),
             MetadataKeyChars(_) | MetadataKeyLen(_) => Status::invalid_argument("metadata_key"),
             ProtocolKeyChars(_) | ProtocolKeyLen(_) => {
                 Status::invalid_argument("version_key.protocol_key")
@@ -175,7 +176,7 @@ impl ProtocolVersion {
         if let Some(version) = versions.pop() {
             Ok(version)
         } else {
-            Err(Error::NoVersions)
+            Err(Error::NoVersions(version_key.clone()))
         }
     }
 
