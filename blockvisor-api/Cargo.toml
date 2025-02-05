@@ -11,7 +11,7 @@ name = "blockvisor-api"
 anyhow = "1.0"
 argh = "0.1"
 argon2 = "0.5"
-aws-sdk-s3 = { version = "1.59", features = ["behavior-version-latest"] }
+aws-sdk-s3 = { version = "=1.68", features = ["behavior-version-latest"] }
 axum = { version = "0.7", features = ["macros"] }
 axum-extra = "0.9"
 axum-tracing-opentelemetry = "0.24"

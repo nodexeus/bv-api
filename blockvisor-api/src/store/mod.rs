@@ -6,7 +6,7 @@ pub mod manifest;
 use std::sync::Arc;
 use std::time::Duration;
 
-use aws_sdk_s3::config::{Credentials, Region, ResponseChecksumValidation};
+use aws_sdk_s3::config::{Credentials, Region};
 use derive_more::{Deref, Display, From, Into};
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
@@ -119,11 +119,10 @@ impl Store {
         let s3_config = aws_sdk_s3::Config::builder()
             .endpoint_url(config.store_url.to_string())
             .region(Region::new(config.region.clone()))
-            .credentials_provider(credentials)
-            .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
-            .build();
+            .credentials_provider(credentials);
 
-        Self::new(aws_sdk_s3::Client::from_conf(s3_config), config)
+        let client = aws_sdk_s3::Client::from_conf(s3_config.build());
+        Self::new(client, config)
     }
 
     /// Return a descending order list of data versions for a `StoreKey`.
