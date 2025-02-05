@@ -6,7 +6,7 @@ pub mod manifest;
 use std::sync::Arc;
 use std::time::Duration;
 
-use aws_sdk_s3::config::{Credentials, Region};
+use aws_sdk_s3::config::{Credentials, Region, ResponseChecksumValidation};
 use derive_more::{Deref, Display, From, Into};
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
@@ -120,6 +120,7 @@ impl Store {
             .endpoint_url(config.store_url.to_string())
             .region(Region::new(config.region.clone()))
             .credentials_provider(credentials)
+            .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
             .build();
 
         Self::new(aws_sdk_s3::Client::from_conf(s3_config), config)
