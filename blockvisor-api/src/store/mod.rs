@@ -6,7 +6,9 @@ pub mod manifest;
 use std::sync::Arc;
 use std::time::Duration;
 
-use aws_sdk_s3::config::{Credentials, Region};
+use aws_sdk_s3::config::{
+    Credentials, Region, RequestChecksumCalculation, ResponseChecksumValidation,
+};
 use derive_more::{Deref, Display, From, Into};
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
@@ -65,14 +67,15 @@ impl From<Error> for Status {
             }
             Client(_)
             | Manifest(_)
-            | MissingManifestHeader(_)
-            | MissingManifestBody(_)
             | ParseManifestHeader(_, _)
             | ParseManifestBody(_, _)
             | ReadManifestHeader(_, _)
             | ReadManifestBody(_, _)
             | SerializeBody(_)
             | SerializeHeader(_) => Status::internal("Internal error."),
+            MissingManifestBody(_) | MissingManifestHeader(_) => {
+                Status::not_found("Manifest not found.")
+            }
             MissingChunk(_) => Status::failed_precondition("Unknown chunk index."),
             StoreKeyChars(_) | StoreKeyLen(_) => Status::invalid_argument("store_key"),
         }
@@ -119,7 +122,9 @@ impl Store {
         let s3_config = aws_sdk_s3::Config::builder()
             .endpoint_url(config.store_url.to_string())
             .region(Region::new(config.region.clone()))
-            .credentials_provider(credentials);
+            .credentials_provider(credentials)
+            .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
+            .response_checksum_validation(ResponseChecksumValidation::WhenRequired);
 
         let client = aws_sdk_s3::Client::from_conf(s3_config.build());
         Self::new(client, config)
