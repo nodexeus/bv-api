@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use diesel::result::Error::NotFound;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;
@@ -73,6 +74,16 @@ pub enum Error {
     Node(#[from] crate::model::node::Error),
     /// Node model status error: {0}
     NodeStatus(#[from] crate::model::node::status::Error),
+    /// No visiblity of NodeCreate command.
+    NoNodeCreate,
+    /// No visiblity of NodeDelete command.
+    NoNodeDelete,
+    /// No visiblity of NodeRestart command.
+    NoNodeRestart,
+    /// No visiblity of NodeStart command.
+    NoNodeStart,
+    /// No visiblity of NodeStop command.
+    NoNodeStop,
     /// Node org error: {0}
     Org(#[from] crate::model::org::Error),
     /// Failed to parse ConfigId: {0}
@@ -136,6 +147,9 @@ impl From<Error> for Status {
             MissingIds => Status::invalid_argument("ids"),
             MissingLaunch => Status::invalid_argument("launch"),
             MissingLauncher => Status::invalid_argument("launcher"),
+            NoNodeCreate | NoNodeDelete | NoNodeRestart | NoNodeStart | NoNodeStop => {
+                Status::forbidden("Access denied.")
+            }
             ParseConfigId(_) => Status::invalid_argument("config_id"),
             ParseHostId(_) => Status::invalid_argument("host_id"),
             ParseId(_) => Status::invalid_argument("node_id"),
@@ -386,15 +400,18 @@ pub async fn create(
     let mut nodes = Vec::with_capacity(created.len());
     for node in created {
         let created_by = common::Resource::from(node.created_by());
-        let node_create = NewCommand::node(&node, CommandType::NodeCreate)?
+
+        let create_cmd = NewCommand::node(&node, CommandType::NodeCreate)?
             .create(&mut write)
             .await?;
+        let create_cmd = api::Command::from(&create_cmd, &authz, &mut write)
+            .await?
+            .ok_or(Error::NoNodeCreate)?;
 
-        let api_cmd = api::Command::from(&node_create, &authz, &mut write).await?;
         let api_node = api::Node::from_model(node, &authz, &mut write).await?;
         let created = api::NodeMessage::created(api_node.clone(), created_by);
 
-        write.mqtt(api_cmd);
+        write.mqtt(create_cmd);
         write.mqtt(created);
         nodes.push(api_node);
     }
@@ -675,10 +692,13 @@ pub async fn start(
         .await?;
 
     let node = Node::by_id(node_id, &mut write).await?;
-    let command = NewCommand::node(&node, CommandType::NodeStart)?;
-    let command = command.create(&mut write).await?;
-    let api_cmd = api::Command::from(&command, &authz, &mut write).await?;
-    write.mqtt(api_cmd);
+    let start_cmd = NewCommand::node(&node, CommandType::NodeStart)?
+        .create(&mut write)
+        .await?;
+    let start_cmd = api::Command::from(&start_cmd, &authz, &mut write)
+        .await?
+        .ok_or(Error::NoNodeStart)?;
+    write.mqtt(start_cmd);
 
     Ok(api::NodeServiceStartResponse {})
 }
@@ -694,10 +714,13 @@ pub async fn stop(
         .await?;
 
     let node = Node::by_id(node_id, &mut write).await?;
-    let command = NewCommand::node(&node, CommandType::NodeStop)?;
-    let command = command.create(&mut write).await?;
-    let api_cmd = api::Command::from(&command, &authz, &mut write).await?;
-    write.mqtt(api_cmd);
+    let stop_cmd = NewCommand::node(&node, CommandType::NodeStop)?
+        .create(&mut write)
+        .await?;
+    let stop_cmd = api::Command::from(&stop_cmd, &authz, &mut write)
+        .await?
+        .ok_or(Error::NoNodeStop)?;
+    write.mqtt(stop_cmd);
 
     Ok(api::NodeServiceStopResponse {})
 }
@@ -713,10 +736,13 @@ pub async fn restart(
         .await?;
 
     let node = Node::by_id(node_id, &mut write).await?;
-    let command = NewCommand::node(&node, CommandType::NodeRestart)?;
-    let command = command.create(&mut write).await?;
-    let api_cmd = api::Command::from(&command, &authz, &mut write).await?;
-    write.mqtt(api_cmd);
+    let restart_cmd = NewCommand::node(&node, CommandType::NodeRestart)?
+        .create(&mut write)
+        .await?;
+    let restart_cmd = api::Command::from(&restart_cmd, &authz, &mut write)
+        .await?
+        .ok_or(Error::NoNodeRestart)?;
+    write.mqtt(restart_cmd);
 
     Ok(api::NodeServiceRestartResponse {})
 }
@@ -732,10 +758,12 @@ pub async fn delete(
         .await?;
 
     let node = Node::delete(node_id, &mut write).await?;
-    let node_cmd = NewCommand::node(&node, CommandType::NodeDelete)?
+    let delete_cmd = NewCommand::node(&node, CommandType::NodeDelete)?
         .create(&mut write)
         .await?;
-    let delete_cmd = api::Command::from(&node_cmd, &authz, &mut write).await?;
+    let delete_cmd = api::Command::from(&delete_cmd, &authz, &mut write)
+        .await?
+        .ok_or(Error::NoNodeDelete)?;
     write.mqtt(delete_cmd);
 
     let deleted_by = common::Resource::from(&authz);
@@ -746,6 +774,26 @@ pub async fn delete(
 }
 
 impl api::Node {
+    pub async fn maybe_from_model(
+        node: Node,
+        authz: &AuthZ,
+        conn: &mut Conn<'_>,
+    ) -> Result<Option<Self>, Error> {
+        use crate::model::protocol::version::Error as VersionError;
+        use crate::model::protocol::Error as ProtocolError;
+
+        match Self::from_model(node, authz, conn).await {
+            Ok(node) => Ok(Some(node)),
+            Err(Error::Protocol(
+                ProtocolError::ById(_, NotFound) | ProtocolError::ByIds(_, NotFound),
+            )) => Ok(None),
+            Err(Error::ProtocolVersion(
+                VersionError::ById(_, NotFound) | VersionError::ByIds(_, NotFound),
+            )) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
     pub async fn from_model(node: Node, authz: &AuthZ, conn: &mut Conn<'_>) -> Result<Self, Error> {
         let config = Config::by_id(node.config_id, conn).await?;
         let org = Org::by_id(node.org_id, conn).await?;
