@@ -70,6 +70,12 @@ pub enum Error {
     MissingRegion,
     /// Node model error: {0}
     Node(#[from] crate::model::node::Error),
+    /// No visibility of HostRestart command.
+    NoHostRestart,
+    /// No visibility of HostStart command.
+    NoHostStart,
+    /// No visibility of HostStop command.
+    NoHostStop,
     /// Host org error: {0}
     Org(#[from] crate::model::org::Error),
     /// Failed to parse bv_version: {0}
@@ -126,6 +132,7 @@ impl From<Error> for Status {
             HostProvisionByToken(_) => Status::forbidden("Invalid token."),
             MemoryBytes(_) => Status::out_of_range("memory_bytes"),
             MissingRegion => Status::out_of_range("region"),
+            NoHostRestart | NoHostStart | NoHostStop => Status::forbidden("Access denied."),
             ParseBvVersion(_) => Status::invalid_argument("bv_version"),
             ParseId(_) => Status::invalid_argument("host_id"),
             ParseImageId(_) => Status::invalid_argument("image_id"),
@@ -639,10 +646,11 @@ pub async fn start(
         write.auth(&meta, HostAdminPerm::Start).await?
     };
 
-    let command = NewCommand::host(id, CommandType::HostStart)?;
-    let command = command.create(&mut write).await?;
-    let message = api::Command::from_host(&command)?;
-    write.mqtt(message);
+    let command = NewCommand::host(id, CommandType::HostStart)?
+        .create(&mut write)
+        .await?;
+    let command = api::Command::from_host(&command)?.ok_or(Error::NoHostStart)?;
+    write.mqtt(command);
 
     Ok(api::HostServiceStartResponse {})
 }
@@ -665,10 +673,11 @@ pub async fn stop(
         write.auth(&meta, HostAdminPerm::Stop).await?
     };
 
-    let command = NewCommand::host(id, CommandType::HostStop)?;
-    let command = command.create(&mut write).await?;
-    let message = api::Command::from_host(&command)?;
-    write.mqtt(message);
+    let command = NewCommand::host(id, CommandType::HostStop)?
+        .create(&mut write)
+        .await?;
+    let command = api::Command::from_host(&command)?.ok_or(Error::NoHostStop)?;
+    write.mqtt(command);
 
     Ok(api::HostServiceStopResponse {})
 }
@@ -691,10 +700,11 @@ pub async fn restart(
         write.auth(&meta, HostAdminPerm::Restart).await?
     };
 
-    let command = NewCommand::host(id, CommandType::HostRestart)?;
-    let command = command.create(&mut write).await?;
-    let message = api::Command::from_host(&command)?;
-    write.mqtt(message);
+    let command = NewCommand::host(id, CommandType::HostRestart)?
+        .create(&mut write)
+        .await?;
+    let command = api::Command::from_host(&command)?.ok_or(Error::NoHostRestart)?;
+    write.mqtt(command);
 
     Ok(api::HostServiceRestartResponse {})
 }

@@ -55,6 +55,8 @@ pub enum Error {
     NotHostToken,
     /// Not a node command: {0}. This should not happen.
     NotNodeCommand(CommandId),
+    /// No visibility of command to update.
+    NoUpdateVisibility,
     /// Failed to parse HostId: {0}
     ParseHostId(uuid::Error),
     /// Failed to parse NodeId: {0}
@@ -92,7 +94,7 @@ impl From<Error> for Status {
             | NotNodeCommand(_) => Status::internal("Internal error."),
             ListMissingNodeOrHost => Status::invalid_argument("node_id or host_id"),
             MissingNodeId => Status::invalid_argument("command.node_id"),
-            NotHostToken => Status::forbidden("Access denied."),
+            NotHostToken | NoUpdateVisibility => Status::forbidden("Access denied."),
             ParseNodeId(_) => Status::invalid_argument("node_id"),
             ParseHostId(_) => Status::invalid_argument("host_id"),
             ParseCommandId(_) => Status::invalid_argument("command_id"),
@@ -281,7 +283,9 @@ async fn list(
 
     let mut commands = Vec::with_capacity(filtered.len());
     for command in filtered {
-        commands.push(api::Command::from(&command, &authz, &mut read).await?);
+        if let Some(cmd) = api::Command::from(&command, &authz, &mut read).await? {
+            commands.push(cmd);
+        }
     }
 
     Ok(api::CommandServiceListResponse { commands })
@@ -305,7 +309,11 @@ async fn pending(
     let pending = Command::host_pending(host_id, &mut read).await?;
     let mut commands = Vec::with_capacity(pending.len());
     for command in pending {
-        commands.push(api::Command::from(&command, &authz, &mut read).await?);
+        match api::Command::from(&command, &authz, &mut read).await {
+            Ok(Some(cmd)) => commands.push(cmd),
+            Ok(None) => (),
+            Err(err) => return Err(err),
+        }
     }
 
     Ok(api::CommandServicePendingResponse { commands })
@@ -343,7 +351,10 @@ async fn update(
         completed_at: req.exit_code.map(|_| chrono::Utc::now()),
     };
     let updated = update.apply(id, &mut write).await?;
-    let cmd = api::Command::from(&updated, &authz, &mut write).await?;
+
+    let cmd = api::Command::from(&updated, &authz, &mut write)
+        .await?
+        .ok_or(Error::NoUpdateVisibility)?;
     write.mqtt(cmd.clone());
 
     match updated.exit_code {
@@ -363,7 +374,7 @@ impl api::Command {
         command: &Command,
         authz: &AuthZ,
         conn: &mut Conn<'_>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Option<Self>, Error> {
         match command.command_type {
             CommandType::HostStart
             | CommandType::HostStop
@@ -379,12 +390,12 @@ impl api::Command {
         }
     }
 
-    pub fn from_host(command: &Command) -> Result<Self, Error> {
+    pub fn from_host(command: &Command) -> Result<Option<Self>, Error> {
         match command.command_type {
-            CommandType::HostStart => host_start(command),
-            CommandType::HostStop => host_stop(command),
-            CommandType::HostRestart => host_restart(command),
-            CommandType::HostPending => host_pending(command),
+            CommandType::HostStart => host_start(command).map(Some),
+            CommandType::HostStop => host_stop(command).map(Some),
+            CommandType::HostRestart => host_restart(command).map(Some),
+            CommandType::HostPending => host_pending(command).map(Some),
             _ => Err(Error::NotHostCommand(command.id)),
         }
     }
@@ -393,15 +404,15 @@ impl api::Command {
         command: &Command,
         authz: &AuthZ,
         conn: &mut Conn<'_>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Option<Self>, Error> {
         match command.command_type {
             CommandType::NodeCreate => node_create(command, authz, conn).await,
-            CommandType::NodeStart => node_start(command, conn).await,
-            CommandType::NodeStop => node_stop(command, conn).await,
-            CommandType::NodeRestart => node_restart(command, conn).await,
-            CommandType::NodeUpdate => node_update(command, conn).await,
+            CommandType::NodeStart => node_start(command, conn).await.map(Some),
+            CommandType::NodeStop => node_stop(command, conn).await.map(Some),
+            CommandType::NodeRestart => node_restart(command, conn).await.map(Some),
+            CommandType::NodeUpdate => node_update(command, conn).await.map(Some),
             CommandType::NodeUpgrade => node_upgrade(command, authz, conn).await,
-            CommandType::NodeDelete => node_delete(command, conn).await,
+            CommandType::NodeDelete => node_delete(command, conn).await.map(Some),
             _ => Err(Error::NotNodeCommand(command.id)),
         }
     }
@@ -488,18 +499,20 @@ async fn node_create(
     command: &Command,
     authz: &AuthZ,
     conn: &mut Conn<'_>,
-) -> Result<api::Command, Error> {
+) -> Result<Option<api::Command>, Error> {
     let node_id = command.node_id.ok_or(Error::MissingNodeId)?;
     let node = Node::by_id(node_id, conn).await?;
-    let api_node = api::Node::from_model(node.clone(), authz, conn)
-        .await
-        .map_err(|err| Error::NodeResponse(Box::new(err)))?;
+    let api_node = match api::Node::maybe_from_model(node.clone(), authz, conn).await {
+        Ok(Some(api_node)) => api_node,
+        Ok(None) => return Ok(None),
+        Err(err) => return Err(Error::NodeResponse(Box::new(err))),
+    };
 
     let node_cmd = api::node_command::Command::Create(api::NodeCreate {
         node: Some(api_node),
     });
 
-    node_command(command, node, node_cmd)
+    node_command(command, node, node_cmd).map(Some)
 }
 
 async fn node_start(command: &Command, conn: &mut Conn<'_>) -> Result<api::Command, Error> {
@@ -540,18 +553,20 @@ async fn node_upgrade(
     command: &Command,
     authz: &AuthZ,
     conn: &mut Conn<'_>,
-) -> Result<api::Command, Error> {
+) -> Result<Option<api::Command>, Error> {
     let node_id = command.node_id.ok_or(Error::MissingNodeId)?;
     let node = Node::by_id(node_id, conn).await?;
-    let api_node = api::Node::from_model(node.clone(), authz, conn)
-        .await
-        .map_err(|err| Error::NodeResponse(Box::new(err)))?;
+    let api_node = match api::Node::maybe_from_model(node.clone(), authz, conn).await {
+        Ok(Some(api_node)) => api_node,
+        Ok(None) => return Ok(None),
+        Err(err) => return Err(Error::NodeResponse(Box::new(err))),
+    };
 
     let node_cmd = api::node_command::Command::Upgrade(api::NodeUpgrade {
         node: Some(api_node),
     });
 
-    node_command(command, node, node_cmd)
+    node_command(command, node, node_cmd).map(Some)
 }
 
 pub async fn node_delete(command: &Command, conn: &mut Conn<'_>) -> Result<api::Command, Error> {

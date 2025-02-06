@@ -28,6 +28,8 @@ pub enum Error {
     Node(#[from] crate::model::node::Error),
     /// Command success node log error: {0}
     NodeLog(#[from] crate::model::node::log::Error),
+    /// No success visibility of NodeStart command.
+    NoNodeStart,
 }
 
 impl From<Error> for Status {
@@ -36,6 +38,7 @@ impl From<Error> for Status {
         match err {
             Json(_) => Status::internal("Internal error."),
             MissingNodeId(_) => Status::invalid_argument("node_id"),
+            NoNodeStart => Status::forbidden("Access denied."),
             DeleteNode(_, _, err) => err.into(),
             MqttStart(err) => (*err).into(),
             Command(err) => err.into(),
@@ -75,10 +78,11 @@ async fn node_created(
     let start_cmd = NewCommand::node(&node, CommandType::NodeStart)?
         .create(write)
         .await?;
-    let start_api = api::Command::from(&start_cmd, authz, write)
+    let start_cmd = api::Command::from(&start_cmd, authz, write)
         .await
-        .map_err(|err| Error::MqttStart(Box::new(err)))?;
-    write.mqtt(start_api);
+        .map_err(|err| Error::MqttStart(Box::new(err)))?
+        .ok_or(Error::NoNodeStart)?;
+    write.mqtt(start_cmd);
 
     Ok(())
 }

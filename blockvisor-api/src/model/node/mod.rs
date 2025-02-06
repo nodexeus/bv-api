@@ -113,6 +113,8 @@ pub enum Error {
     NodeLog(#[from] self::log::Error),
     /// Failed to find a matching host.
     NoMatchingHost,
+    /// No visibility of NodeUpgrade command.
+    NoUpgradeCommand,
     /// Node org error: {0}
     Org(#[from] crate::model::org::Error),
     /// Node pagination: {0}
@@ -199,6 +201,7 @@ impl From<Error> for Status {
             HostFreeMem(_) => Status::failed_precondition("Host has too little available disk."),
             MissingTransferPerm => Status::forbidden("Missing permission."),
             NoMatchingHost => Status::failed_precondition("No matching host."),
+            NoUpgradeCommand => Status::forbidden("Access denied."),
             UpdateSameOrg => Status::already_exists("new_org_id"),
             UpgradeSameImage => Status::already_exists("image_id"),
             Command(err) => (*err).into(),
@@ -415,6 +418,7 @@ impl Node {
         Ok(node)
     }
 
+    /// Find the next host to schedule a node on.
     pub async fn next_host(
         &self,
         protocol: &Protocol,
@@ -569,7 +573,8 @@ impl Node {
             .map_err(|err| Error::Command(Box::new(err)))?;
         let cmd = api::Command::from(&cmd, authz, write)
             .await
-            .map_err(|err| Error::Grpc(Box::new(err)))?;
+            .map_err(|err| Error::Grpc(Box::new(err)))?
+            .ok_or(Error::NoUpgradeCommand)?;
         write.mqtt(cmd);
 
         Ok(upgraded)

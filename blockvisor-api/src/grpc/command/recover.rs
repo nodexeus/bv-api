@@ -2,7 +2,7 @@
 
 use displaydoc::Display;
 use thiserror::Error;
-use tracing::{error, warn};
+use tracing::warn;
 
 use crate::auth::resource::{HostId, OrgId};
 use crate::auth::AuthZ;
@@ -18,6 +18,8 @@ pub enum Error {
     CancelledLog(crate::model::node::log::Error),
     /// Command recovery error: {0}
     Command(#[from] crate::model::command::Error),
+    /// Command recovery failed to build a new NodeCreate command: {0}
+    CreateCommand(Box<crate::grpc::command::Error>),
     /// Recovery of `CreateNode` command has no node id.
     CreateNodeId,
     /// Command recovery dns error: {0}
@@ -31,9 +33,15 @@ pub enum Error {
     /// Command recovery node error: {0}
     Node(#[from] crate::model::node::Error),
     /// No IP addresses available for host: {0}
-    NoIpForHost(HostId),
+    NoIps(HostId),
+    /// No recovery visibilitiy of NodeCreate command.
+    NoNodeCreate,
+    /// No recovery visibilitiy of NodeStart command.
+    NoNodeStart,
     /// Command protocol error: {0}
     Protocol(#[from] crate::model::protocol::Error),
+    /// Command recovery failed to build a new NodeStart command: {0}
+    StartCommand(Box<crate::grpc::command::Error>),
     /// Command recovery failed to update node: {0}
     UpdateNode(crate::model::node::Error),
 }
@@ -42,15 +50,19 @@ impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
         match err {
-            Dns(_) | NoIpForHost(_) => Status::internal("Internal error."),
+            Dns(_) => Status::internal("Internal error."),
             CreateNodeId => Status::invalid_argument("node_id"),
+            NoIps(_) => Status::failed_precondition("No host IPs."),
+            NoNodeCreate | NoNodeStart => Status::forbidden("Access denied."),
             CancelledLog(err) => err.into(),
             Command(err) => err.into(),
+            CreateCommand(err) => (*err).into(),
             DeploymentLog(err) => err.into(),
             Host(err) => err.into(),
             IpAddress(err) => err.into(),
             Node(err) | UpdateNode(err) => err.into(),
             Protocol(err) => err.into(),
+            StartCommand(err) => (*err).into(),
         }
     }
 }
@@ -69,30 +81,17 @@ pub(super) async fn recover(
 }
 
 /// Recover from a failed node creation.
-///
-/// 1. Log that our creation has failed.
-/// 2. Decide whether and where to re-create the node:
-///    a. If this is the first failure on the current host, we try again with
-///       the same host.
-///    b. Otherwise, if this is the first host we tried on, we try again with a
-///       new host.
-///    c. Otherwise, we cannot recover.
-/// 3. Use the previous decision to send a new create message to the right
-///    instance of blockvisord, or mark the current node as failed and send an
-///    MQTT message to the front end.
 async fn node_create_failed(
     failed: &Command,
     org_id: Option<OrgId>,
     authz: &AuthZ,
     write: &mut WriteConn<'_, '_>,
 ) -> Result<Vec<api::Command>, Error> {
-    let mut vec = vec![];
-
     let node_id = failed.node_id.ok_or(Error::CreateNodeId)?;
     let node = Node::by_id(node_id, write).await?;
     Host::remove_node(&node, write).await?;
 
-    // 1. We make a note in the node_logs table that creating our node failed.
+    // log that creating the node failed.
     let _ = NewNodeLog::from(&node, authz, LogEvent::CreateFailed)
         .create(write)
         .await
@@ -102,7 +101,7 @@ async fn node_create_failed(
         warn!("Failed to remove node dns for node {}: {err}", node.id);
     }
 
-    // 2. We now find the next host to assign our node to.
+    // find the next host to assign the node to
     let protocol = Protocol::by_id(node.protocol_id, org_id, authz, write).await?;
     let Some(host) = node.next_host(&protocol, write).await? else {
         return NewNodeLog::from(&node, authz, LogEvent::CreateCancelled)
@@ -112,16 +111,16 @@ async fn node_create_failed(
             .map_err(Error::CancelledLog);
     };
 
-    let ip_address = IpAddress::next_for_host(host.id, write)
+    // update the node to the new host
+    let ip = IpAddress::next_for_host(host.id, write)
         .await?
-        .ok_or_else(|| Error::NoIpForHost(host.id))?;
-
+        .ok_or(Error::NoIps(host.id))?;
     let update = UpdateNode {
         org_id: None,
         host_id: Some(host.id),
         display_name: None,
         auto_upgrade: None,
-        ip_address: Some(ip_address.ip),
+        ip_address: Some(ip.ip),
         ip_gateway: Some(host.ip_gateway),
         note: None,
         tags: None,
@@ -133,38 +132,28 @@ async fn node_create_failed(
         .map_err(Error::UpdateNode)?;
 
     Host::add_node(&node, write).await?;
+    write.ctx.dns.create(&node.dns_name, ip.ip.ip()).await?;
 
-    write
-        .ctx
-        .dns
-        .create(&node.dns_name, ip_address.ip.ip())
+    // notify blockvisor to create the new node
+    let mut commands = vec![];
+    let create_cmd = NewCommand::node(&node, CommandType::NodeCreate)?
+        .create(write)
         .await?;
-
-    // 3. We notify blockvisor of our retry via an MQTT message.
-    if let Ok(cmd) = NewCommand::node(&node, CommandType::NodeCreate)?
-        .create(write)
+    let create_cmd = api::Command::from(&create_cmd, authz, write)
         .await
-    {
-        let result = api::Command::from(&cmd, authz, write).await;
-        result.map_or_else(|_| {
-            error!("Could not convert node create command to gRPC repr while recovering. Command: {:?}", cmd);
-        }, |command| vec.push(command));
-    } else {
-        error!("Could not create node create command while recovering");
-    }
+        .map_err(|err| Error::CreateCommand(Box::new(err)))?
+        .ok_or(Error::NoNodeCreate)?;
+    commands.push(create_cmd);
 
-    // we also start the node.
-    if let Ok(cmd) = NewCommand::node(&node, CommandType::NodeRestart)?
+    // and to start it
+    let start_cmd = NewCommand::node(&node, CommandType::NodeStart)?
         .create(write)
+        .await?;
+    let start_cmd = api::Command::from(&start_cmd, authz, write)
         .await
-    {
-        let result = api::Command::from(&cmd, authz, write).await;
-        result.map_or_else(|_| {
-            error!("Could not convert node start command to gRPC repr while recovering. Command {:?}", cmd);
-        }, |command| vec.push(command));
-    } else {
-        error!("Could not create node start command while recovering");
-    }
+        .map_err(|err| Error::StartCommand(Box::new(err)))?
+        .ok_or(Error::NoNodeStart)?;
+    commands.push(start_cmd);
 
-    Ok(vec)
+    Ok(commands)
 }
