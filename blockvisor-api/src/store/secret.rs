@@ -56,8 +56,8 @@ impl Secret {
     pub fn get(&self, _resource: Resource, key: &SecretKey) -> Result<Vec<u8>, Error> {
         match key.0.as_ref() {
             "cloudflare-cert-key" => Ok(self.config.cloudflare_cert_key.clone().into_bytes()),
+            "grafana-loki-key" => Ok(self.config.grafana_loki_key.clone().into_bytes()),
             "grafana-prometheus-key" => Ok(self.config.grafana_prometheus_key.clone().into_bytes()),
-            "grafana-basic-auth-key" => Ok(self.config.grafana_basic_auth_key.clone().into_bytes()),
             _ => Err(Error::Unimplemented),
         }
     }

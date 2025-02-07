@@ -38,8 +38,8 @@ password = "password"
 
 [secret]
 cloudflare_cert_key = "cloudflare-cert"
+grafana_loki_key = "grafana-loki"
 grafana_prometheus_key = "grafana-prometheus"
-grafana_basic_auth_key = "grafana-basic-auth"
 
 [server]
 ip = "0.0.0.0"
