@@ -4,6 +4,7 @@ pub mod email;
 pub mod grpc;
 pub mod log;
 pub mod mqtt;
+pub mod secret;
 pub mod server;
 pub mod store;
 pub mod stripe;
@@ -58,6 +59,8 @@ pub enum Error {
         &'static str,
         Box<dyn std::error::Error + Send + Sync + 'static>,
     ),
+    /// Failed to parse secret Config: {0}
+    Secret(secret::Error),
     /// Failed to parse server Config: {0}
     Server(server::Error),
     /// Failed to parse store Config: {0}
@@ -77,6 +80,7 @@ pub struct Config {
     pub grpc: Arc<grpc::Config>,
     pub log: Arc<log::Config>,
     pub mqtt: Arc<mqtt::Config>,
+    pub secret: Arc<secret::Config>,
     pub server: Arc<server::Config>,
     pub store: Arc<store::Config>,
     pub stripe: Arc<stripe::Config>,
@@ -134,6 +138,9 @@ impl TryFrom<&Provider> for Config {
         let mqtt = mqtt::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Mqtt)?;
+        let secret = secret::Config::try_from(provider)
+            .map(Arc::new)
+            .map_err(Error::Secret)?;
         let server = server::Config::try_from(provider)
             .map(Arc::new)
             .map_err(Error::Server)?;
@@ -154,6 +161,7 @@ impl TryFrom<&Provider> for Config {
             grpc,
             log,
             mqtt,
+            secret,
             server,
             store,
             stripe,

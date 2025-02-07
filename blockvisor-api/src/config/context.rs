@@ -10,7 +10,7 @@ use crate::cloudflare::{Cloudflare, Dns};
 use crate::database::Pool;
 use crate::email::Email;
 use crate::mqtt::Notifier;
-use crate::store::Store;
+use crate::store::{Secret, Store};
 use crate::stripe::{Stripe, Subscription};
 
 use super::log::Log;
@@ -38,10 +38,12 @@ pub enum Error {
     MissingNotifier,
     /// Builder is missing Pool.
     MissingPool,
-    /// Builder is missing Stripe.
-    MissingStripe,
+    /// Builder is missing Secret.
+    MissingSecret,
     /// Builder is missing Store.
     MissingStore,
+    /// Builder is missing Stripe.
+    MissingStripe,
     /// Failed to create MQTT options: {0}
     Mqtt(#[from] super::mqtt::Error),
     /// Failed to create Notifier: {0}
@@ -66,6 +68,7 @@ pub struct Context {
     pub notifier: Arc<Notifier>,
     pub pool: Pool,
     pub rng: Arc<Mutex<OsRng>>,
+    pub secret: Arc<Secret>,
     pub store: Arc<Store>,
     pub stripe: Arc<Box<dyn Subscription + Send + Sync + 'static>>,
 }
@@ -92,6 +95,7 @@ impl Context {
         let notifier = Notifier::new(config.mqtt.options()?, pool.clone())
             .await
             .map_err(Error::Notifier)?;
+        let secret = Secret::new(config.secret.clone());
         let store = Store::new_s3(&config.store);
         let stripe = Stripe::new(config.stripe.clone()).map_err(Error::Stripe)?;
 
@@ -102,6 +106,7 @@ impl Context {
             .log(log)
             .notifier(notifier)
             .pool(pool)
+            .secret(secret)
             .store(store)
             .stripe(stripe)
             .config(config))
@@ -127,6 +132,7 @@ impl Context {
         let notifier = Notifier::new(config.mqtt.options()?, pool.clone())
             .await
             .map_err(Error::Notifier)?;
+        let secret = Secret::new(config.secret.clone());
         let store = TestStore::new().await.mock_store();
         let stripe = MockStripe::new().await;
 
@@ -138,6 +144,7 @@ impl Context {
             .notifier(notifier)
             .pool(pool)
             .rng(rng)
+            .secret(secret)
             .store(store)
             .stripe(stripe)
             .config(config)
@@ -157,6 +164,7 @@ pub struct Builder {
     notifier: Option<Arc<Notifier>>,
     pool: Option<Pool>,
     rng: Option<OsRng>,
+    secret: Option<Secret>,
     store: Option<Store>,
     stripe: Option<Box<dyn Subscription + Send + Sync + 'static>>,
 }
@@ -172,6 +180,7 @@ impl Builder {
             notifier: self.notifier.ok_or(Error::MissingNotifier)?,
             pool: self.pool.ok_or(Error::MissingPool)?,
             rng: Arc::new(Mutex::new(self.rng.unwrap_or_default())),
+            secret: self.secret.ok_or(Error::MissingSecret).map(Arc::new)?,
             store: self.store.ok_or(Error::MissingStore).map(Arc::new)?,
             stripe: self.stripe.ok_or(Error::MissingStripe).map(Arc::new)?,
         }))
@@ -225,6 +234,12 @@ impl Builder {
     #[must_use]
     pub const fn rng(mut self, rng: OsRng) -> Self {
         self.rng = Some(rng);
+        self
+    }
+
+    #[must_use]
+    pub fn secret(mut self, secret: Secret) -> Self {
+        self.secret = Some(secret);
         self
     }
 

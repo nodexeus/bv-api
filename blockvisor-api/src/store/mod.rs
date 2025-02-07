@@ -3,13 +3,16 @@ pub use client::Client;
 
 pub mod manifest;
 
+pub mod secret;
+pub use secret::Secret;
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use aws_sdk_s3::config::{
     Credentials, Region, RequestChecksumCalculation, ResponseChecksumValidation,
 };
-use derive_more::{Deref, Display, From, Into};
+use derive_more::{Deref, Display, Into};
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
@@ -54,7 +57,7 @@ pub enum Error {
     SerializeHeader(serde_json::Error),
     /// StoreKey is not lower-kebab-case: {0}
     StoreKeyChars(String),
-    /// StoreKey length `{0}` must be at least 10 characters.
+    /// StoreKey length `{0}` must be at least 6 characters.
     StoreKeyLen(usize),
 }
 
@@ -82,12 +85,12 @@ impl From<Error> for Status {
     }
 }
 
-#[derive(Clone, Debug, Display, PartialEq, Eq, DieselNewType, Deref, From, Into)]
+#[derive(Clone, Debug, Display, PartialEq, Eq, DieselNewType, Deref, Into)]
 pub struct StoreKey(String);
 
 impl StoreKey {
     pub fn new(id: String) -> Result<Self, Error> {
-        if id.len() < 10 {
+        if id.len() < 6 {
             Err(Error::StoreKeyLen(id.len()))
         } else if !id.chars().all(|c| LOWER_KEBAB_CASE.contains(c)) {
             Err(Error::StoreKeyChars(id))

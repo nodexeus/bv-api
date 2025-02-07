@@ -10,6 +10,7 @@ use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::grpc::api::crypt_service_server::CryptService;
 use crate::grpc::{api, Grpc, Metadata, Status};
+use crate::store::secret::SecretKey;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -23,6 +24,8 @@ pub enum Error {
     MissingResource,
     /// Claims resource failed: {0}
     Resource(#[from] crate::auth::resource::Error),
+    /// Crypt secret failed: {0}
+    Secret(#[from] crate::store::secret::Error),
 }
 
 impl From<Error> for Status {
@@ -35,6 +38,7 @@ impl From<Error> for Status {
             Auth(err) => err.into(),
             Claims(err) => err.into(),
             Resource(err) => err.into(),
+            Secret(err) => err.into(),
         }
     }
 }
@@ -70,12 +74,8 @@ async fn get_secret(
     let _authz = read.auth_for(&meta, CryptPerm::GetSecret, resource).await?;
     let _id = resource.id_exists(&mut read).await?;
 
-    // FIXME: secrets integration
-    /*
-    let path = format!("{resource}/secret/{}", req.name);
-    let data = read.ctx.vault.read().await.get_bytes(&path).await?;
-     */
-    let data = Vec::new();
+    let key = SecretKey::new(req.key)?;
+    let data = read.ctx.secret.get(resource, &key)?;
 
     Ok(api::CryptServiceGetSecretResponse { value: data })
 }
@@ -92,17 +92,8 @@ async fn put_secret(
         .await?;
     let _id = resource.id_exists(&mut write).await?;
 
-    // FIXME: secrets integration
-    /*
-    let path = format!("{resource}/secret/{}", req.name);
-    let _version = write
-        .ctx
-        .vault
-        .read()
-        .await
-        .set_bytes(&path, &req.value)
-        .await?;
-    */
+    let key = SecretKey::new(req.key)?;
+    write.ctx.secret.put(resource, &key, &req.value)?;
 
     Ok(api::CryptServicePutSecretResponse {})
 }
