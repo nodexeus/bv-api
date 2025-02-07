@@ -21,7 +21,7 @@ async fn node_can_create_secrets() {
     // can't create a secret for another resource
     let req = api::CryptServicePutSecretRequest {
         resource: Some(common::Resource::from(Resource::Host(test.seed().host1.id))),
-        name: test_name!().into(),
+        key: test_name!().into(),
         value: TEST_SECRET.to_vec(),
     };
     let status = test
@@ -35,7 +35,7 @@ async fn node_can_create_secrets() {
         resource: Some(common::Resource::from(Resource::Node(
             Uuid::new_v4().into(),
         ))),
-        name: test_name!().into(),
+        key: test_name!().into(),
         value: TEST_SECRET.to_vec(),
     };
     let status = test
@@ -47,7 +47,7 @@ async fn node_can_create_secrets() {
     // can create a secret for the token's node id
     let req = api::CryptServicePutSecretRequest {
         resource: Some(common::Resource::from(Resource::Node(test.seed().node.id))),
-        name: test_name!().into(),
+        key: test_name!().into(),
         value: TEST_SECRET.to_vec(),
     };
     test.send_with(CryptService::put_secret, req, &jwt)
@@ -65,7 +65,7 @@ async fn node_can_read_secrets() {
 
     let req = api::CryptServicePutSecretRequest {
         resource: Some(common::Resource::from(Resource::Node(test.seed().node.id))),
-        name: test_name!().into(),
+        key: test_name!().into(),
         value: TEST_SECRET.to_vec(),
     };
     test.send_with(CryptService::put_secret, req, &jwt)
@@ -74,7 +74,7 @@ async fn node_can_read_secrets() {
 
     let req = api::CryptServiceGetSecretRequest {
         resource: Some(common::Resource::from(Resource::Node(test.seed().node.id))),
-        name: test_name!().into(),
+        key: test_name!().into(),
     };
     let secret = test
         .send_with(CryptService::get_secret, req, &jwt)
@@ -101,7 +101,7 @@ async fn delete_node_deletes_secrets() {
 
     let req = api::CryptServicePutSecretRequest {
         resource: Some(common::Resource::from(Resource::Node(node_id))),
-        name: test_name!().into(),
+        key: test_name!().into(),
         value: TEST_SECRET.to_vec(),
     };
     test.send_with(CryptService::put_secret, req, &jwt)
@@ -110,7 +110,7 @@ async fn delete_node_deletes_secrets() {
 
     let req = api::CryptServiceGetSecretRequest {
         resource: Some(common::Resource::from(Resource::Node(node_id))),
-        name: test_name!().into(),
+        key: test_name!().into(),
     };
     let secret = test
         .send_with(CryptService::get_secret, req, &jwt)
@@ -125,7 +125,7 @@ async fn delete_node_deletes_secrets() {
 
     let req = api::CryptServiceGetSecretRequest {
         resource: Some(common::Resource::from(Resource::Node(node_id))),
-        name: test_name!().into(),
+        key: test_name!().into(),
     };
     let status = test
         .send_with(CryptService::get_secret, req, &jwt)
@@ -149,9 +149,9 @@ async fn new_node_with_old_id_copies_secrets() {
     let claims = test.node_claims_for(node_id, Perms::from(CryptPerm::PutSecret));
     let jwt = test.cipher().jwt.encode(&claims).unwrap();
 
-    let put_secret = |name: &str| api::CryptServicePutSecretRequest {
+    let put_secret = |key: &str| api::CryptServicePutSecretRequest {
         resource: Some(common::Resource::from(Resource::Node(node_id))),
-        name: name.to_string(),
+        key: key.to_string(),
         value: TEST_SECRET.to_vec(),
     };
 

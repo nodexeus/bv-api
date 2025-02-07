@@ -402,7 +402,7 @@ async fn update_archive(
     let _authz = write.auth(&meta, ImageAdminPerm::UpdateArchive).await?;
 
     let id = req.archive_id.parse().map_err(Error::ParseArchiveId)?;
-    let store_key = req.store_key.map(Into::into);
+    let store_key = req.store_key.map(StoreKey::new).transpose()?;
 
     let update = UpdateArchive { id, store_key };
     let archive = update.update(&mut write).await?;

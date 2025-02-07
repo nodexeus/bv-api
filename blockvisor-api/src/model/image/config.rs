@@ -64,6 +64,8 @@ pub enum Error {
     Property(#[from] super::property::Error),
     /// Image config firewall rule error: {0}
     Rule(#[from] super::rule::Error),
+    /// Image config store error: {0}
+    Store(#[from] crate::store::Error),
     /// Update Image Config missing key: {0}
     UpdateKeyMissing(ImagePropertyKey),
     /// Update Image Config key is not dynamic: {0}
@@ -101,6 +103,7 @@ impl From<Error> for Status {
             Archive(err) => err.into(),
             Property(err) => err.into(),
             Rule(err) => err.into(),
+            Store(err) => err.into(),
         }
     }
 }
@@ -404,7 +407,7 @@ impl NodeConfig {
                 image_id: Uuid::nil().into(),
                 image_uri: "legacy".to_string(),
                 archive_id: Uuid::nil().into(),
-                store_key: "legacy".to_string().into(),
+                store_key: StoreKey::new("legacy".into()).expect("valid StoreKey"),
                 values: vec![],
                 min_babel_version: semver::Version::new(0, 0, 1).into(),
             },
@@ -559,7 +562,7 @@ impl TryFrom<common::ImageConfig> for ImageConfig {
             image_id: config.image_id.parse().map_err(Error::ParseImageId)?,
             image_uri: config.image_uri,
             archive_id: config.archive_id.parse().map_err(Error::ParseArchiveId)?,
-            store_key: config.store_key.into(),
+            store_key: StoreKey::new(config.store_key)?,
             values: config
                 .values
                 .into_iter()
