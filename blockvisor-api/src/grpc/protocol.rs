@@ -279,8 +279,8 @@ pub async fn add_version(
     let new_version = NewVersion {
         org_id: protocol.org_id.or(org_id),
         protocol_id: protocol.id,
-        protocol_key: version_key.protocol_key,
-        variant_key: version_key.variant_key,
+        protocol_key: &version_key.protocol_key,
+        variant_key: &version_key.variant_key,
         metadata: metadata.into(),
         semantic_version: &req.semantic_version.parse().map_err(Error::ParseVersion)?,
         sku_code: &req.sku_code,

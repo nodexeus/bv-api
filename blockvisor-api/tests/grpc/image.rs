@@ -48,6 +48,7 @@ async fn add_a_new_image() {
             archive_pointer(vec!["prop4"], Some("prop4-store-key")),
             archive_pointer(vec!["prop2", "prop4"], None),
         ],
+        dns_scheme: Some("https".to_string()),
     };
 
     // an org admin can't add new images

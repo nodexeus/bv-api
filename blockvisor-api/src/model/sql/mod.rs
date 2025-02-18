@@ -4,7 +4,7 @@ pub use amount::{Amount, Currency, Period};
 use std::fmt;
 use std::str::FromStr;
 
-use derive_more::{Deref, Display, From, Into, IntoIterator};
+use derive_more::{AsRef, Deref, Display, From, Into, IntoIterator};
 use diesel::deserialize::{FromSql, FromSqlRow};
 use diesel::expression::AsExpression;
 use diesel::pg::{Pg, PgValue};
@@ -256,6 +256,7 @@ impl ToSql<Array<Nullable<Text>>, Pg> for Permissions {
     Serialize,
     Deserialize,
     AsExpression,
+    AsRef,
     FromSqlRow,
     From,
     IntoIterator,

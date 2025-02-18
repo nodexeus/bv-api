@@ -10,7 +10,7 @@ use crate::database::WriteConn;
 use crate::grpc::{common, Status};
 use crate::model::image::NodeConfig;
 use crate::model::region::RegionId;
-use crate::model::{Host, Org, ProtocolVersion, Region};
+use crate::model::{Host, Image, Org, ProtocolVersion, Region};
 
 use super::{NewNode, Node, NodeScheduler, ResourceAffinity, SimilarNodeAffinity};
 
@@ -52,8 +52,10 @@ impl Launch {
         self,
         node: &NewNode,
         org: &Org,
+        image: &Image,
         version: &ProtocolVersion,
         node_config: &NodeConfig,
+        dns_base: &str,
         secrets: Option<&HashMap<String, Vec<u8>>>,
         authz: &AuthZ,
         write: &mut WriteConn<'_, '_>,
@@ -70,8 +72,10 @@ impl Launch {
                             .create_node(
                                 &host,
                                 org,
+                                image,
                                 version,
                                 node_config,
+                                dns_base,
                                 secrets,
                                 created_by,
                                 authz,
@@ -109,8 +113,10 @@ impl Launch {
                             .create_node(
                                 &candidate.host,
                                 org,
+                                image,
                                 version,
                                 node_config,
+                                dns_base,
                                 secrets,
                                 created_by,
                                 authz,

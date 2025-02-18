@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::{fmt, str};
 
@@ -29,7 +30,7 @@ pub enum Error {
     /// Failed to create protocol version: {0}
     Create(diesel::result::Error),
     /// No versions found for version key {0}.
-    NoVersions(VersionKey),
+    NoVersions(VersionKey<'static>),
     /// Protocol version model error: {0}
     Protocol(#[from] super::Error),
     /// Failed to find protocol versions for protocol id `{0:?}`: {1}
@@ -41,7 +42,7 @@ pub enum Error {
     /// Failed to find protocol version ids `{0:?}`: {1}
     ByIds(HashSet<VersionId>, diesel::result::Error),
     /// Failed to find protocol versions for key `{0}`: {1}
-    ByKey(VersionKey, diesel::result::Error),
+    ByKey(VersionKey<'static>, diesel::result::Error),
     /// Failed to parse VersionKey `{0}` into 2 parts delimited by `/`.
     KeyParts(String),
     /// Metadata key must be at least 3 characters: {0}
@@ -143,8 +144,8 @@ impl ProtocolVersion {
             .map_err(|err| Error::ByIds(ids.clone(), err))
     }
 
-    pub async fn by_key(
-        version_key: &VersionKey,
+    pub async fn by_key<'k>(
+        version_key: &'k VersionKey<'k>,
         org_id: Option<OrgId>,
         authz: &AuthZ,
         conn: &mut Conn<'_>,
@@ -160,14 +161,14 @@ impl ProtocolVersion {
             .filter(protocol_versions::visibility.eq_any(<&[Visibility]>::from(authz)))
             .get_results(conn)
             .await
-            .map_err(|err| Error::ByKey(version_key.clone(), err))?;
+            .map_err(|err| Error::ByKey(version_key.clone().into_owned(), err))?;
 
         versions.sort_by_cached_key(|version| version.semantic_version.clone());
         Ok(versions)
     }
 
-    pub async fn latest_by_key(
-        version_key: &VersionKey,
+    pub async fn latest_by_key<'k>(
+        version_key: &'k VersionKey<'k>,
         org_id: Option<OrgId>,
         authz: &AuthZ,
         conn: &mut Conn<'_>,
@@ -176,7 +177,7 @@ impl ProtocolVersion {
         if let Some(version) = versions.pop() {
             Ok(version)
         } else {
-            Err(Error::NoVersions(version_key.clone()))
+            Err(Error::NoVersions(version_key.clone().into_owned()))
         }
     }
 
@@ -264,8 +265,8 @@ impl From<ProtocolVersion> for api::ProtocolVersion {
 pub struct NewVersion<'v> {
     pub org_id: Option<OrgId>,
     pub protocol_id: ProtocolId,
-    pub protocol_key: ProtocolKey,
-    pub variant_key: VariantKey,
+    pub protocol_key: &'v ProtocolKey,
+    pub variant_key: &'v VariantKey,
     pub metadata: ProtocolVersionMetadata,
     pub semantic_version: &'v Version,
     pub sku_code: &'v str,
@@ -336,30 +337,46 @@ impl VariantKey {
 
 // A key identifier to some protocol version.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VersionKey {
-    pub protocol_key: ProtocolKey,
-    pub variant_key: VariantKey,
+pub struct VersionKey<'k> {
+    pub protocol_key: Cow<'k, ProtocolKey>,
+    pub variant_key: Cow<'k, VariantKey>,
 }
 
-impl VersionKey {
-    pub const fn new(protocol_key: ProtocolKey, variant_key: VariantKey) -> Self {
+impl VersionKey<'_> {
+    pub const fn new(protocol_key: ProtocolKey, variant_key: VariantKey) -> VersionKey<'static> {
         VersionKey {
-            protocol_key,
-            variant_key,
+            protocol_key: Cow::Owned(protocol_key),
+            variant_key: Cow::Owned(variant_key),
+        }
+    }
+
+    pub fn into_owned(self) -> VersionKey<'static> {
+        VersionKey {
+            protocol_key: Cow::Owned(self.protocol_key.into_owned()),
+            variant_key: Cow::Owned(self.variant_key.into_owned()),
         }
     }
 }
 
-impl From<VersionKey> for common::ProtocolVersionKey {
-    fn from(key: VersionKey) -> Self {
+impl<'k> From<&'k ProtocolVersion> for VersionKey<'k> {
+    fn from(version: &'k ProtocolVersion) -> Self {
+        VersionKey {
+            protocol_key: Cow::Borrowed(&version.protocol_key),
+            variant_key: Cow::Borrowed(&version.variant_key),
+        }
+    }
+}
+
+impl From<VersionKey<'_>> for common::ProtocolVersionKey {
+    fn from(key: VersionKey<'_>) -> Self {
         common::ProtocolVersionKey {
-            protocol_key: key.protocol_key.into(),
-            variant_key: key.variant_key.into(),
+            protocol_key: key.protocol_key.into_owned().into(),
+            variant_key: key.variant_key.into_owned().into(),
         }
     }
 }
 
-impl TryFrom<common::ProtocolVersionKey> for VersionKey {
+impl TryFrom<common::ProtocolVersionKey> for VersionKey<'static> {
     type Error = Error;
 
     fn try_from(key: common::ProtocolVersionKey) -> Result<Self, Self::Error> {
@@ -369,13 +386,13 @@ impl TryFrom<common::ProtocolVersionKey> for VersionKey {
     }
 }
 
-impl fmt::Display for VersionKey {
+impl fmt::Display for VersionKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.protocol_key, self.variant_key)
     }
 }
 
-impl str::FromStr for VersionKey {
+impl str::FromStr for VersionKey<'_> {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
