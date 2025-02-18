@@ -383,6 +383,7 @@ pub async fn create(
         Default::default()
     };
 
+    let dns_base = &write.ctx.config.cloudflare.dns.base;
     let new_node = NewNode {
         org_id,
         image_id,
@@ -395,7 +396,9 @@ pub async fn create(
         tags,
     };
 
-    let created = new_node.create(launch, &authz, &mut write).await?;
+    let created = new_node
+        .create(launch, dns_base, &authz, &mut write)
+        .await?;
 
     let mut nodes = Vec::with_capacity(created.len());
     for node in created {
@@ -953,6 +956,12 @@ impl api::Node {
             created_at: Some(NanosUtc::from(node.created_at).into()),
             updated_at: node.updated_at.map(NanosUtc::from).map(Into::into),
             cost,
+            version_metadata: version
+                .metadata
+                .as_ref()
+                .iter()
+                .map(|meta| meta.clone().into())
+                .collect(),
         })
     }
 }

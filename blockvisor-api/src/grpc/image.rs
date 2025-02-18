@@ -219,6 +219,7 @@ async fn add_image(
         ramdisks: Ramdisks(req.ramdisks.into_iter().map(Into::into).collect()),
         default_firewall_in: firewall.default_in().try_into()?,
         default_firewall_out: firewall.default_out().try_into()?,
+        dns_scheme: req.dns_scheme,
     };
     let image = new_image.create(&mut write).await?;
 
@@ -308,7 +309,7 @@ async fn add_image(
         return Err(Error::MissingKeyCombos(new_archive_powerset));
     };
 
-    Node::notify_auto_upgrades(&image, version, org_id, &authz, &mut write).await?;
+    Node::notify_auto_upgrades(&image, &version, org_id, &authz, &mut write).await?;
 
     Ok(api::ImageServiceAddImageResponse {
         image: Some(api::Image::from(image, properties, rules)?),
@@ -463,6 +464,7 @@ impl api::Image {
             visibility: common::Visibility::from(image.visibility).into(),
             created_at: Some(NanosUtc::from(image.created_at).into()),
             updated_at: image.updated_at.map(NanosUtc::from).map(Into::into),
+            dns_scheme: image.dns_scheme,
         })
     }
 }

@@ -404,6 +404,7 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Nullable<Timestamptz>,
         min_babel_version -> Text,
+        dns_scheme -> Nullable<Text>,
     }
 }
 

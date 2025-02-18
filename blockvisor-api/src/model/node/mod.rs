@@ -520,7 +520,7 @@ impl Node {
 
     pub async fn notify_auto_upgrades(
         image: &Image,
-        version: ProtocolVersion,
+        version: &ProtocolVersion,
         org_id: Option<OrgId>,
         authz: &AuthZ,
         write: &mut WriteConn<'_, '_>,
@@ -529,9 +529,7 @@ impl Node {
             lower < than && lower.major == than.major
         };
 
-        let version_key =
-            VersionKey::new(version.protocol_key.clone(), version.variant_key.clone());
-        let old_versions = ProtocolVersion::by_key(&version_key, org_id, authz, write)
+        let old_versions = ProtocolVersion::by_key(&version.into(), org_id, authz, write)
             .await?
             .into_iter()
             .filter(|pv| is_lower_but_compatible(&pv.semantic_version, &version.semantic_version))
@@ -543,7 +541,7 @@ impl Node {
             .filter(|node| node.auto_upgrade);
 
         for node in old_nodes {
-            node.notify_upgrade(image, &version, org_id, authz, write)
+            node.notify_upgrade(image, version, org_id, authz, write)
                 .await?;
         }
 
@@ -603,6 +601,7 @@ impl NewNode {
     pub async fn create(
         &self,
         launch: Launch,
+        dns_base: &str,
         authz: &AuthZ,
         write: &mut WriteConn<'_, '_>,
     ) -> Result<Vec<Node>, Error> {
@@ -610,6 +609,7 @@ impl NewNode {
         let node_config = config.node_config()?;
 
         let org = Org::by_id(self.org_id, write).await?;
+        let image = Image::by_id(self.image_id, Some(self.org_id), authz, write).await?;
         let version =
             ProtocolVersion::by_id(self.protocol_version_id, Some(self.org_id), authz, write)
                 .await?;
@@ -641,7 +641,17 @@ impl NewNode {
              */
 
         launch
-            .create(self, &org, &version, &node_config, None, authz, write)
+            .create(
+                self,
+                &org,
+                &image,
+                &version,
+                &node_config,
+                dns_base,
+                None,
+                authz,
+                write,
+            )
             .await
             .map_err(|err| Error::Launch(Box::new(err)))
     }
@@ -651,8 +661,10 @@ impl NewNode {
         &self,
         host: &Host,
         org: &Org,
+        image: &Image,
         version: &ProtocolVersion,
         node_config: &NodeConfig,
+        dns_base: &str,
         _secrets: Option<&HashMap<String, Vec<u8>>>,
         created_by: Resource,
         authz: &AuthZ,
@@ -705,6 +717,11 @@ impl NewNode {
                 .generate_one(3, "-")
                 .ok_or(Error::GenerateName)?;
             let dns_id = write.ctx.dns.create(&name, ip_address.ip.ip()).await?.id;
+            let dns_name = if let Some(scheme) = &image.dns_scheme {
+                format!("{scheme}://{name}.{dns_base}")
+            } else {
+                format!("{name}.{dns_base}")
+            };
 
             match diesel::insert_into(nodes::table)
                 .values((
@@ -716,7 +733,7 @@ impl NewNode {
                     nodes::ip_address.eq(&ip_address.ip),
                     nodes::ip_gateway.eq(&host.ip_gateway),
                     nodes::dns_id.eq(&dns_id),
-                    nodes::dns_name.eq(&name),
+                    nodes::dns_name.eq(&dns_name),
                     nodes::cpu_cores.eq(cpu_cores),
                     nodes::memory_bytes.eq(memory_bytes),
                     nodes::disk_bytes.eq(disk_bytes),
@@ -1064,7 +1081,7 @@ impl NodeSort {
 #[derive(Debug)]
 pub struct NodeFilter {
     pub protocol_ids: Vec<ProtocolId>,
-    pub version_keys: Vec<VersionKey>,
+    pub version_keys: Vec<VersionKey<'static>>,
     pub semantic_versions: Vec<String>,
     pub org_ids: Vec<OrgId>,
     pub host_ids: Vec<HostId>,
@@ -1221,6 +1238,8 @@ impl NodeSearch {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use tokio::sync::mpsc;
 
     use crate::auth::rbac::access::tests::view_authz;
@@ -1253,14 +1272,18 @@ mod tests {
         };
 
         let launch = Launch::ByHost(vec![HostCount::one(db.seed.host1.id)]);
+        let dns_base = &ctx.config.cloudflare.dns.base;
         let authz = view_authz(db.seed.node.id);
-        new_node.create(launch, &authz, &mut write).await.unwrap();
+        new_node
+            .create(launch, dns_base, &authz, &mut write)
+            .await
+            .unwrap();
 
         let filter = NodeFilter {
             protocol_ids: vec![],
             version_keys: vec![VersionKey {
-                protocol_key: db.seed.version.protocol_key.clone(),
-                variant_key: db.seed.version.variant_key.clone(),
+                protocol_key: Cow::Owned(db.seed.version.protocol_key.clone()),
+                variant_key: Cow::Owned(db.seed.version.variant_key.clone()),
             }],
             semantic_versions: vec![],
             org_ids: vec![db.seed.org.id],

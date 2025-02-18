@@ -100,6 +100,7 @@ pub struct Image {
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
     pub min_babel_version: Version,
+    pub dns_scheme: Option<String>,
 }
 
 impl Image {
@@ -199,6 +200,7 @@ pub struct NewImage {
     pub ramdisks: Ramdisks,
     pub default_firewall_in: FirewallAction,
     pub default_firewall_out: FirewallAction,
+    pub dns_scheme: Option<String>,
 }
 
 impl NewImage {
