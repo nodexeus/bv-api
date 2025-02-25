@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::State;
 use axum::http::header::HeaderMap;
 use axum::routing::{self, Router};
-use axum::Json;
 use diesel_async::scoped_futures::ScopedFutureExt;
 
 use crate::config::Context;
 use crate::database::Transaction;
 use crate::grpc::metrics::AfterCommit;
-use crate::grpc::{self, api, Status};
+use crate::grpc::{self, Status, api};
 
 use super::Error;
 

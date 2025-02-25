@@ -67,10 +67,10 @@ where
 
 #[cfg(any(test, feature = "integration-test"))]
 pub mod tests {
+    use crate::auth::AuthZ;
     use crate::auth::claims::{Claims, Granted};
     use crate::auth::rbac::{ProtocolAdminPerm, ProtocolPerm};
     use crate::auth::resource::Resource;
-    use crate::auth::AuthZ;
 
     #[cfg(test)]
     use crate::auth::rbac::{BlockjoyRole, GrpcRole, HostPerm, HostProvisionPerm, OrgRole};

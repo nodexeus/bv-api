@@ -2,27 +2,24 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use displaydoc::Display;
+use opentelemetry::global;
 use opentelemetry::trace::TraceError;
-use opentelemetry::{global, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{LogExporter, MetricExporter, SpanExporter, WithExportConfig};
-use opentelemetry_sdk::logs::{LogError, LoggerProvider};
-use opentelemetry_sdk::metrics::{MetricError, PeriodicReader, SdkMeterProvider};
-use opentelemetry_sdk::runtime::{Tokio, TokioCurrentThread};
-use opentelemetry_sdk::trace::TracerProvider;
 use opentelemetry_sdk::Resource;
-use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
+use opentelemetry_sdk::logs::{LogError, SdkLoggerProvider};
+use opentelemetry_sdk::metrics::{MetricError, PeriodicReader, SdkMeterProvider};
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use serde::Deserialize;
 use strum::{EnumString, IntoStaticStr};
 use thiserror::Error;
-use tokio::runtime::{Handle, RuntimeFlavor};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 use url::Url;
 
-use super::provider::{self, Provider};
 use super::HumanTime;
+use super::provider::{self, Provider};
 
 const SERVICE_NAME_DEV: &str = "blockvisor-api-dev";
 const SERVICE_NAME_STAGING: &str = "blockvisor-api-staging";
@@ -51,15 +48,13 @@ pub enum Error {
     /// Metric error: {0}
     MetricError(#[from] MetricError),
     /// Failed to parse OpentelemetryConfig: {0}
-    Opentelemetry(#[from] OpentelemetryError),
+    OtelConfig(#[from] OpentelemetryError),
+    /// Opentelemetry SDK error: {0}
+    OtelSdk(#[from] opentelemetry_sdk::error::OTelSdkError),
     /// Failed to parse {LOG_ENVIRONMENT_ENTRY:?}: {0}
     ParseEnvironment(provider::Error),
     /// Failed to parse {LOG_FILTER_ENTRY:?}: {0}
     ParseFilter(provider::Error),
-    /// Failed to shutdown logger: {0}
-    ShutdownLogger(opentelemetry_sdk::logs::LogError),
-    /// Failed to shutdown meter: {0}
-    ShutdownMeter(opentelemetry_sdk::metrics::MetricError),
     /// Trace error: {0}
     TraceError(#[from] TraceError),
 }
@@ -74,75 +69,59 @@ pub enum Environment {
 }
 
 pub struct Log {
-    pub logger: LoggerProvider,
+    pub logger: SdkLoggerProvider,
     pub meter: SdkMeterProvider,
-    pub tracer: TracerProvider,
-    pub is_serial: bool,
+    pub tracer: SdkTracerProvider,
     pub filter: String,
     pub interval: Duration,
 }
 
 impl Log {
     pub fn new(config: &Config) -> Arc<Self> {
+        #[allow(clippy::significant_drop_tightening)] // clippy bug?
         let log = INIT_LOG.get_or_init(|| {
-            let resource = Resource::new(vec![KeyValue::new(SERVICE_NAME, config.service_name())]);
+            let resource = Resource::builder()
+                .with_service_name(config.service_name())
+                .build();
             let interval = *config.opentelemetry.export_interval;
-            let is_serial = matches!(
-                Handle::current().runtime_flavor(),
-                RuntimeFlavor::CurrentThread
-            );
 
             let exporter = LogExporter::builder()
                 .with_tonic()
                 .with_endpoint(config.opentelemetry.endpoint.clone())
                 .build()
                 .expect("log exporter");
-            let builder = LoggerProvider::builder().with_resource(resource.clone());
-            let logger = if is_serial {
-                builder
-                    .with_batch_exporter(exporter, TokioCurrentThread)
-                    .build()
-            } else {
-                builder.with_batch_exporter(exporter, Tokio).build()
-            };
+            let logger = SdkLoggerProvider::builder()
+                .with_resource(resource.clone())
+                .with_batch_exporter(exporter)
+                .build();
 
             let exporter = MetricExporter::builder()
                 .with_tonic()
                 .with_endpoint(config.opentelemetry.endpoint.clone())
                 .build()
                 .expect("metric exporter");
-            let builder = SdkMeterProvider::builder().with_resource(resource.clone());
-            let meter = if is_serial {
-                let reader = PeriodicReader::builder(exporter, TokioCurrentThread)
-                    .with_interval(interval)
-                    .build();
-                builder.with_reader(reader).build()
-            } else {
-                let reader = PeriodicReader::builder(exporter, Tokio)
-                    .with_interval(interval)
-                    .build();
-                builder.with_reader(reader).build()
-            };
+            let reader = PeriodicReader::builder(exporter)
+                .with_interval(interval)
+                .build();
+            let meter = SdkMeterProvider::builder()
+                .with_resource(resource.clone())
+                .with_reader(reader)
+                .build();
 
             let exporter = SpanExporter::builder()
                 .with_tonic()
                 .with_endpoint(config.opentelemetry.endpoint.clone())
                 .build()
                 .expect("span exporter");
-            let builder = TracerProvider::builder().with_resource(resource);
-            let tracer = if is_serial {
-                builder
-                    .with_batch_exporter(exporter, TokioCurrentThread)
-                    .build()
-            } else {
-                builder.with_batch_exporter(exporter, Tokio).build()
-            };
+            let tracer = SdkTracerProvider::builder()
+                .with_resource(resource)
+                .with_batch_exporter(exporter)
+                .build();
 
             Arc::new(Log {
                 logger,
                 meter,
                 tracer,
-                is_serial,
                 filter: config.filter.clone(),
                 interval,
             })
@@ -192,28 +171,15 @@ impl Log {
             .init();
     }
 
-    pub async fn shutdown(&self) -> Result<(), Error> {
-        if self.is_serial {
-            // TODO: force_flush deadlocks but there must be a better way
-            // https://github.com/open-telemetry/opentelemetry-rust/issues/2056
-            tokio::time::sleep(self.interval + Duration::from_secs(2)).await;
+    pub fn shutdown(&self) -> Result<(), Error> {
+        self.tracer.force_flush()?;
+        self.tracer.shutdown()?;
 
-            global::shutdown_tracer_provider();
-        } else {
-            self.meter.force_flush()?;
-            self.logger
-                .force_flush()
-                .into_iter()
-                .collect::<Result<(), LogError>>()?;
-            self.tracer
-                .force_flush()
-                .into_iter()
-                .collect::<Result<(), TraceError>>()?;
+        self.meter.force_flush()?;
+        self.meter.shutdown()?;
 
-            global::shutdown_tracer_provider();
-            self.meter.shutdown().map_err(Error::ShutdownMeter)?;
-            self.logger.shutdown().map_err(Error::ShutdownLogger)?;
-        }
+        self.logger.force_flush()?;
+        self.logger.shutdown()?;
 
         Ok(())
     }

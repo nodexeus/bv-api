@@ -2,14 +2,14 @@ use std::fmt;
 
 use derive_more::{Deref, FromStr};
 use displaydoc::Display;
-use rumqttc::v5::MqttOptions;
 use rumqttc::Transport;
+use rumqttc::v5::MqttOptions;
 use serde::Deserialize;
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::provider::{self, Provider};
 use super::Redacted;
+use super::provider::{self, Provider};
 
 const SERVER_ADDRESS_VAR: &str = "MQTT_SERVER_ADDRESS";
 const SERVER_ADDRESS_ENTRY: &str = "mqtt.server_address";

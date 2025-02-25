@@ -15,7 +15,7 @@ use crate::model::command::NewCommand;
 use crate::model::host::{ConnectionStatus, UpdateHost};
 use crate::model::{Command, CommandType};
 
-use super::{Client, Message, CLIENT_CAPACITY, CLIENT_QOS};
+use super::{CLIENT_CAPACITY, CLIENT_QOS, Client, Message};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

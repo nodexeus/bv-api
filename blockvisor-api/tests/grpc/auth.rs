@@ -1,14 +1,14 @@
 use blockvisor_api::auth::claims::Claims;
 use blockvisor_api::auth::rbac::AuthPerm;
-use blockvisor_api::auth::token::refresh::Refresh;
 use blockvisor_api::auth::token::RequestToken;
+use blockvisor_api::auth::token::refresh::Refresh;
 use blockvisor_api::database::seed::LOGIN_PASSWORD;
 use blockvisor_api::grpc::api;
 use blockvisor_api::model::user::User;
 use tonic::Code;
 
-use crate::setup::helper::traits::{AuthService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{AuthService, SocketRpc};
 
 #[tokio::test]
 async fn login_with_username_and_password() {

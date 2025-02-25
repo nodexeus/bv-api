@@ -4,8 +4,8 @@ use blockvisor_api::model::User;
 use tonic::Code;
 use uuid::Uuid;
 
-use crate::setup::helper::traits::{SocketRpc, UserService};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{SocketRpc, UserService};
 
 #[tokio::test]
 async fn create_a_new_user() {

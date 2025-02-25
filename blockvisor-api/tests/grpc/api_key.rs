@@ -4,9 +4,9 @@ use blockvisor_api::grpc::api;
 use blockvisor_api::model::org::Org;
 use tonic::Status;
 
+use crate::setup::TestServer;
 use crate::setup::helper::rpc;
 use crate::setup::helper::traits::{ApiKeyService, NodeService, OrgService, SocketRpc};
-use crate::setup::TestServer;
 
 #[tokio::test]
 async fn user_can_create_and_list_api_keys() {

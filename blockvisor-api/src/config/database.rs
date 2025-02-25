@@ -3,8 +3,8 @@ use serde::Deserialize;
 use thiserror::Error;
 use url::{self, Url};
 
-use super::provider::{self, Provider};
 use super::HumanTime;
+use super::provider::{self, Provider};
 
 const URL_VAR: &str = "DATABASE_URL";
 const URL_ENTRY: &str = "database.url";

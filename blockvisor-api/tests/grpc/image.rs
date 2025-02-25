@@ -10,8 +10,8 @@ use prost_wkt_types::Empty;
 use tonic::Code;
 use uuid::Uuid;
 
-use crate::setup::helper::traits::{ImageService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{ImageService, SocketRpc};
 
 #[tokio::test]
 async fn add_a_new_image() {

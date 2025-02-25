@@ -5,7 +5,7 @@ use std::time::Duration;
 use derive_more::Deref;
 use displaydoc::Display;
 use serde::Deserialize;
-use serde_with::{serde_as, DurationSeconds};
+use serde_with::{DurationSeconds, serde_as};
 use thiserror::Error;
 
 use super::provider::{self, Provider};

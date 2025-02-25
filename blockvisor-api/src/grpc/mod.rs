@@ -34,13 +34,13 @@ pub mod common {
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use axum::http::HeaderValue;
 use axum::Extension;
+use axum::http::HeaderValue;
 use derive_more::Deref;
 use tonic::codec::CompressionEncoding;
 use tonic::metadata::AsciiMetadataValue;
-use tonic::transport::server::Router;
 use tonic::transport::Server;
+use tonic::transport::server::Router;
 use tower_http::cors::{self, CorsLayer};
 use tower_http::trace::TraceLayer;
 

@@ -27,8 +27,8 @@ pub mod notifier;
 pub use notifier::Notifier;
 
 use displaydoc::Display;
-use rumqttc::v5::mqttbytes::QoS;
 use rumqttc::v5::AsyncClient;
+use rumqttc::v5::mqttbytes::QoS;
 use thiserror::Error;
 
 pub const CLIENT_CAPACITY: usize = 10;

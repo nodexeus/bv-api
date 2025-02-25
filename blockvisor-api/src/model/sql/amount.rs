@@ -8,9 +8,9 @@ use displaydoc::Display;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::auth::rbac::{HostAdminPerm, NodeAdminPerm};
 use crate::auth::AuthZ;
-use crate::grpc::{common, Status};
+use crate::auth::rbac::{HostAdminPerm, NodeAdminPerm};
+use crate::grpc::{Status, common};
 use crate::model::{Host, Node};
 
 #[derive(Debug, Display, Error)]

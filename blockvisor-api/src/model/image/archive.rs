@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::auth::resource::OrgId;
 use crate::database::Conn;
-use crate::grpc::{api, Status};
+use crate::grpc::{Status, api};
 use crate::model::schema::archives;
 use crate::store::StoreKey;
 

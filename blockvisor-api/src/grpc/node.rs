@@ -12,8 +12,8 @@ use crate::auth::resource::{NodeId, OrgId, Resource};
 use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::model::command::NewCommand;
-use crate::model::image::config::{Config, ConfigType, NewConfig, NodeConfig};
 use crate::model::image::ConfigId;
+use crate::model::image::config::{Config, ConfigType, NewConfig, NodeConfig};
 use crate::model::node::{
     HostCount, Launch, NewNode, NextState, Node, NodeFilter, NodeReport, NodeSearch, NodeSort,
     NodeState, NodeStatus, RegionCount, UpdateNode, UpdateNodeConfig, UpdateNodeState,
@@ -26,7 +26,7 @@ use crate::util::{HashVec, NanosUtc};
 use super::api::node_service_server::NodeService;
 use super::command::node_update;
 use super::common::node_launcher;
-use super::{api, common, Grpc, Metadata, Status};
+use super::{Grpc, Metadata, Status, api, common};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -782,8 +782,8 @@ impl api::Node {
         authz: &AuthZ,
         conn: &mut Conn<'_>,
     ) -> Result<Option<Self>, Error> {
-        use crate::model::protocol::version::Error as VersionError;
         use crate::model::protocol::Error as ProtocolError;
+        use crate::model::protocol::version::Error as VersionError;
 
         match Self::from_model(node, authz, conn).await {
             Ok(node) => Ok(Some(node)),

@@ -9,7 +9,7 @@ use thiserror::Error;
 use crate::auth::resource::{Resource, ResourceId, ResourceType, UserId};
 use crate::auth::token::api_key::{BearerSecret, KeyHash, KeyId, Salt, Secret};
 use crate::database::{Conn, WriteConn};
-use crate::grpc::{api, common, Status};
+use crate::grpc::{Status, api, common};
 use crate::model::sql::Permissions;
 use crate::util::NanosUtc;
 

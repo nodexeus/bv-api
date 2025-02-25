@@ -7,8 +7,8 @@ use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::error;
 
-use crate::auth::rbac::{ImageAdminPerm, ImagePerm, Perm};
 use crate::auth::Authorize;
+use crate::auth::rbac::{ImageAdminPerm, ImagePerm, Perm};
 use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::model::image::archive::{NewArchive, UpdateArchive};
 use crate::model::image::config::Ramdisks;
@@ -22,7 +22,7 @@ use crate::store::StoreKey;
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::image_service_server::ImageService;
-use super::{api, common, Grpc, Metadata, Status};
+use super::{Grpc, Metadata, Status, api, common};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

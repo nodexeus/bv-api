@@ -14,7 +14,7 @@
 
 use std::str::FromStr;
 
-use base64::engine::{general_purpose::STANDARD_NO_PAD, Engine as _};
+use base64::engine::{Engine as _, general_purpose::STANDARD_NO_PAD};
 use derive_more::{Deref, Into};
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display;

@@ -285,13 +285,13 @@ impl Provider {
                 Some(Value::String(s)) => {
                     return s
                         .parse()
-                        .map_err(|err| Error::ParseTomlString(entry, Box::new(err)))
+                        .map_err(|err| Error::ParseTomlString(entry, Box::new(err)));
                 }
                 Some(val) => {
                     return val
                         .to_string()
                         .parse()
-                        .map_err(|err| Error::ParseTomlValue(entry, Box::new(err)))
+                        .map_err(|err| Error::ParseTomlValue(entry, Box::new(err)));
                 }
                 None => return Err(Error::NoTomlEntry(entry)),
             }

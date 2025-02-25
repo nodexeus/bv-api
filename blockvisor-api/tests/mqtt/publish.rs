@@ -1,6 +1,6 @@
 use rumqttc::v5::mqttbytes::v5::LastWill;
 
-use super::{assert_received, default_options, TestMqtt};
+use super::{TestMqtt, assert_received, default_options};
 
 #[tokio::test]
 async fn mqtt_publish_and_subscribe() {

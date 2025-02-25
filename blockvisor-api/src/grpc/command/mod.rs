@@ -13,7 +13,7 @@ use crate::auth::resource::Resource;
 use crate::auth::{AuthZ, Authorize};
 use crate::database::{Conn, ReadConn, Transaction, WriteConn};
 use crate::grpc::api::command_service_server::CommandService;
-use crate::grpc::{api, common, Grpc, Metadata, Status};
+use crate::grpc::{Grpc, Metadata, Status, api, common};
 use crate::model::command::{
     Command, CommandFilter, CommandId, CommandType, ExitCode, UpdateCommand,
 };

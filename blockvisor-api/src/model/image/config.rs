@@ -19,12 +19,12 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::auth::resource::{OrgId, Resource, ResourceId, ResourceType};
 use crate::auth::AuthZ;
+use crate::auth::resource::{OrgId, Resource, ResourceId, ResourceType};
 use crate::database::Conn;
-use crate::grpc::{common, Status};
-use crate::model::image::property::{ImageProperty, ImagePropertyKey};
+use crate::grpc::{Status, common};
 use crate::model::image::Image;
+use crate::model::image::property::{ImageProperty, ImagePropertyKey};
 use crate::model::schema::{configs, sql_types};
 use crate::model::sql::Version;
 use crate::store::StoreKey;

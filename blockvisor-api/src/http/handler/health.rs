@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, Router};
+use axum::routing::{Router, get};
 
 use crate::config::Context;
 use crate::http::response;

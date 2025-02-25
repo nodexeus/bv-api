@@ -26,7 +26,7 @@ use crate::model::{
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::host_service_server::HostService;
-use super::{api, common, Grpc, Metadata, Status};
+use super::{Grpc, Metadata, Status, api, common};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

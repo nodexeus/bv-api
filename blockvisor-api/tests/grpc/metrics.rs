@@ -1,11 +1,11 @@
 use blockvisor_api::auth::rbac::{MetricsPerm, Perms};
 use blockvisor_api::grpc::{api, common};
-use blockvisor_api::model::node::{Node, NodeHealth, NodeState};
 use blockvisor_api::model::Host;
+use blockvisor_api::model::node::{Node, NodeHealth, NodeState};
 use uuid::Uuid;
 
-use crate::setup::helper::traits::{MetricsService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{MetricsService, SocketRpc};
 
 #[tokio::test]
 async fn responds_ok_for_write_node() {

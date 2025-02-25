@@ -14,14 +14,14 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::auth::resource::OrgId;
 use crate::auth::AuthZ;
+use crate::auth::resource::OrgId;
 use crate::database::Conn;
-use crate::grpc::{api, common, Status};
+use crate::grpc::{Status, api, common};
+use crate::model::Region;
 use crate::model::schema::protocol_versions;
 use crate::model::sql::{ProtocolVersionMetadata, Version};
-use crate::model::Region;
-use crate::util::{NanosUtc, LOWER_KEBAB_CASE};
+use crate::util::{LOWER_KEBAB_CASE, NanosUtc};
 
 use super::{ProtocolId, Visibility};
 

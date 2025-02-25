@@ -3,17 +3,17 @@ use blockvisor_api::database::seed::{
     ARCHIVE_ID_1, ARCHIVE_ID_2, DISK_BYTES, IMAGE_ID, MEMORY_BYTES, MORE_RESOURCES_KEY, ORG_ID,
 };
 use blockvisor_api::grpc::{api, common};
+use blockvisor_api::model::Node;
 use blockvisor_api::model::command::Command;
 use blockvisor_api::model::schema::commands;
 use blockvisor_api::model::sql::Tag;
-use blockvisor_api::model::Node;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use tonic::Code;
 use uuid::Uuid;
 
-use crate::setup::helper::traits::{NodeService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{NodeService, SocketRpc};
 
 #[tokio::test]
 async fn create_a_new_node() {

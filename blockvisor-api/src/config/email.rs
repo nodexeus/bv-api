@@ -4,8 +4,8 @@ use serde::Deserialize;
 use thiserror::Error;
 use url::Url;
 
-use super::provider::{self, Provider};
 use super::Redacted;
+use super::provider::{self, Provider};
 
 const TEMPLATE_DIR_VAR: &str = "EMAIL_TEMPLATE_DIR";
 const TEMPLATE_DIR_ENTRY: &str = "email.template_dir";

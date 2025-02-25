@@ -14,8 +14,8 @@ use crate::auth::claims::Claims;
 use crate::auth::rbac::EmailRole;
 use crate::auth::resource::Resource;
 use crate::auth::token::Cipher;
-use crate::config::token::ExpireChrono;
 use crate::config::Config;
+use crate::config::token::ExpireChrono;
 use crate::model::{Invitation, User};
 
 const FROM_EMAIL: &str = "no-reply@blockjoy.com";

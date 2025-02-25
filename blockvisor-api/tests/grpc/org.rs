@@ -6,8 +6,8 @@ use blockvisor_api::grpc::api;
 use blockvisor_api::model::invitation::NewInvitation;
 use blockvisor_api::model::org::Org;
 
-use crate::setup::helper::traits::{InvitationService, OrgService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{InvitationService, OrgService, SocketRpc};
 
 #[tokio::test]
 async fn can_create_new_org() {

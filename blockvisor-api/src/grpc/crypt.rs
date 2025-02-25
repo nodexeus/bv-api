@@ -4,12 +4,12 @@ use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::error;
 
+use crate::auth::Authorize;
 use crate::auth::rbac::CryptPerm;
 use crate::auth::resource::Resource;
-use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::grpc::api::crypt_service_server::CryptService;
-use crate::grpc::{api, Grpc, Metadata, Status};
+use crate::grpc::{Grpc, Metadata, Status, api};
 use crate::store::secret::SecretKey;
 
 #[derive(Debug, Display, Error)]

@@ -2,8 +2,8 @@ use displaydoc::Display;
 use serde::Deserialize;
 use thiserror::Error;
 
-use super::provider;
 use super::Redacted;
+use super::provider;
 
 const STRIPE_SECRET_VAR: &str = "STRIPE_SECRET";
 const STRIPE_SECRET_ENTRY: &str = "stripe.secret";

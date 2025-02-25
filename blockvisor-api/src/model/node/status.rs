@@ -3,7 +3,7 @@ use displaydoc::Display;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::grpc::{common, Status};
+use crate::grpc::{Status, common};
 use crate::model::schema::sql_types;
 
 #[derive(Debug, Display, Error)]

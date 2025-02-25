@@ -5,8 +5,8 @@ use blockvisor_api::auth::resource::OrgId;
 use blockvisor_api::grpc::api;
 use blockvisor_api::model::rbac::RbacUser;
 
-use crate::setup::helper::traits::{OrgService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{OrgService, SocketRpc};
 
 #[tokio::test]
 async fn org_owner_can_delete_org() {

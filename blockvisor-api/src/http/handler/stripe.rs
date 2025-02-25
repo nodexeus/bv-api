@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use axum::extract::State;
-use axum::routing::{post, Router};
+use axum::routing::{Router, post};
 use diesel_async::scoped_futures::ScopedFutureExt;
 use displaydoc::Display;
 use thiserror::Error;

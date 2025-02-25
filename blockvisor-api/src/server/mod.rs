@@ -2,8 +2,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::Request;
-use axum::http::header::CONTENT_TYPE;
 use axum::http::HeaderValue;
+use axum::http::header::CONTENT_TYPE;
 use displaydoc::Display;
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -40,11 +40,7 @@ pub async fn start_with_listener(
 
     let service = Steer::new(vec![grpc, http], |req: &Request, _services: &[_]| {
         #[allow(clippy::bool_to_int_with_if)]
-        if is_grpc_request(req) {
-            0
-        } else {
-            1
-        }
+        if is_grpc_request(req) { 0 } else { 1 }
     });
 
     axum::serve(listener, Shared::new(service))

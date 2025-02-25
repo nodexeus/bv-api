@@ -2,15 +2,15 @@ use displaydoc::Display;
 use thiserror::Error;
 use tracing::warn;
 
-use crate::auth::resource::NodeId;
 use crate::auth::AuthZ;
+use crate::auth::resource::NodeId;
 use crate::database::WriteConn;
-use crate::grpc::{api, Status};
+use crate::grpc::{Status, api};
+use crate::model::CommandId;
 use crate::model::command::{Command, CommandType, NewCommand};
 use crate::model::node::{
     LogEvent, NewNodeLog, Node, NodeJobs, NodeState, UpdateNodeMetrics, UpdateNodeState,
 };
-use crate::model::CommandId;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

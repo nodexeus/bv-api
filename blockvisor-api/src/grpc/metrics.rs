@@ -9,16 +9,16 @@ use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::error;
 
+use crate::auth::Authorize;
 use crate::auth::rbac::MetricsPerm;
 use crate::auth::resource::{HostId, NodeId, Resource};
-use crate::auth::Authorize;
 use crate::database::{Transaction, WriteConn};
 use crate::model::host::{Host, UpdateHostMetrics};
 use crate::model::node::{Node, NodeJobs, NodeStatus, UpdateNodeMetrics};
 use crate::util::HashVec;
 
 use super::api::metrics_service_server::MetricsService;
-use super::{api, common, Grpc, Metadata, Status};
+use super::{Grpc, Metadata, Status, api, common};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

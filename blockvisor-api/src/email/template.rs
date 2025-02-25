@@ -164,8 +164,8 @@ mod test {
     use chrono::DateTime;
     use uuid::Uuid;
 
-    use crate::auth::resource::ResourceType;
     use crate::auth::Auth;
+    use crate::auth::resource::ResourceType;
     use crate::config::Config;
     use crate::email::tests::MockEmail;
     use crate::email::{Email, Recipient};

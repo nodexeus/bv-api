@@ -15,8 +15,8 @@ use thiserror::Error;
 
 use crate::auth::resource::{HostId, OrgId, Resource, ResourceId, ResourceType};
 use crate::database::Conn;
-use crate::grpc::{common, Status};
-use crate::model::sql::{self, greatest, Amount, IpNetwork, Tags, Version};
+use crate::grpc::{Status, common};
+use crate::model::sql::{self, Amount, IpNetwork, Tags, Version, greatest};
 use crate::util::{SearchOperator, SortOrder};
 
 use super::ip_address::NewIpAddress;

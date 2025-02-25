@@ -4,11 +4,11 @@ use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::{error, warn};
 
-use crate::auth::rbac::BundlePerm;
 use crate::auth::Authorize;
+use crate::auth::rbac::BundlePerm;
 use crate::database::{ReadConn, Transaction};
 use crate::grpc::api::bundle_service_server::BundleService;
-use crate::grpc::{api, Grpc, Metadata, Status};
+use crate::grpc::{Grpc, Metadata, Status, api};
 use crate::model::sql::Version;
 use crate::store::BUNDLE_FILE;
 

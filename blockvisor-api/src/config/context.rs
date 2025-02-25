@@ -13,8 +13,8 @@ use crate::mqtt::Notifier;
 use crate::store::{Secret, Store};
 use crate::stripe::{Stripe, Subscription};
 
-use super::log::Log;
 use super::Config;
+use super::log::Log;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

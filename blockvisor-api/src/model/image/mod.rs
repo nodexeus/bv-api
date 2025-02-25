@@ -24,8 +24,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::auth::resource::OrgId;
 use crate::auth::AuthZ;
+use crate::auth::resource::OrgId;
 use crate::database::Conn;
 use crate::grpc::Status;
 use crate::model::protocol::{VersionId, Visibility};
