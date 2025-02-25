@@ -7,8 +7,8 @@ use diesel_async::RunQueryDsl;
 use diesel_derive_enum::DbEnum;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display;
-use rand::distributions::Alphanumeric;
 use rand::Rng;
+use rand::distributions::Alphanumeric;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -169,7 +169,7 @@ impl TokenValue {
             .take(len)
             .map(char::from)
             .collect();
-        Self(text)
+        TokenValue(text)
     }
 
     pub fn take(self) -> String {

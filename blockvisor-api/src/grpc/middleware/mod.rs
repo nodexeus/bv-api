@@ -4,10 +4,10 @@ use futures::future::BoxFuture;
 use hyper::body::Body;
 use hyper::{Request, Response};
 use opentelemetry::trace::{FutureExt, Status, TraceContextExt, Tracer};
-use opentelemetry::{global, KeyValue};
+use opentelemetry::{KeyValue, global};
 use opentelemetry_semantic_conventions::trace::{HTTP_RESPONSE_STATUS_CODE, RPC_GRPC_STATUS_CODE};
-use tonic::body::BoxBody;
 use tonic::Code;
+use tonic::body::BoxBody;
 use tower::{Layer, Service};
 
 #[derive(Clone, Copy, Debug, Default)]

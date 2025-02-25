@@ -1,8 +1,8 @@
 use std::any::type_name;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
-use chrono::offset::Utc;
 use chrono::DateTime;
+use chrono::offset::Utc;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use tracing::warn;

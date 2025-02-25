@@ -2,7 +2,7 @@
 name = "blockvisor-api"
 version = "0.4.0"
 publish = false
-edition = "2021"
+edition = "2024"
 
 [[bin]]
 name = "blockvisor-api"
@@ -14,7 +14,7 @@ argon2 = "0.5"
 aws-sdk-s3 = { version = "1.72", features = ["behavior-version-latest"] }
 axum = { version = "0.7", features = ["macros"] }
 axum-extra = "0.9"
-axum-tracing-opentelemetry = "0.24"
+axum-tracing-opentelemetry = "0.26"
 base64 = "0.22"
 blake3 = "1.4"
 chrono = { version = "0.4", features = ["serde"] }
@@ -41,12 +41,12 @@ jsonwebtoken = "9.0"
 maplit = "1.0"
 mockall = "0.13"
 mockito = { version = "1.4", default-features = false }
-opentelemetry = "0.27"
-opentelemetry-appender-tracing = "0.27"
-opentelemetry-http = "0.27"
-opentelemetry-otlp = { version = "0.27", features = ["logs", "metrics"] }
-opentelemetry-semantic-conventions = { version = "0.27", features = ["semconv_experimental"] }
-opentelemetry_sdk = { version = "0.27", features = ["logs", "metrics", "rt-tokio", "rt-tokio-current-thread"] }
+opentelemetry = "0.28"
+opentelemetry-appender-tracing = "0.28"
+opentelemetry-http = "0.28"
+opentelemetry-otlp = { version = "0.28", features = ["grpc-tonic", "logs", "metrics"] }
+opentelemetry-semantic-conventions = { version = "0.28", features = ["semconv_experimental"] }
+opentelemetry_sdk = { version = "0.28", features = ["logs", "metrics", "rt-tokio", "rt-tokio-current-thread"] }
 password-hash = "0.5"
 paste = "1.0"
 petname = { version = "2.0", default-features = false, features = ["default-rng", "default-words"] }
@@ -67,7 +67,7 @@ serde-enum-str = { version = "0.4" }
 serde_json = { version = "1.0", features = ["raw_value"] }
 serde_urlencoded = "0.7"
 serde_with = { version = "3.6", features = ["chrono_0_4"] }
-strum = { version = "0.26", features = ["derive"] }
+strum = { version = "0.27", features = ["derive"] }
 thiserror = "2.0"
 tokio = { version = "1.41", features = ["io-util", "macros", "rt-multi-thread", "sync"] }
 tokio-postgres = "0.7"
@@ -80,7 +80,7 @@ tower-http = { version = "0.6", features = ["auth", "compression-gzip", "cors", 
 tracing = "0.1"
 tracing-error = "0.2"
 tracing-log = "0.2"
-tracing-opentelemetry = "0.28"
+tracing-opentelemetry = "0.29"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.4", features = ["serde"] }
 uuid = { version = "1.13", features = ["serde", "v4"] }

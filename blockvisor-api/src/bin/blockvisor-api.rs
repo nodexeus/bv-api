@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use diesel::{Connection, PgConnection};
 use diesel_migrations::MigrationHarness;
 use tracing::info;
 
 use blockvisor_api::config::{Config, Context};
-use blockvisor_api::database::{self, Database, Pool, MIGRATIONS};
+use blockvisor_api::database::{self, Database, MIGRATIONS, Pool};
 use blockvisor_api::server;
 
 #[tokio::main]
@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
     info!("Starting server...");
     server::start(context.clone()).await?;
 
-    context.log.shutdown().await?;
+    context.log.shutdown()?;
 
     Ok(())
 }

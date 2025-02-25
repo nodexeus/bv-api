@@ -107,13 +107,13 @@ pub mod tests {
 
     use chrono::Utc;
     use mockito::{Matcher, ServerGuard};
-    use rand::rngs::OsRng;
     use rand::Rng;
+    use rand::rngs::OsRng;
 
     use crate::config::cloudflare::{ApiConfig, Config, DnsConfig};
 
-    use super::api::dns::Meta;
     use super::api::ApiSuccess;
+    use super::api::dns::Meta;
     use super::*;
 
     pub struct MockCloudflare {
