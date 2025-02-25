@@ -21,7 +21,7 @@ use crate::model::{Region, RegionId};
 use crate::util::{HashVec, NanosUtc};
 
 use super::api::protocol_service_server::ProtocolService;
-use super::{api, common, Grpc, Metadata, Status};
+use super::{Grpc, Metadata, Status, api, common};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

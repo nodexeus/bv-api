@@ -1,14 +1,14 @@
+use blockvisor_api::auth::AuthZ;
 use blockvisor_api::auth::claims::Granted;
 use blockvisor_api::auth::rbac::{CommandPerm, Perms, ProtocolPerm};
 use blockvisor_api::auth::resource::NodeId;
-use blockvisor_api::auth::AuthZ;
 use blockvisor_api::grpc::api;
+use blockvisor_api::model::Node;
 use blockvisor_api::model::command::{Command, CommandType, ExitCode, NewCommand};
 use blockvisor_api::model::node::UpdateNode;
-use blockvisor_api::model::Node;
 
-use crate::setup::helper::traits::{CommandService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{CommandService, SocketRpc};
 
 async fn create_command(test: &TestServer, node_id: NodeId, cmd_type: CommandType) -> Command {
     let mut conn = test.conn().await;

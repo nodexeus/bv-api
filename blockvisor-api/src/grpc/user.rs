@@ -6,13 +6,13 @@ use tracing::error;
 
 use crate::auth::rbac::{UserAdminPerm, UserPerm, UserSettingsAdminPerm, UserSettingsPerm};
 use crate::auth::resource::{Resource, UserId};
-use crate::auth::{self, token, Authorize};
+use crate::auth::{self, Authorize, token};
 use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::model::user::setting::{NewUserSetting, UserSetting};
 use crate::model::user::{NewUser, UpdateUser, User, UserFilter, UserSearch, UserSort};
 
 use super::api::user_service_server::UserService;
-use super::{api, Grpc, Metadata, Status};
+use super::{Grpc, Metadata, Status, api};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

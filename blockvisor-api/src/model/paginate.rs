@@ -4,11 +4,11 @@
 
 use std::future::Future;
 
+use diesel::QueryResult;
 use diesel::pg::Pg;
 use diesel::query_builder::{AstPass, Query, QueryFragment, QueryId};
 use diesel::result::Error::NotFound;
 use diesel::sql_types::BigInt;
-use diesel::QueryResult;
 use diesel_async::methods::LoadQuery;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use displaydoc::Display;

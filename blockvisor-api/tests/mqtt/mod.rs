@@ -8,8 +8,8 @@ use std::time::Duration;
 use futures::channel::mpsc::{self, UnboundedReceiver};
 use futures::{SinkExt, StreamExt};
 use rand::distributions::{Alphanumeric, DistString};
-use rumqttc::v5::mqttbytes::v5::{Packet, Publish};
 use rumqttc::v5::mqttbytes::QoS;
+use rumqttc::v5::mqttbytes::v5::{Packet, Publish};
 use rumqttc::v5::{AsyncClient, Event, EventLoop, MqttOptions};
 use tracing::debug;
 

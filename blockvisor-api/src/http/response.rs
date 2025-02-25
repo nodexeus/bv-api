@@ -1,9 +1,9 @@
 //! This module is used to construct `axum::Response` bodies to ensure
 //! consistency in our API responses.
 
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Serialize;
 
 const OK: StatusCode = StatusCode::OK;

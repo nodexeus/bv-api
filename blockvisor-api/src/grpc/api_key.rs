@@ -6,17 +6,17 @@ use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::error;
 
+use crate::auth::Authorize;
 use crate::auth::claims::Granted;
 use crate::auth::rbac::{ApiKeyPerm, Perm};
 use crate::auth::resource::Resource;
-use crate::auth::Authorize;
 use crate::database::{ReadConn, Transaction, WriteConn};
 use crate::model::api_key::{ApiKey, NewApiKey};
 use crate::model::sql::Permissions;
 use crate::util::NanosUtc;
 
 use super::api::api_key_service_server::ApiKeyService;
-use super::{api, Grpc, Metadata, Status};
+use super::{Grpc, Metadata, Status, api};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

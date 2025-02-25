@@ -3,8 +3,8 @@ use displaydoc::Display;
 use serde::Deserialize;
 use thiserror::Error;
 
-use super::provider::{self, Provider};
 use super::Redacted;
+use super::provider::{self, Provider};
 
 const DNS_BASE_VAR: &str = "CF_DNS_BASE";
 const DNS_BASE_ENTRY: &str = "cloudflare.dns.base";

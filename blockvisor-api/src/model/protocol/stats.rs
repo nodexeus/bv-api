@@ -7,10 +7,10 @@ use diesel_async::RunQueryDsl;
 use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
 
-use crate::auth::rbac::ProtocolAdminPerm;
 use crate::auth::AuthZ;
+use crate::auth::rbac::ProtocolAdminPerm;
 use crate::database::Conn;
-use crate::grpc::{api, Status};
+use crate::grpc::{Status, api};
 use crate::model::node::NodeState;
 use crate::model::schema::nodes;
 

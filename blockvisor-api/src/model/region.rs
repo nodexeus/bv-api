@@ -11,7 +11,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::database::Conn;
-use crate::grpc::{api, Status};
+use crate::grpc::{Status, api};
 use crate::util::LOWER_KEBAB_CASE;
 
 use super::schema::regions;

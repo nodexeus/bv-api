@@ -4,10 +4,10 @@ use displaydoc::Display;
 use thiserror::Error;
 use tracing::warn;
 
-use crate::auth::resource::{HostId, Resource};
 use crate::auth::AuthZ;
+use crate::auth::resource::{HostId, Resource};
 use crate::database::WriteConn;
-use crate::grpc::{common, Status};
+use crate::grpc::{Status, common};
 use crate::model::image::NodeConfig;
 use crate::model::region::RegionId;
 use crate::model::{Host, Image, Org, ProtocolVersion, Region};

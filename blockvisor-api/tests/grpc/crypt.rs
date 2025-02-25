@@ -4,8 +4,8 @@ use blockvisor_api::grpc::{api, common};
 use tonic::Code;
 use uuid::Uuid;
 
-use crate::setup::helper::traits::{CryptService, NodeService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{CryptService, NodeService, SocketRpc};
 use crate::test_name;
 
 const TEST_SECRET: &[u8] = b"super secret stuff";

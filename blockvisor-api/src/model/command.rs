@@ -14,11 +14,11 @@ use uuid::Uuid;
 
 use crate::auth::resource::{HostId, NodeId};
 use crate::database::Conn;
-use crate::grpc::api;
 use crate::grpc::Status;
+use crate::grpc::api;
 
-use super::schema::{commands, sql_types};
 use super::Node;
+use super::schema::{commands, sql_types};
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {

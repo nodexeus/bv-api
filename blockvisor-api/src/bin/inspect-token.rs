@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
 use std::io::BufReader;
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use argh::FromArgs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -12,8 +12,8 @@ use blockvisor_api::auth::claims::{Claims, Expirable};
 use blockvisor_api::auth::rbac::{Role, Roles};
 use blockvisor_api::auth::token::refresh::{Encoded, Refresh};
 use blockvisor_api::auth::token::{BearerToken, Cipher};
-use blockvisor_api::config::token::SecretConfig;
 use blockvisor_api::config::HumanTime;
+use blockvisor_api::config::token::SecretConfig;
 
 const DEFAULT_TOKEN_EXPIRY: &str = "10m";
 

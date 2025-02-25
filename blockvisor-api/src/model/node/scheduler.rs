@@ -1,8 +1,8 @@
 use diesel_derive_enum::DbEnum;
 
 use crate::grpc::common;
-use crate::model::schema::sql_types;
 use crate::model::Region;
+use crate::model::schema::sql_types;
 
 /// Controls how a node is placed onto an appropriate host.
 #[derive(Debug)]

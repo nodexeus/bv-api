@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::routing::{self, Router};
-use axum::Json;
 use diesel_async::scoped_futures::ScopedFutureExt;
 
 use crate::config::Context;

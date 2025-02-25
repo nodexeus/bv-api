@@ -4,16 +4,16 @@ use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::{error, warn};
 
+use crate::auth::Authorize;
 use crate::auth::claims::{Claims, Expirable, Granted};
 use crate::auth::rbac::{AuthAdminPerm, AuthPerm, GrpcRole, Perm};
-use crate::auth::token::refresh::Refresh;
 use crate::auth::token::RequestToken;
-use crate::auth::Authorize;
+use crate::auth::token::refresh::Refresh;
 use crate::database::{Transaction, WriteConn};
 use crate::model::User;
 
 use super::api::auth_service_server::AuthService;
-use super::{api, Grpc, Metadata, Status};
+use super::{Grpc, Metadata, Status, api};
 
 #[derive(Debug, Display, Error)]
 pub enum Error {

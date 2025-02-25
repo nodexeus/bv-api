@@ -6,8 +6,8 @@ use blockvisor_api::database::seed;
 use blockvisor_api::grpc::{api, common};
 use blockvisor_api::model::user::{NewUser, User};
 
-use crate::setup::helper::traits::SocketRpc;
 use crate::setup::TestServer;
+use crate::setup::helper::traits::SocketRpc;
 
 use super::traits::{ApiKeyService, AuthService};
 

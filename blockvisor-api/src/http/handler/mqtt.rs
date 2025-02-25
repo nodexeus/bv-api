@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{Json, State};
 use axum::response::Response;
-use axum::routing::{post, Router};
+use axum::routing::{Router, post};
 use axum_extra::extract::WithRejection;
 use displaydoc::Display;
 use serde_json::Value;

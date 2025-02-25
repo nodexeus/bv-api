@@ -17,7 +17,7 @@ use thiserror::Error;
 
 use crate::auth::claims::Granted;
 use crate::auth::rbac::Perm;
-use crate::grpc::{common, Status};
+use crate::grpc::{Status, common};
 use crate::model::protocol::VersionMetadata;
 use crate::util::LOWER_KEBAB_CASE;
 

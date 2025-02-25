@@ -11,7 +11,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::database::Conn;
-use crate::grpc::{api, common, Status};
+use crate::grpc::{Status, api, common};
 use crate::model::schema::{image_properties, sql_types};
 use crate::util::LOWER_KEBAB_CASE;
 

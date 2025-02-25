@@ -6,8 +6,8 @@ use blockvisor_api::grpc::api;
 use blockvisor_api::model::invitation::{Invitation, NewInvitation};
 use blockvisor_api::model::org::Org;
 
-use crate::setup::helper::traits::{InvitationService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{InvitationService, SocketRpc};
 
 async fn create_invitation(test: &TestServer) -> Invitation {
     let mut conn = test.conn().await;

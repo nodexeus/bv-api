@@ -7,8 +7,8 @@ use blockvisor_api::grpc::{api, common};
 use tonic::Code;
 use uuid::Uuid;
 
-use crate::setup::helper::traits::{ProtocolService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{ProtocolService, SocketRpc};
 
 #[tokio::test]
 async fn add_a_new_protocol() {

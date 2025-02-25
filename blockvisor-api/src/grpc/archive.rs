@@ -6,11 +6,11 @@ use thiserror::Error;
 use tonic::{Request, Response};
 use tracing::error;
 
-use crate::auth::rbac::{ArchiveAdminPerm, ArchivePerm, Perm};
 use crate::auth::Authorize;
+use crate::auth::rbac::{ArchiveAdminPerm, ArchivePerm, Perm};
 use crate::database::{ReadConn, Transaction};
 use crate::grpc::api::archive_service_server::ArchiveService;
-use crate::grpc::{api, Grpc, Metadata, Status};
+use crate::grpc::{Grpc, Metadata, Status, api};
 use crate::model::image::Archive;
 use crate::store::manifest::DownloadManifest;
 

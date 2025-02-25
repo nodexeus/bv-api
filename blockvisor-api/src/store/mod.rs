@@ -19,7 +19,7 @@ use thiserror::Error;
 use url::Url;
 
 use crate::config::store::{BucketConfig, Config};
-use crate::grpc::{api, Status};
+use crate::grpc::{Status, api};
 use crate::util::LOWER_KEBAB_CASE;
 
 use self::manifest::{ArchiveChunk, DownloadManifest, ManifestBody, ManifestHeader, UploadSlot};

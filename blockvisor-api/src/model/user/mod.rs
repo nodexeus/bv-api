@@ -21,13 +21,13 @@ use validator::Validate;
 use crate::auth::rbac::{OrgRole, Role};
 use crate::auth::resource::{OrgId, UserId};
 use crate::database::Conn;
-use crate::grpc::{api, Status};
+use crate::grpc::{Status, api};
 use crate::model::sql;
 use crate::util::{NanosUtc, SearchOperator, SortOrder};
 
+use super::Paginate;
 use super::org::NewOrg;
 use super::schema::{user_roles, users};
-use super::Paginate;
 
 pub mod setting;
 

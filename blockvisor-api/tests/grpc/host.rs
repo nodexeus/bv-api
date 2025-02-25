@@ -2,8 +2,8 @@ use blockvisor_api::auth::resource::HostId;
 use blockvisor_api::grpc::{api, common};
 use tonic::Code;
 
-use crate::setup::helper::traits::{HostService, NodeService, OrgService, SocketRpc};
 use crate::setup::TestServer;
+use crate::setup::helper::traits::{HostService, NodeService, OrgService, SocketRpc};
 
 #[tokio::test]
 async fn create_a_new_host() {

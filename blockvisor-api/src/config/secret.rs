@@ -2,8 +2,8 @@ use displaydoc::Display;
 use serde::Deserialize;
 use thiserror::Error;
 
-use super::provider::{self, Provider};
 use super::Redacted;
+use super::provider::{self, Provider};
 
 const CLOUDFLARE_CERT_KEY_VAR: &str = "CLOUDFLARE_CERT_KEY";
 const CLOUDFLARE_CERT_KEY_ENTRY: &str = "secret.cloudflare_cert_key";

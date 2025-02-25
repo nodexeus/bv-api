@@ -12,11 +12,11 @@ use diesel_async::scoped_futures::{ScopedBoxFuture, ScopedFutureExt};
 use diesel_async::{AsyncConnection, AsyncPgConnection};
 use diesel_migrations::EmbeddedMigrations;
 use displaydoc::Display;
-use futures_util::future::BoxFuture;
 use futures_util::FutureExt;
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use futures_util::future::BoxFuture;
 use rustls::client::WebPkiServerVerifier;
-use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{CertificateError, ClientConfig, DigitallySignedStruct, RootCertStore};
 use thiserror::Error;
@@ -28,8 +28,8 @@ use tracing::warn;
 use crate::auth::rbac::Perms;
 use crate::auth::resource::Resources;
 use crate::auth::{self, AuthZ, Authorize};
-use crate::config::database::Config;
 use crate::config::Context;
+use crate::config::database::Config;
 use crate::grpc::{self, Metadata, ResponseMessage, Status};
 use crate::model::rbac::{RbacPerm, RbacRole};
 use crate::mqtt::Message;
@@ -419,8 +419,8 @@ pub async fn create_roles_and_perms(conn: &mut Conn<'_>) -> Result<(), Error> {
 pub mod tests {
     use diesel::migration::MigrationSource;
     use diesel::prelude::*;
-    use diesel_async::pooled_connection::bb8;
     use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+    use diesel_async::pooled_connection::bb8;
     use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
     use rand::{Rng, RngCore};
 
