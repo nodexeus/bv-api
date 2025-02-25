@@ -6,7 +6,6 @@ pub mod manifest;
 pub mod secret;
 pub use secret::Secret;
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use aws_sdk_s3::config::{
@@ -31,6 +30,8 @@ pub const MANIFEST_HEADER: &str = "manifest-header.json";
 
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
+    /// Data Version {1} already reserved for `StoreKey` {0}
+    AlreadyReserved(StoreKey, u64),
     /// Store client error: {0}
     Client(#[from] client::Error),
     /// Storage manifest error: {0}
@@ -51,6 +52,8 @@ pub enum Error {
     ReadManifestBody(StoreKey, client::Error),
     /// Failed to read `ManifestHeader` for `StoreKey` {0}: {1}
     ReadManifestHeader(StoreKey, client::Error),
+    /// Failed to reserve the next data version for `StoreKey` {0}: {1}
+    ReserveNextVersion(StoreKey, client::Error),
     /// Failed to serialize ManifestBody: {0}
     SerializeBody(serde_json::Error),
     /// Failed to serialize ManifestHeader: {0}
@@ -65,6 +68,9 @@ impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
         match err {
+            AlreadyReserved(_, data_version) => {
+                Status::already_exists(format!("Data version: {data_version}"))
+            }
             Client(client::Error::MissingKey(_, _)) | NoDataVersion => {
                 Status::not_found("Store not found.")
             }
@@ -74,6 +80,7 @@ impl From<Error> for Status {
             | ParseManifestBody(_, _)
             | ReadManifestHeader(_, _)
             | ReadManifestBody(_, _)
+            | ReserveNextVersion(_, _)
             | SerializeBody(_)
             | SerializeHeader(_) => Status::internal("Internal error."),
             MissingManifestBody(_) | MissingManifestHeader(_) => {
@@ -101,26 +108,14 @@ impl StoreKey {
 }
 
 pub struct Store {
-    pub client: Arc<dyn Client>,
+    pub client: Client,
     pub bucket: BucketConfig,
     pub prefix: String,
     pub expiration: Duration,
 }
 
 impl Store {
-    pub fn new<C>(client: C, config: &Config) -> Self
-    where
-        C: Client + 'static,
-    {
-        Store {
-            client: Arc::new(client),
-            bucket: config.bucket.clone(),
-            prefix: config.dir_chains_prefix.clone(),
-            expiration: *config.presigned_url_expiration,
-        }
-    }
-
-    pub fn new_s3(config: &Config) -> Self {
+    pub fn new(config: &Config) -> Self {
         let credentials = Credentials::new(&*config.key_id, &*config.key, None, None, CREDENTIALS);
         let s3_config = aws_sdk_s3::Config::builder()
             .endpoint_url(config.store_url.to_string())
@@ -128,29 +123,30 @@ impl Store {
             .credentials_provider(credentials)
             .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
             .response_checksum_validation(ResponseChecksumValidation::WhenRequired);
+        let client = Client::new(aws_sdk_s3::Client::from_conf(s3_config.build()));
 
-        let client = aws_sdk_s3::Client::from_conf(s3_config.build());
-        Self::new(client, config)
+        Store {
+            client,
+            bucket: config.bucket.clone(),
+            prefix: config.dir_chains_prefix.clone(),
+            expiration: *config.presigned_url_expiration,
+        }
     }
 
-    /// Return a descending order list of data versions for a `StoreKey`.
-    async fn data_versions(&self, store_key: &StoreKey) -> Result<Vec<u64>, Error> {
-        let path = format!("{store_key}/");
-        let mut versions: Vec<_> = self
-            .client
-            .list(&self.bucket.archive, &path)
-            .await?
+    pub async fn list_bundles(&self) -> Result<Vec<api::BundleIdentifier>, Error> {
+        let keys = self.client.list_recursive(&self.bucket.bundle, "").await?;
+        Ok(keys
             .iter()
-            .filter_map(|path| {
-                path.trim_end_matches('/')
-                    .rsplit('/')
-                    .next()
-                    .and_then(|version| version.parse::<u64>().ok())
-            })
-            .collect();
+            .filter_map(api::BundleIdentifier::maybe_from_key)
+            .collect())
+    }
 
-        versions.sort_by(|a, b| b.cmp(a));
-        Ok(versions)
+    pub async fn download_bundle(&self, version: &str) -> Result<Url, Error> {
+        let key = format!("{version}/{BUNDLE_FILE}");
+        self.client
+            .download_url(&self.bucket.bundle, &key, self.expiration)
+            .await
+            .map_err(Into::into)
     }
 
     /// Fetch and parse a download manifest header.
@@ -274,8 +270,7 @@ impl Store {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let mut versions = self.data_versions(store_key).await?;
-            versions.pop().unwrap_or_default() + 1
+            self.reserve_next_version(store_key).await?
         };
 
         let mut slots = Vec::with_capacity(slot_indexes.len());
@@ -291,91 +286,42 @@ impl Store {
         Ok((slots, data_version))
     }
 
-    pub async fn list_bundles(&self) -> Result<Vec<api::BundleIdentifier>, Error> {
-        let keys = self.client.list_recursive(&self.bucket.bundle, "").await?;
-        Ok(keys
+    /// Return a descending order list of data versions for a `StoreKey`.
+    async fn data_versions(&self, store_key: &StoreKey) -> Result<Vec<u64>, Error> {
+        let path = format!("{store_key}/");
+        let mut versions: Vec<_> = self
+            .client
+            .list(&self.bucket.archive, &path)
+            .await?
             .iter()
-            .filter_map(api::BundleIdentifier::maybe_from_key)
-            .collect())
+            .filter(|path| path.ends_with(MANIFEST_HEADER))
+            .filter_map(|path| {
+                path.rsplit('/')
+                    .next()
+                    .and_then(|version| version.parse::<u64>().ok())
+            })
+            .collect();
+
+        versions.sort_by(|a, b| b.cmp(a));
+        Ok(versions)
     }
 
-    pub async fn download_bundle(&self, version: &str) -> Result<Url, Error> {
-        let key = format!("{version}/{BUNDLE_FILE}");
+    /// Reserve the next data version.
+    async fn reserve_next_version(&self, store_key: &StoreKey) -> Result<u64, Error> {
+        let mut versions = self.data_versions(store_key).await?;
+        let next_version = versions.pop().unwrap_or_default() + 1;
+
+        let lock_key = format!("{store_key}/{next_version}/.lock");
+        match self.client.read_key(&self.bucket.archive, &lock_key).await {
+            Ok(_) => Err(Error::AlreadyReserved(store_key.clone(), next_version)),
+            Err(client::Error::MissingKey(_, _)) => Ok(()),
+            Err(err) => Err(Error::ReserveNextVersion(store_key.clone(), err)),
+        }?;
+
         self.client
-            .download_url(&self.bucket.bundle, &key, self.expiration)
+            .write_key_if_none(&self.bucket.archive, &lock_key, None)
             .await
-            .map_err(Into::into)
-    }
-}
-
-#[cfg(any(test, feature = "integration-test"))]
-pub mod tests {
-    use mockito::{Matcher, Server, ServerGuard};
-
-    use super::client::Error;
-    use super::*;
-
-    pub struct TestStore {
-        mock: ServerGuard,
-    }
-
-    impl TestStore {
-        pub async fn new() -> Self {
-            let mut mock = Server::new_async().await;
-            mock.mock("POST", Matcher::Regex(r"^/*".to_string()))
-                .with_status(200)
-                .with_body("{\"data\":\"id\"}")
-                .create_async()
-                .await;
-
-            TestStore { mock }
-        }
-
-        pub fn mock_store(&self) -> Store {
-            let client = MockClient {};
-            let config = Config {
-                bucket: BucketConfig {
-                    bundle: "bundle".to_string(),
-                    archive: "archive".to_string(),
-                },
-                store_url: self.mock.url().parse().unwrap(),
-                key_id: "key_id".parse().unwrap(),
-                key: "key".parse().unwrap(),
-                region: "eu-west-3".to_string(),
-                dir_chains_prefix: "prefix".to_string(),
-                presigned_url_expiration: "1d".parse().unwrap(),
-            };
-
-            Store::new(client, &config)
-        }
-    }
-
-    struct MockClient {}
-
-    #[tonic::async_trait]
-    impl Client for MockClient {
-        async fn list(&self, _: &str, _: &str) -> Result<Vec<String>, Error> {
-            unimplemented!()
-        }
-
-        async fn list_recursive(&self, _: &str, _: &str) -> Result<Vec<String>, Error> {
-            unimplemented!()
-        }
-
-        async fn read_key(&self, _: &str, _: &str) -> Result<Vec<u8>, Error> {
-            unimplemented!()
-        }
-
-        async fn write_key(&self, _: &str, _: &str, _: Vec<u8>) -> Result<(), Error> {
-            unimplemented!()
-        }
-
-        async fn download_url(&self, _: &str, _: &str, _: Duration) -> Result<Url, Error> {
-            unimplemented!()
-        }
-
-        async fn upload_url(&self, _: &str, _: &str, _: Duration) -> Result<Url, Error> {
-            unimplemented!()
-        }
+            .map(|()| next_version)
+            .map_err(|err| Error::ReserveNextVersion(store_key.clone(), err))
     }
 }

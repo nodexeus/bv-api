@@ -5,21 +5,11 @@ use aws_sdk_s3::operation::get_object::GetObjectError;
 use aws_sdk_s3::operation::list_objects_v2::ListObjectsV2Error;
 use aws_sdk_s3::operation::put_object::PutObjectError;
 use aws_sdk_s3::presigning::{PresigningConfig, PresigningConfigError};
-use aws_sdk_s3::primitives::ByteStreamError;
+use aws_sdk_s3::primitives::{ByteStream, ByteStreamError};
+use derive_more::Deref;
 use displaydoc::Display;
 use thiserror::Error;
 use url::Url;
-
-#[mockall::automock]
-#[tonic::async_trait]
-pub trait Client: Send + Sync {
-    async fn list(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error>;
-    async fn list_recursive(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error>;
-    async fn read_key(&self, bucket: &str, key: &str) -> Result<Vec<u8>, Error>;
-    async fn write_key(&self, bucket: &str, key: &str, data: Vec<u8>) -> Result<(), Error>;
-    async fn download_url(&self, bucket: &str, key: &str, expires: Duration) -> Result<Url, Error>;
-    async fn upload_url(&self, bucket: &str, key: &str, expires: Duration) -> Result<Url, Error>;
-}
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -45,9 +35,18 @@ pub enum Error {
     WriteKey(String, String, SdkError<PutObjectError>),
 }
 
-#[tonic::async_trait]
-impl Client for aws_sdk_s3::Client {
-    async fn list(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error> {
+#[derive(Deref)]
+pub struct Client {
+    #[deref]
+    inner: aws_sdk_s3::Client,
+}
+
+impl Client {
+    pub const fn new(inner: aws_sdk_s3::Client) -> Self {
+        Client { inner }
+    }
+
+    pub(super) async fn list(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error> {
         let path = path.to_lowercase();
         let resp = self
             .list_objects_v2()
@@ -67,7 +66,11 @@ impl Client for aws_sdk_s3::Client {
         Ok(files)
     }
 
-    async fn list_recursive(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error> {
+    pub(super) async fn list_recursive(
+        &self,
+        bucket: &str,
+        path: &str,
+    ) -> Result<Vec<String>, Error> {
         let path = path.to_lowercase();
         let resp = self
             .list_objects_v2()
@@ -86,7 +89,7 @@ impl Client for aws_sdk_s3::Client {
         Ok(files)
     }
 
-    async fn read_key(&self, bucket: &str, key: &str) -> Result<Vec<u8>, Error> {
+    pub(super) async fn read_key(&self, bucket: &str, key: &str) -> Result<Vec<u8>, Error> {
         let key = key.to_lowercase();
         let response = self
             .get_object()
@@ -109,7 +112,12 @@ impl Client for aws_sdk_s3::Client {
             .map_err(|err| Error::QueryKey(bucket.into(), key, err))
     }
 
-    async fn write_key(&self, bucket: &str, key: &str, data: Vec<u8>) -> Result<(), Error> {
+    pub(super) async fn write_key(
+        &self,
+        bucket: &str,
+        key: &str,
+        data: Vec<u8>,
+    ) -> Result<(), Error> {
         let key = key.to_lowercase();
         let _response = self
             .put_object()
@@ -123,7 +131,38 @@ impl Client for aws_sdk_s3::Client {
         Ok(())
     }
 
-    async fn download_url(&self, bucket: &str, key: &str, expires: Duration) -> Result<Url, Error> {
+    pub(super) async fn write_key_if_none(
+        &self,
+        bucket: &str,
+        key: &str,
+        data: Option<&[u8]>,
+    ) -> Result<(), Error> {
+        let key = key.to_lowercase();
+        let data = if let Some(data) = data {
+            data.to_vec().into()
+        } else {
+            ByteStream::from_static(b"")
+        };
+
+        let _response = self
+            .put_object()
+            .bucket(bucket)
+            .key(&key)
+            .body(data)
+            .set_if_none_match(Some("*".to_string()))
+            .send()
+            .await
+            .map_err(|err| Error::WriteKey(bucket.into(), key.clone(), err))?;
+
+        Ok(())
+    }
+
+    pub(super) async fn download_url(
+        &self,
+        bucket: &str,
+        key: &str,
+        expires: Duration,
+    ) -> Result<Url, Error> {
         let key = key.to_lowercase();
         let config = PresigningConfig::expires_in(expires).map_err(Error::PresigningConfig)?;
 
@@ -136,7 +175,12 @@ impl Client for aws_sdk_s3::Client {
             .and_then(|url| url.uri().parse().map_err(Error::ParseRequestUrl))
     }
 
-    async fn upload_url(&self, bucket: &str, key: &str, expires: Duration) -> Result<Url, Error> {
+    pub(super) async fn upload_url(
+        &self,
+        bucket: &str,
+        key: &str,
+        expires: Duration,
+    ) -> Result<Url, Error> {
         let key = key.to_lowercase();
         let config = PresigningConfig::expires_in(expires).map_err(Error::PresigningConfig)?;
 
