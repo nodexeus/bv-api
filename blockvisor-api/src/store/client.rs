@@ -5,7 +5,7 @@ use aws_sdk_s3::operation::get_object::GetObjectError;
 use aws_sdk_s3::operation::list_objects_v2::ListObjectsV2Error;
 use aws_sdk_s3::operation::put_object::PutObjectError;
 use aws_sdk_s3::presigning::{PresigningConfig, PresigningConfigError};
-use aws_sdk_s3::primitives::{ByteStream, ByteStreamError};
+use aws_sdk_s3::primitives::ByteStreamError;
 use derive_more::Deref;
 use displaydoc::Display;
 use thiserror::Error;
@@ -124,32 +124,6 @@ impl Client {
             .bucket(bucket)
             .key(&key)
             .body(data.into())
-            .send()
-            .await
-            .map_err(|err| Error::WriteKey(bucket.into(), key.clone(), err))?;
-
-        Ok(())
-    }
-
-    pub(super) async fn write_key_if_none(
-        &self,
-        bucket: &str,
-        key: &str,
-        data: Option<&[u8]>,
-    ) -> Result<(), Error> {
-        let key = key.to_lowercase();
-        let data = if let Some(data) = data {
-            data.to_vec().into()
-        } else {
-            ByteStream::from_static(b"")
-        };
-
-        let _response = self
-            .put_object()
-            .bucket(bucket)
-            .key(&key)
-            .body(data)
-            .set_if_none_match(Some("*".to_string()))
             .send()
             .await
             .map_err(|err| Error::WriteKey(bucket.into(), key.clone(), err))?;

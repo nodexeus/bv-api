@@ -319,7 +319,7 @@ impl Store {
         }?;
 
         self.client
-            .write_key_if_none(&self.bucket.archive, &lock_key, None)
+            .write_key(&self.bucket.archive, &lock_key, Vec::new())
             .await
             .map(|()| next_version)
             .map_err(|err| Error::ReserveNextVersion(store_key.clone(), err))
