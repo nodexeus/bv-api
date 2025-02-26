@@ -96,7 +96,7 @@ impl Context {
             .await
             .map_err(Error::Notifier)?;
         let secret = Secret::new(config.secret.clone());
-        let store = Store::new_s3(&config.store);
+        let store = Store::new(&config.store);
         let stripe = Stripe::new(config.stripe.clone()).map_err(Error::Stripe)?;
 
         Ok(Builder::default()
@@ -116,7 +116,6 @@ impl Context {
     pub async fn with_mocked() -> Result<(Arc<Self>, crate::database::tests::TestDb), Error> {
         use crate::cloudflare::tests::MockCloudflare;
         use crate::database::tests::TestDb;
-        use crate::store::tests::TestStore;
         use crate::stripe::tests::MockStripe;
 
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
@@ -133,7 +132,7 @@ impl Context {
             .await
             .map_err(Error::Notifier)?;
         let secret = Secret::new(config.secret.clone());
-        let store = TestStore::new().await.mock_store();
+        let store = Store::new(&config.store);
         let stripe = MockStripe::new().await;
 
         Builder::default()
