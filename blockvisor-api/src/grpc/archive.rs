@@ -277,7 +277,7 @@ pub async fn put_download_manifest(
 
     read.ctx
         .store
-        .save_download_manifest(&archive.store_key, manifest)
+        .save_download_manifest(&archive.store_key, manifest, req.data_version)
         .await?;
 
     Ok(api::ArchiveServicePutDownloadManifestResponse {})
