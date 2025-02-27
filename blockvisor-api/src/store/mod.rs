@@ -294,7 +294,7 @@ impl Store {
             .filter(|path| path.ends_with(MANIFEST_HEADER))
             .filter_map(|path| {
                 path.rsplit('/')
-                    .next()
+                    .nth(1)
                     .and_then(|version| version.parse().ok())
             })
             .collect();
