@@ -160,7 +160,7 @@ impl Store {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let mut versions = self.data_versions(store_key, true).await?;
+            let mut versions = self.data_versions(store_key).await?;
             versions.pop().ok_or(Error::NoDataVersion)?
         };
 
@@ -188,7 +188,7 @@ impl Store {
         let data_version = if let Some(version) = data_version {
             version
         } else {
-            let mut versions = self.data_versions(store_key, true).await?;
+            let mut versions = self.data_versions(store_key).await?;
             versions.pop().ok_or(Error::NoDataVersion)?
         };
 
@@ -240,10 +240,8 @@ impl Store {
         &self,
         store_key: &StoreKey,
         manifest: DownloadManifest,
+        data_version: u64,
     ) -> Result<(), Error> {
-        let mut versions = self.data_versions(store_key, false).await?;
-        let data_version = versions.pop().unwrap_or_default();
-
         let header_key = format!("{store_key}/{data_version}/{MANIFEST_HEADER}");
         let header: ManifestHeader = (&manifest).try_into()?;
         let header_data = serde_json::to_vec(&header).map_err(Error::SerializeHeader)?;
@@ -287,21 +285,13 @@ impl Store {
     }
 
     /// Return a descending order list of data versions for a `StoreKey`.
-    async fn data_versions(
-        &self,
-        store_key: &StoreKey,
-        has_header: bool,
-    ) -> Result<Vec<u64>, Error> {
+    async fn data_versions(&self, store_key: &StoreKey) -> Result<Vec<u64>, Error> {
         let path = format!("{store_key}/");
         let paths = self.client.list(&self.bucket.archive, &path).await?;
 
         let mut versions: Vec<u64> = paths
             .iter()
-            .filter(|path| {
-                has_header
-                    .then(|| path.ends_with(MANIFEST_HEADER))
-                    .unwrap_or(true)
-            })
+            .filter(|path| path.ends_with(MANIFEST_HEADER))
             .filter_map(|path| {
                 path.rsplit('/')
                     .next()
@@ -315,7 +305,7 @@ impl Store {
 
     /// Reserve the next data version.
     async fn reserve_next_version(&self, store_key: &StoreKey) -> Result<u64, Error> {
-        let mut versions = self.data_versions(store_key, true).await?;
+        let mut versions = self.data_versions(store_key).await?;
         let next_version = versions.pop().unwrap_or_default() + 1;
 
         let lock_key = format!("{store_key}/{next_version}/.lock");
