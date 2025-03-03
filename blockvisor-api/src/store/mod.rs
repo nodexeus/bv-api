@@ -288,7 +288,10 @@ impl Store {
     /// Return a descending order list of data versions for a `StoreKey`.
     async fn data_versions(&self, store_key: &StoreKey) -> Result<Vec<u64>, Error> {
         let path = format!("{store_key}/");
-        let paths = self.client.list(&self.bucket.archive, &path).await?;
+        let paths = self
+            .client
+            .list_recursive(&self.bucket.archive, &path)
+            .await?;
 
         let mut versions: Vec<u64> = paths
             .iter()

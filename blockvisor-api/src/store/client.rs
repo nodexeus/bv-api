@@ -46,6 +46,7 @@ impl Client {
         Client { inner }
     }
 
+    #[allow(dead_code)]
     pub(super) async fn list(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error> {
         let path = path.to_lowercase();
         let resp = self
