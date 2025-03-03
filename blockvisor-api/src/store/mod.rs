@@ -15,6 +15,7 @@ use derive_more::{Deref, Display, Into};
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
 use thiserror::Error;
+use tracing::warn;
 use url::Url;
 
 use crate::config::store::{BucketConfig, Config};
@@ -293,9 +294,14 @@ impl Store {
             .iter()
             .filter(|path| path.ends_with(MANIFEST_HEADER))
             .filter_map(|path| {
-                path.rsplit('/')
-                    .nth(1)
-                    .and_then(|version| version.parse().ok())
+                path.rsplit('/').nth(1).and_then(|segment| {
+                    if let Ok(version) = segment.parse::<u64>() {
+                        Some(version)
+                    } else {
+                        warn!("Failed to parse version from path: {}", path);
+                        None
+                    }
+                })
             })
             .collect();
 
