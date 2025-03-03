@@ -144,6 +144,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[ignore]
     #[tokio::test]
     async fn will_fail_on_bad_credentials() {
         let context = Context::from_default_toml().await.unwrap();

@@ -13,6 +13,7 @@ ENV RUSTFLAGS -Ctarget-feature=-crt-static
 WORKDIR /src
 COPY . /src
 
+RUN rustup toolchain install stable-x86_64-unknown-linux-musl
 RUN cargo build --release
 RUN strip /src/target/release/blockvisor-api
 

@@ -135,7 +135,7 @@ impl Store {
     }
 
     pub async fn list_bundles(&self) -> Result<Vec<api::BundleIdentifier>, Error> {
-        let keys = self.client.list_recursive(&self.bucket.bundle, "").await?;
+        let keys = self.client.list(&self.bucket.bundle, "").await?;
         Ok(keys
             .iter()
             .filter_map(api::BundleIdentifier::maybe_from_key)
@@ -288,10 +288,7 @@ impl Store {
     /// Return a descending order list of data versions for a `StoreKey`.
     async fn data_versions(&self, store_key: &StoreKey) -> Result<Vec<u64>, Error> {
         let path = format!("{store_key}/");
-        let paths = self
-            .client
-            .list_recursive(&self.bucket.archive, &path)
-            .await?;
+        let paths = self.client.list(&self.bucket.archive, &path).await?;
 
         let mut versions: Vec<u64> = paths
             .iter()

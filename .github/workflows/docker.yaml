@@ -6,8 +6,7 @@ on:
 
 jobs:
   build-and-push:
-    runs-on:
-      group: Docker
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4

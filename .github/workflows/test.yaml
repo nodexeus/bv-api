@@ -8,49 +8,50 @@ on:
 
 jobs:
   tests:
-    runs-on:
-      group: Docker
-
-    env:
-      CONFIG_FILE: "${{ github.workspace }}/blockvisor-api/config.toml"
+    runs-on: ubuntu-latest
 
     services:
       postgres:
-        image: postgres:13-bookworm
+        image: postgres:17.4
         env:
           POSTGRES_DB: blockvisor_db
           POSTGRES_USER: blockvisor
           POSTGRES_PASSWORD: password
         ports:
-          - 25432:5432
+          - 5432
         options: >-
+          --name postgres
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
       mqtt:
-        image: emqx/emqx-enterprise:5.3.0
+        image: emqx/emqx-enterprise:5.8.5
+        options: --name mqtt
         ports:
-          - 21883:1883
-        volumes:
-          - ${{ github.workspace }}/docker/emqx:/opt/emqx/etc
+          - 1883
 
     steps:
+      - name: Fix permissions
+        run: |
+          sudo chown -R $USER:$USER $GITHUB_WORKSPACE
+          sudo chmod -R 755 $GITHUB_WORKSPACE
+
       - uses: actions/checkout@v4
         with:
           submodules: true
 
       - name: Install dependencies
         run: |
-          apt update
-          apt install -y libpq-dev libssl-dev pkg-config
+          sudo apt update
+          sudo apt install -y libpq-dev libssl-dev pkg-config
           PROTO_URL=https://github.com/protocolbuffers/protobuf/releases/download/v29.3/protoc-29.3-linux-x86_64.zip
           curl -L $PROTO_URL -o protoc.zip
           unzip -o protoc.zip -d protoc
           rm -rf /usr/local/include/google
-          mv protoc/bin/* /usr/local/bin
-          mv protoc/include/google /usr/local/include/
+          sudo mv protoc/bin/* /usr/local/bin
+          sudo mv protoc/include/google /usr/local/include/
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -65,6 +66,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cargo tests
+        env:
+          CONFIG_FILE: "${{ github.workspace }}/blockvisor-api/config.toml"
+          DATABASE_URL: "postgres://blockvisor:password@localhost:${{ job.services.postgres.ports['5432'] }}/blockvisor_db"
+          MQTT_SERVER_PORT: "${{ job.services.mqtt.ports['1883'] }}"
         run: |
           cargo clippy --all-features --all-targets -- -Dwarnings -Drust-2018-idioms
           cargo fmt --all -- --check
