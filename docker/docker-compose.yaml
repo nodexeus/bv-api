@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17.4
     command: ["postgres", "-c", "log_statement=all"]
     environment:
       POSTGRES_DB: blockvisor_db
@@ -15,14 +15,14 @@ services:
       retries: 3
 
   emqx:
-    image: emqx/emqx-enterprise:5.8.1
+    image: emqx/emqx-enterprise:5.8.5
     ports:
       - 21883:1883
     volumes:
       - ./emqx:/opt/emqx/etc
 
   grafana:
-    image: grafana/grafana:11.3.1
+    image: grafana/grafana:11.5.2
     ports:
       - 23000:3000
     volumes:
@@ -31,7 +31,7 @@ services:
       - prometheus
 
   prometheus:
-    image: prom/prometheus:v3.0.0
+    image: prom/prometheus:v3.2.1
     ports:
       - 29090:9090
     volumes:
@@ -40,7 +40,7 @@ services:
       - opentelemetry
 
   opentelemetry:
-    image: otel/opentelemetry-collector-contrib:0.113.0
+    image: otel/opentelemetry-collector-contrib:0.120.0
     command: ["--config=/etc/opentelemetry.yaml"]
     ports:
       - 24317:4317
@@ -52,12 +52,12 @@ services:
       - tempo
 
   loki:
-    image: grafana/loki:3.3.0
+    image: grafana/loki:3.4.2
     ports:
       - 23100:3100
 
   tempo:
-    image: grafana/tempo:2.6.1
+    image: grafana/tempo:2.7.1
     ports:
       - 23200:3200
     command: -config.file=/etc/tempo/tempo.yaml

@@ -31,7 +31,7 @@ endpoint = "http://localhost:24317"
 export_interval = "100ms"
 
 [mqtt]
-server_address = "127.0.0.1"
+server_address = "localhost"
 server_port = 21883
 username = "blockvisor"
 password = "password"

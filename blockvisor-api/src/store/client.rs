@@ -17,8 +17,6 @@ pub enum Error {
     DownloadUrl(String, SdkError<GetObjectError>),
     /// Failed to list path `{0}`: {1:?}
     ListPath(String, SdkError<ListObjectsV2Error>),
-    /// Failed to list path `{0}` recursively: {1:?}
-    ListRecursive(String, SdkError<ListObjectsV2Error>),
     /// Bucket `{0}` does not contain key `{1}`
     MissingKey(String, String),
     /// Failed to parse URL from PresignedRequest: {0}
@@ -46,40 +44,15 @@ impl Client {
         Client { inner }
     }
 
-    #[allow(dead_code)]
     pub(super) async fn list(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error> {
         let path = path.to_lowercase();
         let resp = self
             .list_objects_v2()
             .bucket(bucket)
             .prefix(&path)
-            .delimiter('/')
             .send()
             .await
             .map_err(|err| Error::ListPath(path, err))?;
-
-        let files = resp
-            .common_prefixes()
-            .iter()
-            .filter_map(|object| object.prefix().map(ToString::to_string))
-            .collect();
-
-        Ok(files)
-    }
-
-    pub(super) async fn list_recursive(
-        &self,
-        bucket: &str,
-        path: &str,
-    ) -> Result<Vec<String>, Error> {
-        let path = path.to_lowercase();
-        let resp = self
-            .list_objects_v2()
-            .bucket(bucket)
-            .prefix(&path)
-            .send()
-            .await
-            .map_err(|err| Error::ListRecursive(path, err))?;
 
         let files = resp
             .contents()
@@ -120,16 +93,14 @@ impl Client {
         data: Vec<u8>,
     ) -> Result<(), Error> {
         let key = key.to_lowercase();
-        let _response = self
-            .put_object()
+        self.put_object()
             .bucket(bucket)
             .key(&key)
             .body(data.into())
             .send()
             .await
-            .map_err(|err| Error::WriteKey(bucket.into(), key.clone(), err))?;
-
-        Ok(())
+            .map(|_resp| ())
+            .map_err(|err| Error::WriteKey(bucket.into(), key.clone(), err))
     }
 
     pub(super) async fn download_url(
