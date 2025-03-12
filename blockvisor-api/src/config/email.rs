@@ -13,7 +13,7 @@ const SENDGRID_API_KEY_VAR: &str = "SENDGRID_API_KEY";
 const SENDGRID_API_KEY_ENTRY: &str = "email.sendgrid_api_key";
 const UI_BASE_URL_VAR: &str = "UI_BASE_URL";
 const UI_BASE_URL_ENTRY: &str = "email.ui_base_url";
-const UI_BASE_URL_DEFAULT: &str = "example.com";
+const UI_BASE_URL_DEFAULT: &str = "https://example.com";
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
