@@ -7,7 +7,6 @@ use opentelemetry::trace::{FutureExt, Status, TraceContextExt, Tracer};
 use opentelemetry::{KeyValue, global};
 use opentelemetry_semantic_conventions::trace::{HTTP_RESPONSE_STATUS_CODE, RPC_GRPC_STATUS_CODE};
 use tonic::Code;
-use tonic::body::BoxBody;
 use tower::{Layer, Service};
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -29,7 +28,7 @@ pub struct MetricsService<S> {
 impl<B, S> Service<Request<B>> for MetricsService<S>
 where
     B: Body + Send + 'static,
-    S: Service<Request<B>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    S: Service<Request<B>, Response = Response<axum::body::Body>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: ToString,
 {

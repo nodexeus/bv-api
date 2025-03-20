@@ -17,17 +17,17 @@ where
     S: Clone + Send + Sync,
 {
     Router::new()
-        .route("/:id", routing::get(get))
+        .route("/{id}", routing::get(get))
         .route("/", routing::get(list))
         .route("/", routing::post(create))
-        .route("/:id/report", routing::post(report_error))
+        .route("/{id}/report", routing::post(report_error))
         .route("/status", routing::post(report_status))
         .route("/config", routing::put(update_config))
         .route("/image", routing::put(upgrade_image))
-        .route("/:id/start", routing::put(start))
-        .route("/:id/stop", routing::put(stop))
-        .route("/:id/restart", routing::put(restart))
-        .route("/:id", routing::delete(delete))
+        .route("/{id}/start", routing::put(start))
+        .route("/{id}/stop", routing::put(stop))
+        .route("/{id}/restart", routing::put(restart))
+        .route("/{id}", routing::delete(delete))
         .with_state(context)
 }
 

@@ -18,13 +18,13 @@ where
 {
     Router::new()
         .route("/", routing::post(create))
-        .route("/:user_id", routing::get(get))
+        .route("/{user_id}", routing::get(get))
         .route("/", routing::get(list))
         .route("/", routing::put(update))
-        .route("/:user_id", routing::delete(delete))
-        .route("/:user_id/settings", routing::get(get_settings))
-        .route("/:user_id/settings", routing::put(update_settings))
-        .route("/:user_id/settings", routing::delete(delete_settings))
+        .route("/{user_id}", routing::delete(delete))
+        .route("/{user_id}/settings", routing::get(get_settings))
+        .route("/{user_id}/settings", routing::put(update_settings))
+        .route("/{user_id}/settings", routing::delete(delete_settings))
         .with_state(context)
 }
 
