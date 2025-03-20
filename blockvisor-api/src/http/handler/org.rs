@@ -18,20 +18,23 @@ where
 {
     Router::new()
         .route("/", routing::post(create))
-        .route("/:id", routing::get(get))
+        .route("/{id}", routing::get(get))
         .route("/", routing::get(list))
-        .route("/:id", routing::put(update))
-        .route("/:id", routing::delete(delete))
-        .route("/:id/member", routing::delete(remove_member))
-        .route("/:id/provision-token", routing::get(get_provision_token))
-        .route("/:id/provision-token", routing::post(reset_provision_token))
-        .route("/:id/init-card", routing::post(init_card))
-        .route("/:id/payment-methods", routing::get(list_payment_methods))
-        .route("/:id/billing-details", routing::get(billing_details))
-        .route("/:id/address", routing::get(get_address))
-        .route("/:id/address", routing::post(set_address))
-        .route("/:id/address", routing::delete(delete_address))
-        .route("/:id/invoices", routing::get(get_invoices))
+        .route("/{id}", routing::put(update))
+        .route("/{id}", routing::delete(delete))
+        .route("/{id}/member", routing::delete(remove_member))
+        .route("/{id}/provision-token", routing::get(get_provision_token))
+        .route(
+            "/{id}/provision-token",
+            routing::post(reset_provision_token),
+        )
+        .route("/{id}/init-card", routing::post(init_card))
+        .route("/{id}/payment-methods", routing::get(list_payment_methods))
+        .route("/{id}/billing-details", routing::get(billing_details))
+        .route("/{id}/address", routing::get(get_address))
+        .route("/{id}/address", routing::post(set_address))
+        .route("/{id}/address", routing::delete(delete_address))
+        .route("/{id}/invoices", routing::get(get_invoices))
         .with_state(context)
 }
 

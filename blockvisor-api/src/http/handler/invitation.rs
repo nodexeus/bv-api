@@ -16,9 +16,9 @@ where
     Router::new()
         .route("/", routing::post(create))
         .route("/", routing::get(list))
-        .route("/:id/accept", routing::post(accept))
-        .route("/:id/decline", routing::post(decline))
-        .route("/:id/revoke", routing::post(revoke))
+        .route("/{id}/accept", routing::post(accept))
+        .route("/{id}/decline", routing::post(decline))
+        .route("/{id}/revoke", routing::post(revoke))
         .with_state(context)
 }
 

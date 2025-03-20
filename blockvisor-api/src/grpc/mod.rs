@@ -36,11 +36,12 @@ use std::sync::Arc;
 
 use axum::Extension;
 use axum::http::HeaderValue;
+use axum::routing::Router;
 use derive_more::Deref;
 use tonic::codec::CompressionEncoding;
 use tonic::metadata::AsciiMetadataValue;
-use tonic::transport::Server;
-use tonic::transport::server::Router;
+use tonic::service::Routes;
+use tower::limit::ConcurrencyLimitLayer;
 use tower_http::cors::{self, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -248,24 +249,10 @@ macro_rules! gzip_service {
     };
 }
 
-pub fn server(context: &Arc<Context>) -> Router<impl Clone> {
+pub fn router(context: &Arc<Context>) -> Router {
     let grpc = Grpc::new(context.clone());
 
-    let cors_rules = CorsLayer::new()
-        .allow_headers(cors::Any)
-        .allow_methods(cors::Any)
-        .allow_origin(cors::Any);
-
-    let middleware = tower::ServiceBuilder::new()
-        .layer(TraceLayer::new_for_grpc())
-        .layer(MetricsLayer)
-        .layer(Extension(context.pool.clone()))
-        .layer(cors_rules)
-        .into_inner();
-
-    Server::builder()
-        .layer(middleware)
-        .concurrency_limit_per_connection(context.config.grpc.request_concurrency_limit)
+    let routes = Routes::builder()
         .add_service(gzip_service!(ApiKeyServiceServer, grpc.clone()))
         .add_service(
             ArchiveServiceServer::new(grpc.clone())
@@ -286,4 +273,25 @@ pub fn server(context: &Arc<Context>) -> Router<impl Clone> {
         .add_service(gzip_service!(OrgServiceServer, grpc.clone()))
         .add_service(gzip_service!(ProtocolServiceServer, grpc.clone()))
         .add_service(gzip_service!(UserServiceServer, grpc))
+        .clone()
+        .routes();
+
+    let cors_rules = CorsLayer::new()
+        .allow_headers(cors::Any)
+        .allow_methods(cors::Any)
+        .allow_origin(cors::Any);
+
+    let middleware = tower::ServiceBuilder::new()
+        .layer(TraceLayer::new_for_grpc())
+        .layer(MetricsLayer)
+        .layer(Extension(context.pool.clone()))
+        .layer(cors_rules)
+        .into_inner();
+
+    routes
+        .into_axum_router()
+        .layer(middleware)
+        .layer(ConcurrencyLimitLayer::new(
+            context.config.grpc.request_concurrency_limit,
+        ))
 }

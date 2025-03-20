@@ -12,11 +12,12 @@ anyhow = "1.0"
 argh = "0.1"
 argon2 = "0.5"
 aws-sdk-s3 = { version = "1.72", features = ["behavior-version-latest"] }
-axum = { version = "0.7", features = ["macros"] }
-axum-extra = "0.9"
+axum = { version = "0.8", features = ["macros"] }
+axum-extra = "0.10"
 axum-tracing-opentelemetry = "0.26"
 base64 = "0.22"
 blake3 = "1.4"
+bytes = "1.10"
 chrono = { version = "0.4", features = ["serde"] }
 cidr = { version = "0.3", features = ["serde"] }
 derive_more = { version = "2.0", features = ["full"] }
@@ -74,7 +75,7 @@ tokio-postgres = "0.7"
 tokio-postgres-rustls = "0.13"
 tokio-stream = { version = "0.1", features = ["net"] }
 toml = "0.8"
-tonic = { version = "0.12", features = ["gzip", "tls-roots"] }
+tonic = { git = "https://github.com/hyperium/tonic.git", rev = "72b0fd59442d71804d4104e313ef6f140ab8f6d1", features = ["gzip", "tls-aws-lc"] }
 tower = { version = "0.5", features = ["make", "steer", "tokio", "tracing", "util"] }
 tower-http = { version = "0.6", features = ["auth", "compression-gzip", "cors", "trace"] }
 tracing = "0.1"
@@ -94,7 +95,7 @@ temp-env = "0.3"
 
 [build-dependencies]
 anyhow = "1.0"
-tonic-build = "0.12"
+tonic-build = { git = "https://github.com/hyperium/tonic.git", rev = "72b0fd59442d71804d4104e313ef6f140ab8f6d1" }
 
 [features]
 default = []

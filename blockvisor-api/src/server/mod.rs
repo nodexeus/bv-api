@@ -34,8 +34,7 @@ pub async fn start_with_listener(
     context: Arc<Context>,
     listener: TcpListener,
 ) -> Result<(), Error> {
-    #[allow(deprecated)] // routes is a private field
-    let grpc = grpc::server(&context).into_router();
+    let grpc = grpc::router(&context);
     let http = http::router(&context);
 
     let service = Steer::new(vec![grpc, http], |req: &Request, _services: &[_]| {
