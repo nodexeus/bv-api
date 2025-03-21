@@ -64,6 +64,7 @@ jobs:
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ignore: RUSTSEC-2024-0436 # paste crate is unmaintained
 
       - name: Cargo tests
         env:

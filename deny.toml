@@ -2,7 +2,9 @@
 all-features = true
 
 [advisories]
-ignore = [ ]
+ignore = [
+  "RUSTSEC-2024-0436" # paste crate is unmaintained
+]
 
 [licenses]
 allow = [
