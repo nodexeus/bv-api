@@ -1,4 +1,4 @@
 [submodule "proto"]
 	path = proto
-	url = https://github.com/blockjoy/protobufs.git
+	url = git@github.com:blockjoy/protobufs.git
 	branch = "main"
