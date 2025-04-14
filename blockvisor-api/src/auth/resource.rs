@@ -56,6 +56,7 @@ pub enum Resource {
 }
 
 impl Resource {
+    #[allow(clippy::missing_const_for_fn)]
     pub fn new(typ: ResourceType, id: ResourceId) -> Self {
         match typ {
             ResourceType::User => Resource::User(UserId(*id)),

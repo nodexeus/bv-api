@@ -640,7 +640,7 @@ pub async fn set_address(
             update_org.update(&mut write).await?;
         }
         Some(Err(err)) => return Err(err.into()),
-    };
+    }
 
     Ok(api::OrgServiceSetAddressResponse {})
 }

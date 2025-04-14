@@ -189,7 +189,7 @@ pub async fn create(
                     .await?;
             } else {
                 warn!("Unable to send invite email to user without email configured");
-            };
+            }
         }
 
         Err(crate::model::user::Error::FindByEmail(_, NotFound)) => {
@@ -206,7 +206,7 @@ pub async fn create(
                     .await?;
             } else {
                 warn!("Unable to send invite email to user without email configured");
-            };
+            }
         }
 
         Err(err) => return Err(err.into()),

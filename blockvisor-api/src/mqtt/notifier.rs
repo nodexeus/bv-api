@@ -61,7 +61,7 @@ impl Notifier {
                 Ok(Event::Incoming(Packet::SubAck(_))) => break,
                 Ok(event) => trace!("startup MQTT event: {event:?}"),
                 Err(err) => return Err(Error::StartPolling(err)),
-            };
+            }
         }
 
         let client = Client::new(client);
