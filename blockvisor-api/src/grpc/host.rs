@@ -507,7 +507,7 @@ pub async fn update_host(
     let org_id = Host::org_id(id, &mut write).await?;
     if let Some(org_id) = org_id {
         resources.push(Resource::from(org_id));
-    };
+    }
 
     // for public hosts, only a host api token has the update perm
     let authz = if req.cost.is_some() {

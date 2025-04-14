@@ -310,7 +310,7 @@ pub async fn create(
     if let Some(old_id) = old_node_id {
         perms.push(Perm::from(CryptPerm::GetSecret));
         resources.push(Resource::from(old_id));
-    };
+    }
 
     let launch = req
         .launcher

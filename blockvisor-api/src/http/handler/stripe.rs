@@ -120,7 +120,7 @@ async fn setup_intent_succeeded_handler(
             .await?
             .id;
         org.set_customer_id(&customer_id, &mut write).await?;
-    };
+    }
 
     Ok(serde_json::json!({"message": "subscription created"}))
 }

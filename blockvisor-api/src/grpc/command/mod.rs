@@ -364,7 +364,7 @@ async fn update(
             .into_iter()
             .for_each(|cmd| write.mqtt(cmd)),
         None => (),
-    };
+    }
 
     Ok(api::CommandServiceUpdateResponse { command: Some(cmd) })
 }

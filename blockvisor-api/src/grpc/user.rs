@@ -169,7 +169,7 @@ pub async fn create(
             .await?;
     } else {
         warn!("Can't send registration confirmation email, not configured");
-    };
+    }
 
     Ok(api::UserServiceCreateResponse {
         user: Some(user.into()),
