@@ -542,6 +542,7 @@ diesel::table! {
         updated_at -> Nullable<Timestamptz>,
         deleted_at -> Nullable<Timestamptz>,
         cost -> Nullable<Jsonb>,
+        apr -> Nullable<Float8>,
     }
 }
 

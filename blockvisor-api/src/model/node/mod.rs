@@ -266,6 +266,7 @@ pub struct Node {
     pub updated_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub cost: Option<Amount>,
+    pub apr: Option<f64>,
 }
 
 impl Node {
@@ -929,6 +930,7 @@ pub struct UpdateNodeMetrics {
     pub protocol_health: Option<NodeHealth>,
     pub block_height: Option<i64>,
     pub block_age: Option<i64>,
+    pub apr: Option<f64>,
     pub consensus: Option<bool>,
     pub jobs: Option<NodeJobs>,
 }
@@ -1031,6 +1033,7 @@ pub enum NodeSort {
     ProtocolState(SortOrder),
     ProtocolHealth(SortOrder),
     BlockHeight(SortOrder),
+    Apr(SortOrder),
     CreatedAt(SortOrder),
     UpdatedAt(SortOrder),
 }
@@ -1048,6 +1051,7 @@ impl NodeSort {
         nodes::protocol_state: SelectableExpression<T>,
         nodes::protocol_health: SelectableExpression<T>,
         nodes::block_height: SelectableExpression<T>,
+        nodes::apr: SelectableExpression<T>,
     {
         use NodeSort::*;
         use SortOrder::*;
@@ -1076,6 +1080,9 @@ impl NodeSort {
 
             BlockHeight(Asc) => Box::new(nodes::block_height.asc()),
             BlockHeight(Desc) => Box::new(nodes::block_height.desc()),
+
+            Apr(Asc) => Box::new(nodes::apr.asc()),
+            Apr(Desc) => Box::new(nodes::apr.desc()),
 
             CreatedAt(Asc) => Box::new(nodes::created_at.asc()),
             CreatedAt(Desc) => Box::new(nodes::created_at.desc()),

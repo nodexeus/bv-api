@@ -40,6 +40,8 @@ pub enum Error {
     BlockAge(std::num::TryFromIntError),
     /// Failed to parse block height: {0}
     BlockHeight(std::num::TryFromIntError),
+    /// Failed to parse APR: {0}
+    Apr(std::num::ParseFloatError),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
     /// Node command error: {0}
@@ -187,6 +189,7 @@ impl From<Error> for Status {
             Rule(err) => err.into(),
             Sql(err) => err.into(),
             User(err) => err.into(),
+            Apr(_) => Status::invalid_argument("apr"),
         }
     }
 }
@@ -896,6 +899,9 @@ impl api::Node {
             .block_height
             .map(|age| u64::try_from(age).map_err(Error::BlockAge))
             .transpose()?;
+        let apr = node
+            .apr
+            .map_or(Ok::<Option<f64>, Error>(None), |apr| Ok(Some(apr)))?;
 
         let jobs = node
             .jobs
@@ -950,6 +956,7 @@ impl api::Node {
             note: node.note,
             node_status: Some(status.into()),
             jobs,
+            apr,
             reports,
             tags: Some(node.tags.into()),
             created_by: Some(common::Resource::from(created_by)),
@@ -1034,6 +1041,7 @@ impl api::NodeServiceListRequest {
                     api::NodeSortField::ProtocolState => Ok(NodeSort::ProtocolState(order)),
                     api::NodeSortField::ProtocolHealth => Ok(NodeSort::ProtocolHealth(order)),
                     api::NodeSortField::BlockHeight => Ok(NodeSort::BlockHeight(order)),
+                    api::NodeSortField::Apr => Ok(NodeSort::Apr(order)),
                     api::NodeSortField::CreatedAt => Ok(NodeSort::CreatedAt(order)),
                     api::NodeSortField::UpdatedAt => Ok(NodeSort::UpdatedAt(order)),
                 }

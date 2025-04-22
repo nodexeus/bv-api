@@ -28,6 +28,8 @@ pub enum Error {
     BlockAge(std::num::TryFromIntError),
     /// Failed to parse block height: {0}
     BlockHeight(std::num::TryFromIntError),
+    /// Failed to parse APR: {0}
+    Apr(std::num::ParseFloatError),
     /// Claims check failed: {0}
     Claims(#[from] crate::auth::claims::Error),
     /// Diesel failure: {0}
@@ -110,6 +112,7 @@ impl From<Error> for Status {
             NodeGrpc(err) => err.into(),
             NodeStatus(err) => err.into(),
             Resource(err) => err.into(),
+            Apr(_) => Status::invalid_argument("apr"),
         }
     }
 }
@@ -283,6 +286,9 @@ impl api::NodeMetrics {
             .map(i64::try_from)
             .transpose()
             .map_err(Error::BlockAge)?;
+        let apr = self
+            .apr
+            .map_or(Ok::<Option<f64>, Error>(None), |apr| Ok(Some(apr)))?;
         let jobs: NodeJobs = self
             .jobs
             .into_iter()
@@ -298,6 +304,7 @@ impl api::NodeMetrics {
             block_height,
             block_age,
             consensus: self.consensus,
+            apr,
             jobs: Some(jobs),
         })
     }

@@ -98,6 +98,7 @@ async fn node_upgraded(cmd: &Command, write: &mut WriteConn<'_, '_>) -> Result<(
         block_height: None,
         block_age: None,
         consensus: None,
+        apr: None,
         jobs: Some(NodeJobs(vec![])),
     };
     let _updated = update.apply(write).await?;
