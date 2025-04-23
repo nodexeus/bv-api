@@ -2,6 +2,7 @@ pub mod template;
 pub use template::{Kind, Language, Templates};
 
 use std::collections::HashMap;
+use std::env;
 use std::sync::Arc;
 
 use displaydoc::Display;
@@ -18,8 +19,15 @@ use crate::config::Config;
 use crate::config::token::ExpireChrono;
 use crate::model::{Invitation, User};
 
-const FROM_EMAIL: &str = "no-reply@blockjoy.com";
-const FROM_NAME: &str = "BlockJoy";
+// Get email sender address from environment variable or use default
+fn from_email() -> String {
+    env::var("FROM_EMAIL").unwrap_or_else(|_| "no-reply@example.com".to_string())
+}
+
+// Get email sender name from environment variable or use default
+fn from_name() -> String {
+    env::var("FROM_NAME").unwrap_or_else(|_| "Example".to_string())
+}
 
 #[tonic::async_trait]
 pub trait Sender {
@@ -197,7 +205,7 @@ impl Email {
         let template = self.templates.render(kind, lang, context)?;
 
         let to = v3::Email::new(recipient.email).set_name(name);
-        let from = v3::Email::new(FROM_EMAIL).set_name(FROM_NAME);
+        let from = v3::Email::new(&from_email()).set_name(&from_name());
         let text = v3::Content::new()
             .set_content_type("text/plain")
             .set_value(template.text);
