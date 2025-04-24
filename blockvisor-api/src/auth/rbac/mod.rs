@@ -105,7 +105,6 @@ define_perms! {
 
     Discovery => {
         Services,
-        ApiVersion,
     }
 
     Host => {
