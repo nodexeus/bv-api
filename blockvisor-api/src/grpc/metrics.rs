@@ -80,6 +80,10 @@ pub enum Error {
     UsedDisk(std::num::TryFromIntError),
     /// Failed to parse used memory: {0}
     UsedMemory(std::num::TryFromIntError),
+    /// Failed to parse jailed: {0}
+    Jailed(std::bool::ParseBoolError),
+    /// Failed to parse jailed reason: {0}
+    JailedReason(std::string::FromStrError),
 }
 
 impl From<Error> for Status {
@@ -113,6 +117,8 @@ impl From<Error> for Status {
             NodeStatus(err) => err.into(),
             Resource(err) => err.into(),
             Apr(_) => Status::invalid_argument("apr"),
+            Jailed(_) => Status::invalid_argument("jailed"),
+            JailedReason(_) => Status::invalid_argument("jailed_reason"),
         }
     }
 }
@@ -295,6 +301,15 @@ impl api::NodeMetrics {
             .map(Into::into)
             .collect::<Vec<_>>()
             .into();
+        let jailed = self
+            .jailed
+            .map_or(Ok::<Option<bool>, Error>(None), |jailed| {
+                jailed.map(|jailed| jailed.parse().map_err(Error::Jailed))
+            })?;
+        let jailed_reason = self
+            .jailed_reason
+            .map(|reason| reason.parse().map_err(Error::JailedReason))?
+            .map_err(Error::JailedReason)?;
 
         Ok(UpdateNodeMetrics {
             id,
@@ -306,6 +321,8 @@ impl api::NodeMetrics {
             consensus: self.consensus,
             apr,
             jobs: Some(jobs),
+            jailed,
+            jailed_reason,
         })
     }
 }

@@ -134,6 +134,10 @@ pub enum Error {
     UnknownSortField,
     /// Node user error: {0}
     User(#[from] crate::model::user::Error),
+    /// Failed to parse jailed: {0}
+    Jailed(std::bool::ParseBoolError),
+    /// Failed to parse jailed reason: {0}
+    JailedReason(std::string::FromStrError),
 }
 
 impl From<Error> for Status {
@@ -190,6 +194,8 @@ impl From<Error> for Status {
             Sql(err) => err.into(),
             User(err) => err.into(),
             Apr(_) => Status::invalid_argument("apr"),
+            Jailed(_) => Status::invalid_argument("jailed"),
+            JailedReason(_) => Status::invalid_argument("jailed_reason"),
         }
     }
 }
@@ -907,6 +913,16 @@ impl api::Node {
             .jobs
             .map(|jobs| jobs.into_iter().map(Into::into).collect())
             .unwrap_or_default();
+        let jailed = node
+            .jailed
+            .map_or(Ok::<Option<bool>, Error>(None), |jailed| {
+                jailed.map(|jailed| jailed.parse().map_err(Error::Jailed))
+            })?;
+        let jailed_reason = node
+            .jailed_reason
+            .map(|reason| reason.parse().map_err(Error::JailedReason))?
+            .map_err(Error::JailedReason)?;
+
         let reports = reports
             .into_iter()
             .map(|report| {
@@ -963,6 +979,8 @@ impl api::Node {
             created_at: Some(NanosUtc::from(node.created_at).into()),
             updated_at: node.updated_at.map(NanosUtc::from).map(Into::into),
             cost,
+            jailed,
+            jailed_reason,
             version_metadata: version
                 .metadata
                 .as_ref()
@@ -1044,6 +1062,7 @@ impl api::NodeServiceListRequest {
                     api::NodeSortField::Apr => Ok(NodeSort::Apr(order)),
                     api::NodeSortField::CreatedAt => Ok(NodeSort::CreatedAt(order)),
                     api::NodeSortField::UpdatedAt => Ok(NodeSort::UpdatedAt(order)),
+                    api::NodeSortField::Jailed => Ok(NodeSort::Jailed(order)),
                 }
             })
             .collect::<Result<_, _>>()?;

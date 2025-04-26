@@ -267,6 +267,8 @@ pub struct Node {
     pub deleted_at: Option<DateTime<Utc>>,
     pub cost: Option<Amount>,
     pub apr: Option<f64>,
+    pub jailed: Option<bool>,
+    pub jailed_reason: Option<String>,
 }
 
 impl Node {
@@ -933,6 +935,8 @@ pub struct UpdateNodeMetrics {
     pub apr: Option<f64>,
     pub consensus: Option<bool>,
     pub jobs: Option<NodeJobs>,
+    pub jailed: Option<bool>,
+    pub jailed_reason: Option<String>,
 }
 
 impl UpdateNodeMetrics {
@@ -1036,6 +1040,8 @@ pub enum NodeSort {
     Apr(SortOrder),
     CreatedAt(SortOrder),
     UpdatedAt(SortOrder),
+    Jailed(SortOrder),
+    JailedReason(SortOrder),
 }
 
 impl NodeSort {
@@ -1052,6 +1058,7 @@ impl NodeSort {
         nodes::protocol_health: SelectableExpression<T>,
         nodes::block_height: SelectableExpression<T>,
         nodes::apr: SelectableExpression<T>,
+        nodes::jailed: SelectableExpression<T>,
     {
         use NodeSort::*;
         use SortOrder::*;
@@ -1089,6 +1096,9 @@ impl NodeSort {
 
             UpdatedAt(Asc) => Box::new(nodes::updated_at.asc()),
             UpdatedAt(Desc) => Box::new(nodes::updated_at.desc()),
+
+            Jailed(Asc) => Box::new(nodes::jailed.asc()),
+            Jailed(Desc) => Box::new(nodes::jailed.desc()),
         }
     }
 }

@@ -100,6 +100,8 @@ async fn node_upgraded(cmd: &Command, write: &mut WriteConn<'_, '_>) -> Result<(
         consensus: None,
         apr: None,
         jobs: Some(NodeJobs(vec![])),
+        jailed: None,
+        jailed_reason: None,
     };
     let _updated = update.apply(write).await?;
 
