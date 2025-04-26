@@ -1041,7 +1041,6 @@ pub enum NodeSort {
     CreatedAt(SortOrder),
     UpdatedAt(SortOrder),
     Jailed(SortOrder),
-    JailedReason(SortOrder),
 }
 
 impl NodeSort {
