@@ -134,8 +134,6 @@ pub enum Error {
     UnknownSortField,
     /// Node user error: {0}
     User(#[from] crate::model::user::Error),
-    /// Failed to parse jailed: {0}
-    Jailed(std::str::ParseBoolError),
     /// Failed to parse jailed reason: {0}
     JailedReason(String),
 }
@@ -194,7 +192,6 @@ impl From<Error> for Status {
             Sql(err) => err.into(),
             User(err) => err.into(),
             Apr(_) => Status::invalid_argument("apr"),
-            Jailed(_) => Status::invalid_argument("jailed"),
             JailedReason(_) => Status::invalid_argument("jailed_reason"),
         }
     }
@@ -913,10 +910,7 @@ impl api::Node {
             .jobs
             .map(|jobs| jobs.into_iter().map(Into::into).collect())
             .unwrap_or_default();
-        let jailed = node
-            .jailed
-            .map(|jailed_str| jailed_str.parse::<bool>().map_err(Error::Jailed))
-            .transpose()?;
+        let jailed = node.jailed;
         let jailed_reason = node.jailed_reason;
 
         let reports = reports
