@@ -81,9 +81,9 @@ pub enum Error {
     /// Failed to parse used memory: {0}
     UsedMemory(std::num::TryFromIntError),
     /// Failed to parse jailed: {0}
-    Jailed(std::bool::ParseBoolError),
+    Jailed(std::str::ParseBoolError),
     /// Failed to parse jailed reason: {0}
-    JailedReason(std::string::FromStrError),
+    JailedReason(String),
 }
 
 impl From<Error> for Status {
@@ -303,13 +303,9 @@ impl api::NodeMetrics {
             .into();
         let jailed = self
             .jailed
-            .map_or(Ok::<Option<bool>, Error>(None), |jailed| {
-                jailed.map(|jailed| jailed.parse().map_err(Error::Jailed))
-            })?;
-        let jailed_reason = self
-            .jailed_reason
-            .map(|reason| reason.parse().map_err(Error::JailedReason))?
-            .map_err(Error::JailedReason)?;
+            .map(|jailed_str| jailed_str.parse::<bool>().map_err(Error::Jailed))
+            .transpose()?;
+        let jailed_reason = self.jailed_reason;
 
         Ok(UpdateNodeMetrics {
             id,
