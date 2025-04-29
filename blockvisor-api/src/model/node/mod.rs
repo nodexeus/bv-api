@@ -269,6 +269,7 @@ pub struct Node {
     pub apr: Option<f64>,
     pub jailed: Option<bool>,
     pub jailed_reason: Option<String>,
+    pub sqd_name: Option<String>,
 }
 
 impl Node {
@@ -937,6 +938,7 @@ pub struct UpdateNodeMetrics {
     pub jobs: Option<NodeJobs>,
     pub jailed: Option<bool>,
     pub jailed_reason: Option<String>,
+    pub sqd_name: Option<String>,
 }
 
 impl UpdateNodeMetrics {
@@ -1041,6 +1043,7 @@ pub enum NodeSort {
     CreatedAt(SortOrder),
     UpdatedAt(SortOrder),
     Jailed(SortOrder),
+    SqdName(SortOrder),
 }
 
 impl NodeSort {
@@ -1058,6 +1061,7 @@ impl NodeSort {
         nodes::block_height: SelectableExpression<T>,
         nodes::apr: SelectableExpression<T>,
         nodes::jailed: SelectableExpression<T>,
+        nodes::sqd_name: SelectableExpression<T>,
     {
         use NodeSort::*;
         use SortOrder::*;
@@ -1098,6 +1102,9 @@ impl NodeSort {
 
             Jailed(Asc) => Box::new(nodes::jailed.asc()),
             Jailed(Desc) => Box::new(nodes::jailed.desc()),
+
+            SqdName(Asc) => Box::new(nodes::sqd_name.asc()),
+            SqdName(Desc) => Box::new(nodes::sqd_name.desc()),
         }
     }
 }

@@ -25,6 +25,7 @@ async fn responds_ok_for_write_node() {
         height: Some(10),
         block_age: Some(5),
         apr: Some(10.0),
+        sqd_name: Some("sqd-name".to_string()),
         consensus: Some(false),
         jobs: vec![common::NodeJob {
             name: "download".to_string(),
@@ -52,6 +53,7 @@ async fn responds_ok_for_write_node() {
     assert_eq!(node.block_height, Some(10));
     assert_eq!(node.block_age, Some(5));
     assert_eq!(node.apr, Some(10.0));
+    assert_eq!(node.sqd_name, None);
     assert_eq!(node.consensus, Some(false));
     assert_eq!(node.node_state, NodeState::Running);
     // next state writes from client are ignored
@@ -128,6 +130,7 @@ async fn single_failure_doesnt_abort_all_updates() {
         height: Some(10),
         block_age: Some(5),
         apr: Some(10.0),
+        sqd_name: Some("sqd-name".to_string()),
         consensus: Some(false),
         node_status: None,
         jobs: vec![common::NodeJob {
@@ -160,6 +163,7 @@ async fn single_failure_doesnt_abort_all_updates() {
     assert_eq!(node.block_height, Some(10));
     assert_eq!(node.block_age, Some(5));
     assert_eq!(node.apr, Some(10.0));
+    assert_eq!(node.sqd_name, None);
     assert_eq!(node.consensus, Some(false));
     assert_eq!(node.node_state, NodeState::Running);
 

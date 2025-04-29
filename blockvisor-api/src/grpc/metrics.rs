@@ -82,6 +82,8 @@ pub enum Error {
     UsedMemory(std::num::TryFromIntError),
     /// Failed to parse jailed reason: {0}
     JailedReason(String),
+    /// Failed to parse sqd name: {0}
+    SqdName(String),
 }
 
 impl From<Error> for Status {
@@ -116,6 +118,7 @@ impl From<Error> for Status {
             Resource(err) => err.into(),
             Apr(_) => Status::invalid_argument("apr"),
             JailedReason(_) => Status::invalid_argument("jailed_reason"),
+            SqdName(_) => Status::invalid_argument("sqd_name"),
         }
     }
 }
@@ -300,6 +303,7 @@ impl api::NodeMetrics {
             .into();
         let jailed = self.jailed;
         let jailed_reason = self.jailed_reason;
+        let sqd_name = self.sqd_name;
 
         Ok(UpdateNodeMetrics {
             id,
@@ -313,6 +317,7 @@ impl api::NodeMetrics {
             jobs: Some(jobs),
             jailed,
             jailed_reason,
+            sqd_name,
         })
     }
 }

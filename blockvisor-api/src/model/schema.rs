@@ -545,6 +545,7 @@ diesel::table! {
         apr -> Nullable<Float8>,
         jailed -> Nullable<Bool>,
         jailed_reason -> Nullable<Text>,
+        sqd_name -> Nullable<Text>,
     }
 }
 

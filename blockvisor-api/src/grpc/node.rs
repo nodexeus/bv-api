@@ -136,6 +136,8 @@ pub enum Error {
     User(#[from] crate::model::user::Error),
     /// Failed to parse jailed reason: {0}
     JailedReason(String),
+    /// Failed to parse sqd name: {0}
+    SqdName(String),
 }
 
 impl From<Error> for Status {
@@ -193,6 +195,7 @@ impl From<Error> for Status {
             User(err) => err.into(),
             Apr(_) => Status::invalid_argument("apr"),
             JailedReason(_) => Status::invalid_argument("jailed_reason"),
+            SqdName(_) => Status::invalid_argument("sqd_name"),
         }
     }
 }
@@ -912,6 +915,7 @@ impl api::Node {
             .unwrap_or_default();
         let jailed = node.jailed;
         let jailed_reason = node.jailed_reason;
+        let sqd_name = node.sqd_name;
 
         let reports = reports
             .into_iter()
@@ -971,6 +975,7 @@ impl api::Node {
             cost,
             jailed,
             jailed_reason,
+            sqd_name,
             version_metadata: version
                 .metadata
                 .as_ref()
@@ -1053,6 +1058,7 @@ impl api::NodeServiceListRequest {
                     api::NodeSortField::CreatedAt => Ok(NodeSort::CreatedAt(order)),
                     api::NodeSortField::UpdatedAt => Ok(NodeSort::UpdatedAt(order)),
                     api::NodeSortField::Jailed => Ok(NodeSort::Jailed(order)),
+                    api::NodeSortField::SqdName => Ok(NodeSort::SqdName(order)),
                 }
             })
             .collect::<Result<_, _>>()?;
