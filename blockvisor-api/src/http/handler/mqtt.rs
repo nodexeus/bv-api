@@ -61,6 +61,11 @@ impl From<JsonRejection> for ErrorWrapper<Error> {
     }
 }
 
+#[derive(serde::Serialize)]
+struct AclResponse {
+    result: &'static str,
+}
+
 pub fn router<S>(context: Arc<Context>) -> Router<S>
 where
     S: Clone + Send + Sync,
@@ -82,7 +87,7 @@ async fn auth(
 async fn acl(
     State(ctx): State<Arc<Context>>,
     WithRejection(Json(req), _): WithRejection<Json<AclRequest>, ErrorWrapper<Error>>,
-) -> Result<Response, super::Error> {
+) -> Result<Json<AclResponse>, super::Error> {
     let token = req
         .username
         .parse()
@@ -95,7 +100,7 @@ async fn acl(
         .await
         .is_ok()
     {
-        return Ok(response::ok());
+        return Ok(Json(AclResponse { result: "allow" }));
     }
 
     let resources: Resources = match req.topic {
@@ -106,9 +111,12 @@ async fn acl(
         Topic::Wildcard(topic) => return Err(Status::from(Error::WildcardTopic(topic)).into()),
     };
 
-    ctx.auth
+    match ctx
+        .auth
         .authorize_token(&token, MqttPerm::Acl.into(), resources, &mut conn)
         .await
-        .map(|_authz| response::ok())
-        .map_err(|err| Status::from(err).into())
+    {
+        Ok(_) => Ok(Json(AclResponse { result: "allow" })),
+        Err(_) => Ok(Json(AclResponse { result: "deny" })),
+    }
 }
