@@ -31,9 +31,9 @@ pub struct AclRequest {
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub enum OperationType {
-    #[serde(rename = "1")]
+    #[serde(rename = "publish")]
     Publish,
-    #[serde(rename = "2")]
+    #[serde(rename = "subscribe")]
     Subscribe,
 }
 
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn parse_acl_request() {
         let json = r#"{
-            "operation": "1",
+            "operation": "publish",
             "username": "jwt",
             "topic": "/bv/hosts/c1ce7b5c-fde1-40ab-afa5-06c8265b63f8/status"
         }"#;
