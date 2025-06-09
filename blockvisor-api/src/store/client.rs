@@ -59,7 +59,7 @@ impl Client {
             .iter()
             .filter_map(|object| object.key().map(ToString::to_string))
             .collect();
-
+        tracing::debug!("Listed files for path {}: {:?}", path, files);
         Ok(files)
     }
 
