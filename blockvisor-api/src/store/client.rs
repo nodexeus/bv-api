@@ -139,4 +139,30 @@ impl Client {
             .map_err(|err| Error::UploadUrl(key, err))
             .and_then(|url| url.uri().parse().map_err(Error::ParseRequestUrl))
     }
+
+    pub(super) async fn list_with_delimiter(
+        &self, 
+        bucket: &str, 
+        prefix: &str
+    ) -> Result<Vec<String>, Error> {
+        let prefix = prefix.to_lowercase();
+        let prefix_clone = prefix.clone();
+        
+        let resp = self
+            .list_objects_v2()
+            .bucket(bucket)
+            .prefix(&prefix)
+            .delimiter("/")  // This makes it return common prefixes
+            .send()
+            .await
+            .map_err(move |err| Error::ListPath(prefix_clone, err))?;
+    
+        // Get the common prefixes (subdirectories)
+        let prefixes = resp.common_prefixes()
+            .iter()
+            .filter_map(|cp| cp.prefix().map(String::from))
+            .collect();
+    
+        Ok(prefixes)
+    }
 }
