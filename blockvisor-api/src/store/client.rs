@@ -46,13 +46,14 @@ impl Client {
 
     pub(super) async fn list(&self, bucket: &str, path: &str) -> Result<Vec<String>, Error> {
         let path = path.to_lowercase();
+        let path_clone = path.clone();
         let resp = self
             .list_objects_v2()
             .bucket(bucket)
             .prefix(&path)
             .send()
             .await
-            .map_err(|err| Error::ListPath(path, err))?;
+            .map_err(|err| Error::ListPath(path_clone, err))?;
 
         let files = resp
             .contents()
