@@ -4,7 +4,7 @@ zone_id = "89560cdd783e35f7a9d718755ea9c656"
 token = "9QjEiXC4B26tgshHZjuZ57kJcjaChSSsDfzUvfYQ"
 
 [cloudflare.dns]
-base = "n0des.xyz"
+base = "nodexeuss.io"
 ttl = 300
 
 [database]

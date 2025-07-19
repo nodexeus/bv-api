@@ -1,4 +1,5 @@
 mod api_key;
+mod archive;
 mod auth;
 mod command;
 mod crypt;
