@@ -858,6 +858,166 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationErrorResponse'
 
+  /v1/host/{id}/nodes:
+    get:
+      tags:
+        - Hosts
+      summary: List host nodes
+      description: Get all nodes running on a specific host with optional filtering and pagination
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Host ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: node_states
+          in: query
+          description: Node states to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "running,stopped"
+            enum: [starting, running, stopped, failed, upgrading, deleting, deleted]
+        - name: next_states
+          in: query
+          description: Next states to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "stopping,upgrading"
+            enum: [stopping, deleting, upgrading]
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            example: 0
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 50
+            example: 50
+        - name: ip_addresses
+          in: query
+          description: IP addresses to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "192.168.1.1,10.0.0.1"
+      responses:
+        '200':
+          description: Host nodes retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Node'
+                    description: Array of nodes running on the specified host
+                  total:
+                    type: integer
+                    description: Total number of nodes on the host (before pagination)
+                    example: 42
+              examples:
+                with_nodes:
+                  summary: Host with nodes
+                  value:
+                    nodes:
+                      - id: "550e8400-e29b-41d4-a716-446655440000"
+                        org_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                        host_id: "550e8400-e29b-41d4-a716-446655440000"
+                        protocol_id: "bitcoin"
+                        state: "running"
+                        ip_address: "192.168.1.100"
+                        created_at: "2023-01-01T00:00:00Z"
+                        updated_at: "2023-01-01T00:00:00Z"
+                      - id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                        org_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                        host_id: "550e8400-e29b-41d4-a716-446655440000"
+                        protocol_id: "ethereum"
+                        state: "stopped"
+                        ip_address: "192.168.1.101"
+                        created_at: "2023-01-01T00:00:00Z"
+                        updated_at: "2023-01-01T00:00:00Z"
+                    total: 2
+                empty_host:
+                  summary: Host with no nodes
+                  value:
+                    nodes: []
+                    total: 0
+        '400':
+          description: Invalid query parameters or host ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              examples:
+                invalid_host_id:
+                  summary: Invalid host ID format
+                  value:
+                    error: "Invalid query parameters"
+                    details:
+                      - parameter: "host_id"
+                        error: "Invalid UUID format: 'not-a-uuid'"
+                        expected: "Valid UUID string (e.g., '550e8400-e29b-41d4-a716-446655440000')"
+                invalid_node_states:
+                  summary: Invalid node states
+                  value:
+                    error: "Invalid query parameters"
+                    details:
+                      - parameter: "node_states"
+                        error: "Invalid value: 'invalid_state'"
+                        expected: "One of: starting, running, stopped, failed, upgrading, deleting, deleted"
+                invalid_limit:
+                  summary: Invalid limit parameter
+                  value:
+                    error: "Invalid query parameters"
+                    details:
+                      - parameter: "limit"
+                        error: "Value out of range: 2000"
+                        expected: "Integer between 1 and 1000"
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Authentication required"
+        '403':
+          description: Insufficient permissions to access the host
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Insufficient permissions to access this host"
+        '404':
+          description: Host not found (returns empty nodes array instead of 404 for sub-resources)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Node'
+                  total:
+                    type: integer
+              example:
+                nodes: []
+                total: 0
+
   # User endpoints
   /v1/user:
     get:

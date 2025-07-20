@@ -27,6 +27,8 @@ async fn responds_ok_for_write_node() {
         apr: Some(10.0),
         sqd_name: Some("sqd-name".to_string()),
         consensus: Some(false),
+        jailed: Some(false),
+        jailed_reason: None,
         jobs: vec![common::NodeJob {
             name: "download".to_string(),
             status: 2,
@@ -132,6 +134,8 @@ async fn single_failure_doesnt_abort_all_updates() {
         apr: Some(10.0),
         sqd_name: Some("sqd-name".to_string()),
         consensus: Some(false),
+        jailed: Some(false),
+        jailed_reason: None,
         node_status: None,
         jobs: vec![common::NodeJob {
             name: "download".to_string(),
