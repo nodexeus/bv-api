@@ -1,0 +1,1726 @@
+openapi: 3.0.3
+info:
+  title: Blockvisor API
+  description: |
+    Blockvisor API is a distributed infrastructure management system that orchestrates software deployment and monitoring across physical and virtual machines. Originally designed for blockchain node management, it has evolved into a general-purpose platform for running and managing any software.
+    
+    ## Core Concepts
+    - **Hosts**: Physical or virtual machines registered with the system via the `bvup` tool
+    - **Nodes**: Running software instances with real-time state and metrics monitoring
+    - **Organizations**: Groups of users sharing resources and permissions
+    - **Users**: Individual accounts with role-based access control (RBAC)
+    - **Commands**: Instructions sent to hosts for software lifecycle management
+    
+    ## Authentication
+    The API uses JWT tokens for authentication. Include the token in the `Authorization` header as `Bearer <token>`.
+    
+    ## Error Handling
+    The API returns structured error responses with detailed parameter validation information:
+    ```json
+    {
+      "error": "Invalid query parameters",
+      "details": [
+        {
+          "parameter": "org_id",
+          "error": "Invalid UUID format: 'not-a-uuid'",
+          "expected": "Valid UUID string (e.g., '550e8400-e29b-41d4-a716-446655440000')"
+        }
+      ]
+    }
+    ```
+  version: 0.4.0
+  contact:
+    name: Blockvisor API Support
+  license:
+    name: MIT
+servers:
+  - url: https://api.blockvisor.com
+    description: Production server
+  - url: https://staging-api.blockvisor.com
+    description: Staging server
+  - url: http://localhost:8080
+    description: Local development server
+
+security:
+  - BearerAuth: []
+
+paths:
+  # Health endpoint
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check the health status of the API and database connection
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: ""
+        '500':
+          description: Service is unhealthy (database connection closed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Authentication endpoints
+  /v1/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate a user with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  example: securepassword123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: JWT access token
+                  refresh_token:
+                    type: string
+                    description: JWT refresh token
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Get a new access token using a refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  description: Valid refresh token
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: New JWT access token
+        '400':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/auth/permissions:
+    get:
+      tags:
+        - Authentication
+      summary: List user permissions
+      description: Get the permissions for the authenticated user
+      responses:
+        '200':
+          description: User permissions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  permissions:
+                    type: array
+                    items:
+                      type: string
+                    example: ["org:read", "node:create", "host:manage"]
+
+  # Organization endpoints
+  /v1/org:
+    get:
+      tags:
+        - Organizations
+      summary: List organizations
+      description: Get a list of organizations with optional filtering
+      parameters:
+        - name: member_id
+          in: query
+          description: Filter by member ID - only return orgs that this user is a member of
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: personal
+          in: query
+          description: If true, only personal orgs are returned, otherwise none are
+          schema:
+            type: boolean
+            example: false
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            example: 0
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 50
+            example: 50
+      responses:
+        '200':
+          description: Organizations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organizations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Organization'
+                  total:
+                    type: integer
+                    description: Total number of organizations
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+    post:
+      tags:
+        - Organizations
+      summary: Create organization
+      description: Create a new organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "My Organization"
+                  minLength: 1
+                  maxLength: 255
+      responses:
+        '201':
+          description: Organization created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organization:
+                    $ref: '#/components/schemas/Organization'
+
+  /v1/org/{id}:
+    get:
+      tags:
+        - Organizations
+      summary: Get organization
+      description: Get details of a specific organization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Organization ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Organization retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organization:
+                    $ref: '#/components/schemas/Organization'
+        '404':
+          description: Organization not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Organizations
+      summary: Update organization
+      description: Update an existing organization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Organization ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Updated Organization Name"
+                  minLength: 1
+                  maxLength: 255
+      responses:
+        '200':
+          description: Organization updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organization:
+                    $ref: '#/components/schemas/Organization'
+
+    delete:
+      tags:
+        - Organizations
+      summary: Delete organization
+      description: Delete an organization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Organization ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Organization deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Organization deleted successfully"
+
+  # Node endpoints
+  /v1/node:
+    get:
+      tags:
+        - Nodes
+      summary: List nodes
+      description: Get a list of nodes with optional filtering
+      parameters:
+        - name: org_id
+          in: query
+          description: Organization ID to filter by (singular form)
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: org_ids
+          in: query
+          description: Organization IDs to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        - name: host_id
+          in: query
+          description: Host ID to filter by (singular form)
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: host_ids
+          in: query
+          description: Host IDs to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        - name: user_id
+          in: query
+          description: User ID to filter by (singular form)
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: user_ids
+          in: query
+          description: User IDs to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        - name: protocol_ids
+          in: query
+          description: Protocol IDs to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "protocol1,protocol2"
+        - name: semantic_versions
+          in: query
+          description: Semantic versions to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "1.0.0,1.1.0"
+        - name: ip_addresses
+          in: query
+          description: IP addresses to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "192.168.1.1,10.0.0.1"
+        - name: node_states
+          in: query
+          description: Node states to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "running,stopped"
+            enum: [starting, running, stopped, failed, upgrading, deleting, deleted]
+        - name: next_states
+          in: query
+          description: Next states to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "stopping,upgrading"
+            enum: [stopping, deleting, upgrading]
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            example: 0
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 50
+            example: 50
+      responses:
+        '200':
+          description: Nodes retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Node'
+                  total:
+                    type: integer
+                    description: Total number of nodes
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+    post:
+      tags:
+        - Nodes
+      summary: Create node
+      description: Create a new node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNodeRequest'
+      responses:
+        '201':
+          description: Node created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node:
+                    $ref: '#/components/schemas/Node'
+
+  /v1/node/{id}:
+    get:
+      tags:
+        - Nodes
+      summary: Get node
+      description: Get details of a specific node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Node ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Node retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node:
+                    $ref: '#/components/schemas/Node'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Nodes
+      summary: Delete node
+      description: Delete a node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Node ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Node deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Node deleted successfully"
+
+  /v1/node/{id}/start:
+    put:
+      tags:
+        - Nodes
+      summary: Start node
+      description: Start a stopped node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Node ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Node start command sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Node start command sent"
+
+  /v1/node/{id}/stop:
+    put:
+      tags:
+        - Nodes
+      summary: Stop node
+      description: Stop a running node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Node ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Node stop command sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Node stop command sent"
+
+  /v1/node/{id}/restart:
+    put:
+      tags:
+        - Nodes
+      summary: Restart node
+      description: Restart a node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Node ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Node restart command sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Node restart command sent"
+
+  # Host endpoints
+  /v1/host:
+    get:
+      tags:
+        - Hosts
+      summary: List hosts
+      description: Get a list of hosts with optional filtering
+      parameters:
+        - name: org_id
+          in: query
+          description: Organization ID to filter by (singular form)
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: org_ids
+          in: query
+          description: Organization IDs to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        - name: bv_versions
+          in: query
+          description: Blockvisor versions to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "1.0.0,1.1.0"
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            example: 0
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 50
+            example: 50
+      responses:
+        '200':
+          description: Hosts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hosts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Host'
+                  total:
+                    type: integer
+                    description: Total number of hosts
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+    post:
+      tags:
+        - Hosts
+      summary: Create host
+      description: Create a new host
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHostRequest'
+      responses:
+        '201':
+          description: Host created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  host:
+                    $ref: '#/components/schemas/Host'
+
+  /v1/host/{id}:
+    get:
+      tags:
+        - Hosts
+      summary: Get host
+      description: Get details of a specific host
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Host ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Host retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  host:
+                    $ref: '#/components/schemas/Host'
+        '404':
+          description: Host not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Hosts
+      summary: Update host
+      description: Update an existing host
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Host ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHostRequest'
+      responses:
+        '200':
+          description: Host updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  host:
+                    $ref: '#/components/schemas/Host'
+
+    delete:
+      tags:
+        - Hosts
+      summary: Delete host
+      description: Delete a host
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Host ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Host deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Host deleted successfully"
+
+  /v1/host/regions:
+    get:
+      tags:
+        - Hosts
+      summary: List regions
+      description: Get a list of available regions for hosting
+      parameters:
+        - name: image_id
+          in: query
+          required: true
+          description: Image ID to list regions for
+          schema:
+            type: string
+            example: "ubuntu-20.04"
+        - name: org_id
+          in: query
+          description: Organization ID for private hosts, images or protocols
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Regions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  regions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Region'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+  # User endpoints
+  /v1/user:
+    get:
+      tags:
+        - Users
+      summary: List users
+      description: Get a list of users with optional filtering
+      parameters:
+        - name: user_id
+          in: query
+          description: User ID to filter by (singular form)
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: user_ids
+          in: query
+          description: User IDs to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        - name: org_id
+          in: query
+          description: Organization ID to filter by (singular form)
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: org_ids
+          in: query
+          description: Organization IDs to filter by (comma-separated or repeated)
+          schema:
+            type: string
+            example: "550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            example: 0
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 50
+            example: 50
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  total:
+                    type: integer
+                    description: Total number of users
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+    post:
+      tags:
+        - Users
+      summary: Create user
+      description: Create a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+
+  /v1/user/{user_id}:
+    get:
+      tags:
+        - Users
+      summary: Get user
+      description: Get details of a specific user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: User retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Users
+      summary: Delete user
+      description: Delete a user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User deleted successfully"
+
+  # Protocol endpoints
+  /v1/protocol:
+    get:
+      tags:
+        - Protocols
+      summary: List protocols
+      description: Get a list of available protocols
+      responses:
+        '200':
+          description: Protocols retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  protocols:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Protocol'
+
+    post:
+      tags:
+        - Protocols
+      summary: Add protocol
+      description: Add a new protocol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProtocolRequest'
+      responses:
+        '201':
+          description: Protocol created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  protocol:
+                    $ref: '#/components/schemas/Protocol'
+
+  /v1/protocol/{id}:
+    get:
+      tags:
+        - Protocols
+      summary: Get protocol
+      description: Get details of a specific protocol
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Protocol ID
+          schema:
+            type: string
+            example: "bitcoin"
+        - name: org_id
+          in: query
+          description: Organization ID for private protocols
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Protocol retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  protocol:
+                    $ref: '#/components/schemas/Protocol'
+        '404':
+          description: Protocol not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # API Key endpoints
+  /v1/api-key:
+    get:
+      tags:
+        - API Keys
+      summary: List API keys
+      description: Get a list of API keys for the authenticated user
+      responses:
+        '200':
+          description: API keys retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKey'
+
+    post:
+      tags:
+        - API Keys
+      summary: Create API key
+      description: Create a new API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+      responses:
+        '201':
+          description: API key created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key:
+                    $ref: '#/components/schemas/ApiKey'
+                  secret:
+                    type: string
+                    description: API key secret (only returned on creation)
+                    example: "sk_live_abcd1234..."
+
+    delete:
+      tags:
+        - API Keys
+      summary: Delete API key
+      description: Delete an API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - api_key_id
+              properties:
+                api_key_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: API key deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "API key deleted successfully"
+
+  # Invitation endpoints
+  /v1/invitation:
+    get:
+      tags:
+        - Invitations
+      summary: List invitations
+      description: Get a list of invitations
+      parameters:
+        - name: org_id
+          in: query
+          description: Organization ID to filter by
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: invitee_email
+          in: query
+          description: Invitee email to filter by
+          schema:
+            type: string
+            format: email
+            example: "user@example.com"
+      responses:
+        '200':
+          description: Invitations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invitations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Invitation'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+    post:
+      tags:
+        - Invitations
+      summary: Create invitation
+      description: Create a new invitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitationRequest'
+      responses:
+        '201':
+          description: Invitation created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invitation:
+                    $ref: '#/components/schemas/Invitation'
+
+  /v1/invitation/{id}/accept:
+    post:
+      tags:
+        - Invitations
+      summary: Accept invitation
+      description: Accept an invitation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Invitation ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Invitation accepted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Invitation accepted successfully"
+
+  /v1/invitation/{id}/decline:
+    post:
+      tags:
+        - Invitations
+      summary: Decline invitation
+      description: Decline an invitation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Invitation ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Invitation declined successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Invitation declined successfully"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # Error schemas
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "An error occurred"
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Invalid query parameters"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              parameter:
+                type: string
+                example: "org_id"
+              error:
+                type: string
+                example: "Invalid UUID format: 'not-a-uuid'"
+              expected:
+                type: string
+                example: "Valid UUID string (e.g., '550e8400-e29b-41d4-a716-446655440000')"
+
+    # Core entity schemas
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          example: "My Organization"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        personal:
+          type: boolean
+          example: false
+          description: Whether this is a personal organization
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        name:
+          type: string
+          example: "John Doe"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+
+    Host:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        org_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        network_name:
+          type: string
+          example: "host-001"
+        display_name:
+          type: string
+          example: "Production Host 1"
+        region_id:
+          type: string
+          example: "us-east-1"
+        os:
+          type: string
+          example: "Ubuntu"
+        os_version:
+          type: string
+          example: "20.04"
+        bv_version:
+          type: string
+          example: "1.0.0"
+        cpu_cores:
+          type: integer
+          example: 4
+        memory_bytes:
+          type: integer
+          format: int64
+          example: 8589934592
+        disk_bytes:
+          type: integer
+          format: int64
+          example: 107374182400
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+
+    Node:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        org_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        host_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        protocol_id:
+          type: string
+          example: "bitcoin"
+        state:
+          type: string
+          enum: [starting, running, stopped, failed, upgrading, deleting, deleted]
+          example: "running"
+        ip_address:
+          type: string
+          format: ipv4
+          example: "192.168.1.100"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+
+    Protocol:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "bitcoin"
+        name:
+          type: string
+          example: "Bitcoin"
+        description:
+          type: string
+          example: "Bitcoin blockchain protocol"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+
+    Region:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "us-east-1"
+        name:
+          type: string
+          example: "US East (N. Virginia)"
+        display_name:
+          type: string
+          example: "US East (N. Virginia)"
+        sku_code:
+          type: string
+          example: "us-east-1-standard"
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          example: "Production API Key"
+        prefix:
+          type: string
+          example: "pk_live_"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        last_used_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+          nullable: true
+
+    Invitation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        org_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        invitee_email:
+          type: string
+          format: email
+          example: "user@example.com"
+        status:
+          type: string
+          enum: [pending, accepted, declined, revoked]
+          example: "pending"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        expires_at:
+          type: string
+          format: date-time
+          example: "2023-01-08T00:00:00Z"
+
+    # Request schemas
+    CreateUserRequest:
+      type: object
+      required:
+        - email
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        name:
+          type: string
+          example: "John Doe"
+        password:
+          type: string
+          format: password
+          example: "securepassword123"
+
+    CreateHostRequest:
+      type: object
+      required:
+        - org_id
+        - network_name
+        - region_id
+      properties:
+        org_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        network_name:
+          type: string
+          example: "host-001"
+        display_name:
+          type: string
+          example: "Production Host 1"
+        region_id:
+          type: string
+          example: "us-east-1"
+        os:
+          type: string
+          example: "Ubuntu"
+        os_version:
+          type: string
+          example: "20.04"
+        cpu_cores:
+          type: integer
+          example: 4
+        memory_bytes:
+          type: integer
+          format: int64
+          example: 8589934592
+        disk_bytes:
+          type: integer
+          format: int64
+          example: 107374182400
+
+    UpdateHostRequest:
+      type: object
+      properties:
+        network_name:
+          type: string
+          example: "host-001-updated"
+        display_name:
+          type: string
+          example: "Updated Production Host 1"
+        region_id:
+          type: string
+          example: "us-west-2"
+        os:
+          type: string
+          example: "Ubuntu"
+        os_version:
+          type: string
+          example: "22.04"
+        bv_version:
+          type: string
+          example: "1.1.0"
+        cpu_cores:
+          type: integer
+          example: 8
+        memory_bytes:
+          type: integer
+          format: int64
+          example: 17179869184
+        disk_bytes:
+          type: integer
+          format: int64
+          example: 214748364800
+
+    CreateNodeRequest:
+      type: object
+      required:
+        - org_id
+        - host_id
+        - protocol_id
+      properties:
+        org_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        host_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        protocol_id:
+          type: string
+          example: "bitcoin"
+        version:
+          type: string
+          example: "1.0.0"
+        config:
+          type: object
+          description: Protocol-specific configuration
+          additionalProperties: true
+
+    CreateProtocolRequest:
+      type: object
+      required:
+        - key
+        - name
+      properties:
+        key:
+          type: string
+          example: "bitcoin"
+        name:
+          type: string
+          example: "Bitcoin"
+        description:
+          type: string
+          example: "Bitcoin blockchain protocol"
+
+    CreateApiKeyRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: "Production API Key"
+        permissions:
+          type: array
+          items:
+            type: string
+          example: ["org:read", "node:create", "host:manage"]
+
+    CreateInvitationRequest:
+      type: object
+      required:
+        - org_id
+        - invitee_email
+      properties:
+        org_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        invitee_email:
+          type: string
+          format: email
+          example: "user@example.com"
+        role:
+          type: string
+          example: "member"
+          enum: [admin, member, viewer]
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Organizations
+    description: Organization management
+  - name: Users
+    description: User management
+  - name: Hosts
+    description: Host management
+  - name: Nodes
+    description: Node management
+  - name: Protocols
+    description: Protocol management
+  - name: API Keys
+    description: API key management
+  - name: Invitations
+    description: Invitation management

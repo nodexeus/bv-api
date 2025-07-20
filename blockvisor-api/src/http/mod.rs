@@ -1,4 +1,5 @@
 pub mod handler;
+pub mod params;
 pub mod response;
 
 use std::sync::Arc;

@@ -5,6 +5,7 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
+use crate::http::params::ParameterValidationError;
 
 const OK: StatusCode = StatusCode::OK;
 const BAD_REQUEST: StatusCode = StatusCode::BAD_REQUEST;
@@ -66,6 +67,18 @@ pub fn db_closed() -> Response {
     (INTERNAL_SERVER_ERROR, Body::json(Message::DbClosed)).into_response()
 }
 
+/// Create a response for parameter validation errors with detailed error information
+pub fn parameter_validation_error(error: ParameterValidationError) -> Response {
+    (BAD_REQUEST, Json(error.to_json())).into_response()
+}
+
+/// Create a response for a single parameter error
+pub fn parameter_error(parameter: &str, error: &str, expected: &str) -> Response {
+    let mut validation_error = ParameterValidationError::new("Invalid query parameter");
+    validation_error.add_error(parameter, error, expected);
+    parameter_validation_error(validation_error)
+}
+
 #[derive(Serialize)]
 struct Body {
     pub message: &'static str,
@@ -101,5 +114,40 @@ mod tests {
         let bytes = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
         let body = String::from_utf8(bytes.to_vec()).unwrap();
         assert_eq!(body, r#"{"message":"Failed."}"#);
+    }
+
+    #[tokio::test]
+    async fn parameter_validation_error_response() {
+        let mut error = ParameterValidationError::new("Invalid parameters");
+        error.add_error("org_id", "Invalid UUID format", "Valid UUID string");
+        
+        let resp = parameter_validation_error(error).into_response();
+        assert_eq!(resp.status(), BAD_REQUEST);
+        
+        let bytes = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
+        let body = String::from_utf8(bytes.to_vec()).unwrap();
+        
+        // Verify the JSON structure
+        let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(json["error"], "Invalid parameters");
+        assert_eq!(json["details"][0]["parameter"], "org_id");
+        assert_eq!(json["details"][0]["error"], "Invalid UUID format");
+        assert_eq!(json["details"][0]["expected"], "Valid UUID string");
+    }
+
+    #[tokio::test]
+    async fn parameter_error_response() {
+        let resp = parameter_error("limit", "Value too large", "Number between 1 and 1000").into_response();
+        assert_eq!(resp.status(), BAD_REQUEST);
+        
+        let bytes = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
+        let body = String::from_utf8(bytes.to_vec()).unwrap();
+        
+        // Verify the JSON structure
+        let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(json["error"], "Invalid query parameter");
+        assert_eq!(json["details"][0]["parameter"], "limit");
+        assert_eq!(json["details"][0]["error"], "Value too large");
+        assert_eq!(json["details"][0]["expected"], "Number between 1 and 1000");
     }
 }

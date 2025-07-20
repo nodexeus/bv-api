@@ -5,10 +5,12 @@ use axum::extract::{Path, Query, State};
 use axum::http::header::HeaderMap;
 use axum::routing::{self, Router};
 use diesel_async::scoped_futures::ScopedFutureExt;
+use serde::Deserialize;
 
 use crate::config::Context;
 use crate::database::Transaction;
 use crate::grpc::{self, api, common};
+use crate::http::params::validation;
 
 use super::Error;
 
@@ -57,11 +59,78 @@ async fn get(
         .await
 }
 
+/// HTTP query parameters for listing organizations
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OrgListParams {
+    /// Member ID to filter by - only return orgs that this user is a member of
+    pub member_id: Option<String>,
+    /// If true, only personal orgs are returned, otherwise none are
+    pub personal: Option<bool>,
+    /// Number of results to skip
+    pub offset: Option<u64>,
+    /// Maximum number of results to return
+    pub limit: Option<u64>,
+    /// Search query string
+    pub search: Option<String>,
+}
+
+impl OrgListParams {
+    /// Validate parameters and convert to gRPC request
+    fn to_grpc_request(self) -> Result<api::OrgServiceListRequest, crate::http::params::ParameterValidationError> {
+        let mut validation_error = crate::http::params::ParameterValidationError::new("Invalid query parameters");
+
+        // Validate member_id if provided
+        if let Some(ref member_id) = self.member_id {
+            if let Err(e) = validation::validate_uuid(member_id, "member_id") {
+                validation_error.add_error(e.parameter, e.error, e.expected);
+            }
+        }
+
+        // Validate limit
+        let limit = if let Some(limit) = self.limit {
+            match validation::validate_range(limit, 1u64, 1000u64, "limit") {
+                Ok(l) => l,
+                Err(e) => {
+                    validation_error.add_error(e.parameter, e.error, e.expected);
+                    50 // default
+                }
+            }
+        } else {
+            50 // default
+        };
+
+        // Return validation errors if any
+        if !validation_error.is_empty() {
+            return Err(validation_error);
+        }
+
+        Ok(api::OrgServiceListRequest {
+            member_id: self.member_id,
+            personal: self.personal,
+            offset: self.offset.unwrap_or(0),
+            limit,
+            search: None, // TODO: Implement search parameter parsing
+            sort: Vec::new(), // TODO: Implement sort parameter parsing
+        })
+    }
+}
+
 async fn list(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
-    Query(req): Query<api::OrgServiceListRequest>,
+    Query(params): Query<OrgListParams>,
 ) -> Result<Json<api::OrgServiceListResponse>, Error> {
+    let req = match params.to_grpc_request() {
+        Ok(req) => req,
+        Err(validation_error) => {
+            return Err(Error::new(
+                validation_error.to_json(),
+                hyper::StatusCode::BAD_REQUEST,
+            ));
+        }
+    };
+    
     ctx.read(|read| grpc::org::list(req, headers.into(), read).scope_boxed())
         .await
 }
@@ -122,16 +191,49 @@ struct OrgServiceGetProvisionTokenRequest {
     user_id: String,
 }
 
+impl OrgServiceGetProvisionTokenRequest {
+    /// Validate parameters and convert to gRPC request
+    fn to_grpc_request(self, org_id: String) -> Result<api::OrgServiceGetProvisionTokenRequest, crate::http::params::ParameterValidationError> {
+        let mut validation_error = crate::http::params::ParameterValidationError::new("Invalid query parameters");
+
+        // Validate user_id
+        if let Err(e) = validation::validate_uuid(&self.user_id, "user_id") {
+            validation_error.add_error(e.parameter, e.error, e.expected);
+        }
+
+        // Validate org_id
+        if let Err(e) = validation::validate_uuid(&org_id, "org_id") {
+            validation_error.add_error(e.parameter, e.error, e.expected);
+        }
+
+        // Return validation errors if any
+        if !validation_error.is_empty() {
+            return Err(validation_error);
+        }
+
+        Ok(api::OrgServiceGetProvisionTokenRequest {
+            user_id: self.user_id,
+            org_id,
+        })
+    }
+}
+
 async fn get_provision_token(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
     Path((org_id,)): Path<(String,)>,
-    Query(req): Query<OrgServiceGetProvisionTokenRequest>,
+    Query(params): Query<OrgServiceGetProvisionTokenRequest>,
 ) -> Result<Json<api::OrgServiceGetProvisionTokenResponse>, Error> {
-    let req = api::OrgServiceGetProvisionTokenRequest {
-        user_id: req.user_id,
-        org_id,
+    let req = match params.to_grpc_request(org_id) {
+        Ok(req) => req,
+        Err(validation_error) => {
+            return Err(Error::new(
+                validation_error.to_json(),
+                hyper::StatusCode::BAD_REQUEST,
+            ));
+        }
     };
+    
     ctx.read(|read| grpc::org::get_provision_token(req, headers.into(), read).scope_boxed())
         .await
 }
@@ -244,4 +346,91 @@ async fn get_invoices(
     let req = api::OrgServiceGetInvoicesRequest { org_id };
     ctx.read(|read| grpc::org::get_invoices(req, headers.into(), read).scope_boxed())
         .await
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_urlencoded;
+
+    #[test]
+    fn test_org_list_params_basic() {
+        let query = "member_id=550e8400-e29b-41d4-a716-446655440000&personal=true&limit=25";
+        let params: OrgListParams = serde_urlencoded::from_str(query).unwrap();
+        
+        assert_eq!(params.member_id, Some("550e8400-e29b-41d4-a716-446655440000".to_string()));
+        assert_eq!(params.personal, Some(true));
+        assert_eq!(params.limit, Some(25));
+    }
+
+    #[test]
+    fn test_org_list_params_to_grpc_request_success() {
+        let params = OrgListParams {
+            member_id: Some("550e8400-e29b-41d4-a716-446655440000".to_string()),
+            personal: Some(false),
+            offset: Some(5),
+            limit: Some(100),
+            search: None,
+        };
+
+        let grpc_req = params.to_grpc_request().unwrap();
+        assert_eq!(grpc_req.member_id, Some("550e8400-e29b-41d4-a716-446655440000".to_string()));
+        assert_eq!(grpc_req.personal, Some(false));
+        assert_eq!(grpc_req.offset, 5);
+        assert_eq!(grpc_req.limit, 100);
+    }
+
+    #[test]
+    fn test_org_list_params_to_grpc_request_invalid_member_id() {
+        let params = OrgListParams {
+            member_id: Some("not-a-uuid".to_string()),
+            personal: None,
+            offset: None,
+            limit: None,
+            search: None,
+        };
+
+        let result = params.to_grpc_request();
+        assert!(result.is_err());
+        
+        let error = result.unwrap_err();
+        assert!(!error.is_empty());
+        assert_eq!(error.errors[0].parameter, "member_id");
+        assert!(error.errors[0].error.contains("Invalid UUID format"));
+    }
+
+    #[test]
+    fn test_org_list_params_defaults() {
+        let params = OrgListParams {
+            member_id: None,
+            personal: None,
+            offset: None,
+            limit: None,
+            search: None,
+        };
+
+        let grpc_req = params.to_grpc_request().unwrap();
+        assert_eq!(grpc_req.member_id, None);
+        assert_eq!(grpc_req.personal, None);
+        assert_eq!(grpc_req.offset, 0);
+        assert_eq!(grpc_req.limit, 50); // default limit
+    }
+
+    #[test]
+    fn test_org_list_params_limit_validation() {
+        let params = OrgListParams {
+            member_id: None,
+            personal: None,
+            offset: None,
+            limit: Some(2000), // Over the max limit
+            search: None,
+        };
+
+        let result = params.to_grpc_request();
+        assert!(result.is_err());
+        
+        let error = result.unwrap_err();
+        assert!(!error.is_empty());
+        assert_eq!(error.errors[0].parameter, "limit");
+        assert!(error.errors[0].error.contains("out of range"));
+    }
 }

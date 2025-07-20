@@ -5,10 +5,12 @@ use axum::extract::{Path, Query, State};
 use axum::http::header::HeaderMap;
 use axum::routing::{self, Router};
 use diesel_async::scoped_futures::ScopedFutureExt;
+use serde::Deserialize;
 
 use crate::config::Context;
 use crate::database::Transaction;
 use crate::grpc::{self, api, common};
+use crate::http::params::{CommaSeparatedList, validation};
 
 use super::Error;
 
@@ -74,11 +76,119 @@ async fn get_region(
         .await
 }
 
+/// HTTP query parameters for listing hosts
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostListParams {
+    /// Organization IDs to filter by (supports both singular and plural forms)
+    #[serde(alias = "org_id")]
+    pub org_ids: Option<CommaSeparatedList<String>>,
+    /// Blockvisor versions to filter by
+    pub bv_versions: Option<CommaSeparatedList<String>>,
+    /// Number of results to skip
+    pub offset: Option<u64>,
+    /// Maximum number of results to return
+    pub limit: Option<u64>,
+    /// Search query string
+    pub search: Option<String>,
+}
+
+impl HostListParams {
+    /// Validate parameters and convert to gRPC request
+    fn to_grpc_request(self) -> Result<api::HostServiceListHostsRequest, crate::http::params::ParameterValidationError> {
+        let mut validation_error = crate::http::params::ParameterValidationError::new("Invalid query parameters");
+
+        // Validate org_ids
+        let org_ids = if let Some(org_ids) = self.org_ids {
+            match validation::validate_uuid_list(&org_ids.0, "org_ids") {
+                Ok(_) => org_ids.0,
+                Err(e) => {
+                    validation_error.add_error(e.parameter, e.error, e.expected);
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        };
+
+        // Validate limit
+        let limit = if let Some(limit) = self.limit {
+            match validation::validate_range(limit, 1u64, 1000u64, "limit") {
+                Ok(l) => l,
+                Err(e) => {
+                    validation_error.add_error(e.parameter, e.error, e.expected);
+                    50 // default
+                }
+            }
+        } else {
+            50 // default
+        };
+
+        // Return validation errors if any
+        if !validation_error.is_empty() {
+            return Err(validation_error);
+        }
+
+        Ok(api::HostServiceListHostsRequest {
+            org_ids,
+            bv_versions: self.bv_versions.map(|v| v.0).unwrap_or_default(),
+            offset: self.offset.unwrap_or(0),
+            limit,
+            search: None, // TODO: Implement search parameter parsing
+            sort: Vec::new(), // TODO: Implement sort parameter parsing
+        })
+    }
+}
+
+/// HTTP query parameters for listing regions
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostListRegionsParams {
+    /// Image ID to list regions for
+    pub image_id: String,
+    /// Organization ID for private hosts, images or protocols
+    pub org_id: Option<String>,
+}
+
+impl HostListRegionsParams {
+    /// Validate parameters and convert to gRPC request
+    fn to_grpc_request(self) -> Result<api::HostServiceListRegionsRequest, crate::http::params::ParameterValidationError> {
+        let mut validation_error = crate::http::params::ParameterValidationError::new("Invalid query parameters");
+
+        // Validate org_id if provided
+        if let Some(ref org_id) = self.org_id {
+            if let Err(e) = validation::validate_uuid(org_id, "org_id") {
+                validation_error.add_error(e.parameter, e.error, e.expected);
+            }
+        }
+
+        // Return validation errors if any
+        if !validation_error.is_empty() {
+            return Err(validation_error);
+        }
+
+        Ok(api::HostServiceListRegionsRequest {
+            image_id: self.image_id,
+            org_id: self.org_id,
+        })
+    }
+}
+
 async fn list_hosts(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
-    Query(req): Query<api::HostServiceListHostsRequest>,
+    Query(params): Query<HostListParams>,
 ) -> Result<Json<api::HostServiceListHostsResponse>, Error> {
+    let req = match params.to_grpc_request() {
+        Ok(req) => req,
+        Err(validation_error) => {
+            return Err(Error::new(
+                validation_error.to_json(),
+                hyper::StatusCode::BAD_REQUEST,
+            ));
+        }
+    };
+    
     ctx.read(|read| grpc::host::list_hosts(req, headers.into(), read).scope_boxed())
         .await
 }
@@ -86,8 +196,18 @@ async fn list_hosts(
 async fn list_regions(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
-    Query(req): Query<api::HostServiceListRegionsRequest>,
+    Query(params): Query<HostListRegionsParams>,
 ) -> Result<Json<api::HostServiceListRegionsResponse>, Error> {
+    let req = match params.to_grpc_request() {
+        Ok(req) => req,
+        Err(validation_error) => {
+            return Err(Error::new(
+                validation_error.to_json(),
+                hyper::StatusCode::BAD_REQUEST,
+            ));
+        }
+    };
+    
     ctx.read(|read| grpc::host::list_regions(req, headers.into(), read).scope_boxed())
         .await
 }
@@ -194,4 +314,105 @@ async fn restart(
     let req = api::HostServiceRestartRequest { host_id };
     ctx.write(|write| grpc::host::restart(req, headers.into(), write).scope_boxed())
         .await
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_urlencoded;
+
+    #[test]
+    fn test_host_list_params_single_org_id() {
+        let query = "org_id=550e8400-e29b-41d4-a716-446655440000&limit=10";
+        let params: HostListParams = serde_urlencoded::from_str(query).unwrap();
+        
+        assert!(params.org_ids.is_some());
+        assert_eq!(params.org_ids.unwrap().0, vec!["550e8400-e29b-41d4-a716-446655440000"]);
+        assert_eq!(params.limit, Some(10));
+    }
+
+    #[test]
+    fn test_host_list_params_plural_org_ids() {
+        let query = "org_ids=550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8&limit=20";
+        let params: HostListParams = serde_urlencoded::from_str(query).unwrap();
+        
+        assert!(params.org_ids.is_some());
+        assert_eq!(params.org_ids.unwrap().0, vec![
+            "550e8400-e29b-41d4-a716-446655440000",
+            "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        ]);
+        assert_eq!(params.limit, Some(20));
+    }
+
+    #[test]
+    fn test_host_list_params_to_grpc_request_success() {
+        let params = HostListParams {
+            org_ids: Some(CommaSeparatedList(vec!["550e8400-e29b-41d4-a716-446655440000".to_string()])),
+            bv_versions: Some(CommaSeparatedList(vec!["1.0.0".to_string()])),
+            offset: Some(10),
+            limit: Some(50),
+            search: None,
+        };
+
+        let grpc_req = params.to_grpc_request().unwrap();
+        assert_eq!(grpc_req.org_ids, vec!["550e8400-e29b-41d4-a716-446655440000"]);
+        assert_eq!(grpc_req.bv_versions, vec!["1.0.0"]);
+        assert_eq!(grpc_req.offset, 10);
+        assert_eq!(grpc_req.limit, 50);
+    }
+
+    #[test]
+    fn test_host_list_params_to_grpc_request_invalid_uuid() {
+        let params = HostListParams {
+            org_ids: Some(CommaSeparatedList(vec!["not-a-uuid".to_string()])),
+            bv_versions: None,
+            offset: None,
+            limit: None,
+            search: None,
+        };
+
+        let result = params.to_grpc_request();
+        assert!(result.is_err());
+        
+        let error = result.unwrap_err();
+        assert!(!error.is_empty());
+        assert_eq!(error.errors[0].parameter, "org_ids");
+        assert!(error.errors[0].error.contains("Invalid UUID format"));
+    }
+
+    #[test]
+    fn test_host_list_regions_params_success() {
+        let query = "image_id=img123&org_id=550e8400-e29b-41d4-a716-446655440000";
+        let params: HostListRegionsParams = serde_urlencoded::from_str(query).unwrap();
+        
+        assert_eq!(params.image_id, "img123");
+        assert_eq!(params.org_id, Some("550e8400-e29b-41d4-a716-446655440000".to_string()));
+    }
+
+    #[test]
+    fn test_host_list_regions_params_to_grpc_request_success() {
+        let params = HostListRegionsParams {
+            image_id: "img123".to_string(),
+            org_id: Some("550e8400-e29b-41d4-a716-446655440000".to_string()),
+        };
+
+        let grpc_req = params.to_grpc_request().unwrap();
+        assert_eq!(grpc_req.image_id, "img123");
+        assert_eq!(grpc_req.org_id, Some("550e8400-e29b-41d4-a716-446655440000".to_string()));
+    }
+
+    #[test]
+    fn test_host_list_regions_params_invalid_org_id() {
+        let params = HostListRegionsParams {
+            image_id: "img123".to_string(),
+            org_id: Some("not-a-uuid".to_string()),
+        };
+
+        let result = params.to_grpc_request();
+        assert!(result.is_err());
+        
+        let error = result.unwrap_err();
+        assert!(!error.is_empty());
+        assert_eq!(error.errors[0].parameter, "org_id");
+        assert!(error.errors[0].error.contains("Invalid UUID format"));
+    }
 }

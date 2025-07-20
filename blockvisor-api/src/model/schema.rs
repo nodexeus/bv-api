@@ -544,8 +544,10 @@ diesel::table! {
         cost -> Nullable<Jsonb>,
         apr -> Nullable<Float8>,
         jailed -> Nullable<Bool>,
-        jailed_reason -> Nullable<Text>,
-        sqd_name -> Nullable<Text>,
+        #[max_length = 255]
+        jailed_reason -> Nullable<Varchar>,
+        #[max_length = 255]
+        sqd_name -> Nullable<Varchar>,
     }
 }
 
