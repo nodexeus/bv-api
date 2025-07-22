@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 3.0.1
 info:
   title: Blockvisor API
   description: |
@@ -34,10 +34,10 @@ info:
   license:
     name: MIT
 servers:
-  - url: https://api.blockvisor.com
+  - url: https://api.nodexeus.io
     description: Production server
-  - url: https://staging-api.blockvisor.com
-    description: Staging server
+  - url: https://api.dev.nodexeus.com
+    description: Dev server
   - url: http://localhost:8080
     description: Local development server
 
@@ -640,6 +640,258 @@ paths:
                   message:
                     type: string
                     example: "Node restart command sent"
+
+  /v1/node/{id}/report:
+    post:
+      tags:
+        - Nodes
+      summary: Report node error
+      description: Report an error or issue with a specific node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Node ID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - created_by
+                - message
+              properties:
+                created_by:
+                  $ref: '#/components/schemas/Resource'
+                message:
+                  type: string
+                  description: Error description or problem details
+                  example: "Node failed to sync with network"
+                  minLength: 1
+                  maxLength: 1000
+      responses:
+        '200':
+          description: Error report created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  report_id:
+                    type: string
+                    description: Unique identifier for the error report
+                    example: "report_550e8400-e29b-41d4-a716-446655440000"
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/node/status:
+    post:
+      tags:
+        - Nodes
+      summary: Report node status
+      description: Report the current status and health of a node (typically called by the node itself)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - node_id
+                - config_id
+              properties:
+                node_id:
+                  type: string
+                  format: uuid
+                  description: ID of the node reporting status
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                config_id:
+                  type: string
+                  description: Current configuration ID of the node
+                  example: "config_abc123def456"
+                status:
+                  $ref: '#/components/schemas/NodeStatus'
+                p2p_address:
+                  type: string
+                  description: Peer-to-peer network address
+                  example: "192.168.1.100:8333"
+                  nullable: true
+      responses:
+        '200':
+          description: Node status reported successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Status reported successfully"
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/node/config:
+    put:
+      tags:
+        - Nodes
+      summary: Update node configuration
+      description: Update various configuration settings for a node, including organization transfer, display name, and other properties
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - node_id
+              properties:
+                node_id:
+                  type: string
+                  format: uuid
+                  description: ID of the node to update
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                auto_upgrade:
+                  type: boolean
+                  description: Whether the node should automatically upgrade to new versions
+                  example: true
+                  nullable: true
+                new_org_id:
+                  type: string
+                  format: uuid
+                  description: Transfer the node to a different organization
+                  example: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                  nullable: true
+                new_display_name:
+                  type: string
+                  description: Update the display name of the node
+                  example: "Production Bitcoin Node"
+                  minLength: 1
+                  maxLength: 255
+                  nullable: true
+                new_note:
+                  type: string
+                  description: Update the note explaining what this node is for
+                  example: "Primary Bitcoin node for production trading"
+                  maxLength: 1000
+                  nullable: true
+                new_values:
+                  type: array
+                  description: Update image property values
+                  items:
+                    $ref: '#/components/schemas/ImagePropertyValue'
+                new_firewall:
+                  $ref: '#/components/schemas/FirewallConfig'
+                update_tags:
+                  $ref: '#/components/schemas/UpdateTags'
+                cost:
+                  $ref: '#/components/schemas/BillingAmount'
+      responses:
+        '200':
+          description: Node configuration updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Node configuration updated successfully"
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/node/image:
+    put:
+      tags:
+        - Nodes
+      summary: Upgrade node image
+      description: Upgrade one or more nodes to a new image version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - node_ids
+                - image_id
+              properties:
+                node_ids:
+                  type: array
+                  description: IDs of the nodes to upgrade
+                  items:
+                    type: string
+                    format: uuid
+                  example: ["550e8400-e29b-41d4-a716-446655440000", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"]
+                  minItems: 1
+                image_id:
+                  type: string
+                  description: ID of the image to upgrade to
+                  example: "bitcoin-core-v25.0"
+                  minLength: 1
+                org_id:
+                  type: string
+                  format: uuid
+                  description: Organization ID for private images
+                  example: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                  nullable: true
+      responses:
+        '200':
+          description: Node image upgrade initiated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Node image upgrade initiated successfully"
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '404':
+          description: One or more nodes not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # Host endpoints
   /v1/host:
@@ -1633,21 +1885,183 @@ components:
           format: date-time
           example: "2023-01-01T00:00:00Z"
 
+    # Node-related schemas
+    NodeStatus:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [starting, running, stopped, failed, upgrading, deleting, deleted]
+          example: "running"
+          description: Current state of the node
+        next:
+          type: string
+          enum: [stopping, deleting, upgrading]
+          example: "upgrading"
+          description: Next state the node is transitioning to
+          nullable: true
+        protocol:
+          $ref: '#/components/schemas/ProtocolStatus'
+
+    ProtocolStatus:
+      type: object
+      properties:
+        state:
+          type: string
+          example: "synced"
+          description: Protocol-specific state
+        health:
+          type: string
+          enum: [healthy, neutral, unhealthy]
+          example: "healthy"
+          description: Health status of the protocol
+
+    Resource:
+      type: object
+      properties:
+        resource_type:
+          type: string
+          enum: [user, host, node, system]
+          example: "user"
+          description: Type of resource that created this entry
+        resource_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+          description: ID of the resource
+
+    ImagePropertyValue:
+      type: object
+      required:
+        - key
+        - value
+      properties:
+        key:
+          type: string
+          example: "rpc_port"
+          description: Property key to update
+        value:
+          type: string
+          example: "8332"
+          description: New value for the property
+
+    FirewallConfig:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/FirewallRule'
+          description: List of firewall rules
+
+    FirewallRule:
+      type: object
+      required:
+        - port
+        - protocol
+        - direction
+      properties:
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          example: 8333
+          description: Port number
+        protocol:
+          type: string
+          enum: [tcp, udp]
+          example: "tcp"
+          description: Network protocol
+        direction:
+          type: string
+          enum: [inbound, outbound]
+          example: "inbound"
+          description: Traffic direction
+        source:
+          type: string
+          example: "0.0.0.0/0"
+          description: Source IP range (CIDR notation)
+          nullable: true
+
+    UpdateTags:
+      type: object
+      properties:
+        add:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+          description: Tags to add
+        remove:
+          type: array
+          items:
+            type: string
+          example: ["old-tag", "deprecated"]
+          description: Tag keys to remove
+
+    Tag:
+      type: object
+      required:
+        - key
+        - value
+      properties:
+        key:
+          type: string
+          example: "environment"
+          description: Tag key
+        value:
+          type: string
+          example: "production"
+          description: Tag value
+
+    BillingAmount:
+      type: object
+      properties:
+        amount:
+          type: integer
+          format: int64
+          example: 1000
+          description: Amount in smallest currency unit (e.g., cents)
+        currency:
+          type: string
+          example: "USD"
+          description: Currency code
+        period:
+          type: string
+          enum: [hourly, daily, monthly, yearly]
+          example: "monthly"
+          description: Billing period
+
     Region:
       type: object
       properties:
         id:
           type: string
           example: "us-east-1"
+          description: Region identifier
         name:
           type: string
           example: "US East (N. Virginia)"
+          description: Human-readable region name
+        key:
+          type: string
+          example: "us-east-1"
+          description: Region key
         display_name:
           type: string
           example: "US East (N. Virginia)"
+          description: Display name for the region
         sku_code:
           type: string
           example: "us-east-1-standard"
+          description: SKU code for billing
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
 
     ApiKey:
       type: object

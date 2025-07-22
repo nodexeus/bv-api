@@ -238,6 +238,28 @@ struct NodeServiceReportErrorRequest {
     message: String,
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NodeServiceUpdateConfigRequest {
+    node_id: String,
+    auto_upgrade: Option<bool>,
+    new_org_id: Option<String>,
+    new_display_name: Option<String>,
+    new_note: Option<String>,
+    new_values: Option<Vec<api::NewImagePropertyValue>>,
+    new_firewall: Option<common::FirewallConfig>,
+    update_tags: Option<common::UpdateTags>,
+    cost: Option<common::BillingAmount>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NodeServiceUpgradeImageRequest {
+    node_ids: Vec<String>,
+    image_id: String,
+    org_id: Option<String>,
+}
+
 async fn report_error(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
@@ -265,8 +287,19 @@ async fn report_status(
 async fn update_config(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
-    Json(req): Json<api::NodeServiceUpdateConfigRequest>,
+    Json(req): Json<NodeServiceUpdateConfigRequest>,
 ) -> Result<Json<api::NodeServiceUpdateConfigResponse>, Error> {
+    let req = api::NodeServiceUpdateConfigRequest {
+        node_id: req.node_id,
+        auto_upgrade: req.auto_upgrade,
+        new_org_id: req.new_org_id,
+        new_display_name: req.new_display_name,
+        new_note: req.new_note,
+        new_values: req.new_values.unwrap_or_default(),
+        new_firewall: req.new_firewall,
+        update_tags: req.update_tags,
+        cost: req.cost,
+    };
     ctx.write(|write| grpc::node::update_config(req, headers.into(), write).scope_boxed())
         .await
 }
@@ -274,8 +307,13 @@ async fn update_config(
 async fn upgrade_image(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
-    Json(req): Json<api::NodeServiceUpgradeImageRequest>,
+    Json(req): Json<NodeServiceUpgradeImageRequest>,
 ) -> Result<Json<api::NodeServiceUpgradeImageResponse>, Error> {
+    let req = api::NodeServiceUpgradeImageRequest {
+        node_ids: req.node_ids,
+        image_id: req.image_id,
+        org_id: req.org_id,
+    };
     ctx.write(|write| grpc::node::upgrade_image(req, headers.into(), write).scope_boxed())
         .await
 }
@@ -283,8 +321,9 @@ async fn upgrade_image(
 async fn start(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
-    Json(req): Json<api::NodeServiceStartRequest>,
+    Path((node_id,)): Path<(String,)>,
 ) -> Result<Json<api::NodeServiceStartResponse>, Error> {
+    let req = api::NodeServiceStartRequest { node_id };
     ctx.write(|write| grpc::node::start(req, headers.into(), write).scope_boxed())
         .await
 }
@@ -292,8 +331,9 @@ async fn start(
 async fn stop(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
-    Json(req): Json<api::NodeServiceStopRequest>,
+    Path((node_id,)): Path<(String,)>,
 ) -> Result<Json<api::NodeServiceStopResponse>, Error> {
+    let req = api::NodeServiceStopRequest { node_id };
     ctx.write(|write| grpc::node::stop(req, headers.into(), write).scope_boxed())
         .await
 }
@@ -301,8 +341,9 @@ async fn stop(
 async fn restart(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
-    Json(req): Json<api::NodeServiceRestartRequest>,
+    Path((node_id,)): Path<(String,)>,
 ) -> Result<Json<api::NodeServiceRestartResponse>, Error> {
+    let req = api::NodeServiceRestartRequest { node_id };
     ctx.write(|write| grpc::node::restart(req, headers.into(), write).scope_boxed())
         .await
 }
@@ -310,8 +351,9 @@ async fn restart(
 async fn delete(
     State(ctx): State<Arc<Context>>,
     headers: HeaderMap,
-    Json(req): Json<api::NodeServiceDeleteRequest>,
+    Path((node_id,)): Path<(String,)>,
 ) -> Result<Json<api::NodeServiceDeleteResponse>, Error> {
+    let req = api::NodeServiceDeleteRequest { node_id };
     ctx.write(|write| grpc::node::delete(req, headers.into(), write).scope_boxed())
         .await
 }
@@ -533,5 +575,82 @@ mod tests {
         assert_eq!(error.errors[0].parameter, "next_states");
         assert!(error.errors[0].error.contains("Invalid value"));
         assert!(error.errors[0].expected.contains("stopping, deleting, upgrading"));
+    }
+
+    #[test]
+    fn test_node_update_config_request_deserialization() {
+        // Test that the HTTP request struct can deserialize JSON with only required fields
+        let json = r#"{
+            "node_id": "812103e7-a7d9-4e4d-9d70-c9d87f09e3f6",
+            "new_org_id": "61813465-c72e-4087-aa82-9e1cd6f6a65a",
+            "new_note": "Migrated"
+        }"#;
+        
+        let result: Result<NodeServiceUpdateConfigRequest, _> = serde_json::from_str(json);
+        assert!(result.is_ok());
+        
+        let req = result.unwrap();
+        assert_eq!(req.node_id, "812103e7-a7d9-4e4d-9d70-c9d87f09e3f6");
+        assert_eq!(req.new_org_id, Some("61813465-c72e-4087-aa82-9e1cd6f6a65a".to_string()));
+        assert_eq!(req.new_note, Some("Migrated".to_string()));
+        assert_eq!(req.new_values, None);
+        assert_eq!(req.auto_upgrade, None);
+    }
+
+    #[test]
+    fn test_node_update_config_request_minimal() {
+        // Test that the HTTP request struct can deserialize JSON with only node_id
+        let json = r#"{
+            "node_id": "812103e7-a7d9-4e4d-9d70-c9d87f09e3f6"
+        }"#;
+        
+        let result: Result<NodeServiceUpdateConfigRequest, _> = serde_json::from_str(json);
+        assert!(result.is_ok());
+        
+        let req = result.unwrap();
+        assert_eq!(req.node_id, "812103e7-a7d9-4e4d-9d70-c9d87f09e3f6");
+        assert_eq!(req.new_org_id, None);
+        assert_eq!(req.new_note, None);
+        assert_eq!(req.new_values, None);
+        assert_eq!(req.auto_upgrade, None);
+    }
+
+    #[test]
+    fn test_node_upgrade_image_request_deserialization() {
+        // Test that the HTTP request struct can deserialize JSON properly
+        let json = r#"{
+            "node_ids": ["812103e7-a7d9-4e4d-9d70-c9d87f09e3f6", "61813465-c72e-4087-aa82-9e1cd6f6a65a"],
+            "image_id": "bitcoin-core-v25.0"
+        }"#;
+        
+        let result: Result<NodeServiceUpgradeImageRequest, _> = serde_json::from_str(json);
+        assert!(result.is_ok());
+        
+        let req = result.unwrap();
+        assert_eq!(req.node_ids, vec!["812103e7-a7d9-4e4d-9d70-c9d87f09e3f6", "61813465-c72e-4087-aa82-9e1cd6f6a65a"]);
+        assert_eq!(req.image_id, "bitcoin-core-v25.0");
+        assert_eq!(req.org_id, None);
+    }
+
+    #[test]
+    fn test_node_lifecycle_request_creation() {
+        // Test that we can create gRPC requests from node_id strings
+        let node_id = "812103e7-a7d9-4e4d-9d70-c9d87f09e3f6".to_string();
+        
+        // Test start request
+        let start_req = api::NodeServiceStartRequest { node_id: node_id.clone() };
+        assert_eq!(start_req.node_id, node_id);
+        
+        // Test stop request
+        let stop_req = api::NodeServiceStopRequest { node_id: node_id.clone() };
+        assert_eq!(stop_req.node_id, node_id);
+        
+        // Test restart request
+        let restart_req = api::NodeServiceRestartRequest { node_id: node_id.clone() };
+        assert_eq!(restart_req.node_id, node_id);
+        
+        // Test delete request
+        let delete_req = api::NodeServiceDeleteRequest { node_id: node_id.clone() };
+        assert_eq!(delete_req.node_id, node_id);
     }
 }
