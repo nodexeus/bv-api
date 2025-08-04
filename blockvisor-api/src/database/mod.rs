@@ -1,6 +1,8 @@
 #[cfg(any(test, feature = "integration-test"))]
 pub mod seed;
 
+pub mod validation;
+
 use std::future::Future;
 use std::sync::Arc;
 

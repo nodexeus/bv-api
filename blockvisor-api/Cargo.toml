@@ -7,6 +7,10 @@ edition = "2024"
 [[bin]]
 name = "blockvisor-api"
 
+[[bin]]
+name = "resource-validator"
+path = "src/bin/resource_validator.rs"
+
 [dependencies]
 anyhow = "1.0"
 argh = "0.1"
@@ -20,6 +24,7 @@ blake3 = "1.4"
 bytes = "1.10"
 chrono = { version = "0.4", features = ["serde"] }
 cidr = { version = "0.3", features = ["serde"] }
+clap = { version = "4.0", features = ["derive"] }
 derive_more = { version = "2.0", features = ["full"] }
 diesel = { version = "2.2", default-features = false, features = ["postgres", "without-deprecated", "uuid", "chrono", "serde_json", "network-address", "64-column-tables"] }
 diesel-async = { version = "0.5", features = ["bb8", "postgres"] }

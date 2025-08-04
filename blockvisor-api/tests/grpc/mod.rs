@@ -9,6 +9,7 @@ mod image;
 mod invitation;
 mod metrics;
 mod node;
+mod node_upgrade_integration;
 mod org;
 mod protocol;
 mod user;

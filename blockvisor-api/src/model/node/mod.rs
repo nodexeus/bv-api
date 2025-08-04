@@ -16,6 +16,17 @@ pub use scheduler::{NodeScheduler, ResourceAffinity, SimilarNodeAffinity};
 pub mod status;
 pub use status::{NextState, NodeHealth, NodeState, NodeStatus, ProtocolStatus};
 
+#[cfg(test)]
+mod resource_test;
+
+#[cfg(test)]
+mod upgrade_functionality_test;
+
+#[cfg(test)]
+mod upgrade_test;
+
+
+
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
@@ -48,7 +59,7 @@ use super::image::property::NewImagePropertyValue;
 use super::image::{Config, ConfigId, Image, ImageId, NodeConfig};
 use super::protocol::version::{ProtocolVersion, VersionId};
 use super::protocol::{Protocol, ProtocolId, VersionKey};
-use super::schema::{nodes, protocol_versions};
+use super::schema::{hosts, nodes, protocol_versions};
 use super::{Command, CommandType, IpAddress, Org, Paginate, Region, RegionId};
 
 #[derive(Debug, Display, Error)]
@@ -151,6 +162,16 @@ pub enum Error {
     VmMemory(std::num::TryFromIntError),
     /// Failed to parse VM disk bytes: {0}
     VmDisk(std::num::TryFromIntError),
+    /// Failed to update host resource counters: {0}
+    UpdateHostCounters(diesel::result::Error),
+    /// Resource calculation would cause integer overflow
+    ResourceOverflow,
+    /// Host resource counters would become negative after update
+    NegativeHostCounters,
+    /// Invalid image configuration: {0}
+    InvalidImageConfig(String),
+    /// Cannot retrieve old node configuration: {0}
+    OldConfigNotFound(crate::model::image::config::Error),
 }
 
 impl From<Error> for Status {
@@ -192,9 +213,11 @@ impl From<Error> for Status {
             | UpdateMetrics(_, _)
             | UpdateStatus(_)
             | Upgrade(_)
+            | UpdateHostCounters(_)
             | VmCpu(_)
             | VmDisk(_)
-            | VmMemory(_) => Status::internal("Internal error."),
+            | VmMemory(_)
+            | OldConfigNotFound(_) => Status::internal("Internal error."),
             HostFreeCpu(_) => Status::failed_precondition("Host has too little available cpu."),
             HostFreeDisk(_) => Status::failed_precondition("Host has too little available memory."),
             HostFreeIp(_) => Status::failed_precondition("Host has too few available IPs."),
@@ -202,6 +225,9 @@ impl From<Error> for Status {
             MissingTransferPerm => Status::forbidden("Missing permission."),
             NoMatchingHost => Status::failed_precondition("No matching host."),
             NoUpgradeCommand => Status::forbidden("Access denied."),
+            ResourceOverflow => Status::invalid_argument("Resource calculation would cause overflow."),
+            NegativeHostCounters => Status::invalid_argument("Host resource counters would become negative."),
+            InvalidImageConfig(_) => Status::invalid_argument("Invalid image configuration."),
             UpdateSameOrg => Status::already_exists("new_org_id"),
             UpgradeSameImage => Status::already_exists("image_id"),
             Command(err) => (*err).into(),
@@ -976,18 +1002,177 @@ pub struct UpgradeNode<'a> {
 }
 
 impl UpgradeNode<'_> {
+    /// Extract current resource values from the existing node record
+    fn extract_current_resources(&self, node: &Node) -> (i64, i64, i64) {
+        (node.cpu_cores, node.memory_bytes, node.disk_bytes)
+    }
+
+    /// Calculate new resource requirements from upgraded NodeConfig with safe integer conversion
+    fn calculate_new_resources(&self, new_config: &NodeConfig) -> Result<(i64, i64, i64), Error> {
+        let cpu_cores = i64::try_from(new_config.vm.cpu_cores).map_err(Error::VmCpu)?;
+        let memory_bytes = i64::try_from(new_config.vm.memory_bytes).map_err(Error::VmMemory)?;
+        let disk_bytes = i64::try_from(new_config.vm.disk_bytes).map_err(Error::VmDisk)?;
+        
+        Ok((cpu_cores, memory_bytes, disk_bytes))
+    }
+
+    /// Validate image configuration for upgrade compatibility
+    fn validate_image_config(&self, new_config: &NodeConfig) -> Result<(), Error> {
+        // Validate that resource values are reasonable (not zero or negative)
+        if new_config.vm.cpu_cores == 0 {
+            return Err(Error::InvalidImageConfig("CPU cores cannot be zero".to_string()));
+        }
+        
+        if new_config.vm.memory_bytes == 0 {
+            return Err(Error::InvalidImageConfig("Memory bytes cannot be zero".to_string()));
+        }
+        
+        if new_config.vm.disk_bytes == 0 {
+            return Err(Error::InvalidImageConfig("Disk bytes cannot be zero".to_string()));
+        }
+
+        // Validate that resource values don't exceed reasonable limits to prevent overflow
+        const MAX_REASONABLE_CPU: u64 = 1000; // 1000 cores
+        const MAX_REASONABLE_MEMORY: u64 = 1024 * 1024 * 1024 * 1024; // 1TB
+        const MAX_REASONABLE_DISK: u64 = 100 * 1024 * 1024 * 1024 * 1024; // 100TB
+
+        if new_config.vm.cpu_cores > MAX_REASONABLE_CPU {
+            return Err(Error::InvalidImageConfig(format!(
+                "CPU cores {} exceeds reasonable limit of {}",
+                new_config.vm.cpu_cores, MAX_REASONABLE_CPU
+            )));
+        }
+
+        if new_config.vm.memory_bytes > MAX_REASONABLE_MEMORY {
+            return Err(Error::InvalidImageConfig(format!(
+                "Memory bytes {} exceeds reasonable limit of {}",
+                new_config.vm.memory_bytes, MAX_REASONABLE_MEMORY
+            )));
+        }
+
+        if new_config.vm.disk_bytes > MAX_REASONABLE_DISK {
+            return Err(Error::InvalidImageConfig(format!(
+                "Disk bytes {} exceeds reasonable limit of {}",
+                new_config.vm.disk_bytes, MAX_REASONABLE_DISK
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Calculate resource differences for host counter updates with overflow protection
+    fn calculate_resource_differences(
+        &self,
+        old_resources: (i64, i64, i64),
+        new_resources: (i64, i64, i64),
+    ) -> Result<(i64, i64, i64), Error> {
+        let (old_cpu, old_memory, old_disk) = old_resources;
+        let (new_cpu, new_memory, new_disk) = new_resources;
+
+        // Validate that old resources are non-negative (sanity check)
+        if old_cpu < 0 || old_memory < 0 || old_disk < 0 {
+            return Err(Error::InvalidImageConfig(
+                "Old resource values cannot be negative".to_string()
+            ));
+        }
+
+        // Validate that new resources are non-negative
+        if new_cpu < 0 || new_memory < 0 || new_disk < 0 {
+            return Err(Error::InvalidImageConfig(
+                "New resource values cannot be negative".to_string()
+            ));
+        }
+
+        // Check for potential overflow in subtraction
+        let cpu_diff = new_cpu.checked_sub(old_cpu).ok_or(Error::ResourceOverflow)?;
+        let memory_diff = new_memory.checked_sub(old_memory).ok_or(Error::ResourceOverflow)?;
+        let disk_diff = new_disk.checked_sub(old_disk).ok_or(Error::ResourceOverflow)?;
+
+        // Additional validation: check if differences are within reasonable bounds
+        const MAX_REASONABLE_DIFF: i64 = i64::MAX / 2; // Half of max to prevent addition overflow later
+        
+        if cpu_diff.abs() > MAX_REASONABLE_DIFF ||
+           memory_diff.abs() > MAX_REASONABLE_DIFF ||
+           disk_diff.abs() > MAX_REASONABLE_DIFF {
+            return Err(Error::ResourceOverflow);
+        }
+
+        Ok((cpu_diff, memory_diff, disk_diff))
+    }
+
+    /// Validate that host counter updates won't result in negative values
+    async fn validate_host_counter_updates(
+        &self,
+        host_id: HostId,
+        resource_diffs: (i64, i64, i64),
+        conn: &mut Conn<'_>,
+    ) -> Result<(), Error> {
+        use super::schema::hosts;
+        
+        let (cpu_diff, memory_diff, disk_diff) = resource_diffs;
+        
+        // Get current host counters
+        let host = hosts::table
+            .find(host_id)
+            .select((hosts::node_cpu_cores, hosts::node_memory_bytes, hosts::node_disk_bytes))
+            .get_result::<(i64, i64, i64)>(conn)
+            .await
+            .map_err(Error::UpdateHostCounters)?;
+        
+        let (current_cpu, current_memory, current_disk) = host;
+        
+        // Validate current counters are non-negative (sanity check)
+        if current_cpu < 0 || current_memory < 0 || current_disk < 0 {
+            return Err(Error::InvalidImageConfig(
+                "Host counters are already negative - data inconsistency detected".to_string()
+            ));
+        }
+        
+        // Check for overflow in addition before checking for negative values
+        let new_cpu = current_cpu.checked_add(cpu_diff).ok_or(Error::ResourceOverflow)?;
+        let new_memory = current_memory.checked_add(memory_diff).ok_or(Error::ResourceOverflow)?;
+        let new_disk = current_disk.checked_add(disk_diff).ok_or(Error::ResourceOverflow)?;
+        
+        // Check if any counter would become negative
+        if new_cpu < 0 || new_memory < 0 || new_disk < 0 {
+            return Err(Error::NegativeHostCounters);
+        }
+        
+        Ok(())
+    }
+
     pub async fn apply(self, authz: &AuthZ, conn: &mut Conn<'_>) -> Result<Node, Error> {
         let node = Node::by_id(self.id, conn).await?;
-        let config = Config::by_id(node.config_id, conn).await?;
+        let config = Config::by_id(node.config_id, conn)
+            .await
+            .map_err(Error::OldConfigNotFound)?;
 
         if self.image.id == config.image_id {
             return Err(Error::UpgradeSameImage);
         }
 
-        let old_config = config.node_config()?;
+        // Extract current resource values from existing node record
+        let old_resources = self.extract_current_resources(&node);
+
+        // Gracefully handle old config retrieval
+        let old_config = config.node_config()
+            .map_err(Error::OldConfigNotFound)?;
+        
         let new_config = old_config
             .upgrade(self.image.clone(), self.org_id, conn)
             .await?;
+
+        // Validate image configuration before proceeding
+        self.validate_image_config(&new_config)?;
+
+        // Calculate new resource requirements from upgraded NodeConfig
+        let new_resources = self.calculate_new_resources(&new_config)?;
+
+        // Calculate resource differences for host counter updates
+        let resource_diffs = self.calculate_resource_differences(old_resources, new_resources)?;
+
+        // Validate that host counter updates won't result in negative values
+        self.validate_host_counter_updates(node.host_id, resource_diffs, conn).await?;
 
         let new_config = NewConfig {
             image_id: self.image.id,
@@ -1003,19 +1188,38 @@ impl UpgradeNode<'_> {
         });
         NewNodeLog::from(&node, authz, event).create(conn).await?;
 
-        diesel::update(nodes::table.find(self.id))
+        // Update node record with new resource fields AND metadata
+        let (new_cpu, new_memory, new_disk) = new_resources;
+        let updated_node = diesel::update(nodes::table.find(self.id))
             .set((
                 nodes::image_id.eq(self.image.id),
                 nodes::config_id.eq(config.id),
                 nodes::protocol_id.eq(self.version.protocol_id),
                 nodes::protocol_version_id.eq(self.version.id),
                 nodes::semantic_version.eq(&self.version.semantic_version),
+                nodes::cpu_cores.eq(new_cpu),
+                nodes::memory_bytes.eq(new_memory),
+                nodes::disk_bytes.eq(new_disk),
                 nodes::next_state.eq(Some(NextState::Upgrading)),
                 nodes::updated_at.eq(Utc::now()),
             ))
             .get_result(conn)
             .await
-            .map_err(Error::Upgrade)
+            .map_err(Error::Upgrade)?;
+
+        // Update host resource counters with the resource difference
+        let (cpu_diff, memory_diff, disk_diff) = resource_diffs;
+        diesel::update(hosts::table.find(node.host_id))
+            .set((
+                hosts::node_cpu_cores.eq(hosts::node_cpu_cores + cpu_diff),
+                hosts::node_memory_bytes.eq(hosts::node_memory_bytes + memory_diff),
+                hosts::node_disk_bytes.eq(hosts::node_disk_bytes + disk_diff),
+            ))
+            .execute(conn)
+            .await
+            .map_err(Error::UpdateHostCounters)?;
+
+        Ok(updated_node)
     }
 }
 
@@ -1331,5 +1535,41 @@ mod tests {
 
         let (nodes, _count) = filter.query(&mut write).await.unwrap();
         assert_eq!(nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_resource_tracking_error_types() {
+        use crate::grpc::Status;
+
+        // Test UpdateHostCounters error conversion
+        let db_error = diesel::result::Error::NotFound;
+        let error = Error::UpdateHostCounters(db_error);
+        let status: Status = error.into();
+        match status {
+            Status::Internal(message) => {
+                assert_eq!(message, "Internal error.");
+            }
+            _ => panic!("Expected Internal status"),
+        }
+
+        // Test ResourceOverflow error conversion
+        let error = Error::ResourceOverflow;
+        let status: Status = error.into();
+        match status {
+            Status::InvalidArgument(message) => {
+                assert!(message.contains("overflow"));
+            }
+            _ => panic!("Expected InvalidArgument status"),
+        }
+
+        // Test NegativeHostCounters error conversion
+        let error = Error::NegativeHostCounters;
+        let status: Status = error.into();
+        match status {
+            Status::InvalidArgument(message) => {
+                assert!(message.contains("negative"));
+            }
+            _ => panic!("Expected InvalidArgument status"),
+        }
     }
 }
