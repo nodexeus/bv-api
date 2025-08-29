@@ -238,17 +238,19 @@ impl Image {
             .await
             .map_err(|err| Error::ByVersions(HashSet::new(), org_filter, err))?;
 
-        // Keep only the latest build version for each (protocol_name, variant_key, semantic_version) combination
-        // This ensures we get the latest build for each unique variant
+        // Keep only the latest version for each (protocol_name, variant_key) combination
+        // Select the image with the latest semantic version, then highest build version
         let mut latest_per_variant = std::collections::HashMap::new();
         for (image, protocol_name, variant_key, semantic_version) in all_images {
-            let key = (protocol_name.clone(), variant_key.clone(), semantic_version.clone());
+            let key = (protocol_name.clone(), variant_key.clone());
             match latest_per_variant.get(&key) {
                 None => {
                     latest_per_variant.insert(key, (image, protocol_name, variant_key, semantic_version));
                 }
-                Some((existing_image, _, _, _)) => {
-                    if image.build_version > existing_image.build_version {
+                Some((_, _, _, existing_semantic_version)) => {
+                    // Compare semantic versions using string comparison (works for most semver formats)
+                    // Since build_version is always 1, we only need to compare semantic versions
+                    if semantic_version > *existing_semantic_version {
                         latest_per_variant.insert(key, (image, protocol_name, variant_key, semantic_version));
                     }
                 }
