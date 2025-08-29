@@ -197,41 +197,12 @@ impl Image {
         conn: &mut Conn<'_>,
     ) -> Result<(Vec<(Self, String, String, String, u32)>, u32), Error> {
         use crate::model::schema::{protocols, protocol_versions, image_properties};
-        use diesel::dsl::{count_distinct, count};
+        use diesel::dsl::count;
         
-        // First, get the total count
-        let mut count_query = images::table
-            .inner_join(protocol_versions::table.on(images::protocol_version_id.eq(protocol_versions::id)))
-            .inner_join(protocols::table.on(protocol_versions::protocol_id.eq(protocols::id)))
-            .filter(images::visibility.eq_any(<&[Visibility]>::from(authz)))
-            .into_boxed();
+        // Get all images first, then filter to latest per variant in Rust
+        // This approach is simpler than complex SQL with window functions
 
-        // Apply org filter
-        if let Some(org_id) = org_filter {
-            count_query = count_query.filter(images::org_id.eq(org_id));
-        }
-
-        // Apply protocol filter
-        if let Some(protocol_name) = protocol_filter {
-            count_query = count_query.filter(protocols::name.ilike(format!("%{}%", protocol_name)));
-        }
-
-        // Apply search filter
-        if let Some(search_term) = search {
-            count_query = count_query.filter(
-                protocols::name.ilike(format!("%{}%", search_term))
-                    .or(images::description.ilike(format!("%{}%", search_term)))
-            );
-        }
-
-        let total_count: i64 = count_query
-            .select(count_distinct(images::id))
-            .first(conn)
-            .await
-            .map_err(|err| Error::ByVersions(HashSet::new(), org_filter, err))?;
-
-        // Get the paginated results first, then get property counts separately
-        // This avoids the complex GROUP BY issues with Diesel
+        // Build the main query that joins with the subquery results
         let mut results_query = images::table
             .inner_join(protocol_versions::table.on(images::protocol_version_id.eq(protocol_versions::id)))
             .inner_join(protocols::table.on(protocol_versions::protocol_id.eq(protocols::id)))
@@ -254,19 +225,45 @@ impl Image {
             );
         }
 
-        let images_with_protocol: Vec<(Image, String, String, String)> = results_query
+        // Get all images, then filter in Rust to keep only the latest per variant
+        let all_images: Vec<(Image, String, String, String)> = results_query
             .select((
                 images::all_columns,
                 protocols::name,
                 protocol_versions::variant_key,
                 protocol_versions::semantic_version,
             ))
-            .order_by((protocols::name.asc(), images::build_version.desc()))
-            .offset(offset as i64)
-            .limit(limit as i64)
+            .order_by((protocols::name.asc(), protocol_versions::variant_key.asc(), images::build_version.desc()))
             .load(conn)
             .await
             .map_err(|err| Error::ByVersions(HashSet::new(), org_filter, err))?;
+
+        // Keep only the latest build version for each (protocol_name, variant_key) combination
+        let mut latest_per_variant = std::collections::HashMap::new();
+        for (image, protocol_name, variant_key, semantic_version) in all_images {
+            let key = (protocol_name.clone(), variant_key.clone());
+            match latest_per_variant.get(&key) {
+                None => {
+                    latest_per_variant.insert(key, (image, protocol_name, variant_key, semantic_version));
+                }
+                Some((existing_image, _, _, _)) => {
+                    if image.build_version > existing_image.build_version {
+                        latest_per_variant.insert(key, (image, protocol_name, variant_key, semantic_version));
+                    }
+                }
+            }
+        }
+
+        // Convert back to Vec and apply pagination
+        let mut filtered_images: Vec<(Image, String, String, String)> = latest_per_variant.into_values().collect();
+        filtered_images.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2))); // Sort by protocol name, then variant key
+        
+        let total_filtered = filtered_images.len();
+        let images_with_protocol: Vec<(Image, String, String, String)> = filtered_images
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect();
 
         // Get property counts for each image
         let image_ids: Vec<_> = images_with_protocol.iter().map(|(img, _, _, _)| img.id).collect();
@@ -294,7 +291,7 @@ impl Image {
             })
             .collect();
 
-        Ok((results, total_count as u32))
+        Ok((results, total_filtered as u32))
     }
 }
 
