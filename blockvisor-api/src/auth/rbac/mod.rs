@@ -149,9 +149,14 @@ define_perms! {
     ImageAdmin => {
         Add,
         Get,
+        List,
         ListArchives,
         UpdateArchive,
         UpdateImage,
+        AddProperty,
+        UpdateProperty,
+        DeleteProperty,
+        CopyProperties,
     }
 
     Invitation => {

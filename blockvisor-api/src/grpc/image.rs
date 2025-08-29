@@ -14,7 +14,7 @@ use crate::model::image::archive::{NewArchive, UpdateArchive};
 use crate::model::image::config::Ramdisks;
 use crate::model::image::property::ImagePropertyKey;
 use crate::model::image::rule::{ImageRule, NewImageRule};
-use crate::model::image::{Archive, Image, ImageProperty, NewImage, NewProperty, UpdateImage};
+use crate::model::image::{Archive, Image, ImageProperty, NewImage, NewProperty, UpdateImage, PropertyInheritanceManager};
 use crate::model::protocol::VersionKey;
 use crate::model::sql::Version;
 use crate::model::{Node, ProtocolVersion};
@@ -80,6 +80,8 @@ pub enum Error {
     ParseVersionId(uuid::Error),
     /// Image property error: {0}
     Property(#[from] crate::model::image::property::Error),
+    /// Property inheritance error: {0}
+    PropertyInheritance(#[from] crate::model::image::PropertyInheritanceError),
     /// Image protocol error: {0}
     Protocol(#[from] crate::model::protocol::Error),
     /// Image firewall rule error: {0}
@@ -129,6 +131,7 @@ impl From<Error> for Status {
             Image(err) => err.into(),
             Node(err) => err.into(),
             Property(err) => err.into(),
+            PropertyInheritance(_) => Status::internal("Property inheritance failed."),
             Protocol(err) => err.into(),
             Rule(err) => err.into(),
             Store(err) => err.into(),
@@ -183,6 +186,60 @@ impl ImageService for Grpc {
         self.write(|write| update_image(req, meta.into(), write).scope_boxed())
             .await
     }
+
+    async fn list_images(
+        &self,
+        req: Request<api::ImageServiceListImagesRequest>,
+    ) -> Result<Response<api::ImageServiceListImagesResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.read(|read| list_images(req, meta.into(), read).scope_boxed())
+            .await
+    }
+
+    async fn get_image_details(
+        &self,
+        req: Request<api::ImageServiceGetImageDetailsRequest>,
+    ) -> Result<Response<api::ImageServiceGetImageDetailsResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.read(|read| get_image_details(req, meta.into(), read).scope_boxed())
+            .await
+    }
+
+    async fn add_image_property(
+        &self,
+        req: Request<api::ImageServiceAddImagePropertyRequest>,
+    ) -> Result<Response<api::ImageServiceAddImagePropertyResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| add_image_property(req, meta.into(), write).scope_boxed())
+            .await
+    }
+
+    async fn update_image_property(
+        &self,
+        req: Request<api::ImageServiceUpdateImagePropertyRequest>,
+    ) -> Result<Response<api::ImageServiceUpdateImagePropertyResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| update_image_property(req, meta.into(), write).scope_boxed())
+            .await
+    }
+
+    async fn delete_image_property(
+        &self,
+        req: Request<api::ImageServiceDeleteImagePropertyRequest>,
+    ) -> Result<Response<api::ImageServiceDeleteImagePropertyResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| delete_image_property(req, meta.into(), write).scope_boxed())
+            .await
+    }
+
+    async fn copy_image_properties(
+        &self,
+        req: Request<api::ImageServiceCopyImagePropertiesRequest>,
+    ) -> Result<Response<api::ImageServiceCopyImagePropertiesResponse>, tonic::Status> {
+        let (meta, _, req) = req.into_parts();
+        self.write(|write| copy_image_properties(req, meta.into(), write).scope_boxed())
+            .await
+    }
 }
 
 async fn add_image(
@@ -230,12 +287,31 @@ async fn add_image(
         .collect::<Result<_, _>>()?;
     let rules = NewImageRule::bulk_create(new_rules, &mut write).await?;
 
-    let new_properties = req
-        .properties
-        .into_iter()
-        .map(|prop| NewProperty::from(image.id, prop))
-        .collect::<Result<_, _>>()?;
-    let properties = NewProperty::bulk_create(new_properties, &mut write).await?;
+    // First, inherit properties from the latest image version
+    // This ensures property continuity across image versions
+    let inherited_properties = PropertyInheritanceManager::inherit_properties_for_new_image(
+        version.id,
+        version.org_id.or(org_id),
+        image.id,
+        &mut write,
+    ).await.map_err(|err| {
+        tracing::warn!("Property inheritance failed for new image {}: {}. Continuing with request properties only.", image.id, err);
+        // Don't fail the entire operation if inheritance fails - just log and continue
+        err
+    }).unwrap_or_else(|_| Vec::new());
+
+    // Then, create any additional properties from the request
+    // These will be added to the inherited properties
+    let mut properties = inherited_properties;
+    if !req.properties.is_empty() {
+        let new_properties = req
+            .properties
+            .into_iter()
+            .map(|prop| NewProperty::from(image.id, prop))
+            .collect::<Result<_, _>>()?;
+        let additional_properties = NewProperty::bulk_create(new_properties, &mut write).await?;
+        properties.extend(additional_properties);
+    }
     let key_to_property_id = properties
         .iter()
         .to_map_keep_last(|prop| (prop.key.clone(), prop.id));
@@ -434,6 +510,232 @@ async fn update_image(
 
     Ok(api::ImageServiceUpdateImageResponse {
         image: Some(api::Image::from(image, properties, rules)?),
+    })
+}
+
+async fn list_images(
+    req: api::ImageServiceListImagesRequest,
+    meta: Metadata,
+    mut read: ReadConn<'_, '_>,
+) -> Result<api::ImageServiceListImagesResponse, Error> {
+    let authz = read.auth(&meta, ImageAdminPerm::List).await?;
+
+    let page = req.page.max(1);
+    let page_size = req.page_size.clamp(1, 100);
+    let offset = (page - 1) * page_size;
+
+    let org_filter = req
+        .org_filter
+        .as_ref()
+        .map(|id| id.parse().map_err(Error::ParseOrgId))
+        .transpose()?;
+
+    let (images, total_count) = Image::list_for_admin(
+        req.search.as_deref(),
+        req.protocol_filter.as_deref(),
+        org_filter,
+        offset,
+        page_size,
+        &authz,
+        &mut read,
+    ).await?;
+
+    let image_summaries = images
+        .into_iter()
+        .map(|(image, protocol_name, variant_key, property_count)| {
+            Ok(api::ImageSummary {
+                image_id: image.id.to_string(),
+                protocol_name: protocol_name.clone(),
+                version_key: Some(common::ProtocolVersionKey {
+                    protocol_name,
+                    node_type: variant_key,
+                }),
+                build_version: u64::try_from(image.build_version).map_err(Error::BuildVersion)?,
+                property_count,
+                created_at: Some(NanosUtc::from(image.created_at).into()),
+                org_id: image.org_id.map(|id| id.to_string()),
+                description: image.description,
+                visibility: common::Visibility::from(image.visibility).into(),
+            })
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    Ok(api::ImageServiceListImagesResponse {
+        images: image_summaries,
+        total_count,
+    })
+}
+
+async fn get_image_details(
+    req: api::ImageServiceGetImageDetailsRequest,
+    meta: Metadata,
+    mut read: ReadConn<'_, '_>,
+) -> Result<api::ImageServiceGetImageDetailsResponse, Error> {
+    let org_id = req
+        .org_id
+        .as_ref()
+        .map(|id| id.parse().map_err(Error::ParseOrgId))
+        .transpose()?;
+    let authz = read.auth(&meta, ImageAdminPerm::Get).await?;
+
+    let image_id = req.image_id.parse().map_err(Error::ParseImageId)?;
+    let image = Image::by_id(image_id, org_id, &authz, &mut read).await?;
+    let properties = ImageProperty::by_image_id(image.id, &mut read).await?;
+    let rules = ImageRule::by_image_id(image.id, &mut read).await?;
+
+    Ok(api::ImageServiceGetImageDetailsResponse {
+        image: Some(api::Image::from(image, properties, rules)?),
+    })
+}
+
+async fn add_image_property(
+    req: api::ImageServiceAddImagePropertyRequest,
+    meta: Metadata,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::ImageServiceAddImagePropertyResponse, Error> {
+    let authz = write.auth(&meta, ImageAdminPerm::AddProperty).await?;
+
+    let image_id = req.image_id.parse().map_err(Error::ParseImageId)?;
+    
+    // Verify the image exists and user has access
+    let image = Image::by_id(image_id, None, &authz, &mut write).await?;
+    
+    // Create the new property
+    let property = ImageProperty::create_for_image(image_id, req.property.clone(), &mut write).await?;
+    
+    let mut affected_image_ids = vec![image_id.to_string()];
+    
+    // If apply_to_newer_versions is true, sync to newer versions
+    if req.apply_to_newer_versions {
+        let newer_images = PropertyInheritanceManager::find_newer_image_versions(&image, &mut write).await?;
+        
+        for newer_image in newer_images {
+            // Create the property in the newer image
+            let _newer_property = ImageProperty::create_for_image(newer_image.id, req.property.clone(), &mut write).await?;
+            affected_image_ids.push(newer_image.id.to_string());
+        }
+    }
+
+    Ok(api::ImageServiceAddImagePropertyResponse {
+        property: Some(property.into()),
+        affected_image_ids,
+    })
+}
+
+async fn update_image_property(
+    req: api::ImageServiceUpdateImagePropertyRequest,
+    meta: Metadata,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::ImageServiceUpdateImagePropertyResponse, Error> {
+    let authz = write.auth(&meta, ImageAdminPerm::UpdateProperty).await?;
+
+    let property_id = req.image_property_id.parse().map_err(Error::ParseImageId)?;
+    
+    // Get the existing property to find the image
+    let existing_property = ImageProperty::by_id(property_id, &mut write).await?;
+    let image = Image::by_id(existing_property.image_id, None, &authz, &mut write).await?;
+    
+    // Update the property
+    let updated_property = ImageProperty::update_by_id(property_id, req.property, &mut write).await?;
+    
+    let mut affected_image_ids = vec![existing_property.image_id.to_string()];
+    
+    // If apply_to_newer_versions is true, sync to newer versions
+    if req.apply_to_newer_versions {
+        let newer_images = PropertyInheritanceManager::find_newer_image_versions(&image, &mut write).await?;
+        
+        PropertyInheritanceManager::sync_property_across_versions(
+            &updated_property,
+            &newer_images.iter().map(|img| img.id).collect::<Vec<_>>(),
+            &mut write,
+        ).await?;
+        
+        affected_image_ids.extend(newer_images.iter().map(|img| img.id.to_string()));
+    }
+
+    Ok(api::ImageServiceUpdateImagePropertyResponse {
+        property: Some(updated_property.into()),
+        affected_image_ids,
+    })
+}
+
+async fn delete_image_property(
+    req: api::ImageServiceDeleteImagePropertyRequest,
+    meta: Metadata,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::ImageServiceDeleteImagePropertyResponse, Error> {
+    let authz = write.auth(&meta, ImageAdminPerm::DeleteProperty).await?;
+
+    let property_id = req.image_property_id.parse().map_err(Error::ParseImageId)?;
+    
+    // Get the existing property to find the image
+    let existing_property = ImageProperty::by_id(property_id, &mut write).await?;
+    let image = Image::by_id(existing_property.image_id, None, &authz, &mut write).await?;
+    
+    // Delete the property
+    ImageProperty::delete_by_id(property_id, &mut write).await?;
+    
+    let mut affected_image_ids = vec![existing_property.image_id.to_string()];
+    
+    // If apply_to_newer_versions is true, delete from newer versions
+    if req.apply_to_newer_versions {
+        let newer_images = PropertyInheritanceManager::find_newer_image_versions(&image, &mut write).await?;
+        
+        for newer_image in newer_images {
+            // Find and delete the corresponding property in newer images
+            let properties = ImageProperty::by_image_id(newer_image.id, &mut write).await?;
+            if let Some(prop) = properties.iter().find(|p| p.key == existing_property.key) {
+                ImageProperty::delete_by_id(prop.id, &mut write).await?;
+                affected_image_ids.push(newer_image.id.to_string());
+            }
+        }
+    }
+
+    Ok(api::ImageServiceDeleteImagePropertyResponse {
+        affected_image_ids,
+    })
+}
+
+async fn copy_image_properties(
+    req: api::ImageServiceCopyImagePropertiesRequest,
+    meta: Metadata,
+    mut write: WriteConn<'_, '_>,
+) -> Result<api::ImageServiceCopyImagePropertiesResponse, Error> {
+    let authz = write.auth(&meta, ImageAdminPerm::CopyProperties).await?;
+
+    let source_image_id = req.source_image_id.parse().map_err(Error::ParseImageId)?;
+    let target_image_ids: Result<Vec<_>, _> = req
+        .target_image_ids
+        .iter()
+        .map(|id| id.parse().map_err(Error::ParseImageId))
+        .collect();
+    let target_image_ids = target_image_ids?;
+
+    // Verify source image exists and user has access
+    let source_image = Image::by_id(source_image_id, None, &authz, &mut write).await?;
+    
+    let mut affected_image_ids = Vec::new();
+    let mut total_properties_copied = 0;
+    
+    for target_image_id in target_image_ids {
+        // Verify target image exists and user has access
+        let _target_image = Image::by_id(target_image_id, None, &authz, &mut write).await?;
+        
+        let copied_properties = PropertyInheritanceManager::copy_properties_to_new_version(
+            &source_image,
+            target_image_id,
+            &mut write,
+        ).await?;
+        
+        if !copied_properties.is_empty() {
+            affected_image_ids.push(target_image_id.to_string());
+            total_properties_copied += copied_properties.len() as u32;
+        }
+    }
+
+    Ok(api::ImageServiceCopyImagePropertiesResponse {
+        affected_image_ids,
+        properties_copied: total_properties_copied,
     })
 }
 

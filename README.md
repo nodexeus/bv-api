@@ -35,7 +35,7 @@ All protobuf schema updates are made with a Pull Request to the
 [api-protos](https://github.com/blockjoy/api-proto) repo. Once merged there, the
 submodule in this repo can be updated with:
 
-``` sh
+```sh
 cd proto
 git checkout main
 git pull

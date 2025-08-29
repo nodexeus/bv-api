@@ -43,18 +43,67 @@ pub enum Error {
     PropertyKeyLen(String),
     /// Unknown UiType.
     UnknownUiType,
+    /// Admin error: {0}
+    Admin(#[from] ImagePropertyAdminError),
+}
+
+/// Specific error types for image property admin operations
+#[derive(Debug, DisplayDoc, Error)]
+pub enum ImagePropertyAdminError {
+    /// Property key '{0}' already exists for this image
+    DuplicateKey(String),
+    /// Cannot delete property '{0}': {1} nodes are currently using this image
+    PropertyInUse(String, usize),
+    /// Invalid property configuration: {0}
+    InvalidConfiguration(String),
+    /// Property inheritance failed: {0}
+    InheritanceFailed(String),
+    /// Property validation failed: {0}
+    ValidationFailed(String),
+    /// Cannot modify property '{0}': it is required by the protocol
+    RequiredProperty(String),
+    /// Property '{0}' not found in image
+    PropertyNotFound(String),
+    /// Invalid resource configuration: {0}
+    InvalidResourceConfig(String),
+    /// Property group '{0}' has conflicting configurations
+    GroupConflict(String),
 }
 
 impl From<Error> for Status {
     fn from(err: Error) -> Self {
         use Error::*;
         match err {
-            ById(_, NotFound) => Status::not_found("Image property ot found."),
+            ById(_, NotFound) => Status::not_found("Image property not found."),
             GroupMultipleDefaults(_) | GroupNoDefault(_) => {
                 Status::failed_precondition("is_group_default")
             }
             UnknownUiType => Status::invalid_argument("ui_type"),
+            Admin(admin_err) => admin_err.into(),
             _ => Status::internal("Internal error."),
+        }
+    }
+}
+
+impl From<ImagePropertyAdminError> for Status {
+    fn from(err: ImagePropertyAdminError) -> Self {
+        use ImagePropertyAdminError::*;
+        match err {
+            DuplicateKey(key) => Status::already_exists(format!("Property key '{}' already exists for this image", key)),
+            PropertyInUse(key, count) => Status::failed_precondition(
+                format!("Cannot delete property '{}': {} nodes are currently using this image", key, count)
+            ),
+            InvalidConfiguration(msg) => Status::invalid_argument(format!("Invalid property configuration: {}", msg)),
+            InheritanceFailed(msg) => Status::internal(format!("Property inheritance failed: {}", msg)),
+            ValidationFailed(msg) => Status::invalid_argument(format!("Property validation failed: {}", msg)),
+            RequiredProperty(key) => Status::failed_precondition(
+                format!("Cannot modify property '{}': it is required by the protocol", key)
+            ),
+            PropertyNotFound(key) => Status::not_found(format!("Property '{}' not found in image", key)),
+            InvalidResourceConfig(msg) => Status::invalid_argument(format!("Invalid resource configuration: {}", msg)),
+            GroupConflict(group) => Status::failed_precondition(
+                format!("Property group '{}' has conflicting configurations", group)
+            ),
         }
     }
 }
@@ -123,6 +172,80 @@ impl ImageProperty {
             .map_err(|err| Error::ById(id, err))
     }
 
+    /// Validate property configuration for admin operations
+    pub fn validate_admin_config(property: &api::AddImageProperty) -> Result<(), ImagePropertyAdminError> {
+        // Validate property key format
+        if property.key.is_empty() {
+            return Err(ImagePropertyAdminError::ValidationFailed("Property key cannot be empty".to_string()));
+        }
+
+        // Validate resource configurations are non-negative
+        if let Some(cpu) = property.add_cpu_cores {
+            if cpu < 0 {
+                return Err(ImagePropertyAdminError::InvalidResourceConfig("CPU cores cannot be negative".to_string()));
+            }
+        }
+
+        if let Some(memory) = property.add_memory_bytes {
+            if memory < 0 {
+                return Err(ImagePropertyAdminError::InvalidResourceConfig("Memory bytes cannot be negative".to_string()));
+            }
+        }
+
+        if let Some(disk) = property.add_disk_bytes {
+            if disk < 0 {
+                return Err(ImagePropertyAdminError::InvalidResourceConfig("Disk bytes cannot be negative".to_string()));
+            }
+        }
+
+        // Validate UI type specific configurations
+        match property.ui_type() {
+            common::UiType::Enum => {
+                if property.default_value.is_empty() {
+                    return Err(ImagePropertyAdminError::ValidationFailed(
+                        "Enum properties must have a default value".to_string()
+                    ));
+                }
+            }
+            common::UiType::Switch => {
+                if !["true", "false"].contains(&property.default_value.as_str()) {
+                    return Err(ImagePropertyAdminError::ValidationFailed(
+                        "Switch properties must have 'true' or 'false' as default value".to_string()
+                    ));
+                }
+            }
+            _ => {}
+        }
+
+        // Validate group configuration
+        if let Some(ref group) = property.key_group {
+            if group.is_empty() {
+                return Err(ImagePropertyAdminError::ValidationFailed("Property group cannot be empty".to_string()));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if a property is in use by any nodes
+    pub async fn check_property_usage(
+        image_id: ImageId,
+        property_key: &ImagePropertyKey,
+        conn: &mut Conn<'_>,
+    ) -> Result<usize, Error> {
+        use crate::model::schema::nodes;
+        
+        // Count nodes using this image
+        let node_count = nodes::table
+            .filter(nodes::image_id.eq(image_id))
+            .count()
+            .get_result::<i64>(conn)
+            .await
+            .map_err(|err| Error::ByImageId(image_id, err))?;
+
+        Ok(node_count as usize)
+    }
+
     pub async fn by_ids(
         ids: &HashSet<ImagePropertyId>,
         conn: &mut Conn<'_>,
@@ -151,6 +274,149 @@ impl ImageProperty {
             .get_results(conn)
             .await
             .map_err(|err| Error::ByImageIds(image_ids.clone(), err))
+    }
+
+    /// Create a new property for a specific image (admin operation)
+    pub async fn create_for_image(
+        image_id: ImageId,
+        property: api::AddImageProperty,
+        conn: &mut Conn<'_>,
+    ) -> Result<Self, Error> {
+        // Validate property configuration
+        Self::validate_admin_config(&property)
+            .map_err(Error::Admin)?;
+
+        // Check for duplicate keys within the same image
+        let existing = image_properties::table
+            .filter(image_properties::image_id.eq(image_id))
+            .filter(image_properties::key.eq(&property.key))
+            .first::<Self>(conn)
+            .await
+            .optional()
+            .map_err(|err| Error::ByImageId(image_id, err))?;
+
+        if existing.is_some() {
+            return Err(Error::Admin(ImagePropertyAdminError::DuplicateKey(property.key.clone())));
+        }
+
+        let new_property = NewProperty::from(image_id, property)?;
+        
+        diesel::insert_into(image_properties::table)
+            .values(new_property)
+            .get_result(conn)
+            .await
+            .map_err(Error::BulkCreate)
+    }
+
+    /// Update an existing image property by ID (admin operation)
+    pub async fn update_by_id(
+        id: ImagePropertyId,
+        property: api::AddImageProperty,
+        conn: &mut Conn<'_>,
+    ) -> Result<Self, Error> {
+        // Validate property configuration
+        Self::validate_admin_config(&property)
+            .map_err(Error::Admin)?;
+
+        // Get the existing property to check image_id for duplicate key validation
+        let existing = Self::by_id(id, conn).await?;
+        
+        // Check for duplicate keys within the same image (excluding the current property)
+        let duplicate = image_properties::table
+            .filter(image_properties::image_id.eq(existing.image_id))
+            .filter(image_properties::key.eq(&property.key))
+            .filter(image_properties::id.ne(id))
+            .first::<Self>(conn)
+            .await
+            .optional()
+            .map_err(|err| Error::ByImageId(existing.image_id, err))?;
+
+        if duplicate.is_some() {
+            return Err(Error::Admin(ImagePropertyAdminError::DuplicateKey(property.key.clone())));
+        }
+
+        let ui_type = property.ui_type().try_into()?;
+        let key = ImagePropertyKey::new(property.key)?;
+        let key_group = property.key_group.map(ImagePropertyGroup::new).transpose()?;
+
+        diesel::update(image_properties::table.find(id))
+            .set((
+                image_properties::key.eq(key),
+                image_properties::key_group.eq(key_group),
+                image_properties::is_group_default.eq(property.is_group_default),
+                image_properties::new_archive.eq(property.new_archive),
+                image_properties::default_value.eq(property.default_value),
+                image_properties::dynamic_value.eq(property.dynamic_value),
+                image_properties::description.eq(property.description),
+                image_properties::ui_type.eq(ui_type),
+                image_properties::add_cpu_cores.eq(property.add_cpu_cores),
+                image_properties::add_memory_bytes.eq(property.add_memory_bytes),
+                image_properties::add_disk_bytes.eq(property.add_disk_bytes),
+                image_properties::display_name.eq(property.display_name),
+                image_properties::display_group.eq(property.display_group),
+            ))
+            .get_result(conn)
+            .await
+            .map_err(|err| Error::ById(id, err))
+    }
+
+    /// Delete an image property by ID (admin operation)
+    pub async fn delete_by_id(
+        id: ImagePropertyId,
+        conn: &mut Conn<'_>,
+    ) -> Result<(), Error> {
+        // Get the existing property to check usage
+        let existing = Self::by_id(id, conn).await?;
+        
+        // Check if the property is in use by any nodes
+        let usage_count = Self::check_property_usage(existing.image_id, &existing.key, conn).await?;
+        if usage_count > 0 {
+            return Err(Error::Admin(ImagePropertyAdminError::PropertyInUse(
+                existing.key.to_string(),
+                usage_count,
+            )));
+        }
+
+        diesel::delete(image_properties::table.find(id))
+            .execute(conn)
+            .await
+            .map_err(|err| Error::ById(id, err))?;
+        
+        Ok(())
+    }
+
+    /// Copy properties from one image to another (for inheritance)
+    pub async fn copy_to_image(
+        source_image_id: ImageId,
+        target_image_id: ImageId,
+        conn: &mut Conn<'_>,
+    ) -> Result<Vec<Self>, Error> {
+        // Get all properties from the source image
+        let source_properties = Self::by_image_id(source_image_id, conn).await?;
+
+        // Create new properties for the target image
+        let new_properties: Vec<NewProperty> = source_properties
+            .into_iter()
+            .map(|prop| NewProperty {
+                image_id: target_image_id,
+                key: prop.key,
+                key_group: prop.key_group,
+                is_group_default: prop.is_group_default,
+                new_archive: prop.new_archive,
+                default_value: prop.default_value,
+                dynamic_value: prop.dynamic_value,
+                description: prop.description,
+                ui_type: prop.ui_type,
+                add_cpu_cores: prop.add_cpu_cores,
+                add_memory_bytes: prop.add_memory_bytes,
+                add_disk_bytes: prop.add_disk_bytes,
+                display_name: prop.display_name,
+                display_group: prop.display_group,
+            })
+            .collect();
+
+        // Bulk create the new properties
+        NewProperty::bulk_create(new_properties, conn).await
     }
 }
 
