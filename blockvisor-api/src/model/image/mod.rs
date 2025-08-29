@@ -195,7 +195,7 @@ impl Image {
         limit: u32,
         authz: &AuthZ,
         conn: &mut Conn<'_>,
-    ) -> Result<(Vec<(Self, String, String, u32)>, u32), Error> {
+    ) -> Result<(Vec<(Self, String, String, String, u32)>, u32), Error> {
         use crate::model::schema::{protocols, protocol_versions, image_properties};
         use diesel::dsl::{count_distinct, count};
         
@@ -254,11 +254,12 @@ impl Image {
             );
         }
 
-        let images_with_protocol: Vec<(Image, String, String)> = results_query
+        let images_with_protocol: Vec<(Image, String, String, String)> = results_query
             .select((
                 images::all_columns,
                 protocols::name,
                 protocol_versions::variant_key,
+                protocol_versions::semantic_version,
             ))
             .order_by((protocols::name.asc(), images::build_version.desc()))
             .offset(offset as i64)
@@ -268,7 +269,7 @@ impl Image {
             .map_err(|err| Error::ByVersions(HashSet::new(), org_filter, err))?;
 
         // Get property counts for each image
-        let image_ids: Vec<_> = images_with_protocol.iter().map(|(img, _, _)| img.id).collect();
+        let image_ids: Vec<_> = images_with_protocol.iter().map(|(img, _, _, _)| img.id).collect();
         let property_counts: Vec<(ImageId, i64)> = if !image_ids.is_empty() {
             image_properties::table
                 .filter(image_properties::image_id.eq_any(&image_ids))
@@ -285,11 +286,11 @@ impl Image {
         let property_count_map: std::collections::HashMap<ImageId, i64> = property_counts.into_iter().collect();
 
         // Combine the results
-        let results: Vec<(Image, String, String, u32)> = images_with_protocol
+        let results: Vec<(Image, String, String, String, u32)> = images_with_protocol
             .into_iter()
-            .map(|(image, protocol_name, variant_key)| {
+            .map(|(image, protocol_name, variant_key, semantic_version)| {
                 let property_count = property_count_map.get(&image.id).copied().unwrap_or(0) as u32;
-                (image, protocol_name, variant_key, property_count)
+                (image, protocol_name, variant_key, semantic_version, property_count)
             })
             .collect();
 

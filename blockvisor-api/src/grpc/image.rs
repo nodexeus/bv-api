@@ -542,7 +542,7 @@ async fn list_images(
 
     let image_summaries = images
         .into_iter()
-        .map(|(image, protocol_name, variant_key, property_count)| {
+        .map(|(image, protocol_name, variant_key, semantic_version, property_count)| {
             Ok(api::ImageSummary {
                 image_id: image.id.to_string(),
                 protocol_name: protocol_name.clone(),
@@ -556,6 +556,7 @@ async fn list_images(
                 org_id: image.org_id.map(|id| id.to_string()),
                 description: image.description,
                 visibility: common::Visibility::from(image.visibility).into(),
+                semantic_version,
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
