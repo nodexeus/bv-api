@@ -547,8 +547,8 @@ async fn list_images(
                 image_id: image.id.to_string(),
                 protocol_name: protocol_name.clone(),
                 version_key: Some(common::ProtocolVersionKey {
-                    protocol_name,
-                    node_type: variant_key,
+                    protocol_key: protocol_name,
+                    variant_key,
                 }),
                 build_version: u64::try_from(image.build_version).map_err(Error::BuildVersion)?,
                 property_count,
@@ -601,7 +601,8 @@ async fn add_image_property(
     let image = Image::by_id(image_id, None, &authz, &mut write).await?;
     
     // Create the new property
-    let property = ImageProperty::create_for_image(image_id, req.property.clone(), &mut write).await?;
+    let property_req = req.property.ok_or_else(|| Error::Property(crate::model::image::property::Error::Admin(crate::model::image::property::ImagePropertyAdminError::ValidationFailed("property is required".to_string()))))?;
+    let property = ImageProperty::create_for_image(image_id, property_req.clone(), &mut write).await?;
     
     let mut affected_image_ids = vec![image_id.to_string()];
     
@@ -611,7 +612,7 @@ async fn add_image_property(
         
         for newer_image in newer_images {
             // Create the property in the newer image
-            let _newer_property = ImageProperty::create_for_image(newer_image.id, req.property.clone(), &mut write).await?;
+            let _newer_property = ImageProperty::create_for_image(newer_image.id, property_req.clone(), &mut write).await?;
             affected_image_ids.push(newer_image.id.to_string());
         }
     }
@@ -636,7 +637,8 @@ async fn update_image_property(
     let image = Image::by_id(existing_property.image_id, None, &authz, &mut write).await?;
     
     // Update the property
-    let updated_property = ImageProperty::update_by_id(property_id, req.property, &mut write).await?;
+    let property_req = req.property.ok_or_else(|| Error::Property(crate::model::image::property::Error::Admin(crate::model::image::property::ImagePropertyAdminError::ValidationFailed("property is required".to_string()))))?;
+    let updated_property = ImageProperty::update_by_id(property_id, property_req, &mut write).await?;
     
     let mut affected_image_ids = vec![existing_property.image_id.to_string()];
     

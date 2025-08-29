@@ -17,6 +17,44 @@ use crate::util::LOWER_KEBAB_CASE;
 
 use super::ImageId;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
+#[ExistingTypePath = "sql_types::EnumUiType"]
+pub enum UiType {
+    #[db_rename = "switch"]
+    Switch,
+    #[db_rename = "text"]
+    Text,
+    #[db_rename = "password"]
+    Password,
+    #[db_rename = "enum"]
+    Enum,
+}
+
+impl TryFrom<common::UiType> for UiType {
+    type Error = Error;
+
+    fn try_from(ui_type: common::UiType) -> Result<Self, Self::Error> {
+        match ui_type {
+            common::UiType::Switch => Ok(UiType::Switch),
+            common::UiType::Text => Ok(UiType::Text),
+            common::UiType::Password => Ok(UiType::Password),
+            common::UiType::Enum => Ok(UiType::Enum),
+            common::UiType::Unspecified => Err(Error::UnknownUiType),
+        }
+    }
+}
+
+impl From<UiType> for common::UiType {
+    fn from(ui_type: UiType) -> Self {
+        match ui_type {
+            UiType::Switch => common::UiType::Switch,
+            UiType::Text => common::UiType::Text,
+            UiType::Password => common::UiType::Password,
+            UiType::Enum => common::UiType::Enum,
+        }
+    }
+}
+
 #[derive(Debug, DisplayDoc, Error)]
 pub enum Error {
     /// Failed to bulk create image properties: {0}
@@ -110,6 +148,14 @@ impl From<ImagePropertyAdminError> for Status {
 
 #[derive(Clone, Copy, Debug, Display, Hash, PartialEq, Eq, DieselNewType, Deref, From)]
 pub struct ImagePropertyId(Uuid);
+
+impl std::str::FromStr for ImagePropertyId {
+    type Err = uuid::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(ImagePropertyId(Uuid::parse_str(s)?))
+    }
+}
 
 #[derive(Clone, derive_more::Debug, Display, Hash, PartialEq, Eq, DieselNewType, Deref, Into)]
 #[debug("{_0}")]
@@ -230,7 +276,7 @@ impl ImageProperty {
     /// Check if a property is in use by any nodes
     pub async fn check_property_usage(
         image_id: ImageId,
-        property_key: &ImagePropertyKey,
+        _property_key: &ImagePropertyKey,
         conn: &mut Conn<'_>,
     ) -> Result<usize, Error> {
         use crate::model::schema::nodes;
@@ -335,7 +381,7 @@ impl ImageProperty {
             return Err(Error::Admin(ImagePropertyAdminError::DuplicateKey(property.key.clone())));
         }
 
-        let ui_type = property.ui_type().try_into()?;
+        let ui_type = UiType::try_from(property.ui_type())?;
         let key = ImagePropertyKey::new(property.key)?;
         let key_group = property.key_group.map(ImagePropertyGroup::new).transpose()?;
 
@@ -482,7 +528,7 @@ impl NewProperty {
     }
 
     pub fn from(image_id: ImageId, property: api::AddImageProperty) -> Result<Self, Error> {
-        let ui_type = property.ui_type().try_into()?;
+        let ui_type = UiType::try_from(property.ui_type())?;
 
         Ok(NewProperty {
             image_id,
@@ -624,39 +670,7 @@ impl TryFrom<common::PropertyValueConfig> for PropertyValueConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, DbEnum)]
-#[ExistingTypePath = "sql_types::EnumUiType"]
-pub enum UiType {
-    Switch,
-    Text,
-    Password,
-    Enum,
-}
 
-impl From<UiType> for common::UiType {
-    fn from(ui_type: UiType) -> Self {
-        match ui_type {
-            UiType::Switch => common::UiType::Switch,
-            UiType::Text => common::UiType::Text,
-            UiType::Password => common::UiType::Password,
-            UiType::Enum => common::UiType::Enum,
-        }
-    }
-}
-
-impl TryFrom<common::UiType> for UiType {
-    type Error = Error;
-
-    fn try_from(ui_type: common::UiType) -> Result<Self, Self::Error> {
-        match ui_type {
-            common::UiType::Unspecified => Err(Error::UnknownUiType),
-            common::UiType::Switch => Ok(UiType::Switch),
-            common::UiType::Text => Ok(UiType::Text),
-            common::UiType::Password => Ok(UiType::Password),
-            common::UiType::Enum => Ok(UiType::Enum),
-        }
-    }
-}
 
 pub struct PropertyMap {
     pub key_to_value: HashMap<ImagePropertyKey, NewImagePropertyValue>,

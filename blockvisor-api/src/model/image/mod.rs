@@ -14,7 +14,7 @@ pub use property_inheritance::{PropertyInheritanceManager, PropertyInheritanceEr
 pub mod rule;
 pub use rule::{FirewallRule, ImageRule, ImageRuleId, NewImageRule};
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
@@ -230,11 +230,11 @@ impl Image {
             .await
             .map_err(|err| Error::ByVersions(HashSet::new(), org_filter, err))?;
 
-        // Now get the paginated results with property counts
+        // Get the paginated results first, then get property counts separately
+        // This avoids the complex GROUP BY issues with Diesel
         let mut results_query = images::table
             .inner_join(protocol_versions::table.on(images::protocol_version_id.eq(protocol_versions::id)))
             .inner_join(protocols::table.on(protocol_versions::protocol_id.eq(protocols::id)))
-            .left_join(image_properties::table.on(images::id.eq(image_properties::image_id)))
             .filter(images::visibility.eq_any(<&[Visibility]>::from(authz)))
             .into_boxed();
 
@@ -254,14 +254,12 @@ impl Image {
             );
         }
 
-        let results: Vec<(Image, String, String, i64)> = results_query
+        let images_with_protocol: Vec<(Image, String, String)> = results_query
             .select((
                 images::all_columns,
                 protocols::name,
                 protocol_versions::variant_key,
-                count(image_properties::id.nullable())
             ))
-            .group_by((images::all_columns, protocols::name, protocol_versions::variant_key))
             .order_by((protocols::name.asc(), images::build_version.desc()))
             .offset(offset as i64)
             .limit(limit as i64)
@@ -269,14 +267,33 @@ impl Image {
             .await
             .map_err(|err| Error::ByVersions(HashSet::new(), org_filter, err))?;
 
-        let formatted_results = results
+        // Get property counts for each image
+        let image_ids: Vec<_> = images_with_protocol.iter().map(|(img, _, _)| img.id).collect();
+        let property_counts: Vec<(ImageId, i64)> = if !image_ids.is_empty() {
+            image_properties::table
+                .filter(image_properties::image_id.eq_any(&image_ids))
+                .group_by(image_properties::image_id)
+                .select((image_properties::image_id, count(image_properties::id)))
+                .load(conn)
+                .await
+                .map_err(|err| Error::ByVersions(HashSet::new(), org_filter, err))?
+        } else {
+            Vec::new()
+        };
+
+        // Create a map for quick lookup
+        let property_count_map: std::collections::HashMap<ImageId, i64> = property_counts.into_iter().collect();
+
+        // Combine the results
+        let results: Vec<(Image, String, String, u32)> = images_with_protocol
             .into_iter()
-            .map(|(image, protocol_name, variant_key, property_count)| {
-                (image, protocol_name, variant_key, property_count as u32)
+            .map(|(image, protocol_name, variant_key)| {
+                let property_count = property_count_map.get(&image.id).copied().unwrap_or(0) as u32;
+                (image, protocol_name, variant_key, property_count)
             })
             .collect();
 
-        Ok((formatted_results, total_count as u32))
+        Ok((results, total_count as u32))
     }
 }
 
