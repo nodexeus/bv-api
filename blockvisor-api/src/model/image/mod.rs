@@ -238,25 +238,25 @@ impl Image {
             .await
             .map_err(|err| Error::ByVersions(HashSet::new(), org_filter, err))?;
 
-        // Keep only the latest build version for each protocol_version_id
-        // This ensures we get the latest build for each unique protocol version
-        let mut latest_per_version = std::collections::HashMap::new();
+        // Keep only the latest build version for each (protocol_name, variant_key, semantic_version) combination
+        // This ensures we get the latest build for each unique variant
+        let mut latest_per_variant = std::collections::HashMap::new();
         for (image, protocol_name, variant_key, semantic_version) in all_images {
-            let key = image.protocol_version_id;
-            match latest_per_version.get(&key) {
+            let key = (protocol_name.clone(), variant_key.clone(), semantic_version.clone());
+            match latest_per_variant.get(&key) {
                 None => {
-                    latest_per_version.insert(key, (image, protocol_name, variant_key, semantic_version));
+                    latest_per_variant.insert(key, (image, protocol_name, variant_key, semantic_version));
                 }
                 Some((existing_image, _, _, _)) => {
                     if image.build_version > existing_image.build_version {
-                        latest_per_version.insert(key, (image, protocol_name, variant_key, semantic_version));
+                        latest_per_variant.insert(key, (image, protocol_name, variant_key, semantic_version));
                     }
                 }
             }
         }
 
         // Convert back to Vec and apply pagination
-        let mut filtered_images: Vec<(Image, String, String, String)> = latest_per_version.into_values().collect();
+        let mut filtered_images: Vec<(Image, String, String, String)> = latest_per_variant.into_values().collect();
         filtered_images.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2))); // Sort by protocol name, then variant key
         
         let total_filtered = filtered_images.len();
