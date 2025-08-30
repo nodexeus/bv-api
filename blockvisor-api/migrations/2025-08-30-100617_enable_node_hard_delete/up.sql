@@ -1,11 +1,11 @@
 -- Enable hard deletion of nodes by modifying foreign key constraints
 -- This allows nodes to be completely removed from the database rather than just soft-deleted
 
--- Drop existing RESTRICT constraints on nodes table
+-- Drop existing RESTRICT constraints on nodes table (use IF EXISTS to handle missing constraints)
 ALTER TABLE nodes
-    DROP CONSTRAINT nodes_host_id_fkey,
-    DROP CONSTRAINT nodes_org_id_fkey,
-    DROP CONSTRAINT nodes_blockchain_id_fkey;
+    DROP CONSTRAINT IF EXISTS nodes_host_id_fkey,
+    DROP CONSTRAINT IF EXISTS nodes_org_id_fkey,
+    DROP CONSTRAINT IF EXISTS nodes_blockchain_id_fkey;
 
 -- Add new constraints with CASCADE for hard deletion support
 -- Note: We use SET NULL for some relationships to prevent unwanted cascade deletion
