@@ -19,6 +19,8 @@ ALTER TABLE hosts ALTER COLUMN org_id DROP NOT NULL;
 -- Ensure child tables will properly cascade delete when hosts are deleted
 -- Commands should cascade delete when host is deleted
 ALTER TABLE commands 
+    DROP CONSTRAINT IF EXISTS fk_commands_host_id,
+    DROP CONSTRAINT IF EXISTS commands_host_id_fkey,
     DROP CONSTRAINT IF EXISTS fk_host_commands_hosts,
     ADD CONSTRAINT commands_host_id_fkey FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE;
 

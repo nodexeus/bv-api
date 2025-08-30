@@ -37,6 +37,7 @@ ALTER TABLE nodes ALTER COLUMN scheduler_region_id DROP NOT NULL;
 
 -- Commands should cascade delete when node is deleted
 ALTER TABLE commands 
+    DROP CONSTRAINT IF EXISTS fk_commands_node_id,
     DROP CONSTRAINT IF EXISTS commands_node_id_fkey,
     ADD CONSTRAINT commands_node_id_fkey FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE;
 
