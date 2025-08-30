@@ -1,11 +1,26 @@
 -- Enable permanent deletion of hosts by ensuring proper cascade constraints
 -- This allows hosts to be completely removed from the database
 
+-- First, handle the foreign key constraints ON the hosts table itself
+-- Drop existing constraints and recreate with SET NULL to prevent unwanted cascade deletion
+ALTER TABLE hosts
+    DROP CONSTRAINT IF EXISTS hosts_org_id_fkey1,
+    DROP CONSTRAINT IF EXISTS fk_hosts_region_id;
+
+-- Add new constraints with SET NULL behavior to prevent cascade deletion of parent records
+ALTER TABLE hosts
+    ADD CONSTRAINT hosts_org_id_fkey FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE SET NULL,
+    ADD CONSTRAINT hosts_region_id_fkey FOREIGN KEY (region_id) REFERENCES regions(id) ON DELETE SET NULL;
+
+-- Make the foreign key columns nullable to support SET NULL behavior
+ALTER TABLE hosts ALTER COLUMN org_id DROP NOT NULL;
+-- region_id should remain NOT NULL as regions are required for hosts
+
 -- Ensure child tables will properly cascade delete when hosts are deleted
 -- Commands should cascade delete when host is deleted
 ALTER TABLE commands 
     DROP CONSTRAINT IF EXISTS fk_host_commands_hosts,
-    ADD CONSTRAINT fk_host_commands_hosts FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE;
+    ADD CONSTRAINT commands_host_id_fkey FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE;
 
 -- IP addresses should cascade delete when host is deleted
 ALTER TABLE ip_addresses
