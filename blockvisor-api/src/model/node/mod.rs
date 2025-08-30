@@ -400,55 +400,70 @@ impl Node {
             .map_err(|err| Error::HostHasNodes(host_id, err))
     }
 
-    pub async fn delete(id: NodeId, write: &mut WriteConn<'_, '_>) -> Result<Node, Error> {
-        let node = Node::deleted_by_id(id, write).await?;
-        if node.deleted_at.is_some() {
-            return Err(Error::AlreadyDeleted(node.id));
-        }
+    pub async fn delete(id: NodeId, write: &mut WriteConn<'_, '_>) -> Result<(), Error> {
+        // Get the node first to perform external cleanup
+        let node = match Node::by_id(id, write).await {
+            Ok(node) => node,
+            Err(Error::FindById(_, NotFound)) => {
+                // If node doesn't exist (or is already soft-deleted), try to find it anyway
+                // for cleanup purposes
+                match Node::deleted_by_id(id, write).await {
+                    Ok(node) => node,
+                    Err(_) => return Ok(()), // Node doesn't exist at all, nothing to delete
+                }
+            }
+            Err(err) => return Err(err),
+        };
 
-        Org::remove_node(node.org_id, write).await?;
-        Host::remove_node(&node, write).await?;
-        Command::delete_node_pending(node.id, write)
-            .await
-            .map_err(|err| Error::Command(Box::new(err)))?;
-
-        let node: Node = diesel::update(nodes::table.find(id))
-            .set((
-                nodes::next_state.eq(Some(NextState::Deleting)),
-                nodes::deleted_at.eq(Utc::now()),
-            ))
-            .get_result(write)
-            .await
-            .map_err(|err| Error::Delete(id, err))?;
-
+        // Perform external cleanup (DNS, Stripe, Vault secrets) before database deletion
         if let Err(err) = write.ctx.dns.delete(&node.dns_id).await {
-            warn!("Failed to remove node dns: {err}");
+            warn!("Failed to remove node dns during deletion: {err}");
         }
 
         // FIXME: secrets integration
         /*
-            let prefix = format!("node/{id}/secret");
-            let secrets = write.ctx.vault.read().await.list_path(&prefix).await?;
-            if let Some(names) = secrets {
+        let prefix = format!("node/{id}/secret");
+        let secrets = write.ctx.vault.read().await.list_path(&prefix).await?;
+        if let Some(names) = secrets {
             for name in names {
-            let path = format!("{prefix}/{name}");
-            let result = write.ctx.vault.read().await.delete_path(&path).await;
-            match result {
-            Ok(()) | Err(crate::store::vault::Error::PathNotFound) => (),
-            Err(err) => return Err(err.into()),
+                let path = format!("{prefix}/{name}");
+                let result = write.ctx.vault.read().await.delete_path(&path).await;
+                match result {
+                    Ok(()) | Err(crate::store::vault::Error::PathNotFound) => (),
+                    Err(err) => {
+                        warn!("Failed to remove node secret during deletion: {err}");
+                    }
+                }
+            }
         }
-        }
-        }
-             */
+        */
 
         if let Some(ref item_id) = node.stripe_item_id {
             if let Some(stripe) = write.ctx.stripe.as_ref() {
-                stripe.remove_subscription(item_id).await?;
+                if let Err(err) = stripe.remove_subscription(item_id).await {
+                    warn!("Failed to remove stripe subscription during deletion: {err:?}");
+                }
             }
         }
 
-        Ok(node)
+        // Update org and host counts before deletion
+        if let Err(err) = Org::remove_node(node.org_id, write).await {
+            warn!("Failed to update org node count during deletion: {err}");
+        }
+        if let Err(err) = Host::remove_node(&node, write).await {
+            warn!("Failed to update host node count during deletion: {err}");
+        }
+
+        // Delete the node from the database - this will cascade to all related tables
+        // due to the foreign key constraints we set up in the migration
+        diesel::delete(nodes::table.find(id))
+            .execute(write)
+            .await
+            .map_err(|err| Error::Delete(id, err))?;
+
+        Ok(())
     }
+
 
     /// Find the next host to schedule a node on.
     pub async fn next_host(

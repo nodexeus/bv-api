@@ -65,7 +65,7 @@ async fn list(
             ));
         }
     };
-    
+
     ctx.read(|read| grpc::node::list(req, headers.into(), read).scope_boxed())
         .await
 }
@@ -103,8 +103,11 @@ struct NodeListParams {
 
 impl NodeListParams {
     /// Validate parameters and convert to gRPC request
-    fn to_grpc_request(self) -> Result<api::NodeServiceListRequest, crate::http::params::ParameterValidationError> {
-        let mut validation_error = crate::http::params::ParameterValidationError::new("Invalid query parameters");
+    fn to_grpc_request(
+        self,
+    ) -> Result<api::NodeServiceListRequest, crate::http::params::ParameterValidationError> {
+        let mut validation_error =
+            crate::http::params::ParameterValidationError::new("Invalid query parameters");
 
         // Validate org_ids
         let org_ids = if let Some(org_ids) = self.org_ids {
@@ -177,7 +180,9 @@ impl NodeListParams {
             for state in &next_states.0 {
                 // Next states are: stopping, deleting, upgrading
                 let allowed_next_states = ["stopping", "deleting", "upgrading"];
-                if let Err(e) = validation::validate_enum(state, &allowed_next_states, "next_states") {
+                if let Err(e) =
+                    validation::validate_enum(state, &allowed_next_states, "next_states")
+                {
                     validation_error.add_error(e.parameter, e.error, e.expected);
                 } else {
                     // Convert string to gRPC enum integer
@@ -217,7 +222,7 @@ impl NodeListParams {
             org_ids,
             offset: self.offset.unwrap_or(0),
             limit,
-            search: None, // TODO: Implement search parameter parsing
+            search: None,     // TODO: Implement search parameter parsing
             sort: Vec::new(), // TODO: Implement sort parameter parsing
             protocol_ids: self.protocol_ids.map(|p| p.0).unwrap_or_default(),
             version_keys: Vec::new(), // TODO: Implement version_keys parsing
@@ -366,9 +371,12 @@ mod tests {
     fn test_node_list_params_single_org_id() {
         let query = "org_id=550e8400-e29b-41d4-a716-446655440000&limit=10";
         let params: NodeListParams = serde_urlencoded::from_str(query).unwrap();
-        
+
         assert!(params.org_ids.is_some());
-        assert_eq!(params.org_ids.unwrap().0, vec!["550e8400-e29b-41d4-a716-446655440000"]);
+        assert_eq!(
+            params.org_ids.unwrap().0,
+            vec!["550e8400-e29b-41d4-a716-446655440000"]
+        );
         assert_eq!(params.limit, Some(10));
     }
 
@@ -376,19 +384,24 @@ mod tests {
     fn test_node_list_params_plural_org_ids() {
         let query = "org_ids=550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8&limit=20";
         let params: NodeListParams = serde_urlencoded::from_str(query).unwrap();
-        
+
         assert!(params.org_ids.is_some());
-        assert_eq!(params.org_ids.unwrap().0, vec![
-            "550e8400-e29b-41d4-a716-446655440000",
-            "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-        ]);
+        assert_eq!(
+            params.org_ids.unwrap().0,
+            vec![
+                "550e8400-e29b-41d4-a716-446655440000",
+                "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+            ]
+        );
         assert_eq!(params.limit, Some(20));
     }
 
     #[test]
     fn test_node_list_params_to_grpc_request_success() {
         let params = NodeListParams {
-            org_ids: Some(CommaSeparatedList(vec!["550e8400-e29b-41d4-a716-446655440000".to_string()])),
+            org_ids: Some(CommaSeparatedList(vec![
+                "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            ])),
             offset: Some(10),
             limit: Some(50),
             search: None,
@@ -402,7 +415,10 @@ mod tests {
         };
 
         let grpc_req = params.to_grpc_request().unwrap();
-        assert_eq!(grpc_req.org_ids, vec!["550e8400-e29b-41d4-a716-446655440000"]);
+        assert_eq!(
+            grpc_req.org_ids,
+            vec!["550e8400-e29b-41d4-a716-446655440000"]
+        );
         assert_eq!(grpc_req.offset, 10);
         assert_eq!(grpc_req.limit, 50);
     }
@@ -425,7 +441,7 @@ mod tests {
 
         let result = params.to_grpc_request();
         assert!(result.is_err());
-        
+
         let error = result.unwrap_err();
         assert!(!error.is_empty());
         assert_eq!(error.errors[0].parameter, "org_ids");
@@ -450,7 +466,7 @@ mod tests {
 
         let result = params.to_grpc_request();
         assert!(result.is_err());
-        
+
         let error = result.unwrap_err();
         assert!(!error.is_empty());
         assert_eq!(error.errors[0].parameter, "limit");
@@ -491,15 +507,21 @@ mod tests {
             host_ids: None,
             user_ids: None,
             ip_addresses: None,
-            node_states: Some(CommaSeparatedList(vec!["running".to_string(), "stopped".to_string()])),
+            node_states: Some(CommaSeparatedList(vec![
+                "running".to_string(),
+                "stopped".to_string(),
+            ])),
             next_states: None,
         };
 
         let grpc_req = params.to_grpc_request().unwrap();
-        assert_eq!(grpc_req.node_states, vec![
-            common::NodeState::Running as i32, 
-            common::NodeState::Stopped as i32
-        ]);
+        assert_eq!(
+            grpc_req.node_states,
+            vec![
+                common::NodeState::Running as i32,
+                common::NodeState::Stopped as i32
+            ]
+        );
     }
 
     #[test]
@@ -520,12 +542,16 @@ mod tests {
 
         let result = params.to_grpc_request();
         assert!(result.is_err());
-        
+
         let error = result.unwrap_err();
         assert!(!error.is_empty());
         assert_eq!(error.errors[0].parameter, "node_states");
         assert!(error.errors[0].error.contains("Invalid value"));
-        assert!(error.errors[0].expected.contains("starting, running, stopped"));
+        assert!(
+            error.errors[0]
+                .expected
+                .contains("starting, running, stopped")
+        );
     }
 
     #[test]
@@ -541,14 +567,20 @@ mod tests {
             user_ids: None,
             ip_addresses: None,
             node_states: None,
-            next_states: Some(CommaSeparatedList(vec!["stopping".to_string(), "upgrading".to_string()])),
+            next_states: Some(CommaSeparatedList(vec![
+                "stopping".to_string(),
+                "upgrading".to_string(),
+            ])),
         };
 
         let grpc_req = params.to_grpc_request().unwrap();
-        assert_eq!(grpc_req.next_states, vec![
-            common::NextState::Stopping as i32, 
-            common::NextState::Upgrading as i32
-        ]);
+        assert_eq!(
+            grpc_req.next_states,
+            vec![
+                common::NextState::Stopping as i32,
+                common::NextState::Upgrading as i32
+            ]
+        );
     }
 
     #[test]
@@ -569,12 +601,16 @@ mod tests {
 
         let result = params.to_grpc_request();
         assert!(result.is_err());
-        
+
         let error = result.unwrap_err();
         assert!(!error.is_empty());
         assert_eq!(error.errors[0].parameter, "next_states");
         assert!(error.errors[0].error.contains("Invalid value"));
-        assert!(error.errors[0].expected.contains("stopping, deleting, upgrading"));
+        assert!(
+            error.errors[0]
+                .expected
+                .contains("stopping, deleting, upgrading")
+        );
     }
 
     #[test]
@@ -585,13 +621,16 @@ mod tests {
             "new_org_id": "61813465-c72e-4087-aa82-9e1cd6f6a65a",
             "new_note": "Migrated"
         }"#;
-        
+
         let result: Result<NodeServiceUpdateConfigRequest, _> = serde_json::from_str(json);
         assert!(result.is_ok());
-        
+
         let req = result.unwrap();
         assert_eq!(req.node_id, "812103e7-a7d9-4e4d-9d70-c9d87f09e3f6");
-        assert_eq!(req.new_org_id, Some("61813465-c72e-4087-aa82-9e1cd6f6a65a".to_string()));
+        assert_eq!(
+            req.new_org_id,
+            Some("61813465-c72e-4087-aa82-9e1cd6f6a65a".to_string())
+        );
         assert_eq!(req.new_note, Some("Migrated".to_string()));
         assert_eq!(req.new_values, None);
         assert_eq!(req.auto_upgrade, None);
@@ -603,10 +642,10 @@ mod tests {
         let json = r#"{
             "node_id": "812103e7-a7d9-4e4d-9d70-c9d87f09e3f6"
         }"#;
-        
+
         let result: Result<NodeServiceUpdateConfigRequest, _> = serde_json::from_str(json);
         assert!(result.is_ok());
-        
+
         let req = result.unwrap();
         assert_eq!(req.node_id, "812103e7-a7d9-4e4d-9d70-c9d87f09e3f6");
         assert_eq!(req.new_org_id, None);
@@ -622,12 +661,18 @@ mod tests {
             "node_ids": ["812103e7-a7d9-4e4d-9d70-c9d87f09e3f6", "61813465-c72e-4087-aa82-9e1cd6f6a65a"],
             "image_id": "bitcoin-core-v25.0"
         }"#;
-        
+
         let result: Result<NodeServiceUpgradeImageRequest, _> = serde_json::from_str(json);
         assert!(result.is_ok());
-        
+
         let req = result.unwrap();
-        assert_eq!(req.node_ids, vec!["812103e7-a7d9-4e4d-9d70-c9d87f09e3f6", "61813465-c72e-4087-aa82-9e1cd6f6a65a"]);
+        assert_eq!(
+            req.node_ids,
+            vec![
+                "812103e7-a7d9-4e4d-9d70-c9d87f09e3f6",
+                "61813465-c72e-4087-aa82-9e1cd6f6a65a"
+            ]
+        );
         assert_eq!(req.image_id, "bitcoin-core-v25.0");
         assert_eq!(req.org_id, None);
     }
@@ -636,21 +681,29 @@ mod tests {
     fn test_node_lifecycle_request_creation() {
         // Test that we can create gRPC requests from node_id strings
         let node_id = "812103e7-a7d9-4e4d-9d70-c9d87f09e3f6".to_string();
-        
+
         // Test start request
-        let start_req = api::NodeServiceStartRequest { node_id: node_id.clone() };
+        let start_req = api::NodeServiceStartRequest {
+            node_id: node_id.clone(),
+        };
         assert_eq!(start_req.node_id, node_id);
-        
+
         // Test stop request
-        let stop_req = api::NodeServiceStopRequest { node_id: node_id.clone() };
+        let stop_req = api::NodeServiceStopRequest {
+            node_id: node_id.clone(),
+        };
         assert_eq!(stop_req.node_id, node_id);
-        
+
         // Test restart request
-        let restart_req = api::NodeServiceRestartRequest { node_id: node_id.clone() };
+        let restart_req = api::NodeServiceRestartRequest {
+            node_id: node_id.clone(),
+        };
         assert_eq!(restart_req.node_id, node_id);
-        
+
         // Test delete request
-        let delete_req = api::NodeServiceDeleteRequest { node_id: node_id.clone() };
+        let delete_req = api::NodeServiceDeleteRequest {
+            node_id: node_id.clone(),
+        };
         assert_eq!(delete_req.node_id, node_id);
     }
 }
