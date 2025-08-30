@@ -769,7 +769,14 @@ pub async fn delete(
         .auth_or_for(&meta, NodeAdminPerm::Delete, NodePerm::Delete, node_id)
         .await?;
 
-    Node::delete(node_id, &mut write).await?;
+    let node = Node::by_id(node_id, &mut write).await?;
+    let delete_cmd = NewCommand::node(&node, CommandType::NodeDelete)?
+        .create(&mut write)
+        .await?;
+    let delete_cmd = api::Command::from(&delete_cmd, &authz, &mut write)
+        .await?
+        .ok_or(Error::NoNodeDelete)?;
+    write.mqtt(delete_cmd);
 
     Ok(api::NodeServiceDeleteResponse {})
 }
