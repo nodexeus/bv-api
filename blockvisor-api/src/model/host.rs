@@ -12,6 +12,7 @@ use diesel_async::RunQueryDsl;
 use diesel_derive_enum::DbEnum;
 use displaydoc::Display;
 use thiserror::Error;
+use tracing::warn;
 
 use crate::auth::resource::{HostId, OrgId, Resource, ResourceId, ResourceType};
 use crate::database::Conn;
@@ -232,23 +233,40 @@ impl Host {
         org_id: Option<OrgId>,
         conn: &mut Conn<'_>,
     ) -> Result<(), Error> {
-        let row = hosts::table
+        // Verify the host exists and belongs to the specified org (if provided)
+        let host_exists = hosts::table
             .find(id)
             .filter(hosts::org_id.eq(org_id).or(hosts::org_id.is_null()))
-            .filter(hosts::deleted_at.is_null());
-        diesel::update(row)
-            .set(hosts::deleted_at.eq(Utc::now()))
+            .filter(hosts::deleted_at.is_null())
+            .first::<Host>(conn)
+            .await
+            .optional()
+            .map_err(|err| Error::Delete(id, err))?;
+
+        if host_exists.is_none() {
+            // Host doesn't exist or already deleted, nothing to do
+            return Ok(());
+        }
+
+        // Update org counts before deletion
+        if let Some(org_id) = org_id {
+            if let Err(err) = Org::remove_host(org_id, conn).await {
+                warn!("Failed to update org host count during deletion: {err}");
+            }
+        }
+
+        // Delete pending commands for this host
+        if let Err(err) = Command::delete_host_pending(id, conn).await {
+            warn!("Failed to delete pending commands during host deletion: {err:?}");
+        }
+
+        // Delete the host from the database - this will cascade to all related tables
+        // (commands, ip_addresses, node_logs, host_provisions)
+        // and SET NULL for nodes.host_id
+        diesel::delete(hosts::table.find(id))
             .execute(conn)
             .await
             .map_err(|err| Error::Delete(id, err))?;
-
-        if let Some(org_id) = org_id {
-            Org::remove_host(org_id, conn).await?;
-        }
-
-        Command::delete_host_pending(id, conn)
-            .await
-            .map_err(|err| Error::Command(Box::new(err)))?;
 
         Ok(())
     }
