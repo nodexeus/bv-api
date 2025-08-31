@@ -9,7 +9,7 @@ use crate::auth::resource::{HostId, OrgId};
 use crate::database::WriteConn;
 use crate::grpc::{Status, api};
 use crate::model::command::NewCommand;
-use crate::model::node::{LogEvent, NewNodeLog, UpdateNode};
+use crate::model::node::{LogEvent, NewNodeLog, NodeState, UpdateNode, UpdateNodeState};
 use crate::model::{Command, CommandType, Host, IpAddress, Node, Protocol};
 
 #[derive(Debug, Display, Error)]
@@ -76,6 +76,7 @@ pub(super) async fn recover(
 ) -> Result<Vec<api::Command>, Error> {
     match failed.command_type {
         CommandType::NodeCreate => node_create_failed(failed, org_id, authz, write).await,
+        CommandType::NodeDelete => node_delete_failed(failed, write).await,
         _ => Ok(vec![]),
     }
 }
@@ -101,14 +102,53 @@ async fn node_create_failed(
         warn!("Failed to remove node dns for node {}: {err}", node.id);
     }
 
+    // Check if this is a non-retryable error (syntax errors, config issues, etc.)
+    // These errors will fail on any host, so don't waste time retrying
+    if let Some(exit_message) = &failed.exit_message {
+        if exit_message.contains("Rhai syntax error") || 
+           exit_message.contains("syntax error") ||
+           exit_message.contains("Invalid character") ||
+           exit_message.contains("parse error") ||
+           exit_message.contains("compilation error") {
+            // This is a configuration/syntax error - mark as failed immediately
+            let update = UpdateNodeState {
+                node_state: Some(NodeState::Failed),
+                next_state: Some(None),
+                protocol_state: None,
+                protocol_health: None,
+                p2p_address: None,
+            };
+            update.apply(node.id, write).await.map_err(Error::UpdateNode)?;
+            
+            let _ = NewNodeLog::from(&node, authz, LogEvent::CreateCancelled)
+                .create(write)
+                .await
+                .map_err(Error::CancelledLog)?;
+            
+            return Ok(vec![]);
+        }
+    }
+
     // find the next host to assign the node to
     let protocol = Protocol::by_id(node.protocol_id, org_id, authz, write).await?;
     let Some(host) = node.next_host(&protocol, write).await? else {
-        return NewNodeLog::from(&node, authz, LogEvent::CreateCancelled)
+        // Log the cancellation
+        let _ = NewNodeLog::from(&node, authz, LogEvent::CreateCancelled)
             .create(write)
             .await
-            .map(|_log| vec![])
-            .map_err(Error::CancelledLog);
+            .map_err(Error::CancelledLog)?;
+        
+        // Update the node state to Failed since no retry is possible
+        let update = UpdateNodeState {
+            node_state: Some(NodeState::Failed),
+            next_state: Some(None),
+            protocol_state: None,
+            protocol_health: None,
+            p2p_address: None,
+        };
+        update.apply(node.id, write).await.map_err(Error::UpdateNode)?;
+        
+        return Ok(vec![]);
     };
 
     // update the node to the new host
@@ -156,4 +196,31 @@ async fn node_create_failed(
     commands.push(start_cmd);
 
     Ok(commands)
+}
+
+/// Recover from a failed node deletion.
+/// If the node deletion failed because the node doesn't exist on the host,
+/// we should still remove it from the database since the goal is achieved.
+async fn node_delete_failed(
+    failed: &Command,
+    write: &mut WriteConn<'_, '_>,
+) -> Result<Vec<api::Command>, Error> {
+    let node_id = failed.node_id.ok_or(Error::CreateNodeId)?; // Reusing existing error type
+    
+    // Try to get the node from the database
+    let node = match Node::by_id(node_id, write).await {
+        Ok(node) => node,
+        Err(_) => {
+            // Node already doesn't exist in database, nothing to do
+            return Ok(vec![]);
+        }
+    };
+
+    // If the delete command failed on the host (likely because node doesn't exist there),
+    // we should still remove it from the database since the goal is achieved
+    Node::delete(node.id, write)
+        .await
+        .map_err(|err| Error::Node(err))?;
+
+    Ok(vec![])
 }
