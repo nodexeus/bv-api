@@ -435,7 +435,7 @@ async fn get_image(
     };
 
     let image = Image::by_build(version.id, org_id, build, &authz, &mut read).await?;
-    let properties = ImageProperty::by_image_id(image.id, &mut read).await?;
+    let properties = ImageProperty::by_image_id_and_variant(image.id, Some(&version_key.variant_key), &mut read).await?;
     let rules = ImageRule::by_image_id(image.id, &mut read).await?;
 
     Ok(api::ImageServiceGetImageResponse {

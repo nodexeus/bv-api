@@ -359,9 +359,12 @@ impl ImageProperty {
             // Filter properties that either:
             // 1. Have no variant restriction (variants is null)
             // 2. Include this variant in their variants array
+            // Use PostgreSQL's JSONB ? operator to check if the variant exists as a string in the array
             query = query.filter(
                 image_properties::variants.is_null()
-                .or(image_properties::variants.contains(serde_json::json!([variant])))
+                .or(diesel::dsl::sql::<diesel::sql_types::Bool>(&format!(
+                    "variants ? '{}'", variant.replace("'", "''")
+                )))
             );
         }
 
