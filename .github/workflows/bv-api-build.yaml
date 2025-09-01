@@ -1,8 +1,11 @@
-name: Docker
+name: BV API Build and Push
 
 on:
   push:
     branches: [main]
+    paths:
+      - "blockvisor-api/**"
+      - "proto/**"
 
 jobs:
   build-and-push:
@@ -19,7 +22,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      
+
       - name: Get current date
         id: date
         run: echo "date=$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
