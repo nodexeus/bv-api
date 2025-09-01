@@ -14,7 +14,7 @@ pub use property_inheritance::{PropertyInheritanceManager, PropertyInheritanceEr
 pub mod rule;
 pub use rule::{FirewallRule, ImageRule, ImageRuleId, NewImageRule};
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 use derive_more::{Deref, Display, From, FromStr};
@@ -23,6 +23,7 @@ use diesel::result::Error::NotFound;
 use diesel_async::RunQueryDsl;
 use diesel_derive_newtype::DieselNewType;
 use displaydoc::Display as DisplayDoc;
+use semver::Version as SemVersion;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -248,9 +249,15 @@ impl Image {
                     latest_per_variant.insert(key, (image, protocol_name, variant_key, semantic_version));
                 }
                 Some((_, _, _, existing_semantic_version)) => {
-                    // Compare semantic versions using string comparison (works for most semver formats)
+                    // Compare semantic versions using proper semver parsing
                     // Since build_version is always 1, we only need to compare semantic versions
-                    if semantic_version > *existing_semantic_version {
+                    let should_update = match (SemVersion::parse(&semantic_version), SemVersion::parse(existing_semantic_version)) {
+                        (Ok(new_version), Ok(existing_version)) => new_version > existing_version,
+                        // If parsing fails, fall back to string comparison as before
+                        _ => semantic_version > *existing_semantic_version,
+                    };
+                    
+                    if should_update {
                         latest_per_variant.insert(key, (image, protocol_name, variant_key, semantic_version));
                     }
                 }
