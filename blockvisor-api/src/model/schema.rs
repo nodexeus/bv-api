@@ -360,6 +360,7 @@ diesel::table! {
         add_disk_bytes -> Nullable<Int8>,
         display_name -> Nullable<Text>,
         display_group -> Nullable<Text>,
+        variants -> Nullable<Jsonb>,
     }
 }
 

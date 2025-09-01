@@ -152,6 +152,7 @@ impl PropertyInheritanceManager {
                 add_disk_bytes: prop.add_disk_bytes,
                 display_name: prop.display_name,
                 display_group: prop.display_group,
+                variants: prop.variants,
             })
             .collect();
 

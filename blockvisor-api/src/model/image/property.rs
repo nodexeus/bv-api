@@ -207,6 +207,7 @@ pub struct ImageProperty {
     pub add_disk_bytes: Option<i64>,
     pub display_name: Option<String>,
     pub display_group: Option<String>,
+    pub variants: Option<serde_json::Value>,
 }
 
 impl ImageProperty {
@@ -270,6 +271,39 @@ impl ImageProperty {
             }
         }
 
+        // Validate variants if present
+        if let Some(ref variants_str) = property.variants {
+            if let Ok(variants_json) = serde_json::from_str::<serde_json::Value>(variants_str) {
+                if let Some(variants_array) = variants_json.as_array() {
+                    if variants_array.is_empty() {
+                        return Err(ImagePropertyAdminError::ValidationFailed("Variants array cannot be empty".to_string()));
+                    }
+                    
+                    // Validate each variant key format
+                    for variant in variants_array {
+                        if let Some(variant_str) = variant.as_str() {
+                            if variant_str.len() < 3 {
+                                return Err(ImagePropertyAdminError::ValidationFailed(
+                                    format!("Variant key '{}' must be at least 3 characters", variant_str)
+                                ));
+                            }
+                            if !variant_str.chars().all(|c| crate::util::LOWER_KEBAB_CASE.contains(c)) {
+                                return Err(ImagePropertyAdminError::ValidationFailed(
+                                    format!("Variant key '{}' must be lower-kebab-case", variant_str)
+                                ));
+                            }
+                        } else {
+                            return Err(ImagePropertyAdminError::ValidationFailed("Variant keys must be strings".to_string()));
+                        }
+                    }
+                } else {
+                    return Err(ImagePropertyAdminError::ValidationFailed("Variants must be an array".to_string()));
+                }
+            } else {
+                return Err(ImagePropertyAdminError::ValidationFailed("Invalid JSON format for variants".to_string()));
+            }
+        }
+
         Ok(())
     }
 
@@ -306,6 +340,32 @@ impl ImageProperty {
     pub async fn by_image_id(image_id: ImageId, conn: &mut Conn<'_>) -> Result<Vec<Self>, Error> {
         image_properties::table
             .filter(image_properties::image_id.eq(image_id))
+            .get_results(conn)
+            .await
+            .map_err(|err| Error::ByImageId(image_id, err))
+    }
+
+    /// Get image properties filtered by variant key
+    pub async fn by_image_id_and_variant(
+        image_id: ImageId, 
+        variant_key: Option<&str>,
+        conn: &mut Conn<'_>
+    ) -> Result<Vec<Self>, Error> {
+        let mut query = image_properties::table
+            .filter(image_properties::image_id.eq(image_id))
+            .into_boxed();
+
+        if let Some(variant) = variant_key {
+            // Filter properties that either:
+            // 1. Have no variant restriction (variants is null)
+            // 2. Include this variant in their variants array
+            query = query.filter(
+                image_properties::variants.is_null()
+                .or(image_properties::variants.contains(serde_json::json!([variant])))
+            );
+        }
+
+        query
             .get_results(conn)
             .await
             .map_err(|err| Error::ByImageId(image_id, err))
@@ -384,6 +444,7 @@ impl ImageProperty {
         let ui_type = UiType::try_from(property.ui_type())?;
         let key = ImagePropertyKey::new(property.key)?;
         let key_group = property.key_group.map(ImagePropertyGroup::new).transpose()?;
+        let variants = property.variants.and_then(|v| serde_json::from_str::<serde_json::Value>(&v).ok());
 
         diesel::update(image_properties::table.find(id))
             .set((
@@ -400,6 +461,7 @@ impl ImageProperty {
                 image_properties::add_disk_bytes.eq(property.add_disk_bytes),
                 image_properties::display_name.eq(property.display_name),
                 image_properties::display_group.eq(property.display_group),
+                image_properties::variants.eq(variants),
             ))
             .get_result(conn)
             .await
@@ -458,6 +520,7 @@ impl ImageProperty {
                 add_disk_bytes: prop.add_disk_bytes,
                 display_name: prop.display_name,
                 display_group: prop.display_group,
+                variants: prop.variants,
             })
             .collect();
 
@@ -484,6 +547,7 @@ impl From<ImageProperty> for api::ImageProperty {
             add_cpu_cores: property.add_cpu_cores,
             add_memory_bytes: property.add_memory_bytes,
             add_disk_bytes: property.add_disk_bytes,
+            variants: property.variants.map(|v| v.to_string()),
         }
     }
 }
@@ -505,6 +569,7 @@ pub struct NewProperty {
     pub add_disk_bytes: Option<i64>,
     pub display_name: Option<String>,
     pub display_group: Option<String>,
+    pub variants: Option<serde_json::Value>,
 }
 
 impl NewProperty {
@@ -524,6 +589,7 @@ impl NewProperty {
             add_disk_bytes: property.add_disk_bytes,
             display_name: property.display_name,
             display_group: property.display_group,
+            variants: property.variants,
         }
     }
 
@@ -548,6 +614,7 @@ impl NewProperty {
             add_disk_bytes: property.add_disk_bytes,
             display_name: property.display_name,
             display_group: property.display_group,
+            variants: property.variants.and_then(|v| serde_json::from_str::<serde_json::Value>(&v).ok()),
         })
     }
 
@@ -705,6 +772,31 @@ impl PropertyMap {
             key_to_group,
             group_to_keys,
         }
+    }
+
+    /// Create a PropertyMap with properties filtered by variant
+    pub fn new_with_variant(properties: Vec<ImageProperty>, variant_key: Option<&str>) -> Self {
+        let filtered_properties = if let Some(variant) = variant_key {
+            properties
+                .into_iter()
+                .filter(|prop| {
+                    // Include property if:
+                    // 1. No variant restriction (variants is null)
+                    // 2. Variant is included in variants array
+                    prop.variants.is_none() || 
+                    prop.variants
+                        .as_ref()
+                        .and_then(|v| v.as_array())
+                        .map_or(false, |arr| {
+                            arr.iter().any(|v| v.as_str() == Some(variant))
+                        })
+                })
+                .collect()
+        } else {
+            properties
+        };
+
+        Self::new(filtered_properties)
     }
 
     pub fn apply_overrides(
