@@ -25,3 +25,8 @@ DELETE FROM permissions WHERE name IN (
     'image-admin-delete-property',
     'image-admin-copy-properties'
 ) AND name NOT IN (SELECT DISTINCT permission FROM role_permissions);
+
+-- Remove blockjoy-admin role (only if not used by other permissions or users)
+DELETE FROM roles WHERE name = 'blockjoy-admin' 
+    AND name NOT IN (SELECT DISTINCT role FROM role_permissions)
+    AND name NOT IN (SELECT DISTINCT role FROM user_roles);

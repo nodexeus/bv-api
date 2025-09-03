@@ -1,3 +1,7 @@
+-- Create blockjoy-admin role if it doesn't exist
+INSERT INTO roles (name) VALUES ('blockjoy-admin')
+ON CONFLICT (name) DO NOTHING;
+
 -- Insert image admin permissions
 INSERT INTO permissions (name) VALUES 
     ('image-admin-add'),
