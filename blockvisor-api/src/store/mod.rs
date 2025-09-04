@@ -313,18 +313,18 @@ impl Store {
     }
 
     /// Return a descending order list of data versions for a `StoreKey`.
-    /// 
+    ///
     /// Uses targeted version discovery by directly checking for manifest files
     /// instead of listing all objects, avoiding S3 pagination limits.
     async fn data_versions(&self, store_key: &StoreKey) -> Result<Vec<u64>, Error> {
         tracing::debug!("Discovering versions for store_key: {}", store_key);
-        
+
         let mut versions = Vec::new();
         let mut version = 1u64;
         let mut consecutive_misses = 0;
         const MAX_CONSECUTIVE_MISSES: u32 = 10;
         const MAX_VERSION_CHECK: u64 = 1000; // reasonable upper bound
-        
+
         while version <= MAX_VERSION_CHECK && consecutive_misses < MAX_CONSECUTIVE_MISSES {
             if self.check_archive_exists(store_key, version).await? {
                 versions.push(version);
@@ -335,17 +335,22 @@ impl Store {
             }
             version += 1;
         }
-        
+
         // Sort in descending order (latest first) to maintain compatibility
         versions.sort_by(|a, b| b.cmp(a));
-        tracing::debug!("Discovered {} versions for store_key {}: {:?}", versions.len(), store_key, versions);
+        tracing::debug!(
+            "Discovered {} versions for store_key {}: {:?}",
+            versions.len(),
+            store_key,
+            versions
+        );
         Ok(versions)
     }
 
     /// Reserve the next data version.
     async fn reserve_next_version(&self, store_key: &StoreKey) -> Result<u64, Error> {
         let mut versions = self.data_versions(store_key).await?;
-        let next_version = versions.pop().unwrap_or_default() + 1;
+        let next_version = versions.first().copied().unwrap_or(0) + 1;
 
         let lock_key = format!("{store_key}/{next_version}/.lock");
         match self.client.read_key(&self.bucket.archive, &lock_key).await {
@@ -370,11 +375,11 @@ mod tests {
     fn test_check_archive_exists_method_signature() {
         // This test verifies that the check_archive_exists method has the correct signature
         // and can be referenced. The actual S3 integration testing is done in the integration test suite.
-        
+
         // Test StoreKey creation for use in archive validation
         let store_key = StoreKey::new("test-archive-key".to_string()).unwrap();
         assert_eq!(store_key.as_str(), "test-archive-key");
-        
+
         // Test that invalid store keys are rejected
         assert!(StoreKey::new("short".to_string()).is_err()); // Too short
         assert!(StoreKey::new("Invalid_Key".to_string()).is_err()); // Invalid characters
@@ -384,22 +389,22 @@ mod tests {
     fn test_error_handling_coverage() {
         // This test verifies that our error handling covers all the scenarios
         // we expect to encounter during archive validation.
-        
+
         // Test that client errors are properly converted
         let client_error = Error::Client(client::Error::MissingKey(
             "test-bucket".to_string(),
             "test-key".to_string(),
         ));
-        
+
         // Verify it converts to the expected Status
         let status: Status = client_error.into();
         assert!(matches!(status, Status::NotFound(_)));
-        
+
         // Test StoreKey validation errors
         let store_key_error = Error::StoreKeyLen(3);
         let status: Status = store_key_error.into();
         assert!(matches!(status, Status::InvalidArgument(_)));
-        
+
         // Test NoDataVersion error
         let no_version_error = Error::NoDataVersion;
         let status: Status = no_version_error.into();
@@ -410,35 +415,57 @@ mod tests {
     fn test_large_archive_scenario_simulation() {
         // This test simulates the large archive scenario that was causing issues
         // with 7000+ chunks and verifies our optimization approach.
-        
+
         // Test various store keys that might be used for large archives
         let large_archive_scenarios = vec![
-            ("ethereum-mainnet-archive-v1", "Ethereum mainnet with 7645 chunks"),
-            ("bitcoin-mainnet-archive-v2", "Bitcoin mainnet with 8000+ chunks"),
+            (
+                "ethereum-mainnet-archive-v1",
+                "Ethereum mainnet with 7645 chunks",
+            ),
+            (
+                "bitcoin-mainnet-archive-v2",
+                "Bitcoin mainnet with 8000+ chunks",
+            ),
             ("polygon-pos-archive-v1", "Polygon PoS with 9500+ chunks"),
             ("arbitrum-one-archive-v3", "Arbitrum One with 12000+ chunks"),
-            ("optimism-mainnet-archive-v2", "Optimism mainnet with 6800+ chunks"),
+            (
+                "optimism-mainnet-archive-v2",
+                "Optimism mainnet with 6800+ chunks",
+            ),
         ];
-        
+
         for (store_key_str, description) in large_archive_scenarios {
             // Verify StoreKey creation works for realistic archive names
             let store_key = StoreKey::new(store_key_str.to_string()).unwrap();
             assert_eq!(store_key.as_str(), store_key_str);
-            
+
             // Verify the key follows our validation rules
             assert!(store_key_str.len() >= 6);
-            assert!(store_key_str.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'));
-            
-            println!("✓ Validated store key for {}: {}", description, store_key_str);
+            assert!(
+                store_key_str
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            );
+
+            println!(
+                "✓ Validated store key for {}: {}",
+                description, store_key_str
+            );
         }
-        
+
         // Test that our optimization constants are reasonable
         const MAX_CONSECUTIVE_MISSES: u32 = 10;
         const MAX_VERSION_CHECK: u64 = 1000;
-        
-        assert!(MAX_CONSECUTIVE_MISSES >= 5, "Should allow reasonable consecutive misses");
-        assert!(MAX_VERSION_CHECK >= 100, "Should check reasonable number of versions");
-        
+
+        assert!(
+            MAX_CONSECUTIVE_MISSES >= 5,
+            "Should allow reasonable consecutive misses"
+        );
+        assert!(
+            MAX_VERSION_CHECK >= 100,
+            "Should check reasonable number of versions"
+        );
+
         println!("✓ Large archive scenario simulation completed successfully");
         println!("✓ Optimization approach validated for archives with 7000+ chunks");
     }
@@ -447,25 +474,25 @@ mod tests {
     fn test_backward_compatibility_preservation() {
         // This test verifies that existing archive download workflows continue to work
         // unchanged after the optimization implementation.
-        
+
         // Test that all existing public methods are still available and have the same signatures
         let store_key = StoreKey::new("test-compatibility-key".to_string()).unwrap();
-        
+
         // Verify that the Store struct still has all the expected public methods
         // These are the methods used by the gRPC archive service
-        
+
         // Verify that error types are still compatible
         let error = Error::NoDataVersion;
         let status: Status = error.into();
         assert!(matches!(status, Status::NotFound(_)));
-        
+
         // Verify that manifest constants are unchanged
         assert_eq!(MANIFEST_HEADER, "manifest-header.json");
         assert_eq!(MANIFEST_BODY, "manifest-body.json");
-        
+
         // Verify that StoreKey validation still works as expected
         assert_eq!(store_key.as_str(), "test-compatibility-key");
-        
+
         println!("✓ All existing public methods are preserved");
         println!("✓ Error handling remains compatible");
         println!("✓ Manifest constants are unchanged");
