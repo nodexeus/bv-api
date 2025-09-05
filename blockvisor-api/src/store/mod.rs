@@ -162,7 +162,7 @@ impl Store {
             version
         } else {
             let mut versions = self.data_versions(store_key).await?;
-            versions.pop().ok_or(Error::NoDataVersion)?
+            versions.first().copied().ok_or(Error::NoDataVersion)?
         };
 
         let key = format!("{store_key}/{data_version}/{MANIFEST_HEADER}");
@@ -190,7 +190,7 @@ impl Store {
             version
         } else {
             let mut versions = self.data_versions(store_key).await?;
-            versions.pop().ok_or(Error::NoDataVersion)?
+            versions.first().copied().ok_or(Error::NoDataVersion)?
         };
 
         let key = format!("{store_key}/{data_version}/{MANIFEST_BODY}");
